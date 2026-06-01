@@ -1,0 +1,159 @@
+"""Turn a Markdown requirement file into a :class:`~rac.models.Product` AST.
+
+We tokenize with ``markdown-it-py`` and walk the (flat) token stream, tracking the
+current ``##`` section. This module performs *structural extraction only* — it does
+not enforce any rules. All rule-checking lives in :mod:`rac.validate`, so that
+diffing and future analysis share a single source of truth.
+
+Heading matching is case-insensitive and whitespace-trimmed, so ``## problem`` and
+``##  Problem `` both work.
+"""
+
+from __future__ import annotations
+
+import re
+
+from markdown_it import MarkdownIt
+
+from .models import MalformedRequirement, Product, Requirement
+
+# A requirement line: a leading ``[...]`` ID token followed by description text.
+# We capture anything inside the brackets so we can distinguish a *malformed* ID
+# from a missing one, then validate the ID shape separately.
+_BRACKET_RE = re.compile(r"^\[(?P<id>[^\]]*)\]\s*(?P<text>.*)$")
+# Canonical requirement ID, e.g. REQ-001.
+_CANONICAL_ID_RE = re.compile(r"^REQ-\d+$")
+
+# Recognized section headings, normalized (stripped + casefolded).
+_SECTIONS = {
+    "problem": "problem",
+    "requirements": "requirements",
+    "success metrics": "success_metrics",
+    "risks": "risks",
+}
+
+
+def _normalize_heading(text: str) -> str:
+    return text.strip().casefold()
+
+
+def _content_lines(content: str, start_line: int) -> list[tuple[str, int]]:
+    """Split an inline token's content into ``(text, 1-based-line)`` pairs.
+
+    ``start_line`` is the 0-based line where the enclosing block begins (from the
+    token's ``.map``). Blank lines are dropped but still advance the line counter.
+    """
+    pairs: list[tuple[str, int]] = []
+    for offset, raw in enumerate(content.split("\n")):
+        stripped = raw.strip()
+        if stripped:
+            pairs.append((stripped, start_line + offset + 1))
+    return pairs
+
+
+def _classify_requirement_line(text: str, line: int):
+    """Return either a :class:`Requirement` or :class:`MalformedRequirement`."""
+    m = _BRACKET_RE.match(text)
+    if not m:
+        # No recognizable ``[...]`` prefix at all.
+        return MalformedRequirement(raw=text, line=line, bad_id=None)
+    req_id = m.group("id").strip()
+    desc = m.group("text").strip()
+    if not _CANONICAL_ID_RE.match(req_id):
+        return MalformedRequirement(raw=text, line=line, bad_id=req_id)
+    if not desc:
+        return MalformedRequirement(
+            raw=text, line=line, bad_id=req_id, empty_text=True
+        )
+    return Requirement(id=req_id, text=desc, line=line)
+
+
+def parse(text: str, source_path: str = "") -> Product:
+    """Parse Markdown ``text`` into a :class:`Product`."""
+    tokens = MarkdownIt("commonmark").parse(text)
+
+    title: str | None = None
+    extra_title_lines: list[int] = []
+    section: str | None = None  # current tracked section key, or None/"other"
+
+    problem_lines: list[str] = []
+    requirement_lines: list[tuple[str, int]] = []
+    metric_lines: list[str] = []
+    risk_lines: list[str] = []
+
+    has = {
+        "problem": False,
+        "requirements": False,
+        "success_metrics": False,
+        "risks": False,
+    }
+
+    for i, tok in enumerate(tokens):
+        if tok.type == "heading_open":
+            heading_text = tokens[i + 1].content if i + 1 < len(tokens) else ""
+            if tok.tag == "h1":
+                if title is None:
+                    title = heading_text.strip()
+                else:
+                    extra_title_lines.append((tok.map[0] + 1) if tok.map else 0)
+                section = None  # content directly under the title is ignored
+            elif tok.tag == "h2":
+                key = _SECTIONS.get(_normalize_heading(heading_text))
+                section = key
+                if key is not None:
+                    has[key] = True
+            else:
+                section = "other"
+            continue
+
+        if tok.type != "inline" or section is None or section == "other":
+            continue
+
+        # Skip the inline that *is* a heading's text.
+        if i > 0 and tokens[i - 1].type == "heading_open":
+            continue
+
+        start_line = tok.map[0] if tok.map else 0
+        lines = _content_lines(tok.content, start_line)
+
+        if section == "problem":
+            problem_lines.extend(t for t, _ in lines)
+        elif section == "requirements":
+            requirement_lines.extend(lines)
+        elif section == "success_metrics":
+            metric_lines.extend(t for t, _ in lines)
+        elif section == "risks":
+            risk_lines.extend(t for t, _ in lines)
+
+    requirements: list[Requirement] = []
+    malformed: list[MalformedRequirement] = []
+    for line_text, line_no in requirement_lines:
+        result = _classify_requirement_line(line_text, line_no)
+        if isinstance(result, Requirement):
+            requirements.append(result)
+        else:
+            malformed.append(result)
+
+    # None = section absent; "" = present but empty; otherwise the joined text.
+    problem = "\n".join(problem_lines).strip() if has["problem"] else None
+
+    return Product(
+        title=title,
+        extra_title_lines=extra_title_lines,
+        problem=problem,
+        requirements=requirements,
+        malformed_requirements=malformed,
+        success_metrics=metric_lines,
+        risks=risk_lines,
+        has_problem_section=has["problem"],
+        has_requirements_section=has["requirements"],
+        has_metrics_section=has["success_metrics"],
+        has_risks_section=has["risks"],
+        source_path=source_path,
+    )
+
+
+def parse_file(path: str) -> Product:
+    """Read ``path`` and parse it into a :class:`Product`."""
+    with open(path, encoding="utf-8") as fh:
+        return parse(fh.read(), source_path=path)
