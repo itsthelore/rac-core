@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "requirements-as-code"
+version = "0.1.0"
+description = "RAC — lint and diff product requirements written in Markdown."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "RAC" }]
+dependencies = ["markdown-it-py>=3.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+rac = "rac.cli:main"
+
+[tool.setuptools]
+packages = ["rac"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
