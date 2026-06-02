@@ -54,8 +54,6 @@ rac diff bond_dashboard_v1.md bond_dashboard_v2.md
 rac stats ./features
 ```
 
-*(planned for v0.2)*
-
 ---
 
 # Example
@@ -334,9 +332,12 @@ Requirements are matched by ID.
 
 ---
 
-## Stats (Planned)
+## Stats
 
-Portfolio-level analysis.
+Portfolio-level analysis. Recursively scans a directory for `*.md` files
+(skipping dotted folders like `.git`), parses and validates each one, and
+aggregates the totals. Files that fail validation are still counted and are
+listed separately rather than skipped silently.
 
 ```bash
 rac stats ./features
@@ -349,17 +350,43 @@ Portfolio Overview
 ==================
 
 Features: 12
-
 Requirements: 87
-
-Success Metrics: 24
-
+Metrics: 24
 Risks: 18
 
-Features Missing Risks: 3
+Quality
+=======
 
 Features Missing Metrics: 2
+  - Trade Alerts
+  - Watchlists
+Features Missing Risks: 3
+  - Trade Alerts
+  - Watchlists
+  - Onboarding
+Average Requirements Per Feature: 7.3
+Largest Feature: Bond Dashboard (16 requirements)
+
+Requirements by Feature
+=======================
+
+Bond Dashboard      16
+Trade Alerts        11
+Watchlists           8
+Onboarding           3
+
+Invalid Features (1)
+  ./features/draft.md — missing-title, missing-requirements
 ```
+
+Counts span all parsed files; a feature with only *warnings* (e.g. no metrics)
+still counts as valid. Invalid files are listed at the end so they are never
+silently skipped.
+
+Add `--json` for machine-readable output. `stats` exits `0` when the directory
+has at least one valid feature, `1` if none are valid, and `2` if the path is
+not a directory. (A `--strict` flag for failing on *any* invalid file — handy in
+CI — is planned.)
 
 ---
 

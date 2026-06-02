@@ -11,6 +11,7 @@ import sys
 from dataclasses import asdict
 
 from .models import Diff, Issue, Product
+from .stats import PortfolioStats
 
 # --- Minimal color (auto-disabled when not writing to a TTY) ----------------
 
@@ -148,5 +149,89 @@ def render_diff_json(d: Diff, old_path: str, new_path: str) -> str:
         "removed_metrics": d.removed_metrics,
         "added_risks": d.added_risks,
         "removed_risks": d.removed_risks,
+    }
+    return json.dumps(payload, indent=2)
+
+
+# --- stats -------------------------------------------------------------------
+
+
+def render_stats_human(s: PortfolioStats) -> str:
+    lines = [
+        _bold("Portfolio Overview"),
+        "==================",
+        "",
+        f"Features: {s.files_found}",
+        f"Requirements: {s.total_requirements}",
+        f"Metrics: {s.total_metrics}",
+        f"Risks: {s.total_risks}",
+        "",
+        _bold("Quality"),
+        "=======",
+        "",
+    ]
+
+    def missing_block(label: str, names: list[str]) -> None:
+        lines.append(f"{label}: {len(names)}")
+        for name in names:
+            lines.append(f"  - {name}")
+
+    missing_block("Features Missing Metrics", s.missing_metrics)
+    missing_block("Features Missing Risks", s.missing_risks)
+    lines.append(
+        f"Average Requirements Per Feature: {s.average_requirements:.1f}"
+    )
+
+    largest = s.largest_feature
+    if largest is not None:
+        lines.append(
+            f"Largest Feature: {largest.name} ({largest.requirements} requirements)"
+        )
+    else:
+        lines.append("Largest Feature: (none)")
+
+    lines += ["", _bold("Requirements by Feature"), "=======================", ""]
+    by_feature = s.requirements_by_feature
+    if by_feature:
+        width = max(len(f.name) for f in by_feature) + 4
+        for f in by_feature:
+            lines.append(f"{f.name:<{width}}{f.requirements}")
+    else:
+        lines.append("(none)")
+
+    if s.invalid:
+        lines += ["", _bold(f"Invalid Features ({len(s.invalid)})")]
+        for f in s.invalid:
+            reasons = ", ".join(f.error_codes) or "unknown"
+            lines.append(f"  {_red(f.path)} — {reasons}")
+
+    return "\n".join(lines)
+
+
+def render_stats_json(s: PortfolioStats) -> str:
+    largest = s.largest_feature
+    payload = {
+        "directory": s.directory,
+        "features": s.files_found,
+        "valid_features": s.valid_features,
+        "invalid_features": s.invalid_features,
+        "requirements": s.total_requirements,
+        "metrics": s.total_metrics,
+        "risks": s.total_risks,
+        "features_missing_metrics": s.features_missing_metrics,
+        "features_missing_risks": s.features_missing_risks,
+        "missing_metrics": s.missing_metrics,
+        "missing_risks": s.missing_risks,
+        "average_requirements_per_feature": round(s.average_requirements, 1),
+        "largest_feature": (
+            {"name": largest.name, "requirements": largest.requirements}
+            if largest is not None
+            else None
+        ),
+        "requirements_by_feature": [
+            {"name": f.name, "requirements": f.requirements}
+            for f in s.requirements_by_feature
+        ],
+        "invalid": [{"file": f.path, "errors": f.error_codes} for f in s.invalid],
     }
     return json.dumps(payload, indent=2)

@@ -3,22 +3,25 @@
 Commands:
     rac validate <file.md> [--json]
     rac diff <old.md> <new.md> [--json]
+    rac stats <directory> [--json]
 
 Exit codes:
-    0  success (validate: no errors; diff: always, when it runs)
-    1  validation found errors
-    2  usage / IO error (e.g. file not found)
+    0  success (validate: no errors; diff: ran; stats: >=1 valid feature)
+    1  validate: errors found; stats: no valid features in the directory
+    2  usage / IO error (e.g. file not found, path is not a directory)
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import __version__
 from . import outputs
 from .diff import diff as diff_asts
 from .parser import parse_file
+from .stats import collect_stats
 from .validate import has_errors, validate
 
 EXIT_OK = 0
@@ -59,6 +62,21 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_stats(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    stats = collect_stats(args.directory)
+    if args.json:
+        print(outputs.render_stats_json(stats))
+    else:
+        print(outputs.render_stats_human(stats))
+    # Success as long as the portfolio has at least one valid feature. Invalid
+    # files are reported but don't fail the run on their own. (A future --strict
+    # flag will fail the run if *any* file is invalid, for CI use.)
+    return EXIT_OK if stats.valid_features > 0 else EXIT_VALIDATION_FAILED
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rac",
@@ -86,7 +104,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_diff.set_defaults(func=cmd_diff)
 
-    # Future commands (rac stats <dir>, rac review <file>) will register here.
+    p_stats = sub.add_parser(
+        "stats", help="Summarize a directory of requirement files."
+    )
+    p_stats.add_argument("directory", help="Directory to scan recursively for *.md.")
+    p_stats.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_stats.set_defaults(func=cmd_stats)
+
+    # Future command (rac review <file>) will register here.
     return parser
 
 
