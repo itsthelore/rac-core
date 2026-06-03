@@ -21,24 +21,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # setuptools-scm derives the version from git tags, so we need the
+          # full history + tags (the default shallow checkout omits them).
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-
-      - name: Verify release tag matches package version
-        run: |
-          # The release tag (e.g. v0.2.0) must match pyproject.toml's version, or
-          # the build produces the wrong (often already-published) artifact and
-          # PyPI rejects it with a cryptic "file already exists". Fail fast here
-          # with a clear message instead. Tag the *version-bumped* commit.
-          TAG="${GITHUB_REF_NAME#v}"
-          PKG="$(python -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")"
-          echo "release tag = $TAG | pyproject version = $PKG"
-          if [ "$TAG" != "$PKG" ]; then
-            echo "::error::Release tag 'v$TAG' does not match pyproject version '$PKG'. Re-tag the commit that bumps the version."
-            exit 1
-          fi
 
       - name: Build release distributions
         run: |

@@ -1,10 +1,12 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "requirements-as-code"
-version = "0.2.0"
+# Version is derived from the git tag by setuptools-scm (see [tool.setuptools_scm]).
+# Release flow: tag vX.Y.Z -> the build is version X.Y.Z. No manual edits.
+dynamic = ["version"]
 description = "RAC — lint and diff product requirements written in Markdown."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -41,6 +43,9 @@ rac = "rac.cli:main"
 
 [tool.setuptools]
 packages = ["rac"]
+
+[tool.setuptools_scm]
+# Defaults are fine: version comes from the latest `vX.Y.Z` git tag.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
