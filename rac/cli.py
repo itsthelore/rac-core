@@ -4,11 +4,13 @@ Commands:
     rac validate <file.md> [--json]
     rac diff <old.md> <new.md> [--json]
     rac stats <directory> [--json]
+    rac ingest <file> [-o OUT] [--force] [--json]
 
 Exit codes:
-    0  success (validate: no errors; diff: ran; stats: >=1 valid feature)
-    1  validate: errors found; stats: no valid features in the directory
-    2  usage / IO error (e.g. file not found, path is not a directory)
+    0  success
+    1  validate: errors found; stats: no valid features; ingest: conversion failed
+    2  usage / IO error (file not found, not a directory, unsupported type,
+       refuse-to-overwrite)
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from pathlib import Path
 from . import __version__
 from . import outputs
 from .diff import diff as diff_asts
+from .ingest import ConversionError, UnsupportedDocument, ingest
 from .parser import parse_file
 from .stats import collect_stats
 from .validate import has_errors, validate
@@ -77,6 +80,46 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return EXIT_OK if stats.valid_features > 0 else EXIT_VALIDATION_FAILED
 
 
+def cmd_ingest(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    if not path.is_file():
+        print(f"rac: file not found: {args.file}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    try:
+        result = ingest(args.file)
+    except UnsupportedDocument as exc:  # unhandled type / missing extra
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    except ConversionError as exc:  # recognized file, failed to convert
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+
+    if args.output:
+        out = Path(args.output)
+        if out.exists() and not args.force:
+            print(
+                f"rac: {args.output} already exists; pass --force to overwrite",
+                file=sys.stderr,
+            )
+            raise SystemExit(EXIT_USAGE)
+        out.write_text(result.markdown, encoding="utf-8")
+        if args.json:
+            print(outputs.render_ingest_json(result, str(out)))
+        else:
+            print(
+                f"Wrote {out} ({len(result.markdown)} chars, via {result.converter}).",
+                file=sys.stderr,
+            )
+    else:
+        # No output file: preview the converted Markdown on stdout.
+        if args.json:
+            print(outputs.render_ingest_json(result, None))
+        else:
+            print(result.markdown)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rac",
@@ -112,6 +155,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_stats.set_defaults(func=cmd_stats)
+
+    p_ingest = sub.add_parser(
+        "ingest", help="Convert a source document (DOCX, Markdown) to Markdown."
+    )
+    p_ingest.add_argument("file", help="Path to the source document.")
+    p_ingest.add_argument(
+        "-o", "--output", help="Write Markdown here instead of printing it."
+    )
+    p_ingest.add_argument(
+        "--force", action="store_true", help="Overwrite the output file if it exists."
+    )
+    p_ingest.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_ingest.set_defaults(func=cmd_ingest)
 
     # Future command (rac review <file>) will register here.
     return parser

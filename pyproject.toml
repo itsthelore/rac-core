@@ -31,7 +31,10 @@ Repository = "https://github.com/tcballard/requirements-as-code"
 Issues = "https://github.com/tcballard/requirements-as-code/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+# Document ingestion (rac ingest). Optional so the core install stays light.
+# markitdown[docx] pulls the DOCX reader; later formats add their own extras.
+ingest = ["markitdown[docx]"]
+dev = ["pytest>=7.0", "markitdown[docx]", "python-docx"]
 
 [project.scripts]
 rac = "rac.cli:main"

@@ -10,6 +10,7 @@ import json
 import sys
 from dataclasses import asdict
 
+from .ingest import IngestResult
 from .models import Diff, Issue, Product
 from .stats import PortfolioStats
 
@@ -233,5 +234,18 @@ def render_stats_json(s: PortfolioStats) -> str:
             for f in s.requirements_by_feature
         ],
         "invalid": [{"file": f.path, "errors": f.error_codes} for f in s.invalid],
+    }
+    return json.dumps(payload, indent=2)
+
+
+# --- ingest ------------------------------------------------------------------
+
+
+def render_ingest_json(result: IngestResult, output_path: str | None) -> str:
+    payload = {
+        "source": result.source_path,
+        "converter": result.converter,
+        "output": output_path,
+        "markdown": result.markdown,
     }
     return json.dumps(payload, indent=2)

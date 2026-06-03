@@ -390,6 +390,37 @@ CI — is planned.)
 
 ---
 
+## Ingest
+
+Convert an existing document into Markdown so it can enter the RAC workflow.
+Ingestion only **converts and preserves structure** — it does not decide whether
+the result is a valid RAC artifact (that is the job of future `inspect` /
+`normalize` commands).
+
+```bash
+rac ingest spec.docx              # print converted Markdown (preview)
+rac ingest spec.docx -o spec.md   # write it to a file
+rac ingest spec.docx -o spec.md --force   # overwrite an existing file
+rac ingest spec.docx --json       # { source, converter, output, markdown }
+```
+
+Conversion is powered by [MarkItDown](https://github.com/microsoft/markitdown),
+installed via the optional `ingest` extra:
+
+```bash
+pip install "requirements-as-code[ingest]"
+```
+
+Supported today: **DOCX** and **Markdown** (pass-through). HTML and PDF are
+planned for v0.3.x. Converters live behind a `DocumentConverter` abstraction, so
+new sources can be added without changing the CLI.
+
+`ingest` exits `0` on success, `1` if a recognized document fails to convert, and
+`2` for usage errors (file not found, unsupported type, missing `ingest` extra,
+or an existing output file without `--force`).
+
+---
+
 ## Review (Planned)
 
 AI-assisted product review.
