@@ -379,14 +379,36 @@ Invalid Features (1)
   ./features/draft.md — missing-title, missing-requirements
 ```
 
-Counts span all parsed files; a feature with only *warnings* (e.g. no metrics)
-still counts as valid. Invalid files are listed at the end so they are never
-silently skipped.
+Counts span all parsed requirement files; a feature with only *warnings* (e.g. no
+metrics) still counts as valid. Invalid files are listed at the end so they are
+never silently skipped.
 
-Add `--json` for machine-readable output. `stats` exits `0` when the directory
-has at least one valid feature, `1` if none are valid, and `2` if the path is
-not a directory. (A `--strict` flag for failing on *any* invalid file — handy in
-CI — is planned.)
+Decision artifacts are aggregated **separately** so they never distort the
+requirement totals or averages. When a directory contains decisions, a
+`Decisions` section reports the count plus a status and category breakdown:
+
+```text
+Decisions
+=========
+
+Total: 17
+
+Status
+  - Accepted: 12
+  - Proposed: 3
+  - Superseded: 2
+
+Category
+  - Architecture: 8
+  - Product: 5
+  - Process: 4
+```
+
+Add `--json` for machine-readable output (a `decisions` block is included only
+when decisions are present). `stats` exits `0` when the directory has at least
+one valid feature or decision, `1` if none, and `2` if the path is not a
+directory. (A `--strict` flag for failing on *any* invalid file — handy in CI —
+is planned.)
 
 ---
 
@@ -510,6 +532,37 @@ Missing:
 
 Score: 2 + 0.5 × 1 = 2.5 / 3.5 = 0.71
 ```
+
+### Decision metadata
+
+Decision artifacts (ADRs) may carry lightweight, optional metadata. When present,
+`inspect` extracts it and `validate` checks the values:
+
+```markdown
+## Status
+
+Accepted
+
+## Category
+
+Architecture
+
+## Supersedes
+
+ADR-012
+```
+
+| Field | Supported values | Validated? |
+|------------|--------------------------------------------------------------|------------|
+| Status | Proposed, Accepted, Superseded, Deprecated | yes |
+| Category | Architecture, Product, Process, Technical, Other | yes |
+| Supersedes | any reference (free text) | no — metadata only |
+
+`inspect` surfaces these under a **Decision Metadata** block (and in `--json` as
+`status` / `category` / `supersedes`, present only when declared). Metadata is
+**optional**: a decision without it is still valid. Only an *unsupported* Status
+or Category value fails validation (`invalid-decision-status` /
+`invalid-decision-category`); values are matched case-insensitively.
 
 ### Synonyms
 

@@ -75,11 +75,14 @@ def parse(text: str, source_path: str = "") -> Product:
     title: str | None = None
     extra_title_lines: list[int] = []
     section: str | None = None  # current tracked section key, or None/"other"
+    current_h2: str | None = None  # normalized heading of the current ## section
 
     problem_lines: list[str] = []
     requirement_lines: list[tuple[str, int]] = []
     metric_lines: list[str] = []
     risk_lines: list[str] = []
+    # Generic body text per ## section: {normalized heading -> [stripped lines]}.
+    section_bodies: dict[str, list[str]] = {}
 
     has = {
         "problem": False,
@@ -97,8 +100,14 @@ def parse(text: str, source_path: str = "") -> Product:
                 else:
                     extra_title_lines.append((tok.map[0] + 1) if tok.map else 0)
                 section = None  # content directly under the title is ignored
+                current_h2 = None
             elif tok.tag == "h2":
-                key = _SECTIONS.get(_normalize_heading(heading_text))
+                normalized = _normalize_heading(heading_text)
+                current_h2 = normalized
+                # Record the heading immediately so empty sections still appear
+                # in product.sections (classification keys off heading presence).
+                section_bodies.setdefault(normalized, [])
+                key = _SECTIONS.get(normalized)
                 section = key
                 if key is not None:
                     has[key] = True
@@ -106,11 +115,21 @@ def parse(text: str, source_path: str = "") -> Product:
                 section = "other"
             continue
 
-        if tok.type != "inline" or section is None or section == "other":
+        if tok.type != "inline":
             continue
 
         # Skip the inline that *is* a heading's text.
         if i > 0 and tokens[i - 1].type == "heading_open":
+            continue
+
+        # Generic body capture for every ## section (the canonical content map).
+        if current_h2 is not None:
+            for raw in tok.content.split("\n"):
+                stripped = raw.strip()
+                if stripped:
+                    section_bodies.setdefault(current_h2, []).append(stripped)
+
+        if section is None or section == "other":
             continue
 
         start_line = tok.map[0] if tok.map else 0
@@ -137,6 +156,8 @@ def parse(text: str, source_path: str = "") -> Product:
     # None = section absent; "" = present but empty; otherwise the joined text.
     problem = "\n".join(problem_lines).strip() if has["problem"] else None
 
+    sections = {h: "\n".join(lines) for h, lines in section_bodies.items()}
+
     return Product(
         title=title,
         extra_title_lines=extra_title_lines,
@@ -145,6 +166,7 @@ def parse(text: str, source_path: str = "") -> Product:
         malformed_requirements=malformed,
         success_metrics=metric_lines,
         risks=risk_lines,
+        sections=sections,
         has_problem_section=has["problem"],
         has_requirements_section=has["requirements"],
         has_metrics_section=has["success_metrics"],

@@ -11,14 +11,9 @@ import sys
 from dataclasses import asdict
 
 from .artifacts import ARTIFACT_SPECS
+from .classification import CONFIDENCE_THRESHOLD, TypeScore
 from .ingest import IngestResult
-from .inspect import (
-    CONFIDENCE_THRESHOLD,
-    DirectoryInspection,
-    DocumentSections,
-    InspectionResult,
-    score_artifacts,
-)
+from .inspect import DirectoryInspection, InspectionResult
 from .models import Diff, Issue, Product
 from .stats import PortfolioStats
 
@@ -214,6 +209,22 @@ def render_stats_human(s: PortfolioStats) -> str:
             reasons = ", ".join(f.error_codes) or "unknown"
             lines.append(f"  {_red(f.path)} — {reasons}")
 
+    # Decisions are reported separately; omit the section entirely when there are
+    # none so requirement-only portfolios render exactly as before.
+    if s.decisions:
+        lines += ["", _bold("Decisions"), "=========", "", f"Total: {s.decision_count}"]
+
+        def breakdown(label: str, counts: dict[str, int]) -> None:
+            lines.extend(["", _bold(label)])
+            if counts:
+                for name, count in counts.items():
+                    lines.append(f"  - {name}: {count}")
+            else:
+                lines.append("  (none recorded)")
+
+        breakdown("Status", s.decision_status_counts)
+        breakdown("Category", s.decision_category_counts)
+
     return "\n".join(lines)
 
 
@@ -243,6 +254,14 @@ def render_stats_json(s: PortfolioStats) -> str:
         ],
         "invalid": [{"file": f.path, "errors": f.error_codes} for f in s.invalid],
     }
+    # Additive: only present when the portfolio actually contains decisions, so
+    # requirement-only output is unchanged.
+    if s.decisions:
+        payload["decisions"] = {
+            "count": s.decision_count,
+            "by_status": s.decision_status_counts,
+            "by_category": s.decision_category_counts,
+        }
     return json.dumps(payload, indent=2)
 
 
@@ -263,20 +282,33 @@ def render_inspect_human(result: InspectionResult) -> str:
     if result.missing_sections:
         lines += ["", _bold("Missing Sections:")]
         lines.extend(_red(f"  ✗ {s.title()}") for s in result.missing_sections)
+    _append_decision_metadata(lines, result)
     return "\n".join(lines)
+
+
+def _append_decision_metadata(lines: list[str], result: InspectionResult) -> None:
+    """Add Status / Category / Supersedes lines when a decision declares them."""
+    pairs = [
+        ("Status", result.status),
+        ("Category", result.category),
+        ("Supersedes", result.supersedes),
+    ]
+    shown = [(label, value) for label, value in pairs if value]
+    if shown:
+        lines += ["", _bold("Decision Metadata:")]
+        lines.extend(f"  {label}: {value}" for label, value in shown)
 
 
 def render_inspect_json(result: InspectionResult) -> str:
     return json.dumps(result.to_dict(), indent=2)
 
 
-def render_inspect_verbose(result: InspectionResult, sections: DocumentSections) -> str:
+def render_inspect_verbose(
+    result: InspectionResult, scores: list[TypeScore]
+) -> str:
     """Explainable single-file output: matches, misses, and the score math."""
-    chosen = next(
-        (s for s in score_artifacts(sections) if s.name == result.type), None
-    )
+    chosen = next((s for s in scores if s.name == result.type), None)
     if chosen is None:  # Unknown — explain via the closest candidate
-        scores = score_artifacts(sections)
         chosen = scores[0] if scores else None
 
     lines = [

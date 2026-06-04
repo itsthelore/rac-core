@@ -9,16 +9,14 @@ from pathlib import Path
 import pytest
 
 from rac.artifacts import ARTIFACT_SPECS
+from rac.classification import CONFIDENCE_THRESHOLD, score_artifacts
 from rac.cli import main
 from rac.inspect import (
-    CONFIDENCE_THRESHOLD,
-    classify,
-    extract_sections,
     inspect_directory,
     inspect_file,
     inspect_text,
-    score_artifacts,
 )
+from rac.parser import parse
 
 from conftest import fixture_path
 
@@ -33,10 +31,10 @@ def test_artifact_specs_are_the_two_concrete_types():
     assert names == {"requirement", "decision"}
 
 
-def test_extract_sections_returns_title_and_headings():
-    doc = extract_sections("# Title\n\n## Problem\n\nx\n\n## Requirements\n\ny\n")
-    assert doc.title == "Title"
-    assert doc.headings == ["problem", "requirements"]
+def test_parse_captures_title_and_sections():
+    product = parse("# Title\n\n## Problem\n\nx\n\n## Requirements\n\ny\n")
+    assert product.title == "Title"
+    assert list(product.sections) == ["problem", "requirements"]
 
 
 def test_classify_requirement():
@@ -110,14 +108,13 @@ def test_synonym_is_case_insensitive():
 
 
 def test_score_artifacts_breakdown():
-    sections = extract_sections(
-        Path(fixture_path("inspect", "decision.md")).read_text()
-    )
-    top = score_artifacts(sections)[0]
+    product = parse(Path(fixture_path("inspect", "decision.md")).read_text())
+    top = score_artifacts(product)[0]
     assert top.name == "decision"
     assert set(top.matched_required) == {"context", "decision", "consequences"}
     assert "status" in top.matched_recommended
-    assert top.points == 3.5 and top.ceiling == 4.0
+    # required (3) + 0.5×(status) = 3.5 / (3 + 0.5×3 recommended) = 3.5 / 4.5
+    assert top.points == 3.5 and top.ceiling == 4.5
 
 
 def test_cli_inspect_verbose(capsys):

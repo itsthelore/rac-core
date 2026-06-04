@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from collections import Counter
 
+from .artifacts import spec_for
+from .classification import classify
 from .models import Issue, Product
 
 # A file with more requirements than this earns a (non-failing) warning.
@@ -28,6 +30,79 @@ def has_errors(issues: list[Issue]) -> bool:
 
 
 def validate(product: Product) -> list[Issue]:
+    """Check ``product`` and return all structural and quality findings.
+
+    Dispatches on artifact type: Decisions are validated against the Decision
+    schema; everything else (Requirements and Unknown documents) keeps RAC's
+    original Requirement rules unchanged.
+    """
+    if classify(product).type == "decision":
+        return _validate_decision(product)
+    return _validate_requirement(product)
+
+
+def _first_value(body: str) -> str:
+    """First non-empty line of a section body (single-value metadata)."""
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ""
+
+
+def _validate_decision(product: Product) -> list[Issue]:
+    """Validate a Decision artifact (REQ-001/002/006/007).
+
+    Missing metadata never fails (it is optional); only *invalid values* are
+    errors. Required sections (Context, Decision, Consequences) must be present.
+    """
+    spec = spec_for("decision")
+    assert spec is not None  # the decision spec always exists
+    issues: list[Issue] = []
+
+    if not product.title:
+        issues.append(Issue("error", "missing-title", "File has no top-level # title."))
+
+    if product.extra_title_lines:
+        issues.append(
+            Issue(
+                "error",
+                "multiple-titles",
+                "File has more than one top-level # title; expected exactly one.",
+                product.extra_title_lines[0],
+            )
+        )
+
+    # Required sections define the artifact (ADR format).
+    for section in spec.required:
+        if section not in product.sections:
+            issues.append(
+                Issue(
+                    "error",
+                    f"missing-{section}",
+                    f"Decision is missing a ## {section.title()} section.",
+                )
+            )
+
+    # Constrained metadata: a present value must be in the allowed set. A missing
+    # section is fine — metadata is optional (REQ-007).
+    for field_name, allowed in spec.metadata.items():
+        body = product.sections.get(field_name, "")
+        value = _first_value(body)
+        if value and not any(value.casefold() == a.casefold() for a in allowed):
+            issues.append(
+                Issue(
+                    "error",
+                    f"invalid-decision-{field_name}",
+                    f"## {field_name.title()} value {value!r} is not one of: "
+                    f"{', '.join(allowed)}.",
+                )
+            )
+
+    return issues
+
+
+def _validate_requirement(product: Product) -> list[Issue]:
     """Check ``product`` and return all structural and quality findings."""
     issues: list[Issue] = []
 
