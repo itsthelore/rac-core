@@ -28,9 +28,11 @@ class ArtifactSpec:
     display: str  # human label, e.g. "Requirement"
     required: tuple[str, ...]  # normalized section names that define the type
     recommended: tuple[str, ...] = ()  # expected-but-optional sections
-    # Optional aliases: alternate normalized headings that map onto a canonical
-    # section name (e.g. "alternatives" -> "alternatives considered").
-    aliases: dict[str, str] = field(default_factory=dict)
+    # Synonyms: alternate normalized headings that map onto a canonical section
+    # name (e.g. "success criteria" -> "success metrics"). Applied before
+    # matching, so synonyms contribute to confidence. Matching is deterministic
+    # (dict lookup) and case-insensitive (headings are normalized first).
+    synonyms: dict[str, str] = field(default_factory=dict)
 
     @property
     def expected(self) -> tuple[str, ...]:
@@ -44,12 +46,20 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         display="Requirement",
         required=("problem", "requirements"),
         recommended=("success metrics", "risks", "assumptions"),
+        synonyms={
+            "success criteria": "success metrics",
+            "kpis": "success metrics",
+            "kpi": "success metrics",
+        },
     ),
     ArtifactSpec(
         name="decision",
         display="Decision",
         required=("context", "decision", "consequences"),
         recommended=("status", "alternatives considered"),
-        aliases={"alternatives": "alternatives considered"},
+        synonyms={
+            "alternatives": "alternatives considered",
+            "options considered": "alternatives considered",
+        },
     ),
 )

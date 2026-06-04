@@ -24,7 +24,12 @@ from . import __version__
 from . import outputs
 from .diff import diff as diff_asts
 from .ingest import ConversionError, UnsupportedDocument, ingest
-from .inspect import inspect_text
+from .inspect import (
+    classify,
+    extract_sections,
+    inspect_directory,
+    inspect_text,
+)
 from .parser import parse_file
 from .stats import collect_stats
 from .validate import has_errors, validate
@@ -145,11 +150,25 @@ def _read_inspect_input(target: str) -> str:
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
-    result = inspect_text(_read_inspect_input(args.file))
-    if args.json:
-        print(outputs.render_inspect_json(result))
+    # Directory? Aggregate per-file results into type counts.
+    if args.file != "-" and Path(args.file).is_dir():
+        recursive = not args.top_level
+        result = inspect_directory(args.file, recursive=recursive)
+        if args.json:
+            print(outputs.render_dir_inspect_json(result))
+        else:
+            print(outputs.render_dir_inspect_human(result))
+        return EXIT_OK
+
+    # Single file (or stdin).
+    text = _read_inspect_input(args.file)
+    if args.verbose and not args.json:
+        sections = extract_sections(text)
+        print(outputs.render_inspect_verbose(classify(sections), sections))
+    elif args.json:
+        print(outputs.render_inspect_json(inspect_text(text)))
     else:
-        print(outputs.render_inspect_human(result))
+        print(outputs.render_inspect_human(inspect_text(text)))
     # A completed inspection always succeeds — Unknown is a valid outcome.
     return EXIT_OK
 
@@ -234,10 +253,26 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[version_parent],
     )
     p_inspect.add_argument(
-        "file", help="Path to a Markdown file, or '-' to read from stdin."
+        "file",
+        help="A Markdown file, a directory, or '-' to read from stdin.",
     )
     p_inspect.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_inspect.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show the classification breakdown and score (single file only).",
+    )
+    p_inspect.add_argument(
+        "--top-level",
+        action="store_true",
+        help="When inspecting a directory, only its top-level files (no recursion).",
+    )
+    p_inspect.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_inspect.set_defaults(func=cmd_inspect)
 

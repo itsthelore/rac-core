@@ -10,8 +10,15 @@ import json
 import sys
 from dataclasses import asdict
 
+from .artifacts import ARTIFACT_SPECS
 from .ingest import IngestResult
-from .inspect import InspectionResult
+from .inspect import (
+    CONFIDENCE_THRESHOLD,
+    DirectoryInspection,
+    DocumentSections,
+    InspectionResult,
+    score_artifacts,
+)
 from .models import Diff, Issue, Product
 from .stats import PortfolioStats
 
@@ -261,6 +268,78 @@ def render_inspect_human(result: InspectionResult) -> str:
 
 def render_inspect_json(result: InspectionResult) -> str:
     return json.dumps(result.to_dict(), indent=2)
+
+
+def render_inspect_verbose(result: InspectionResult, sections: DocumentSections) -> str:
+    """Explainable single-file output: matches, misses, and the score math."""
+    chosen = next(
+        (s for s in score_artifacts(sections) if s.name == result.type), None
+    )
+    if chosen is None:  # Unknown — explain via the closest candidate
+        scores = score_artifacts(sections)
+        chosen = scores[0] if scores else None
+
+    lines = [
+        _bold(f"Artifact Type: {result.type.title()}"),
+        f"Confidence: {result.confidence:.0%}",
+    ]
+    if chosen is None:
+        return "\n".join(lines)
+    if result.type == "unknown":
+        lines.append(f"Closest match: {chosen.display}")
+
+    def block(title: str, names: list[str]) -> None:
+        lines.extend(["", _bold(title)])
+        if names:
+            lines.extend(_green(f"  ✓ {s.title()}") for s in names)
+        else:
+            lines.append("  (none)")
+
+    block("Required Matches:", chosen.matched_required)
+    block("Recommended Matches:", chosen.matched_recommended)
+    if chosen.missing:
+        lines.extend(["", _bold("Missing:")])
+        lines.extend(_red(f"  ✗ {s.title()}") for s in chosen.missing)
+
+    req, rec = len(chosen.matched_required), len(chosen.matched_recommended)
+    lines.extend(
+        [
+            "",
+            _bold("Score:")
+            + f" {req} + 0.5 × {rec} = {chosen.points:g} / {chosen.ceiling:g}"
+            + f" = {round(chosen.fit, 2)}",
+        ]
+    )
+    if result.type == "unknown":
+        lines.append(f"(below the {CONFIDENCE_THRESHOLD:.0%} threshold → Unknown)")
+    return "\n".join(lines)
+
+
+def render_dir_inspect_human(d: DirectoryInspection) -> str:
+    counts = d.counts
+    lines = [_bold(f"Files Inspected: {d.total_files}"), ""]
+    for spec in ARTIFACT_SPECS:
+        lines.append(f"{spec.display}s: {counts.get(spec.name, 0)}")
+    lines.append(f"Unknown: {counts.get('unknown', 0)}")
+    return "\n".join(lines)
+
+
+def render_dir_inspect_json(d: DirectoryInspection) -> str:
+    payload = {
+        "schema_version": "1",
+        "directory": d.directory,
+        "recursive": d.recursive,
+        "summary": {
+            "total_files": d.total_files,
+            "counts": d.counts,
+            "unknown": d.unknown_count,
+        },
+        "files": [
+            {"path": f.path, "type": f.type, "confidence": f.confidence}
+            for f in d.files
+        ],
+    }
+    return json.dumps(payload, indent=2)
 
 
 # --- ingest ------------------------------------------------------------------

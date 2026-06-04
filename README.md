@@ -468,6 +468,55 @@ anything that doesn't fit well is reported as **Unknown** (a valid, successful
 result — not an error). `--json` emits `{ type, confidence, present_sections,
 missing_sections }`.
 
+### Inspect a directory
+
+Point `inspect` at a directory to get a summary across many files (recursive by
+default; `--top-level` limits it to the directory's own files):
+
+```bash
+rac inspect planning/
+rac inspect planning/ --top-level
+rac inspect planning/ --json        # versioned summary + per-file array
+```
+
+```text
+Files Inspected: 23
+
+Requirements: 7
+Decisions: 3
+Unknown: 13
+```
+
+### Explain a classification (`--verbose`)
+
+```bash
+rac inspect bond-dashboard.md --verbose
+```
+
+```text
+Artifact Type: Requirement
+Confidence: 71%
+
+Required Matches:
+  ✓ Problem
+  ✓ Requirements
+
+Recommended Matches:
+  ✓ Success Metrics
+
+Missing:
+  ✗ Risks
+  ✗ Assumptions
+
+Score: 2 + 0.5 × 1 = 2.5 / 3.5 = 0.71
+```
+
+### Synonyms
+
+Common heading variants are recognized automatically (case-insensitive,
+deterministic) — e.g. `Success Criteria` and `KPIs` both count as Success Metrics,
+and `Alternatives` counts as Alternatives Considered.
+
 `inspect` exits `0` for any completed inspection (including Unknown) and `2` for
 usage errors (file not found, or a non-Markdown file — convert it with
 `rac ingest` first).

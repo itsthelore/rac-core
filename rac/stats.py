@@ -111,12 +111,17 @@ def _neg_name(name: str) -> tuple[int, ...]:
     return tuple(-ord(c) for c in name)
 
 
-def find_markdown_files(directory: str) -> list[Path]:
-    """Recursively find `*.md` files, skipping dotted dirs (.git, .venv, ...)."""
+def find_markdown_files(directory: str, recursive: bool = True) -> list[Path]:
+    """Find `*.md` files, skipping dotted dirs (.git, .venv, ...).
+
+    Recursive by default (used by `stats` and `inspect`); pass ``recursive=False``
+    to look only at files directly inside ``directory``.
+    """
     root = Path(directory)
+    glob = root.rglob if recursive else root.glob
     found = [
         p
-        for p in root.rglob("*.md")
+        for p in glob("*.md")
         if not any(part.startswith(".") for part in p.relative_to(root).parts)
     ]
     return sorted(found)

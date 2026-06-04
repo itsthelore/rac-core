@@ -14,8 +14,10 @@ from rac.inspect import (
     CONFIDENCE_THRESHOLD,
     classify,
     extract_sections,
+    inspect_directory,
     inspect_file,
     inspect_text,
+    score_artifacts,
 )
 
 from conftest import fixture_path
@@ -82,6 +84,109 @@ def test_dogfood_repo_artifacts():
     roadmap = REPO_ROOT / "planning/roadmap/v0.4-inspect.md"
     assert inspect_file(str(adr)).type == "decision"
     assert inspect_file(str(roadmap)).type == "requirement"
+
+
+# --- synonyms ---------------------------------------------------------------
+
+
+def test_synonym_counts_as_canonical_section():
+    # "## Success Criteria" should satisfy the requirement's success-metrics slot.
+    text = (
+        "# Feature\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n\n"
+        "## Success Criteria\n\n- hits target\n"
+    )
+    result = inspect_text(text)
+    assert result.type == "requirement"
+    assert "success metrics" in result.present_sections
+    assert "success metrics" not in result.missing_sections
+
+
+def test_synonym_is_case_insensitive():
+    text = "# F\n\n## Problem\n\np\n\n## Requirements\n\nr\n\n## KPIs\n\n- x\n"
+    assert "success metrics" in inspect_text(text).present_sections
+
+
+# --- scoring breakdown / verbose --------------------------------------------
+
+
+def test_score_artifacts_breakdown():
+    sections = extract_sections(
+        Path(fixture_path("inspect", "decision.md")).read_text()
+    )
+    top = score_artifacts(sections)[0]
+    assert top.name == "decision"
+    assert set(top.matched_required) == {"context", "decision", "consequences"}
+    assert "status" in top.matched_recommended
+    assert top.points == 3.5 and top.ceiling == 4.0
+
+
+def test_cli_inspect_verbose(capsys):
+    rc = main(["inspect", fixture_path("inspect", "requirement.md"), "--verbose"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Required Matches:" in out
+    assert "Recommended Matches:" in out
+    assert "Score:" in out and "/ 3.5" in out
+
+
+# --- directory inspection ---------------------------------------------------
+
+
+def test_inspect_directory_recursive_vs_top_level():
+    d = fixture_path("inspect")
+    top = inspect_directory(d, recursive=False)
+    rec = inspect_directory(d, recursive=True)
+    assert top.total_files == 3  # requirement, decision, ambiguous
+    assert rec.total_files == 4  # + nested/another_requirement.md
+    assert rec.counts["requirement"] == 2
+    assert rec.counts["decision"] == 1
+    assert rec.counts["unknown"] == 1
+
+
+def test_cli_dir_inspect_human(capsys):
+    rc = main(["inspect", fixture_path("inspect")])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Files Inspected: 4" in out
+    assert "Requirements: 2" in out
+    assert "Decisions: 1" in out
+    assert "Unknown: 1" in out
+
+
+def test_cli_dir_inspect_json_is_versioned_and_flat(capsys):
+    rc = main(["inspect", fixture_path("inspect"), "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "1"
+    assert payload["recursive"] is True
+    assert payload["summary"]["total_files"] == 4
+    assert payload["summary"]["counts"]["requirement"] == 2
+    # File entries are flat: path/type/confidence only (no present/missing).
+    entry = payload["files"][0]
+    assert set(entry) == {"path", "type", "confidence"}
+
+
+def test_cli_dir_inspect_top_level_flag(capsys):
+    rc = main(["inspect", fixture_path("inspect"), "--top-level"])
+    assert rc == 0
+    assert "Files Inspected: 3" in capsys.readouterr().out
+
+
+def test_cli_dir_inspect_recursive_flag_accepted(capsys):
+    # --recursive is the default; accepted as a no-op for clarity.
+    rc = main(["inspect", fixture_path("inspect"), "--recursive"])
+    assert rc == 0
+    assert "Files Inspected: 4" in capsys.readouterr().out
+
+
+def test_dogfood_directory_targets():
+    # planning/roadmap is fully RAC-formatted -> all Requirements, no Unknown.
+    roadmap = inspect_directory(str(REPO_ROOT / "planning/roadmap"))
+    assert roadmap.unknown_count == 0
+    assert roadmap.counts["requirement"] == roadmap.total_files
+    # The well-formed ADRs classify as Decision.
+    adr = REPO_ROOT / "planning/adr/adr-010-documents-are-not-artifacts.md"
+    assert inspect_file(str(adr)).type == "decision"
 
 
 # --- CLI --------------------------------------------------------------------
