@@ -68,32 +68,42 @@ class MarkItDownConverter:
 
     name = "markitdown"
     # HTML needs no extra (built into MarkItDown); the others come from the
-    # corresponding markitdown extras, all bundled in our `ingest` extra.
+    # corresponding markitdown extras, exposed as our granular ingest extras.
     extensions = (".docx", ".pdf", ".html", ".htm", ".pptx", ".xls", ".xlsx")
-
-    _MISSING_EXTRA = (
-        "converting '{suffix}' needs the ingest extra: "
-        "pip install 'requirements-as-code[ingest]'"
-    )
 
     def convert(self, path: Path) -> str:
         try:
             from markitdown import MarkItDown
         except ModuleNotFoundError as exc:
-            raise UnsupportedDocument(
-                self._MISSING_EXTRA.format(suffix=path.suffix)
-            ) from exc
+            raise UnsupportedDocument(_missing_extra_message(path.suffix)) from exc
 
         try:
             result = MarkItDown().convert(str(path))
         except Exception as exc:  # MarkItDown raises a variety of errors
             if _is_missing_dependency(exc):
                 # MarkItDown is installed but this format's reader extra isn't.
-                raise UnsupportedDocument(
-                    self._MISSING_EXTRA.format(suffix=path.suffix)
-                ) from exc
+                raise UnsupportedDocument(_missing_extra_message(path.suffix)) from exc
             raise ConversionError(f"could not convert {path.name}: {exc}") from exc
         return result.text_content
+
+
+# Which optional extra provides the reader for a given file type. HTML/HTM need
+# no extra (built into MarkItDown), so they fall back to the base `ingest`.
+_EXTRA_FOR_SUFFIX = {
+    ".docx": "ingest",
+    ".pdf": "ingest-pdf",
+    ".pptx": "ingest-office",
+    ".xls": "ingest-office",
+    ".xlsx": "ingest-office",
+}
+
+
+def _missing_extra_message(suffix: str) -> str:
+    extra = _EXTRA_FOR_SUFFIX.get(suffix.lower(), "ingest")
+    return (
+        f"converting '{suffix}' needs the {extra} extra: "
+        f"pip install 'requirements-as-code[{extra}]'"
+    )
 
 
 def _is_missing_dependency(exc: Exception) -> bool:

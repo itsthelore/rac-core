@@ -49,6 +49,16 @@ def test_unsupported_type_raises(tmp_path):
         ingest(str(bad))
 
 
+def test_missing_extra_message_points_at_right_extra():
+    from rac.ingest import _missing_extra_message
+
+    assert "[ingest-pdf]" in _missing_extra_message(".pdf")
+    assert "[ingest-office]" in _missing_extra_message(".pptx")
+    assert "[ingest-office]" in _missing_extra_message(".xlsx")
+    assert "[ingest]" in _missing_extra_message(".docx")
+    assert "[ingest]" in _missing_extra_message(".html")  # html -> base markitdown
+
+
 # --- CLI: markdown / error paths (no optional deps needed) ------------------
 
 

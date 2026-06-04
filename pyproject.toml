@@ -33,9 +33,13 @@ Repository = "https://github.com/tcballard/requirements-as-code"
 Issues = "https://github.com/tcballard/requirements-as-code/issues"
 
 [project.optional-dependencies]
-# Document ingestion (rac ingest). Optional so the core install stays light.
-# Each MarkItDown extra pulls one format reader (HTML needs none — it's built in).
-ingest = ["markitdown[docx,pdf,pptx,xlsx,xls]"]
+# Document ingestion (rac ingest). Optional so the core install stays light, and
+# split by format so users only pull the readers they need. HTML and Markdown
+# need no extra (HTML is built into MarkItDown; Markdown is pass-through).
+ingest = ["markitdown[docx]"]                        # DOCX (+ HTML, Markdown)
+ingest-pdf = ["markitdown[pdf]"]                     # + PDF
+ingest-office = ["markitdown[pptx,xlsx,xls]"]        # + PPTX / XLSX / XLS
+ingest-all = ["markitdown[docx,pdf,pptx,xlsx,xls]"]  # every supported format
 # dev also pulls the libraries used to *generate* fixture files in the tests.
 dev = [
     "pytest>=7.0",

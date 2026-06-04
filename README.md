@@ -405,15 +405,25 @@ rac ingest spec.docx --json       # { source, converter, output, markdown }
 ```
 
 Conversion is powered by [MarkItDown](https://github.com/microsoft/markitdown),
-installed via the optional `ingest` extra:
+installed via optional extras — split by format so you only pull the readers you
+need:
+
+| Extra | Adds | Formats |
+|-------|------|---------|
+| `ingest` | `markitdown[docx]` | DOCX, HTML, Markdown |
+| `ingest-pdf` | `markitdown[pdf]` | + PDF |
+| `ingest-office` | `markitdown[pptx,xlsx,xls]` | + PPTX, XLSX, XLS |
+| `ingest-all` | everything above | all supported formats |
 
 ```bash
-pip install "requirements-as-code[ingest]"
+pip install "requirements-as-code[ingest]"       # DOCX + HTML + Markdown
+pip install "requirements-as-code[ingest-all]"    # everything
 ```
 
-Supported formats: **DOCX, PDF, HTML, PPTX, XLSX**, and **Markdown**
-(pass-through, no extra needed). Converters live behind a `DocumentConverter`
-abstraction, so new sources can be added without changing the CLI.
+HTML and Markdown need no extra (HTML is built into MarkItDown; Markdown is a
+pass-through). If a file's reader isn't installed, `rac ingest` tells you exactly
+which extra to install. Converters live behind a `DocumentConverter` abstraction,
+so new sources can be added without changing the CLI.
 
 `ingest` exits `0` on success, `1` if a recognized document fails to convert, and
 `2` for usage errors (file not found, unsupported type, missing `ingest` extra,
