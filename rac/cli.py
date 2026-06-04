@@ -4,10 +4,11 @@ Commands:
     rac validate <file.md> [--json]
     rac diff <old.md> <new.md> [--json]
     rac stats <directory> [--json]
-    rac ingest <file> [-o OUT] [--force] [--json]
+    rac ingest <file> [-o OUT | --stdout] [--force] [--json]
+    rac inspect <file.md | -> [--json]
 
 Exit codes:
-    0  success
+    0  success (incl. inspect reporting Unknown)
     1  validate: errors found; stats: no valid features; ingest: conversion failed
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite)
@@ -23,6 +24,7 @@ from . import __version__
 from . import outputs
 from .diff import diff as diff_asts
 from .ingest import ConversionError, UnsupportedDocument, ingest
+from .inspect import inspect_text
 from .parser import parse_file
 from .stats import collect_stats
 from .validate import has_errors, validate
@@ -112,11 +114,43 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
     else:
-        # No output file: preview the converted Markdown on stdout.
+        # No -o (or explicit --stdout): preview the converted Markdown on stdout.
         if args.json:
             print(outputs.render_ingest_json(result, None))
         else:
             print(result.markdown)
+    return EXIT_OK
+
+
+def _read_inspect_input(target: str) -> str:
+    """Read inspect input from a Markdown file or stdin (``-``)."""
+    if target == "-":
+        return sys.stdin.read()
+    path = Path(target)
+    if not path.is_file():
+        print(f"rac: file not found: {target}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    if path.suffix.lower() not in (".md", ".markdown"):
+        print(
+            f"rac: inspect expects a Markdown file; "
+            f"convert it first with: rac ingest {target}",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_USAGE)
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"rac: cannot read {target}: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+
+def cmd_inspect(args: argparse.Namespace) -> int:
+    result = inspect_text(_read_inspect_input(args.file))
+    if args.json:
+        print(outputs.render_inspect_json(result))
+    else:
+        print(outputs.render_inspect_human(result))
+    # A completed inspection always succeeds — Unknown is a valid outcome.
     return EXIT_OK
 
 
@@ -177,8 +211,14 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[version_parent],
     )
     p_ingest.add_argument("file", help="Path to the source document.")
-    p_ingest.add_argument(
+    ingest_dest = p_ingest.add_mutually_exclusive_group()
+    ingest_dest.add_argument(
         "-o", "--output", help="Write Markdown here instead of printing it."
+    )
+    ingest_dest.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Write Markdown to stdout (the default; explicit for pipelines).",
     )
     p_ingest.add_argument(
         "--force", action="store_true", help="Overwrite the output file if it exists."
@@ -188,7 +228,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_ingest.set_defaults(func=cmd_ingest)
 
-    # Future command (rac review <file>) will register here.
+    p_inspect = sub.add_parser(
+        "inspect",
+        help="Identify a Markdown document's artifact type and structure.",
+        parents=[version_parent],
+    )
+    p_inspect.add_argument(
+        "file", help="Path to a Markdown file, or '-' to read from stdin."
+    )
+    p_inspect.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_inspect.set_defaults(func=cmd_inspect)
+
+    # Future command (rac improve <file>) will register here.
     return parser
 
 

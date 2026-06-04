@@ -11,6 +11,7 @@ import sys
 from dataclasses import asdict
 
 from .ingest import IngestResult
+from .inspect import InspectionResult
 from .models import Diff, Issue, Product
 from .stats import PortfolioStats
 
@@ -236,6 +237,30 @@ def render_stats_json(s: PortfolioStats) -> str:
         "invalid": [{"file": f.path, "errors": f.error_codes} for f in s.invalid],
     }
     return json.dumps(payload, indent=2)
+
+
+# --- inspect -----------------------------------------------------------------
+
+
+def render_inspect_human(result: InspectionResult) -> str:
+    lines = [
+        _bold(f"Artifact Type: {result.type.title()}"),
+        f"Confidence: {result.confidence:.0%}",
+        "",
+        _bold("Present Sections:"),
+    ]
+    if result.present_sections:
+        lines.extend(_green(f"  ✓ {s.title()}") for s in result.present_sections)
+    else:
+        lines.append("  (none)")
+    if result.missing_sections:
+        lines += ["", _bold("Missing Sections:")]
+        lines.extend(_red(f"  ✗ {s.title()}") for s in result.missing_sections)
+    return "\n".join(lines)
+
+
+def render_inspect_json(result: InspectionResult) -> str:
+    return json.dumps(result.to_dict(), indent=2)
 
 
 # --- ingest ------------------------------------------------------------------

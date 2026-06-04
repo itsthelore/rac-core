@@ -399,6 +399,7 @@ the result is a valid RAC artifact (that is the job of future `inspect` /
 
 ```bash
 rac ingest spec.docx              # print converted Markdown (preview)
+rac ingest spec.docx --stdout     # same, explicit (handy in pipelines)
 rac ingest spec.docx -o spec.md   # write it to a file
 rac ingest spec.docx -o spec.md --force   # overwrite an existing file
 rac ingest spec.docx --json       # { source, converter, output, markdown }
@@ -428,6 +429,48 @@ so new sources can be added without changing the CLI.
 `ingest` exits `0` on success, `1` if a recognized document fails to convert, and
 `2` for usage errors (file not found, unsupported type, missing `ingest` extra,
 or an existing output file without `--force`).
+
+---
+
+## Inspect
+
+Identify what kind of artifact a Markdown document is, and report which expected
+sections are present or missing. Inspection is **read-only and observational** —
+it answers *"what is this?"*, not *"how should I improve it?"* (that's a future
+`improve` command).
+
+```bash
+rac inspect bond-dashboard.md
+rac inspect bond-dashboard.md --json
+cat decision.md | rac inspect -          # read from stdin
+rac ingest prd.docx --stdout | rac inspect -   # ingest then inspect
+```
+
+Output:
+
+```text
+Artifact Type: Requirement
+Confidence: 71%
+
+Present Sections:
+  ✓ Problem
+  ✓ Requirements
+  ✓ Success Metrics
+
+Missing Sections:
+  ✗ Risks
+  ✗ Assumptions
+```
+
+RAC classifies the document against known artifact schemas (no AI) and reports a
+confidence score. v0.4 recognizes **Requirement** and **Decision** artifacts;
+anything that doesn't fit well is reported as **Unknown** (a valid, successful
+result — not an error). `--json` emits `{ type, confidence, present_sections,
+missing_sections }`.
+
+`inspect` exits `0` for any completed inspection (including Unknown) and `2` for
+usage errors (file not found, or a non-Markdown file — convert it with
+`rac ingest` first).
 
 ---
 
