@@ -166,6 +166,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             ),
             "success measures": (
                 "How will the team know the roadmap is succeeding?",
+                "What observable signals would show progress?",
             ),
             "assumptions": (
                 "What must be true for this roadmap to remain valid?",

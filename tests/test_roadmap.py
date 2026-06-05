@@ -14,10 +14,11 @@ import json
 
 import pytest
 
-from rac.artifacts import spec_for
+import rac.improve as improve_mod
+from rac.artifacts import ARTIFACT_SPECS, spec_for
 from rac.cli import main
 from rac.classification import classify
-from rac.improve import improve_file, supports_improve
+from rac.improve import improve_file, improve_text, supports_improve
 from rac.inspect import inspect_file
 from rac.parser import parse, parse_file
 from rac.schema import available_schemas, schema_reference
@@ -177,7 +178,12 @@ def test_improve_json_shape_is_structural_only(capsys):
     assert payload["type"] == "roadmap"
     assert "success_measures" in payload["missing_recommended"]
     assert payload["guidance"]["success_measures"] == [
-        "How will the team know the roadmap is succeeding?"
+        "How will the team know the roadmap is succeeding?",
+        "What observable signals would show progress?",
+    ]
+    # risks stays single-line (REQ-006).
+    assert payload["guidance"]["risks"] == [
+        "What could prevent these outcomes from being achieved?"
     ]
 
 
@@ -188,6 +194,53 @@ def test_improve_human_lists_missing_with_guidance(capsys):
     assert "Artifact Type: Roadmap" in out
     assert "Missing Recommended:" in out
     assert "Success Measures" in out
+
+
+def test_success_measures_guidance_is_enriched():
+    # v0.6.1 hardening: Success Measures carries both prompting questions
+    # (REQ-004/006). Enrichment flows from the ArtifactSpec, not a renderer.
+    spec = spec_for("roadmap")
+    assert spec is not None
+    assert spec.guidance["success measures"] == (
+        "How will the team know the roadmap is succeeding?",
+        "What observable signals would show progress?",
+    )
+
+
+def test_improve_separates_missing_required_from_recommended():
+    # A roadmap with enough signal to classify (Outcomes + 3 recommended) but
+    # missing the required Initiatives section reports them in separate buckets.
+    text = (
+        "# R\n\n## Outcomes\n\n- o\n\n## Success Measures\n\n- m\n\n"
+        "## Assumptions\n\n- a\n\n## Risks\n\n- r\n"
+    )
+    result = improve_text(text)
+    assert result.type == "roadmap"
+    assert result.missing_required == ["initiatives"]
+    assert result.missing_recommended == []
+
+
+def test_improve_template_orders_required_before_recommended(monkeypatch, capsys):
+    # Only Outcomes present -> Initiatives (required) must precede the recommended
+    # sections in the emitted template (REQ-005).
+    text = (
+        "# R\n\n## Outcomes\n\n- o\n\n## Assumptions\n\n- a\n\n## Risks\n\n- r\n"
+    )
+    _stdin(monkeypatch, text)
+    rc = main(["improve", "-", "--template"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert out.index("## Initiatives") < out.index("## Success Measures")
+
+
+def test_improve_does_not_modify_the_roadmap(tmp_path):
+    f = tmp_path / "roadmap.md"
+    content = "# R\n\n## Outcomes\n\n- o\n\n## Initiatives\n\n- i\n"
+    f.write_text(content)
+    before = f.stat().st_mtime_ns
+    main(["improve", str(f), "--template"])
+    assert f.read_text() == content
+    assert f.stat().st_mtime_ns == before
 
 
 # --- inspection CLI ---------------------------------------------------------
@@ -283,3 +336,45 @@ def test_decision_stats_unchanged_and_omit_roadmaps(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["decisions"]["count"] == 3
     assert "roadmaps" not in payload
+
+
+# --- architecture: improvement stays ArtifactSpec-driven --------------------
+
+
+def test_improve_support_is_artifact_spec_driven():
+    # The real v0.6.0 achievement: improve support is earned through complete
+    # ArtifactSpec guidance, via the shared pipeline — never per-type logic.
+    for spec in ARTIFACT_SPECS:
+        complete = set(spec.expected) <= set(spec.guidance)
+        assert supports_improve(spec) is complete
+
+    # No artifact-specific improve engine exists: the public surface is generic.
+    public = {name for name in vars(improve_mod) if not name.startswith("_")}
+    artifact_specific = {
+        name
+        for name in public
+        if any(t in name for t in ("roadmap", "requirement", "decision"))
+    }
+    assert artifact_specific == set()
+
+
+def test_roadmap_guidance_has_no_work_management_fields():
+    # ADR-017 / REQ-008: guidance must not push work-management *fields* onto
+    # roadmaps. Field-oriented (not a broad word ban): normal strategic language
+    # like "milestone" or "timeline" stays allowed.
+    forbidden_fields = [
+        "owner:",
+        "assignee:",
+        "status:",
+        "sprint:",
+        "due date:",
+        "deadline:",
+        "priority:",
+    ]
+    spec = spec_for("roadmap")
+    assert spec is not None
+    blob = " ".join(
+        line for lines in spec.guidance.values() for line in lines
+    ).casefold()
+    for field in forbidden_fields:
+        assert field not in blob
