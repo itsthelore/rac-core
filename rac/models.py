@@ -53,6 +53,11 @@ class Product:
     malformed_requirements: list[MalformedRequirement] = field(default_factory=list)
     success_metrics: list[str] = field(default_factory=list)
     risks: list[str] = field(default_factory=list)
+    # Every ``##`` section as {normalized heading -> stripped body text}, in
+    # document order. The canonical source of section content for all artifact
+    # types: classification, inspection metadata, and validation read from here
+    # rather than re-parsing the Markdown.
+    sections: dict[str, str] = field(default_factory=dict)
     # Distinguish "section absent" from "section present but empty".
     has_problem_section: bool = False
     has_requirements_section: bool = False

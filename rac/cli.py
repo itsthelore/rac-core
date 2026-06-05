@@ -9,7 +9,8 @@ Commands:
 
 Exit codes:
     0  success (incl. inspect reporting Unknown)
-    1  validate: errors found; stats: no valid features; ingest: conversion failed
+    1  validate: errors found; stats: no valid features or decisions;
+       ingest: conversion failed
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite)
 """
@@ -24,13 +25,9 @@ from . import __version__
 from . import outputs
 from .diff import diff as diff_asts
 from .ingest import ConversionError, UnsupportedDocument, ingest
-from .inspect import (
-    classify,
-    extract_sections,
-    inspect_directory,
-    inspect_text,
-)
-from .parser import parse_file
+from .classification import score_artifacts
+from .inspect import build_inspection, inspect_directory
+from .parser import parse, parse_file
 from .stats import collect_stats
 from .validate import has_errors, validate
 
@@ -81,10 +78,12 @@ def cmd_stats(args: argparse.Namespace) -> int:
         print(outputs.render_stats_json(stats))
     else:
         print(outputs.render_stats_human(stats))
-    # Success as long as the portfolio has at least one valid feature. Invalid
-    # files are reported but don't fail the run on their own. (A future --strict
-    # flag will fail the run if *any* file is invalid, for CI use.)
-    return EXIT_OK if stats.valid_features > 0 else EXIT_VALIDATION_FAILED
+    # Success as long as the portfolio has analysable content: at least one valid
+    # feature or at least one decision. Invalid files are reported but don't fail
+    # the run on their own. (A future --strict flag will fail the run if *any*
+    # file is invalid, for CI use.)
+    has_content = stats.valid_features > 0 or stats.decision_count > 0
+    return EXIT_OK if has_content else EXIT_VALIDATION_FAILED
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -162,13 +161,14 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
     # Single file (or stdin).
     text = _read_inspect_input(args.file)
+    product = parse(text)
+    result = build_inspection(product)
     if args.verbose and not args.json:
-        sections = extract_sections(text)
-        print(outputs.render_inspect_verbose(classify(sections), sections))
+        print(outputs.render_inspect_verbose(result, score_artifacts(product)))
     elif args.json:
-        print(outputs.render_inspect_json(inspect_text(text)))
+        print(outputs.render_inspect_json(result))
     else:
-        print(outputs.render_inspect_human(inspect_text(text)))
+        print(outputs.render_inspect_human(result))
     # A completed inspection always succeeds — Unknown is a valid outcome.
     return EXIT_OK
 

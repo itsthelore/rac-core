@@ -28,6 +28,13 @@ class ArtifactSpec:
     display: str  # human label, e.g. "Requirement"
     required: tuple[str, ...]  # normalized section names that define the type
     recommended: tuple[str, ...] = ()  # expected-but-optional sections
+    # Truly optional sections: recognized and extracted, but never scored and
+    # never reported as "missing" (e.g. a Decision's "supersedes" reference).
+    optional: tuple[str, ...] = ()
+    # Constrained metadata fields: {normalized section name -> allowed values}.
+    # A value present in one of these sections that is not in its allowed set is
+    # a validation error; a missing section is not (metadata stays optional).
+    metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Synonyms: alternate normalized headings that map onto a canonical section
     # name (e.g. "success criteria" -> "success metrics"). Applied before
     # matching, so synonyms contribute to confidence. Matching is deterministic
@@ -36,7 +43,11 @@ class ArtifactSpec:
 
     @property
     def expected(self) -> tuple[str, ...]:
-        """All sections that belong to this artifact (required + recommended)."""
+        """Sections that count toward fit (required + recommended).
+
+        ``optional`` sections are deliberately excluded — they are extracted but
+        never scored, so they never show up as "missing".
+        """
         return self.required + self.recommended
 
 
@@ -56,10 +67,23 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         name="decision",
         display="Decision",
         required=("context", "decision", "consequences"),
-        recommended=("status", "alternatives considered"),
+        recommended=("status", "category", "alternatives considered"),
+        optional=("supersedes",),
+        metadata={
+            "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
+            "category": ("Architecture", "Product", "Process", "Technical", "Other"),
+        },
         synonyms={
             "alternatives": "alternatives considered",
             "options considered": "alternatives considered",
         },
     ),
 )
+
+
+def spec_for(name: str) -> ArtifactSpec | None:
+    """Return the :class:`ArtifactSpec` with canonical ``name``, or None."""
+    for spec in ARTIFACT_SPECS:
+        if spec.name == name:
+            return spec
+    return None

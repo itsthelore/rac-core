@@ -2,48 +2,22 @@
 
 `rac inspect <file>` answers, for a single document: *what kind of artifact is
 this, how confident are we, and which expected sections are present / missing?*
-`rac inspect <dir>` aggregates that across a directory into type counts. It is
-strictly observational — it never modifies content and never recommends changes
-(that is a future `improve` command's job). Classification is a pure heuristic
-over the document's ``##`` section headings (ADR-002: AI-optional), consuming the
-shared schemas in :mod:`rac.artifacts`.
+For Decisions it also surfaces lightweight metadata (status, category, supersedes)
+when present. `rac inspect <dir>` aggregates the type across a directory into
+counts. It is strictly observational — it never modifies content and never
+recommends changes (that is a future `improve` command's job). Classification is
+delegated to :mod:`rac.classification` (the shared, AI-optional heuristic).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from markdown_it import MarkdownIt
-
-from .artifacts import ARTIFACT_SPECS
-from .parser import _normalize_heading
-from .stats import find_markdown_files
-
-# Below this best-fit score, the document is reported as Unknown rather than
-# forced into a type. Unknown is a valid, successful outcome — not an error.
-CONFIDENCE_THRESHOLD = 0.5
-
-
-@dataclass
-class DocumentSections:
-    """The structural skeleton of a document: its title and ``##`` headings."""
-
-    title: str | None
-    headings: list[str]  # normalized h2 section names, in document order
-
-
-@dataclass
-class TypeScore:
-    """How well a document fits one artifact type — the explainable breakdown."""
-
-    name: str
-    display: str
-    matched_required: list[str]
-    matched_recommended: list[str]
-    missing: list[str]
-    points: float  # matched_required + 0.5 * matched_recommended
-    ceiling: float  # |required| + 0.5 * |recommended|
-    fit: float  # points / ceiling, 0.0 – 1.0 (unrounded)
+from .artifacts import ARTIFACT_SPECS, spec_for
+from .classification import classify
+from .fs import find_markdown_files
+from .models import Product
+from .parser import parse, parse_file
 
 
 @dataclass
@@ -51,21 +25,31 @@ class InspectionResult:
     """Typed single-file inspection result (ADR-003).
 
     Section names are stored normalized (e.g. ``"success metrics"``); renderers
-    format them. ``to_dict`` is the JSON contract and is additive-friendly.
+    format them. ``to_dict`` is the JSON contract and is additive-friendly:
+    decision metadata fields appear only when present.
     """
 
     type: str  # artifact name, or "unknown"
     confidence: float  # 0.0 – 1.0 (rounded to 2dp)
     present_sections: list[str]
     missing_sections: list[str]
+    # Decision metadata — populated only for decisions that declare it.
+    status: str | None = None
+    category: str | None = None
+    supersedes: str | None = None
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "type": self.type,
             "confidence": self.confidence,
             "present_sections": [_snake(s) for s in self.present_sections],
             "missing_sections": [_snake(s) for s in self.missing_sections],
         }
+        for key in ("status", "category", "supersedes"):
+            value = getattr(self, key)
+            if value is not None:
+                payload[key] = value
+        return payload
 
 
 @dataclass
@@ -107,83 +91,60 @@ def _snake(section: str) -> str:
     return section.replace(" ", "_")
 
 
-def extract_sections(text: str) -> DocumentSections:
-    """Pull the ``#`` title and ordered, normalized ``##`` headings from Markdown."""
-    tokens = MarkdownIt("commonmark").parse(text)
-    title: str | None = None
-    headings: list[str] = []
-    for i, tok in enumerate(tokens):
-        if tok.type != "heading_open":
-            continue
-        content = tokens[i + 1].content if i + 1 < len(tokens) else ""
-        if tok.tag == "h1" and title is None:
-            title = content.strip()
-        elif tok.tag == "h2":
-            headings.append(_normalize_heading(content))
-    return DocumentSections(title=title, headings=headings)
+def _first_line(body: str) -> str:
+    """The first non-empty line of a section body (single-value metadata)."""
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ""
 
 
-def score_artifacts(sections: DocumentSections) -> list[TypeScore]:
-    """Score the document against every artifact type, best fit first.
-
-    Synonyms (e.g. "success criteria" -> "success metrics") are applied before
-    matching, so they contribute to the score deterministically.
-    """
-    scores: list[TypeScore] = []
-    for spec in ARTIFACT_SPECS:
-        mapped = {spec.synonyms.get(h, h) for h in sections.headings}
-        matched_required = [s for s in spec.required if s in mapped]
-        matched_recommended = [s for s in spec.recommended if s in mapped]
-        missing = [s for s in spec.expected if s not in mapped]
-        points = len(matched_required) + 0.5 * len(matched_recommended)
-        ceiling = len(spec.required) + 0.5 * len(spec.recommended)
-        fit = points / ceiling if ceiling else 0.0
-        scores.append(
-            TypeScore(
-                name=spec.name,
-                display=spec.display,
-                matched_required=matched_required,
-                matched_recommended=matched_recommended,
-                missing=missing,
-                points=points,
-                ceiling=ceiling,
-                fit=fit,
-            )
-        )
-    # Best fit first; ties broken by more required matches, then ARTIFACT_SPECS
-    # order (stable sort preserves it).
-    scores.sort(key=lambda t: (t.fit, len(t.matched_required)), reverse=True)
-    return scores
+def canonical_value(raw: str, allowed: tuple[str, ...]) -> str:
+    """Match ``raw`` against ``allowed`` case-insensitively, returning the
+    canonical spelling; if it matches nothing, return it stripped (an invalid
+    value that validation will flag)."""
+    candidate = _first_line(raw)
+    for value in allowed:
+        if value.casefold() == candidate.casefold():
+            return value
+    return candidate
 
 
-def classify(sections: DocumentSections) -> InspectionResult:
-    """Pick the best-fit artifact type for ``sections`` (or Unknown)."""
-    scores = score_artifacts(sections)
-    best = scores[0] if scores else None
+def _attach_decision_metadata(result: InspectionResult, product: Product) -> None:
+    spec = spec_for("decision")
+    if spec is None:  # pragma: no cover - decision spec always exists
+        return
+    for field_name, allowed in spec.metadata.items():
+        body = product.sections.get(field_name)
+        if body:
+            setattr(result, field_name, canonical_value(body, allowed))
+    supersedes = product.sections.get("supersedes")
+    if supersedes:
+        # Metadata only (REQ-003): no validation, just normalize the value.
+        result.supersedes = _first_line(supersedes)
 
-    if best is None or best.fit < CONFIDENCE_THRESHOLD or not best.matched_required:
-        return InspectionResult(
-            type="unknown",
-            confidence=round(best.fit, 2) if best else 0.0,
-            present_sections=list(sections.headings),
-            missing_sections=[],
-        )
 
-    return InspectionResult(
-        type=best.name,
-        confidence=round(best.fit, 2),
-        present_sections=best.matched_required + best.matched_recommended,
-        missing_sections=best.missing,
+def build_inspection(product: Product) -> InspectionResult:
+    """Classify ``product`` and attach decision metadata when applicable."""
+    c = classify(product)
+    result = InspectionResult(
+        type=c.type,
+        confidence=c.confidence,
+        present_sections=c.present_sections,
+        missing_sections=c.missing_sections,
     )
+    if c.type == "decision":
+        _attach_decision_metadata(result, product)
+    return result
 
 
 def inspect_text(text: str) -> InspectionResult:
-    return classify(extract_sections(text))
+    return build_inspection(parse(text))
 
 
 def inspect_file(path: str) -> InspectionResult:
-    with open(path, encoding="utf-8") as fh:
-        return inspect_text(fh.read())
+    return build_inspection(parse_file(path))
 
 
 def inspect_directory(directory: str, recursive: bool = True) -> DirectoryInspection:
