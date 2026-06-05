@@ -660,6 +660,77 @@ the exit code.
 
 ---
 
+## Schema
+
+Inspect RAC's registered artifact schemas without creating a file.
+
+```bash
+rac schema --list
+rac schema --list --json
+rac schema requirement
+rac schema decision --json
+rac schema requirement --template
+```
+
+`rac schema <type>` shows the full schema reference: required, recommended, and
+optional sections; descriptions; guidance; and metadata values where applicable.
+
+```text
+Artifact Type: Decision
+
+Required Sections:
+  - Context
+  - Decision
+  - Consequences
+
+Recommended Sections:
+  - Status
+  - Category
+  - Alternatives Considered
+
+Optional Sections:
+  - Supersedes
+
+Metadata Fields:
+  - Status: Proposed | Accepted | Superseded | Deprecated
+  - Category: Architecture | Product | Process | Technical | Other
+```
+
+`--json` returns the same schema data as grouped arrays and maps:
+
+```json
+{
+  "type": "requirement",
+  "required": ["problem", "requirements"],
+  "recommended": ["success_metrics", "risks", "assumptions"],
+  "optional": [],
+  "descriptions": {},
+  "guidance": {},
+  "metadata": {}
+}
+```
+
+`--template` emits a structurally valid Markdown starter. Templates are useful
+starting points, not finished artifacts: users still replace TODO text with
+meaningful product knowledge.
+
+```bash
+rac schema requirement --template > requirement.md
+rac schema decision --template > decision.md
+```
+
+Generated templates are validation-safe:
+
+```bash
+rac schema requirement --template | rac validate -
+rac schema decision --template | rac validate -
+```
+
+Unknown schemas fail with exit code `2` and list available schemas. Only
+registered schemas are supported; custom schemas are out of scope.
+
+---
+
 ## Review (Planned)
 
 AI-assisted product review.

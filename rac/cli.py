@@ -1,12 +1,13 @@
 """Command-line interface for RAC.
 
 Commands:
-    rac validate <file.md> [--json]
+    rac validate <file.md | -> [--json]
     rac diff <old.md> <new.md> [--json]
     rac stats <directory> [--json]
     rac ingest <file> [-o OUT | --stdout] [--force] [--json]
     rac inspect <file.md | -> [--json]
     rac improve <file.md | -> [--json | --template]
+    rac schema [--list] [type] [--json | --template]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown)
@@ -30,6 +31,7 @@ from .classification import score_artifacts
 from .improve import improve_product
 from .inspect import build_inspection, inspect_directory
 from .parser import parse, parse_file
+from .schema import available_schemas, schema_reference
 from .stats import collect_stats
 from .validate import has_errors, validate
 
@@ -50,8 +52,15 @@ def _read(path: str):
         raise SystemExit(EXIT_USAGE)
 
 
+def _read_validate_input(target: str):
+    """Parse validation input from a Markdown file or stdin."""
+    if target == "-":
+        return parse(sys.stdin.read(), source_path="-")
+    return _read(target)
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
-    product = _read(args.file)
+    product = _read_validate_input(args.file)
     issues = validate(product)
     if args.json:
         print(outputs.render_validation_json(product, issues))
@@ -188,6 +197,39 @@ def cmd_improve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_schema(args: argparse.Namespace) -> int:
+    names = available_schemas()
+    if args.list:
+        if args.template:
+            print("rac: --template cannot be used with --list", file=sys.stderr)
+            raise SystemExit(EXIT_USAGE)
+        if args.schema:
+            print("rac: schema name cannot be used with --list", file=sys.stderr)
+            raise SystemExit(EXIT_USAGE)
+        if args.json:
+            print(outputs.render_schema_list_json(names))
+        else:
+            print(outputs.render_schema_list_human(names))
+        return EXIT_OK
+
+    if not args.schema:
+        print("rac: schema name required unless --list is passed", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    ref = schema_reference(args.schema)
+    if ref is None:
+        print(outputs.render_unknown_schema(args.schema, names), file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    if args.json:
+        print(outputs.render_schema_json(ref))
+    elif args.template:
+        print(outputs.render_schema_template(ref))
+    else:
+        print(outputs.render_schema_human(ref))
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     version_str = f"rac {__version__}"
 
@@ -210,7 +252,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate a single requirement file.",
         parents=[version_parent],
     )
-    p_validate.add_argument("file", help="Path to the requirement Markdown file.")
+    p_validate.add_argument(
+        "file", help="Path to a requirement Markdown file, or '-' to read from stdin."
+    )
     p_validate.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
@@ -310,6 +354,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit Markdown templates for the missing sections.",
     )
     p_improve.set_defaults(func=cmd_improve)
+
+    p_schema = sub.add_parser(
+        "schema",
+        help="Show registered artifact schemas and starter templates.",
+        parents=[version_parent],
+    )
+    p_schema.add_argument(
+        "schema",
+        nargs="?",
+        help="Schema name, e.g. requirement or decision.",
+    )
+    p_schema.add_argument(
+        "--list",
+        action="store_true",
+        help="List available schemas.",
+    )
+    schema_mode = p_schema.add_mutually_exclusive_group()
+    schema_mode.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    schema_mode.add_argument(
+        "--template",
+        action="store_true",
+        help="Emit a full Markdown starter template.",
+    )
+    p_schema.set_defaults(func=cmd_schema)
 
     return parser
 

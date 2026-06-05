@@ -16,6 +16,7 @@ from .improve import ImprovementResult
 from .ingest import IngestResult
 from .inspect import DirectoryInspection, InspectionResult
 from .models import Diff, Issue, Product
+from .schema import SchemaReference, template_sections
 from .stats import PortfolioStats
 
 # --- Minimal color (auto-disabled when not writing to a TTY) ----------------
@@ -440,6 +441,74 @@ def render_improve_template(result: ImprovementResult) -> str:
         guidance_lines = result.guidance.get(section, [])
         if guidance_lines:
             block += "\n\n" + "\n".join(f"<!-- {q} -->" for q in guidance_lines)
+        blocks.append(block)
+    return "\n\n".join(blocks) + "\n"
+
+
+# --- schema ------------------------------------------------------------------
+
+
+def render_schema_list_human(names: list[str]) -> str:
+    lines = [_bold("Available Schemas:")]
+    lines.extend(f"- {name}" for name in names)
+    return "\n".join(lines)
+
+
+def render_schema_list_json(names: list[str]) -> str:
+    return json.dumps({"schemas": names}, indent=2)
+
+
+def render_unknown_schema(name: str, available: list[str]) -> str:
+    lines = [f"Unknown schema: {name}", "", "Available schemas:"]
+    lines.extend(f"- {schema}" for schema in available)
+    return "\n".join(lines)
+
+
+def render_schema_human(ref: SchemaReference) -> str:
+    lines = [_bold(f"Artifact Type: {ref.display}"), ""]
+
+    def section_block(title: str, names: list[str]) -> None:
+        lines.extend([_bold(title)])
+        if not names:
+            lines.append("  (none)")
+            lines.append("")
+            return
+        for name in names:
+            lines.append(f"  - {name.title()}")
+            description = ref.descriptions.get(name)
+            if description:
+                lines.append(f"      Description: {description}")
+            guidance = ref.guidance.get(name, [])
+            if guidance:
+                lines.append("      Guidance:")
+                lines.extend(f"        - {item}" for item in guidance)
+        lines.append("")
+
+    section_block("Required Sections:", ref.required)
+    section_block("Recommended Sections:", ref.recommended)
+    section_block("Optional Sections:", ref.optional)
+
+    if ref.metadata:
+        lines.append(_bold("Metadata Fields:"))
+        for name, values in ref.metadata.items():
+            lines.append(f"  - {name.title()}: {' | '.join(values)}")
+    return "\n".join(lines).rstrip()
+
+
+def render_schema_json(ref: SchemaReference) -> str:
+    return json.dumps(ref.to_dict(), indent=2)
+
+
+def render_schema_template(ref: SchemaReference) -> str:
+    blocks = ["# Title"]
+    for section in template_sections(ref):
+        block = f"## {section.name.title()}\n\n{section.body}"
+        comments: list[str] = []
+        if section.metadata_values:
+            comments.append(f"Choose one: {' | '.join(section.metadata_values)}")
+        comments.extend(section.guidance)
+        if comments:
+            block += "\n\n" + "\n".join(f"<!-- {comment} -->" for comment in comments)
         blocks.append(block)
     return "\n\n".join(blocks) + "\n"
 

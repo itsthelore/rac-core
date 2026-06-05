@@ -21,6 +21,7 @@ from conftest import fixture_path
         ["stats", "d", "--version"],
         ["ingest", "foo.docx", "--version"],
         ["ingest", "--version"],  # short-circuits before the required `file`
+        ["schema", "--version"],
     ],
 )
 def test_version_flag_on_root_and_subcommands(argv, capsys):

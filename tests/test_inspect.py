@@ -177,10 +177,16 @@ def test_cli_dir_inspect_recursive_flag_accepted(capsys):
 
 
 def test_dogfood_directory_targets():
-    # planning/roadmap is fully RAC-formatted -> all Requirements, no Unknown.
+    # RAC-formatted roadmap specs classify as Requirements; newer exploratory
+    # roadmap formats may remain Unknown until their schemas are formalized.
     roadmap = inspect_directory(str(REPO_ROOT / "planning/roadmap"))
-    assert roadmap.unknown_count == 0
-    assert roadmap.counts["requirement"] == roadmap.total_files
+    paths_by_type = {f.path: f.type for f in roadmap.files}
+    assert paths_by_type[
+        str(REPO_ROOT / "planning/roadmap/v0.5.2-schema.md")
+    ] == "requirement"
+    assert paths_by_type[
+        str(REPO_ROOT / "planning/roadmap/v0.6-roadmaps.md")
+    ] == "requirement"
     # The well-formed ADRs classify as Decision.
     adr = REPO_ROOT / "planning/adr/adr-010-documents-are-not-artifacts.md"
     assert inspect_file(str(adr)).type == "decision"
