@@ -576,6 +576,67 @@ usage errors (file not found, or a non-Markdown file — convert it with
 
 ---
 
+## Improve
+
+Where `inspect` tells you *what an artifact is*, `improve` tells you *what to add
+next*. It reports the required and recommended sections an artifact is missing —
+**deterministically, from the schema, with no AI** (ADR-002) — and can emit
+Markdown templates for them. `improve` is **advisory and read-only**: it never
+modifies your files and never generates content beyond `_TODO_` placeholders.
+
+```bash
+rac improve requirement.md
+rac improve requirement.md --template     # Markdown skeletons for missing sections
+rac improve requirement.md --json
+cat requirement.md | rac improve -        # stdin
+rac ingest prd.docx --stdout | rac improve -
+```
+
+Default output:
+
+```text
+Artifact Type: Requirement
+
+Missing Required:
+  (none)
+
+Missing Recommended:
+  - Risks
+  - Assumptions
+```
+
+`--template` turns the gaps into a ready-to-paste skeleton (required sections
+first, then recommended), with a short guidance hint per section:
+
+```markdown
+## Risks
+
+_TODO_
+
+<!-- Potential implementation, delivery, or adoption risks -->
+```
+
+So you can go straight from `rac inspect requirement.md` to
+`rac improve requirement.md --template` without consulting any documentation.
+
+`--json` returns a stable contract (ADR-007):
+
+```json
+{
+  "type": "requirement",
+  "missing_required": [],
+  "missing_recommended": ["risks", "assumptions"]
+}
+```
+
+v0.5.0 generates suggestions for **Requirement** artifacts. Other known types
+(e.g. Decision) and Unknown documents return a short explanatory message instead.
+`improve` is advisory: it exits `0` for any completed analysis (with or without
+suggestions) and `2` for usage errors. The presence of suggestions never changes
+the exit code.
+
+---
+
 ## Review (Planned)
 
 AI-assisted product review.

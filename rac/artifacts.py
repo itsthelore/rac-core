@@ -35,6 +35,10 @@ class ArtifactSpec:
     # A value present in one of these sections that is not in its allowed set is
     # a validation error; a missing section is not (metadata stays optional).
     metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Short authoring hints per normalized section name, surfaced by `rac improve
+    # --template` as guidance comments. Optional; sections without a hint render
+    # without one.
+    descriptions: dict[str, str] = field(default_factory=dict)
     # Synonyms: alternate normalized headings that map onto a canonical section
     # name (e.g. "success criteria" -> "success metrics"). Applied before
     # matching, so synonyms contribute to confidence. Matching is deterministic
@@ -57,6 +61,13 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         display="Requirement",
         required=("problem", "requirements"),
         recommended=("success metrics", "risks", "assumptions"),
+        descriptions={
+            "problem": "The user or business problem this addresses",
+            "requirements": "Numbered requirement statements, e.g. [REQ-001] ...",
+            "success metrics": "How success will be measured",
+            "risks": "Potential implementation, delivery, or adoption risks",
+            "assumptions": "Assumptions this artifact depends on",
+        },
         synonyms={
             "success criteria": "success metrics",
             "kpis": "success metrics",

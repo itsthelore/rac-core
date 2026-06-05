@@ -47,16 +47,38 @@ class Classification:
     missing_sections: list[str]
 
 
+def _mapped(product: Product, spec) -> set[str]:
+    """The document's ``##`` headings, with this spec's synonyms applied.
+
+    The single source of synonym-aware section matching, shared by scoring
+    (:func:`score_artifacts`) and the scoring-independent :func:`missing_sections`.
+    """
+    return {spec.synonyms.get(h, h) for h in product.sections}
+
+
+def missing_sections(product: Product, spec) -> tuple[list[str], list[str]]:
+    """Return ``(missing_required, missing_recommended)`` for ``spec``.
+
+    Synonym-aware and in schema declaration order. Independent of confidence
+    scoring (no :class:`TypeScore`) so callers like ``improve`` depend only on the
+    schema, not on classification internals.
+    """
+    mapped = _mapped(product, spec)
+    return (
+        [s for s in spec.required if s not in mapped],
+        [s for s in spec.recommended if s not in mapped],
+    )
+
+
 def score_artifacts(product: Product) -> list[TypeScore]:
     """Score the document against every artifact type, best fit first.
 
     Synonyms (e.g. "success criteria" -> "success metrics") are applied before
     matching, so they contribute to the score deterministically.
     """
-    headings = list(product.sections)
     scores: list[TypeScore] = []
     for spec in ARTIFACT_SPECS:
-        mapped = {spec.synonyms.get(h, h) for h in headings}
+        mapped = _mapped(product, spec)
         matched_required = [s for s in spec.required if s in mapped]
         matched_recommended = [s for s in spec.recommended if s in mapped]
         missing = [s for s in spec.expected if s not in mapped]

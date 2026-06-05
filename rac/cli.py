@@ -6,9 +6,10 @@ Commands:
     rac stats <directory> [--json]
     rac ingest <file> [-o OUT | --stdout] [--force] [--json]
     rac inspect <file.md | -> [--json]
+    rac improve <file.md | -> [--json | --template]
 
 Exit codes:
-    0  success (incl. inspect reporting Unknown)
+    0  success (incl. inspect/improve reporting Unknown)
     1  validate: errors found; stats: no valid features or decisions;
        ingest: conversion failed
     2  usage / IO error (file not found, not a directory, unsupported type,
@@ -26,6 +27,7 @@ from . import outputs
 from .diff import diff as diff_asts
 from .ingest import ConversionError, UnsupportedDocument, ingest
 from .classification import score_artifacts
+from .improve import improve_product
 from .inspect import build_inspection, inspect_directory
 from .parser import parse, parse_file
 from .stats import collect_stats
@@ -126,8 +128,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _read_inspect_input(target: str) -> str:
-    """Read inspect input from a Markdown file or stdin (``-``)."""
+def _read_markdown_input(target: str, command: str) -> str:
+    """Read a Markdown file or stdin (``-``) for ``command`` (inspect/improve)."""
     if target == "-":
         return sys.stdin.read()
     path = Path(target)
@@ -136,7 +138,7 @@ def _read_inspect_input(target: str) -> str:
         raise SystemExit(EXIT_USAGE)
     if path.suffix.lower() not in (".md", ".markdown"):
         print(
-            f"rac: inspect expects a Markdown file; "
+            f"rac: {command} expects a Markdown file; "
             f"convert it first with: rac ingest {target}",
             file=sys.stderr,
         )
@@ -160,7 +162,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         return EXIT_OK
 
     # Single file (or stdin).
-    text = _read_inspect_input(args.file)
+    text = _read_markdown_input(args.file, "inspect")
     product = parse(text)
     result = build_inspection(product)
     if args.verbose and not args.json:
@@ -170,6 +172,19 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     else:
         print(outputs.render_inspect_human(result))
     # A completed inspection always succeeds — Unknown is a valid outcome.
+    return EXIT_OK
+
+
+def cmd_improve(args: argparse.Namespace) -> int:
+    text = _read_markdown_input(args.file, "improve")
+    result = improve_product(parse(text))
+    if args.json:
+        print(outputs.render_improve_json(result))
+    elif args.template:
+        print(outputs.render_improve_template(result))
+    else:
+        print(outputs.render_improve_human(result))
+    # Advisory: a completed analysis always succeeds, with or without suggestions.
     return EXIT_OK
 
 
@@ -276,7 +291,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_inspect.set_defaults(func=cmd_inspect)
 
-    # Future command (rac improve <file>) will register here.
+    p_improve = sub.add_parser(
+        "improve",
+        help="Suggest missing sections (and templates) for an artifact.",
+        parents=[version_parent],
+    )
+    p_improve.add_argument(
+        "file",
+        help="A Markdown file, or '-' to read from stdin.",
+    )
+    improve_mode = p_improve.add_mutually_exclusive_group()
+    improve_mode.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    improve_mode.add_argument(
+        "--template",
+        action="store_true",
+        help="Emit Markdown templates for the missing sections.",
+    )
+    p_improve.set_defaults(func=cmd_improve)
+
     return parser
 
 

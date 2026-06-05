@@ -10,8 +10,9 @@ import json
 import sys
 from dataclasses import asdict
 
-from .artifacts import ARTIFACT_SPECS
+from .artifacts import ARTIFACT_SPECS, spec_for
 from .classification import CONFIDENCE_THRESHOLD, TypeScore
+from .improve import ImprovementResult
 from .ingest import IngestResult
 from .inspect import DirectoryInspection, InspectionResult
 from .models import Diff, Issue, Product
@@ -372,6 +373,75 @@ def render_dir_inspect_json(d: DirectoryInspection) -> str:
         ],
     }
     return json.dumps(payload, indent=2)
+
+
+# --- improve -----------------------------------------------------------------
+
+# Shown when guidance cannot be produced. Ordering everywhere is required-first,
+# then recommended (schema declaration order within each).
+_UNKNOWN_MESSAGE = (
+    "Unable to generate improvement guidance.\n"
+    "Artifact type could not be determined."
+)
+
+
+def _unsupported_message(result: ImprovementResult) -> str:
+    """Generic guidance for a known but unsupported artifact type (e.g. Decision)."""
+    return (
+        f"Artifact Type: {result.type.title()}\n\n"
+        "Improvement guidance is not currently available for this artifact type."
+    )
+
+
+def render_improve_human(result: ImprovementResult) -> str:
+    if result.type == "unknown":
+        return _UNKNOWN_MESSAGE
+    if not result.supported:
+        return _unsupported_message(result)
+
+    lines = [_bold(f"Artifact Type: {result.type.title()}"), ""]
+    if not result.missing_required and not result.missing_recommended:
+        lines.append("Nothing to improve — all expected sections present.")
+        return "\n".join(lines)
+
+    def block(title: str, names: list[str]) -> None:
+        lines.extend([_bold(title)])
+        if names:
+            lines.extend(f"  - {s.title()}" for s in names)
+        else:
+            lines.append("  (none)")
+        lines.append("")
+
+    block("Missing Required:", result.missing_required)
+    block("Missing Recommended:", result.missing_recommended)
+    return "\n".join(lines).rstrip()
+
+
+def render_improve_json(result: ImprovementResult) -> str:
+    return json.dumps(result.to_dict(), indent=2)
+
+
+def render_improve_template(result: ImprovementResult) -> str:
+    """Emit Markdown templates for missing sections (required first)."""
+    if result.type == "unknown":
+        return _UNKNOWN_MESSAGE
+    if not result.supported:
+        return _unsupported_message(result)
+
+    missing = result.missing_required + result.missing_recommended
+    if not missing:
+        return "# Nothing to add — all expected sections present."
+
+    spec = spec_for(result.type)
+    descriptions = spec.descriptions if spec else {}
+    blocks: list[str] = []
+    for section in missing:
+        block = f"## {section.title()}\n\n_TODO_"
+        hint = descriptions.get(section)
+        if hint:
+            block += f"\n\n<!-- {hint} -->"
+        blocks.append(block)
+    return "\n\n".join(blocks) + "\n"
 
 
 # --- ingest ------------------------------------------------------------------
