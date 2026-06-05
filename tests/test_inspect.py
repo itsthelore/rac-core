@@ -185,7 +185,7 @@ def test_dogfood_directory_targets():
         str(REPO_ROOT / "planning/roadmap/v0.5.2-schema.md")
     ] == "requirement"
     assert paths_by_type[
-        str(REPO_ROOT / "planning/roadmap/v0.6-roadmaps.md")
+        str(REPO_ROOT / "planning/roadmap/v0.6.0-roadmap-artifacts.md")
     ] == "requirement"
     # The well-formed ADRs classify as Decision.
     adr = REPO_ROOT / "planning/adr/adr-010-documents-are-not-artifacts.md"
