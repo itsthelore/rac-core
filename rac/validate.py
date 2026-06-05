@@ -45,6 +45,8 @@ def validate(product: Product) -> list[Issue]:
         return _validate_roadmap(product)
     if artifact_type == "prompt":
         return _validate_prompt(product)
+    if artifact_type == "design":
+        return _validate_design(product)
     return _validate_requirement(product)
 
 
@@ -181,6 +183,43 @@ def _validate_prompt(product: Product) -> list[Issue]:
                     "error",
                     f"missing-{section}",
                     f"Prompt is missing a ## {section.title()} section.",
+                )
+            )
+
+    return issues
+
+
+def _validate_design(product: Product) -> list[Issue]:
+    """Validate a Design artifact (v0.6.3).
+
+    Required sections (Context, User Need, Design, Constraints) must be present;
+    missing recommended/optional sections never fail or warn. Designs carry no
+    metadata and are knowledge artifacts, not UI renderings or component systems.
+    """
+    spec = spec_for("design")
+    assert spec is not None  # the design spec always exists
+    issues: list[Issue] = []
+
+    if not product.title:
+        issues.append(Issue("error", "missing-title", "File has no top-level # title."))
+
+    if product.extra_title_lines:
+        issues.append(
+            Issue(
+                "error",
+                "multiple-titles",
+                "File has more than one top-level # title; expected exactly one.",
+                product.extra_title_lines[0],
+            )
+        )
+
+    for section in spec.required:
+        if section not in product.sections:
+            issues.append(
+                Issue(
+                    "error",
+                    f"missing-{section.replace(' ', '-')}",
+                    f"Design is missing a ## {section.title()} section.",
                 )
             )
 

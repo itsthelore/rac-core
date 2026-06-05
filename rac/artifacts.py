@@ -9,11 +9,12 @@ there is a single source of truth.
 Section names are normalized (stripped + casefolded) for matching; ``display``
 holds the human-facing label.
 
-Four artifact types have a concrete schema today: Requirement (RAC's own format /
+Five artifact types have a concrete schema today: Requirement (RAC's own format /
 validator), Decision (the ADR format used in this repository), Roadmap (outcome- and
 initiative-focused knowledge, added in v0.6.0), and Prompt (structured AI prompts as
-knowledge, added in v0.6.2). Meeting is intentionally deferred until its schema is
-formalized — see planning/roadmap/.
+knowledge, added in v0.6.2), and Design (UX and interaction knowledge, added in
+v0.6.3). Meeting is intentionally deferred until its schema is formalized — see
+planning/roadmap/.
 """
 
 from __future__ import annotations
@@ -239,6 +240,76 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "expected output": "output",
             "output specification": "output",
             "input specification": "input",
+        },
+    ),
+    ArtifactSpec(
+        name="design",
+        display="Design",
+        required=("context", "user need", "design", "constraints"),
+        recommended=(
+            "rationale",
+            "alternatives",
+            "accessibility",
+            "style guidance",
+            "open questions",
+        ),
+        # Relationship sections are recognized but never scored or templated; they
+        # let a Design reference other artifacts as text without RAC analyzing
+        # those links (relationship analysis is v0.7.x).
+        optional=(
+            "related requirements",
+            "related decisions",
+            "related roadmaps",
+            "related prompts",
+        ),
+        descriptions={
+            "context": "The product area, situation, or experience this design addresses",
+            "user need": "The user, audience, task, pain point, or goal this design supports",
+            "design": "The proposed experience, interaction, layout, flow, or behavior",
+            "constraints": "Technical, product, accessibility, platform, or implementation constraints",
+            "rationale": "Why this design approach was chosen",
+            "alternatives": "Other approaches considered and why they were not chosen",
+            "accessibility": "Accessibility needs and expectations for the design",
+            "style guidance": "Visual, tone, layout, or interaction style guidance",
+            "open questions": "Unresolved design questions to validate or decide later",
+        },
+        guidance={
+            "context": (
+                "What situation, product area, or user experience does this design address?",
+                "Why is this design needed now?",
+            ),
+            "user need": (
+                "Who is the user or audience?",
+                "What task, pain point, or goal does this design support?",
+            ),
+            "design": (
+                "What is the proposed design?",
+                "How should the experience work?",
+            ),
+            "constraints": (
+                "What constraints shape this design?",
+                "What must the design respect or avoid?",
+            ),
+            "rationale": (
+                "Why is this the preferred approach?",
+                "What trade-offs does this design make?",
+            ),
+            "alternatives": (
+                "What other approaches were considered?",
+                "Why were they not chosen?",
+            ),
+            "accessibility": (
+                "What accessibility needs should this design support?",
+                "Are there keyboard, contrast, readability, or screen-reader considerations?",
+            ),
+            "style guidance": (
+                "What visual or interaction style should be followed?",
+                "What patterns should remain consistent?",
+            ),
+            "open questions": (
+                "What still needs to be decided?",
+                "What should be validated or explored further?",
+            ),
         },
     ),
 )

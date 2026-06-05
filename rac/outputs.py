@@ -263,6 +263,24 @@ def render_stats_human(s: PortfolioStats) -> str:
                 reasons = ", ".join(p.error_codes) or "unknown"
                 lines.append(f"  {_red(p.path)} — {reasons}")
 
+    # Designs are reported separately and lightly (count + invalid only); the
+    # section is omitted entirely when there are none.
+    if s.designs:
+        lines += [
+            "",
+            _bold("Designs"),
+            "=======",
+            "",
+            f"Total: {s.design_count}",
+            f"Valid: {s.valid_designs}",
+        ]
+        invalid_designs = s.invalid_designs
+        if invalid_designs:
+            lines += ["", _bold(f"Invalid Designs ({len(invalid_designs)})")]
+            for d in invalid_designs:
+                reasons = ", ".join(d.error_codes) or "unknown"
+                lines.append(f"  {_red(d.path)} — {reasons}")
+
     return "\n".join(lines)
 
 
@@ -318,6 +336,16 @@ def render_stats_json(s: PortfolioStats) -> str:
             "valid": s.valid_prompts,
             "invalid": [
                 {"file": p.path, "errors": p.error_codes} for p in s.invalid_prompts
+            ],
+        }
+    # Additive: only present when the portfolio contains designs. Lightweight by
+    # design — count and validity only (no design quality or rendering metrics).
+    if s.designs:
+        payload["designs"] = {
+            "count": s.design_count,
+            "valid": s.valid_designs,
+            "invalid": [
+                {"file": d.path, "errors": d.error_codes} for d in s.invalid_designs
             ],
         }
     return json.dumps(payload, indent=2)

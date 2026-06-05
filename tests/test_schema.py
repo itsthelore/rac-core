@@ -15,7 +15,13 @@ from conftest import fixture_path
 
 
 def test_available_schemas_are_registered_artifacts():
-    assert available_schemas() == ["requirement", "decision", "roadmap", "prompt"]
+    assert available_schemas() == [
+        "requirement",
+        "decision",
+        "roadmap",
+        "prompt",
+        "design",
+    ]
 
 
 def test_schema_reference_consumes_artifact_spec():
@@ -38,6 +44,7 @@ def test_schema_list_human(capsys):
         "- decision\n"
         "- roadmap\n"
         "- prompt\n"
+        "- design\n"
     )
 
 
@@ -45,7 +52,9 @@ def test_schema_list_json(capsys):
     rc = main(["schema", "--list", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload == {"schemas": ["requirement", "decision", "roadmap", "prompt"]}
+    assert payload == {
+        "schemas": ["requirement", "decision", "roadmap", "prompt", "design"]
+    }
 
 
 def test_schema_human_requirement(capsys):
@@ -160,6 +169,7 @@ def test_unknown_schema_exits_two_and_lists_available(capsys):
     assert "- decision" in err
     assert "- roadmap" in err
     assert "- prompt" in err
+    assert "- design" in err
 
 
 def test_schema_requires_name_or_list(capsys):
