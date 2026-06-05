@@ -383,9 +383,12 @@ Counts span all parsed requirement files; a feature with only *warnings* (e.g. n
 metrics) still counts as valid. Invalid files are listed at the end so they are
 never silently skipped.
 
-Decision artifacts are aggregated **separately** so they never distort the
-requirement totals or averages. When a directory contains decisions, a
-`Decisions` section reports the count plus a status and category breakdown:
+Non-requirement artifacts are aggregated **separately** so they never distort the
+requirement totals or averages. Decisions report metadata breakdowns; Roadmaps,
+Prompts, and Designs use lightweight count/valid/invalid summaries.
+
+When a directory contains decisions, a `Decisions` section reports the count plus
+a status and category breakdown:
 
 ```text
 Decisions
@@ -404,11 +407,24 @@ Category
   - Process: 4
 ```
 
-Add `--json` for machine-readable output (a `decisions` block is included only
-when decisions are present). `stats` exits `0` when the directory has at least
-one valid feature or decision, `1` if none, and `2` if the path is not a
-directory. (A `--strict` flag for failing on *any* invalid file — handy in CI —
-is planned.)
+When a directory contains Design artifacts, a lightweight section is shown:
+
+```text
+Designs
+=======
+
+Total: 4
+Valid: 3
+
+Invalid Designs (1)
+  ./planning/design/draft.md — missing-constraints
+```
+
+Add `--json` for machine-readable output. Artifact-specific blocks such as
+`decisions`, `roadmaps`, `prompts`, and `designs` are included only when those
+artifacts are present. `stats` exits `0` when the directory has at least one
+valid known artifact, `1` if none, and `2` if the path is not a directory. (A
+`--strict` flag for failing on *any* invalid file — handy in CI — is planned.)
 
 ---
 
@@ -485,10 +501,10 @@ Missing Sections:
 ```
 
 RAC classifies the document against known artifact schemas (no AI) and reports a
-confidence score. v0.4 recognizes **Requirement** and **Decision** artifacts;
-anything that doesn't fit well is reported as **Unknown** (a valid, successful
-result — not an error). `--json` emits `{ type, confidence, present_sections,
-missing_sections }`.
+confidence score. RAC recognizes **Requirement**, **Decision**, **Roadmap**,
+**Prompt**, and **Design** artifacts; anything that doesn't fit well is reported
+as **Unknown** (a valid, successful result — not an error). `--json` emits
+`{ type, confidence, present_sections, missing_sections }`.
 
 ### Inspect a directory
 
@@ -506,7 +522,10 @@ Files Inspected: 23
 
 Requirements: 7
 Decisions: 3
-Unknown: 13
+Roadmaps: 2
+Prompts: 4
+Designs: 1
+Unknown: 6
 ```
 
 ### Explain a classification (`--verbose`)
@@ -646,10 +665,10 @@ So you can go straight from `rac inspect requirement.md` to
 ```
 
 `improve` generates suggestions for artifact types with complete schema guidance
-coverage. Today that means **Requirement** and **Decision** artifacts. Unknown
-documents return a short explanatory message instead. Future artifact types do
-not become improvable until their schemas define guidance for every required and
-recommended section.
+coverage. Today that means **Requirement**, **Decision**, **Roadmap**, **Prompt**,
+and **Design** artifacts. Unknown documents return a short explanatory message
+instead. Future artifact types do not become improvable until their schemas
+define guidance for every required and recommended section.
 
 Guidance is informational metadata only: it does not influence classification,
 validation, confidence scoring, statistics, or repository analysis.
@@ -669,11 +688,15 @@ rac schema --list
 rac schema --list --json
 rac schema requirement
 rac schema decision --json
+rac schema design
 rac schema requirement --template
+rac schema design --template
 ```
 
 `rac schema <type>` shows the full schema reference: required, recommended, and
 optional sections; descriptions; guidance; and metadata values where applicable.
+Supported schemas are `requirement`, `decision`, `roadmap`, `prompt`, and
+`design`.
 
 ```text
 Artifact Type: Decision
@@ -717,6 +740,7 @@ meaningful product knowledge.
 ```bash
 rac schema requirement --template > requirement.md
 rac schema decision --template > decision.md
+rac schema design --template > design.md
 ```
 
 Generated templates are validation-safe:
@@ -724,6 +748,7 @@ Generated templates are validation-safe:
 ```bash
 rac schema requirement --template | rac validate -
 rac schema decision --template | rac validate -
+rac schema design --template | rac validate -
 ```
 
 Unknown schemas fail with exit code `2` and list available schemas. Only

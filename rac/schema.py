@@ -115,6 +115,8 @@ def _starter_body(
         return _metadata_default(section, metadata_values)
     if ref.type == "requirement" and section == "requirements":
         return "- [REQ-001] TODO: describe a required system behaviour."
+    if ref.type == "design":
+        return _design_free_text_todo(section)
     return _free_text_todo(section)
 
 
@@ -161,6 +163,31 @@ def _free_text_todo(section: str) -> str:
         ),
     }
     return messages.get(section, f"TODO: describe {section}.")
+
+
+def _design_free_text_todo(section: str) -> str:
+    messages = {
+        "context": "TODO: describe the design context and why this design exists.",
+        "user need": (
+            "TODO: describe who this design is for and what they need to accomplish."
+        ),
+        "design": (
+            "TODO: describe the proposed experience, interaction, layout, flow, "
+            "or system behavior."
+        ),
+        "constraints": (
+            "TODO: describe technical, product, accessibility, platform, or "
+            "implementation constraints."
+        ),
+        "rationale": "TODO: explain why this design approach was chosen.",
+        "alternatives": "TODO: describe alternatives that were considered.",
+        "accessibility": "TODO: describe accessibility considerations.",
+        "style guidance": (
+            "TODO: describe visual, tone, layout, or interaction style guidance."
+        ),
+        "open questions": "TODO: list unresolved design questions.",
+    }
+    return messages.get(section, _free_text_todo(section))
 
 
 def _snake(section: str) -> str:

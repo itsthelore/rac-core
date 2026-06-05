@@ -11,8 +11,8 @@ Commands:
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown)
-    1  validate: errors found; stats: no valid features or decisions;
-       ingest: conversion failed
+    1  validate: errors found; stats: no valid known artifacts; ingest:
+       conversion failed
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite)
 """
@@ -90,14 +90,15 @@ def cmd_stats(args: argparse.Namespace) -> int:
     else:
         print(outputs.render_stats_human(stats))
     # Success as long as the portfolio has analysable content: at least one valid
-    # feature, one decision, one valid roadmap, or one valid prompt. Invalid files
-    # are reported but don't fail the run on their own. (A future --strict flag will
-    # fail the run if *any* file is invalid, for CI use.)
+    # feature, one decision, one valid roadmap, one valid prompt, or one valid
+    # design. Invalid files are reported but don't fail the run on their own. (A
+    # future --strict flag will fail the run if *any* file is invalid, for CI use.)
     has_content = (
         stats.valid_features > 0
         or stats.decision_count > 0
         or stats.valid_roadmaps > 0
         or stats.valid_prompts > 0
+        or stats.valid_designs > 0
     )
     return EXIT_OK if has_content else EXIT_VALIDATION_FAILED
 
@@ -368,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_schema.add_argument(
         "schema",
         nargs="?",
-        help="Schema name, e.g. requirement, decision, roadmap, or prompt.",
+        help="Schema name, e.g. requirement, decision, roadmap, prompt, or design.",
     )
     p_schema.add_argument(
         "--list",

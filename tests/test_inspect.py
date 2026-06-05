@@ -28,7 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def test_artifact_specs_are_the_concrete_types():
     names = {spec.name for spec in ARTIFACT_SPECS}
-    assert names == {"requirement", "decision", "roadmap", "prompt"}
+    assert names == {"requirement", "decision", "roadmap", "prompt", "design"}
 
 
 def test_parse_captures_title_and_sections():

@@ -4,10 +4,10 @@
 each one, and aggregates the results. Like the rest of RAC, it works on the
 Product AST: every `.md` is parsed into a :class:`~rac.models.Product`.
 
-Requirement, Decision, Roadmap, and Prompt artifacts are aggregated separately so
+Requirement, Decision, Roadmap, Prompt, and Design artifacts are aggregated separately so
 that one never distorts another: requirement totals/averages span only requirement
 files, decisions get their own status/category breakdown, and roadmaps and prompts
-each get a lightweight count of how many exist and how many are valid.
+and designs each get a lightweight count of how many exist and how many are valid.
 
 Counting basis: requirement totals, averages, and the per-feature breakdown span
 *all* parsed requirement files (including ones that fail validation). A file
@@ -80,6 +80,20 @@ class PromptStat:
 
 
 @dataclass
+class DesignStat:
+    """Per-file result for a Design artifact (kept separate from features).
+
+    Lightweight by design (v0.6.3): identity plus validity and error codes only.
+    No section-completeness, visual, or design-system metrics.
+    """
+
+    path: str
+    name: str  # the design title, or the filename stem if it has none
+    valid: bool
+    error_codes: list[str]
+
+
+@dataclass
 class PortfolioStats:
     """Aggregate view over all discovered requirement files."""
 
@@ -88,6 +102,7 @@ class PortfolioStats:
     decisions: list[DecisionStat] = field(default_factory=list)
     roadmaps: list[RoadmapStat] = field(default_factory=list)
     prompts: list[PromptStat] = field(default_factory=list)
+    designs: list[DesignStat] = field(default_factory=list)
 
     # --- counts (requirement features) ---
     @property
@@ -198,6 +213,19 @@ class PortfolioStats:
     def invalid_prompts(self) -> list[PromptStat]:
         return [p for p in self.prompts if not p.valid]
 
+    # --- designs ---
+    @property
+    def design_count(self) -> int:
+        return len(self.designs)
+
+    @property
+    def valid_designs(self) -> int:
+        return sum(1 for d in self.designs if d.valid)
+
+    @property
+    def invalid_designs(self) -> list[DesignStat]:
+        return [d for d in self.designs if not d.valid]
+
 
 def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict[str, int]:
     """Count ``decisions`` by ``attr`` in the artifact spec's declared order."""
@@ -224,7 +252,7 @@ def _neg_name(name: str) -> tuple[int, ...]:
 def collect_stats(directory: str) -> PortfolioStats:
     """Parse and classify every Markdown file under ``directory``.
 
-    Decisions, roadmaps, and prompts are each routed to their own aggregate;
+    Decisions, roadmaps, prompts, and designs are each routed to their own aggregate;
     everything else is treated as a requirement feature (preserving prior behavior
     for requirement repositories).
     """
@@ -261,6 +289,18 @@ def collect_stats(directory: str) -> PortfolioStats:
             error_codes = [i.code for i in issues if i.severity == "error"]
             stats.prompts.append(
                 PromptStat(
+                    path=str(path),
+                    name=name,
+                    valid=not error_codes,
+                    error_codes=error_codes,
+                )
+            )
+            continue
+        if result.type == "design":
+            issues = validate(product)
+            error_codes = [i.code for i in issues if i.severity == "error"]
+            stats.designs.append(
+                DesignStat(
                     path=str(path),
                     name=name,
                     valid=not error_codes,
