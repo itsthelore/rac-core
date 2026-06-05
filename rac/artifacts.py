@@ -9,10 +9,10 @@ there is a single source of truth.
 Section names are normalized (stripped + casefolded) for matching; ``display``
 holds the human-facing label.
 
-v0.4 defines only the two artifact types that have a concrete schema today:
-Requirement (RAC's own format / validator) and Decision (the ADR format used in
-this repository). Roadmap, Prompt, and Meeting are intentionally deferred until
-their schemas are formalized — see planning/roadmap/.
+Three artifact types have a concrete schema today: Requirement (RAC's own format /
+validator), Decision (the ADR format used in this repository), and Roadmap
+(outcome- and initiative-focused knowledge, added in v0.6.0). Prompt and Meeting
+are intentionally deferred until their schemas are formalized — see planning/roadmap/.
 """
 
 from __future__ import annotations
@@ -137,6 +137,48 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         synonyms={
             "alternatives": "alternatives considered",
             "options considered": "alternatives considered",
+        },
+    ),
+    ArtifactSpec(
+        name="roadmap",
+        display="Roadmap",
+        required=("outcomes", "initiatives"),
+        recommended=("success measures", "assumptions", "risks"),
+        # Relationship sections are recognized but never scored or templated; they
+        # exist so v0.6.0 roadmaps can reference Decisions/Requirements as text
+        # without RAC analyzing those links (relationship analysis is v0.7.x).
+        optional=("related decisions", "related requirements"),
+        descriptions={
+            "outcomes": "The user, business, or operational outcomes this roadmap pursues",
+            "initiatives": "The major bodies of work that support those outcomes",
+            "success measures": "How progress toward the outcomes will be measured",
+            "assumptions": "Conditions that must hold for this roadmap to stay valid",
+            "risks": "What could prevent the outcomes from being achieved",
+        },
+        guidance={
+            "outcomes": (
+                "What user, business, or operational outcomes matter?",
+                "Why are these outcomes important now?",
+            ),
+            "initiatives": (
+                "What major bodies of work support these outcomes?",
+                "How does each initiative connect to an outcome?",
+            ),
+            "success measures": (
+                "How will the team know the roadmap is succeeding?",
+            ),
+            "assumptions": (
+                "What must be true for this roadmap to remain valid?",
+            ),
+            "risks": (
+                "What could prevent these outcomes from being achieved?",
+            ),
+        },
+        # Artifact-scoped: this only normalizes "success metrics" when scoring a
+        # document against the Roadmap spec (see rac.classification._mapped), so it
+        # never affects the Requirement spec's canonical "success metrics" section.
+        synonyms={
+            "success metrics": "success measures",
         },
     ),
 )

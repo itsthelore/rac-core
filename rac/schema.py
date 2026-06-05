@@ -135,6 +135,9 @@ def _free_text_todo(section: str) -> str:
             "or adoption risks."
         ),
         "assumptions": "TODO: describe conditions assumed to be true.",
+        "outcomes": "TODO: describe the outcomes this roadmap is intended to achieve.",
+        "initiatives": "TODO: describe the major initiatives that support the outcomes.",
+        "success measures": "TODO: describe how progress or success will be measured.",
         "context": "TODO: describe the situation, constraints, and background.",
         "decision": "TODO: describe the decision that has been made.",
         "consequences": (

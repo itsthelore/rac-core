@@ -90,10 +90,14 @@ def cmd_stats(args: argparse.Namespace) -> int:
     else:
         print(outputs.render_stats_human(stats))
     # Success as long as the portfolio has analysable content: at least one valid
-    # feature or at least one decision. Invalid files are reported but don't fail
-    # the run on their own. (A future --strict flag will fail the run if *any*
-    # file is invalid, for CI use.)
-    has_content = stats.valid_features > 0 or stats.decision_count > 0
+    # feature, one decision, or one valid roadmap. Invalid files are reported but
+    # don't fail the run on their own. (A future --strict flag will fail the run if
+    # *any* file is invalid, for CI use.)
+    has_content = (
+        stats.valid_features > 0
+        or stats.decision_count > 0
+        or stats.valid_roadmaps > 0
+    )
     return EXIT_OK if has_content else EXIT_VALIDATION_FAILED
 
 
@@ -363,7 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_schema.add_argument(
         "schema",
         nargs="?",
-        help="Schema name, e.g. requirement or decision.",
+        help="Schema name, e.g. requirement, decision, or roadmap.",
     )
     p_schema.add_argument(
         "--list",

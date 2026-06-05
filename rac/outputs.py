@@ -227,6 +227,24 @@ def render_stats_human(s: PortfolioStats) -> str:
         breakdown("Status", s.decision_status_counts)
         breakdown("Category", s.decision_category_counts)
 
+    # Roadmaps are reported separately and lightly (count + invalid only); the
+    # section is omitted entirely when there are none.
+    if s.roadmaps:
+        lines += [
+            "",
+            _bold("Roadmaps"),
+            "========",
+            "",
+            f"Total: {s.roadmap_count}",
+            f"Valid: {s.valid_roadmaps}",
+        ]
+        invalid_roadmaps = s.invalid_roadmaps
+        if invalid_roadmaps:
+            lines += ["", _bold(f"Invalid Roadmaps ({len(invalid_roadmaps)})")]
+            for r in invalid_roadmaps:
+                reasons = ", ".join(r.error_codes) or "unknown"
+                lines.append(f"  {_red(r.path)} — {reasons}")
+
     return "\n".join(lines)
 
 
@@ -263,6 +281,16 @@ def render_stats_json(s: PortfolioStats) -> str:
             "count": s.decision_count,
             "by_status": s.decision_status_counts,
             "by_category": s.decision_category_counts,
+        }
+    # Additive: only present when the portfolio contains roadmaps. Lightweight by
+    # design — count and validity only (no section-completeness breakdown).
+    if s.roadmaps:
+        payload["roadmaps"] = {
+            "count": s.roadmap_count,
+            "valid": s.valid_roadmaps,
+            "invalid": [
+                {"file": r.path, "errors": r.error_codes} for r in s.invalid_roadmaps
+            ],
         }
     return json.dumps(payload, indent=2)
 

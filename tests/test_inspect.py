@@ -26,9 +26,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # --- service layer ----------------------------------------------------------
 
 
-def test_artifact_specs_are_the_two_concrete_types():
+def test_artifact_specs_are_the_concrete_types():
     names = {spec.name for spec in ARTIFACT_SPECS}
-    assert names == {"requirement", "decision"}
+    assert names == {"requirement", "decision", "roadmap"}
 
 
 def test_parse_captures_title_and_sections():

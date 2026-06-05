@@ -32,12 +32,17 @@ def has_errors(issues: list[Issue]) -> bool:
 def validate(product: Product) -> list[Issue]:
     """Check ``product`` and return all structural and quality findings.
 
-    Dispatches on artifact type: Decisions are validated against the Decision
-    schema; everything else (Requirements and Unknown documents) keeps RAC's
-    original Requirement rules unchanged.
+    Dispatches on artifact type. Each type with its own schema is routed
+    explicitly; the final ``_validate_requirement`` arm is a
+    backwards-compatibility fallback for Unknown/legacy documents (and RAC's
+    original Requirement rules), *not* the long-term model — new artifact types
+    must be routed explicitly above it.
     """
-    if classify(product).type == "decision":
+    artifact_type = classify(product).type
+    if artifact_type == "decision":
         return _validate_decision(product)
+    if artifact_type == "roadmap":
+        return _validate_roadmap(product)
     return _validate_requirement(product)
 
 
@@ -96,6 +101,43 @@ def _validate_decision(product: Product) -> list[Issue]:
                     f"invalid-decision-{field_name}",
                     f"## {field_name.title()} value {value!r} is not one of: "
                     f"{', '.join(allowed)}.",
+                )
+            )
+
+    return issues
+
+
+def _validate_roadmap(product: Product) -> list[Issue]:
+    """Validate a Roadmap artifact (REQ-003).
+
+    Required sections (Outcomes, Initiatives) must be present; missing recommended
+    sections never fail. Roadmaps carry no constrained metadata (no owners, dates,
+    or status — ADR-017: RAC manages knowledge, not work).
+    """
+    spec = spec_for("roadmap")
+    assert spec is not None  # the roadmap spec always exists
+    issues: list[Issue] = []
+
+    if not product.title:
+        issues.append(Issue("error", "missing-title", "File has no top-level # title."))
+
+    if product.extra_title_lines:
+        issues.append(
+            Issue(
+                "error",
+                "multiple-titles",
+                "File has more than one top-level # title; expected exactly one.",
+                product.extra_title_lines[0],
+            )
+        )
+
+    for section in spec.required:
+        if section not in product.sections:
+            issues.append(
+                Issue(
+                    "error",
+                    f"missing-{section}",
+                    f"Roadmap is missing a ## {section.title()} section.",
                 )
             )
 

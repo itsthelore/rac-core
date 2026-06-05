@@ -4,9 +4,10 @@
 each one, and aggregates the results. Like the rest of RAC, it works on the
 Product AST: every `.md` is parsed into a :class:`~rac.models.Product`.
 
-Requirement and Decision artifacts are aggregated separately so that one never
-distorts the other: requirement totals/averages span only requirement files, and
-decisions get their own status/category breakdown.
+Requirement, Decision, and Roadmap artifacts are aggregated separately so that one
+never distorts another: requirement totals/averages span only requirement files,
+decisions get their own status/category breakdown, and roadmaps get a lightweight
+count of how many exist and how many are valid.
 
 Counting basis: requirement totals, averages, and the per-feature breakdown span
 *all* parsed requirement files (including ones that fail validation). A file
@@ -50,12 +51,28 @@ class DecisionStat:
 
 
 @dataclass
+class RoadmapStat:
+    """Per-file result for a Roadmap artifact (kept separate from features).
+
+    Deliberately lightweight (v0.6.0): identity plus validity. Section-completeness
+    or quality breakdowns are intentionally absent — those belong to `rac improve`,
+    not portfolio statistics.
+    """
+
+    path: str
+    name: str  # the roadmap title, or the filename stem if it has none
+    valid: bool
+    error_codes: list[str]
+
+
+@dataclass
 class PortfolioStats:
     """Aggregate view over all discovered requirement files."""
 
     directory: str
     features: list[FeatureStat] = field(default_factory=list)
     decisions: list[DecisionStat] = field(default_factory=list)
+    roadmaps: list[RoadmapStat] = field(default_factory=list)
 
     # --- counts (requirement features) ---
     @property
@@ -138,6 +155,19 @@ class PortfolioStats:
         """Decisions grouped by category, in schema order, omitting empty buckets."""
         return _bucket(self.decisions, "category", "category")
 
+    # --- roadmaps ---
+    @property
+    def roadmap_count(self) -> int:
+        return len(self.roadmaps)
+
+    @property
+    def valid_roadmaps(self) -> int:
+        return sum(1 for r in self.roadmaps if r.valid)
+
+    @property
+    def invalid_roadmaps(self) -> list[RoadmapStat]:
+        return [r for r in self.roadmaps if not r.valid]
+
 
 def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict[str, int]:
     """Count ``decisions`` by ``attr`` in the artifact spec's declared order."""
@@ -180,6 +210,18 @@ def collect_stats(directory: str) -> PortfolioStats:
                     status=result.status,
                     category=result.category,
                     supersedes=result.supersedes,
+                )
+            )
+            continue
+        if result.type == "roadmap":
+            issues = validate(product)
+            error_codes = [i.code for i in issues if i.severity == "error"]
+            stats.roadmaps.append(
+                RoadmapStat(
+                    path=str(path),
+                    name=name,
+                    valid=not error_codes,
+                    error_codes=error_codes,
                 )
             )
             continue

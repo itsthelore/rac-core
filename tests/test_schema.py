@@ -15,7 +15,7 @@ from conftest import fixture_path
 
 
 def test_available_schemas_are_registered_artifacts():
-    assert available_schemas() == ["requirement", "decision"]
+    assert available_schemas() == ["requirement", "decision", "roadmap"]
 
 
 def test_schema_reference_consumes_artifact_spec():
@@ -36,6 +36,7 @@ def test_schema_list_human(capsys):
         "Available Schemas:\n"
         "- requirement\n"
         "- decision\n"
+        "- roadmap\n"
     )
 
 
@@ -43,7 +44,7 @@ def test_schema_list_json(capsys):
     rc = main(["schema", "--list", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload == {"schemas": ["requirement", "decision"]}
+    assert payload == {"schemas": ["requirement", "decision", "roadmap"]}
 
 
 def test_schema_human_requirement(capsys):
@@ -147,14 +148,16 @@ def test_decision_template_is_validation_safe(capsys, monkeypatch):
 
 
 def test_unknown_schema_exits_two_and_lists_available(capsys):
+    # "meeting" is a deferred type with no concrete schema yet (see rac/artifacts.py).
     with pytest.raises(SystemExit) as exc:
-        main(["schema", "roadmap"])
+        main(["schema", "meeting"])
     assert exc.value.code == 2
     err = capsys.readouterr().err
-    assert "Unknown schema: roadmap" in err
+    assert "Unknown schema: meeting" in err
     assert "Available schemas:" in err
     assert "- requirement" in err
     assert "- decision" in err
+    assert "- roadmap" in err
 
 
 def test_schema_requires_name_or_list(capsys):
