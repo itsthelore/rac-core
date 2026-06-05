@@ -10,7 +10,7 @@ import json
 import sys
 from dataclasses import asdict
 
-from .artifacts import ARTIFACT_SPECS, spec_for
+from .artifacts import ARTIFACT_SPECS
 from .classification import CONFIDENCE_THRESHOLD, TypeScore
 from .improve import ImprovementResult
 from .ingest import IngestResult
@@ -405,9 +405,11 @@ def render_improve_human(result: ImprovementResult) -> str:
         return "\n".join(lines)
 
     def block(title: str, names: list[str]) -> None:
-        lines.extend([_bold(title)])
+        lines.append(_bold(title))
         if names:
-            lines.extend(f"  - {s.title()}" for s in names)
+            for s in names:
+                lines.append(f"  - {s.title()}")
+                lines.extend(f"      • {q}" for q in result.guidance.get(s, []))
         else:
             lines.append("  (none)")
         lines.append("")
@@ -432,14 +434,12 @@ def render_improve_template(result: ImprovementResult) -> str:
     if not missing:
         return "# Nothing to add — all expected sections present."
 
-    spec = spec_for(result.type)
-    descriptions = spec.descriptions if spec else {}
     blocks: list[str] = []
     for section in missing:
         block = f"## {section.title()}\n\n_TODO_"
-        hint = descriptions.get(section)
-        if hint:
-            block += f"\n\n<!-- {hint} -->"
+        guidance_lines = result.guidance.get(section, [])
+        if guidance_lines:
+            block += "\n\n" + "\n".join(f"<!-- {q} -->" for q in guidance_lines)
         blocks.append(block)
     return "\n\n".join(blocks) + "\n"
 

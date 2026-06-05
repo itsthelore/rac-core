@@ -1,8 +1,8 @@
-"""Tests for artifact improvement (`rac improve`, v0.5.0).
+"""Tests for artifact improvement (`rac improve`).
 
-Advisory, deterministic, schema-driven, read-only. Requirement artifacts get
-missing-section suggestions; other known types and Unknown get explanatory
-guidance. Exit code is always 0 for a completed analysis, 2 for usage errors.
+Advisory, deterministic, schema-driven, read-only. Supported artifact types get
+missing-section suggestions and guidance. Exit code is always 0 for a completed
+analysis, 2 for usage errors.
 """
 
 from __future__ import annotations
@@ -13,8 +13,13 @@ from pathlib import Path
 
 import pytest
 
+from rac.artifacts import ARTIFACT_SPECS, spec_for
+from rac.classification import classify
 from rac.cli import main
-from rac.improve import improve_file, improve_text
+from rac.improve import improve_file, improve_text, supports_improve
+from rac.parser import parse, parse_file
+from rac.stats import collect_stats
+from rac.validate import validate
 
 from conftest import fixture_path
 
@@ -61,11 +66,13 @@ def test_unknown_artifact_yields_no_suggestions():
     assert result.missing_recommended == []
 
 
-def test_decision_is_out_of_scope_for_v050():
+def test_decision_is_supported_when_guidance_is_complete():
     result = improve_file(fixture_path("decision", "with_metadata.md"))
     assert result.type == "decision"
-    assert not result.supported
+    assert result.supported
     assert result.missing_required == []
+    assert result.missing_recommended == ["alternatives considered"]
+    assert "alternatives considered" in result.guidance
 
 
 def test_improve_does_not_depend_on_typescore():
@@ -86,9 +93,16 @@ def test_json_shape_is_stable(capsys):
     rc = main(["improve", fixture_path("inspect", "requirement.md"), "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert set(payload) == {"type", "missing_required", "missing_recommended"}
+    assert set(payload) == {
+        "type",
+        "missing_required",
+        "missing_recommended",
+        "guidance",
+    }
     assert payload["type"] == "requirement"
-    # closest_type is reserved on the model but not serialized in v0.5.0.
+    assert set(payload["guidance"]) == set(payload["missing_recommended"])
+    assert payload["guidance"]["risks"]
+    # closest_type is reserved on the model but not serialized.
     assert "closest_type" not in payload
 
 
@@ -109,6 +123,32 @@ def test_json_unknown_has_empty_arrays(capsys):
     assert payload["type"] == "unknown"
     assert payload["missing_required"] == []
     assert payload["missing_recommended"] == []
+    assert payload["guidance"] == {}
+
+
+def test_json_guidance_is_map_keyed_by_snake_cased_sections(capsys):
+    rc = main(["improve", fixture_path("inspect", "requirement.md"), "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert isinstance(payload["guidance"], dict)
+    assert sorted(payload["guidance"]) == ["assumptions", "risks"]
+    assert payload["guidance"]["risks"] == [
+        "What could prevent successful delivery?",
+        "What dependencies or unknowns exist?",
+    ]
+
+
+def test_json_decision_guidance(capsys):
+    rc = main(["improve", fixture_path("decision", "with_metadata.md"), "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["type"] == "decision"
+    assert payload["missing_required"] == []
+    assert payload["missing_recommended"] == ["alternatives_considered"]
+    assert payload["guidance"]["alternatives_considered"] == [
+        "What other options were weighed?",
+        "Why were they not chosen?",
+    ]
 
 
 # --- template (REQ-003) -----------------------------------------------------
@@ -120,7 +160,7 @@ def test_template_emits_todo_and_guidance(capsys):
     out = capsys.readouterr().out
     assert "## Risks" in out
     assert "_TODO_" in out
-    assert "<!--" in out  # schema guidance comment
+    assert "<!-- What could prevent successful delivery? -->" in out
 
 
 def test_template_orders_required_before_recommended(capsys):
@@ -141,6 +181,7 @@ def test_human_output_lists_missing(capsys):
     assert "Artifact Type: Requirement" in out
     assert "Missing Recommended:" in out
     assert "Risks" in out
+    assert "What could prevent successful delivery?" in out
 
 
 def test_human_unknown_message(capsys):
@@ -151,12 +192,13 @@ def test_human_unknown_message(capsys):
     assert "could not be determined" in out
 
 
-def test_human_decision_is_generic_not_requirement_worded(capsys):
+def test_human_decision_shows_guidance(capsys):
     rc = main(["improve", fixture_path("decision", "with_metadata.md")])
     assert rc == 0
     out = capsys.readouterr().out
     assert "Artifact Type: Decision" in out
-    assert "not currently available for this artifact type" in out
+    assert "Alternatives Considered" in out
+    assert "What other options were weighed?" in out
     assert "Requirement" not in out  # no hard-coded requirement wording
 
 
@@ -211,3 +253,73 @@ def test_improve_does_not_modify_the_file(tmp_path):
     main(["improve", str(f), "--template"])
     assert f.read_text() == original
     assert f.stat().st_mtime_ns == before
+
+
+# --- guidance model (v0.5.1) ------------------------------------------------
+
+
+def test_supported_specs_have_guidance_for_every_expected_section():
+    supported = {"requirement", "decision"}
+    for spec in ARTIFACT_SPECS:
+        if spec.name not in supported:
+            continue
+        assert supports_improve(spec)
+        assert set(spec.expected) <= set(spec.guidance)
+
+
+def test_incomplete_guidance_makes_known_type_unsupported(monkeypatch, capsys):
+    spec = spec_for("requirement")
+    assert spec is not None
+    original = spec.guidance["risks"]
+    monkeypatch.delitem(spec.guidance, "risks")
+    assert not supports_improve(spec)
+
+    rc = main(["improve", fixture_path("inspect", "requirement.md")])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Artifact Type: Requirement" in out
+    assert "not currently available for this artifact type" in out
+
+    spec.guidance["risks"] = original
+
+
+def test_guidance_is_informational_metadata_only(monkeypatch):
+    spec = spec_for("requirement")
+    assert spec is not None
+    original = spec.guidance["risks"]
+    product = parse_file(fixture_path("inspect", "requirement.md"))
+    stats_dir = fixture_path("portfolio")
+
+    before_classify = classify(product)
+    before_validate = [(i.severity, i.code, i.message) for i in validate(product)]
+    before_stats = collect_stats(stats_dir)
+    before_stats_tuple = (
+        before_stats.files_found,
+        before_stats.total_requirements,
+        before_stats.total_metrics,
+        before_stats.total_risks,
+        before_stats.decision_status_counts,
+        before_stats.decision_category_counts,
+    )
+    before_improve = improve_file(fixture_path("inspect", "requirement.md"))
+
+    monkeypatch.setitem(spec.guidance, "risks", ("Changed guidance text?",))
+
+    after_classify = classify(product)
+    after_validate = [(i.severity, i.code, i.message) for i in validate(product)]
+    after_stats = collect_stats(stats_dir)
+    after_stats_tuple = (
+        after_stats.files_found,
+        after_stats.total_requirements,
+        after_stats.total_metrics,
+        after_stats.total_risks,
+        after_stats.decision_status_counts,
+        after_stats.decision_category_counts,
+    )
+    after_improve = improve_file(fixture_path("inspect", "requirement.md"))
+
+    assert after_classify == before_classify
+    assert after_validate == before_validate
+    assert after_stats_tuple == before_stats_tuple
+    assert before_improve.guidance["risks"] == list(original)
+    assert after_improve.guidance["risks"] == ["Changed guidance text?"]

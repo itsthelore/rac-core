@@ -39,6 +39,10 @@ class ArtifactSpec:
     # --template` as guidance comments. Optional; sections without a hint render
     # without one.
     descriptions: dict[str, str] = field(default_factory=dict)
+    # Prompting questions per normalized section name. This is informational
+    # metadata only: improve renders it, but classification, validation, and
+    # statistics must not use it.
+    guidance: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Synonyms: alternate normalized headings that map onto a canonical section
     # name (e.g. "success criteria" -> "success metrics"). Applied before
     # matching, so synonyms contribute to confidence. Matching is deterministic
@@ -68,6 +72,28 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "risks": "Potential implementation, delivery, or adoption risks",
             "assumptions": "Assumptions this artifact depends on",
         },
+        guidance={
+            "problem": (
+                "What user or business problem does this solve?",
+                "Who is affected, and why does it matter now?",
+            ),
+            "requirements": (
+                "What must the system do?",
+                "Is each one a testable [REQ-NNN] statement?",
+            ),
+            "success metrics": (
+                "How will you know this succeeded?",
+                "What measurable target indicates success?",
+            ),
+            "risks": (
+                "What could prevent successful delivery?",
+                "What dependencies or unknowns exist?",
+            ),
+            "assumptions": (
+                "What are you assuming to be true?",
+                "What would change the approach if it turned out false?",
+            ),
+        },
         synonyms={
             "success criteria": "success metrics",
             "kpis": "success metrics",
@@ -83,6 +109,30 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         metadata={
             "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
             "category": ("Architecture", "Product", "Process", "Technical", "Other"),
+        },
+        guidance={
+            "context": (
+                "What forces, constraints, or problems led to this decision?",
+                "What background does a reader need?",
+            ),
+            "decision": (
+                "What was decided?",
+                "State it as a clear, active choice.",
+            ),
+            "consequences": (
+                "What becomes easier or harder as a result?",
+                "What trade-offs are you accepting?",
+            ),
+            "status": (
+                "Is this Proposed, Accepted, Superseded, or Deprecated?",
+            ),
+            "category": (
+                "Which area: Architecture, Product, Process, Technical, or Other?",
+            ),
+            "alternatives considered": (
+                "What other options were weighed?",
+                "Why were they not chosen?",
+            ),
         },
         synonyms={
             "alternatives": "alternatives considered",

@@ -579,10 +579,11 @@ usage errors (file not found, or a non-Markdown file — convert it with
 ## Improve
 
 Where `inspect` tells you *what an artifact is*, `improve` tells you *what to add
-next*. It reports the required and recommended sections an artifact is missing —
-**deterministically, from the schema, with no AI** (ADR-002) — and can emit
-Markdown templates for them. `improve` is **advisory and read-only**: it never
-modifies your files and never generates content beyond `_TODO_` placeholders.
+next* and how to think about completing it. It reports the required and
+recommended sections an artifact is missing, plus schema-defined guidance for
+those sections — **deterministically, from the schema, with no AI** (ADR-002).
+`improve` is **advisory and read-only**: it never modifies your files and never
+generates content beyond `_TODO_` placeholders and guidance comments.
 
 ```bash
 rac improve requirement.md
@@ -602,18 +603,23 @@ Missing Required:
 
 Missing Recommended:
   - Risks
+      • What could prevent successful delivery?
+      • What dependencies or unknowns exist?
   - Assumptions
+      • What are you assuming to be true?
+      • What would change the approach if it turned out false?
 ```
 
 `--template` turns the gaps into a ready-to-paste skeleton (required sections
-first, then recommended), with a short guidance hint per section:
+first, then recommended), with deterministic guidance comments per section:
 
 ```markdown
 ## Risks
 
 _TODO_
 
-<!-- Potential implementation, delivery, or adoption risks -->
+<!-- What could prevent successful delivery? -->
+<!-- What dependencies or unknowns exist? -->
 ```
 
 So you can go straight from `rac inspect requirement.md` to
@@ -625,12 +631,29 @@ So you can go straight from `rac inspect requirement.md` to
 {
   "type": "requirement",
   "missing_required": [],
-  "missing_recommended": ["risks", "assumptions"]
+  "missing_recommended": ["risks", "assumptions"],
+  "guidance": {
+    "risks": [
+      "What could prevent successful delivery?",
+      "What dependencies or unknowns exist?"
+    ],
+    "assumptions": [
+      "What are you assuming to be true?",
+      "What would change the approach if it turned out false?"
+    ]
+  }
 }
 ```
 
-v0.5.0 generates suggestions for **Requirement** artifacts. Other known types
-(e.g. Decision) and Unknown documents return a short explanatory message instead.
+`improve` generates suggestions for artifact types with complete schema guidance
+coverage. Today that means **Requirement** and **Decision** artifacts. Unknown
+documents return a short explanatory message instead. Future artifact types do
+not become improvable until their schemas define guidance for every required and
+recommended section.
+
+Guidance is informational metadata only: it does not influence classification,
+validation, confidence scoring, statistics, or repository analysis.
+
 `improve` is advisory: it exits `0` for any completed analysis (with or without
 suggestions) and `2` for usage errors. The presence of suggestions never changes
 the exit code.
