@@ -507,4 +507,4 @@ Review after the first v0.7.x relationship implementation, or before introducing
 * workflow-like dependency management
 * relationship scoring
 
-**v0.7.3 note:** `rac portfolio` introduces a health score that includes relationship integrity as one of four weighted factors (0.25 weight). This is the first instance of relationship scoring in RAC Core. The formula is fully deterministic, documented in `rac/portfolio.py`, and uses only counts already produced by `summarize_relationships`. This ADR was reviewed before v0.7.3 implementation; no architectural objections were raised.
+**v0.7.3 note:** `rac portfolio` introduces a health score that includes relationship integrity as one of four weighted factors (0.25 weight). This is the first instance of relationship scoring in RAC Core. The formula is fully deterministic, documented in `src/rac/portfolio.py`, and uses only counts already produced by `summarize_relationships`. This ADR was reviewed before v0.7.3 implementation; no architectural objections were raised.

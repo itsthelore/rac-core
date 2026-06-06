@@ -54,6 +54,9 @@ dev = [
 rac = "rac.cli:main"
 
 [tool.setuptools]
+# src/ layout: the package root is src/, so the import package `rac` lives at
+# src/rac/. The distribution and import names are unchanged.
+package-dir = {"" = "src"}
 packages = ["rac"]
 
 [tool.setuptools_scm]

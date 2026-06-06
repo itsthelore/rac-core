@@ -95,6 +95,22 @@ class DesignStat:
 
 
 @dataclass
+class UnrecognizedStat:
+    """Per-file result for a document that matched no known artifact schema.
+
+    ADR-010 (documents are not artifacts): a file that classifies as ``unknown``
+    is recorded here rather than being validated as a Requirement *feature*. It is
+    surfaced (never silently dropped) but is not an error — there is no schema to
+    validate it against. ``confidence`` is the best-fit classification score
+    (0.0 when the document has no recognizable sections at all).
+    """
+
+    path: str
+    name: str  # the document title, or the filename stem if it has none
+    confidence: float
+
+
+@dataclass
 class PortfolioStats:
     """Aggregate view over all discovered requirement files."""
 
@@ -104,6 +120,9 @@ class PortfolioStats:
     roadmaps: list[RoadmapStat] = field(default_factory=list)
     prompts: list[PromptStat] = field(default_factory=list)
     designs: list[DesignStat] = field(default_factory=list)
+    # Documents that matched no known artifact schema (ADR-010). Surfaced
+    # separately so they never inflate the feature/invalid counts.
+    unrecognized: list[UnrecognizedStat] = field(default_factory=list)
     # Declared relationship-presence counts (v0.7.0, REQ-011): {normalized
     # section -> number of artifacts that declare it with >=1 reference}. Ordered
     # by RELATIONSHIP_SECTIONS. Not resolution, not edge totals — just presence.
@@ -231,6 +250,11 @@ class PortfolioStats:
     def invalid_designs(self) -> list[DesignStat]:
         return [d for d in self.designs if not d.valid]
 
+    # --- unrecognized (ADR-010: documents that are not artifacts) ---
+    @property
+    def unrecognized_count(self) -> int:
+        return len(self.unrecognized)
+
 
 def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict[str, int]:
     """Count ``decisions`` by ``attr`` in the artifact spec's declared order."""
@@ -257,9 +281,10 @@ def _neg_name(name: str) -> tuple[int, ...]:
 def collect_stats(directory: str) -> PortfolioStats:
     """Parse and classify every Markdown file under ``directory``.
 
-    Decisions, roadmaps, prompts, and designs are each routed to their own aggregate;
-    everything else is treated as a requirement feature (preserving prior behavior
-    for requirement repositories).
+    Decisions, roadmaps, prompts, and designs are each routed to their own
+    aggregate, and documents that match no known schema are recorded as
+    unrecognized (ADR-010); only Requirement-classified files become features
+    (preserving prior behavior for requirement repositories).
     """
     stats = PortfolioStats(directory=directory)
     rel_counts: dict[str, int] = {}
@@ -317,6 +342,18 @@ def collect_stats(directory: str) -> PortfolioStats:
                     name=name,
                     valid=not error_codes,
                     error_codes=error_codes,
+                )
+            )
+            continue
+        if result.type == "unknown":
+            # ADR-010: a document that matches no known artifact schema is not a
+            # broken Requirement. Record it separately instead of validating it as
+            # a feature (its former fate via the fallthrough below).
+            stats.unrecognized.append(
+                UnrecognizedStat(
+                    path=str(path),
+                    name=name,
+                    confidence=result.confidence,
                 )
             )
             continue
