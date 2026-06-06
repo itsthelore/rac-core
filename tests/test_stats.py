@@ -117,3 +117,73 @@ def test_cli_stats_exits_zero_with_one_valid_feature(tmp_path):
     (tmp_path / "broken.md").write_text("## Problem\n\nno title\n")
     # One valid feature present -> exit 0 even though a broken file exists.
     assert main(["stats", str(tmp_path)]) == 0
+
+
+# --- unrecognized documents (ADR-010) ----------------------------------------
+
+_OK_FEATURE = "# Ok\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n"
+_PROSE_DOC = "# Notes\n\nJust prose, no recognizable sections.\n"
+
+
+def test_unrecognized_documents_are_not_features(tmp_path):
+    # A document with no recognizable artifact sections is recorded as
+    # unrecognized, not validated as a broken Requirement feature.
+    (tmp_path / "ok.md").write_text(_OK_FEATURE)
+    (tmp_path / "notes.md").write_text(_PROSE_DOC)
+    s = collect_stats(str(tmp_path))
+    assert s.files_found == 1  # only the requirement feature
+    assert s.valid_features == 1
+    assert s.invalid_features == 0  # notes.md is NOT a broken feature
+    assert s.unrecognized_count == 1
+    assert s.unrecognized[0].path.endswith("notes.md")
+    assert s.unrecognized[0].name == "Notes"  # title, not the filename stem
+    assert s.unrecognized[0].confidence == 0.0  # no recognizable sections
+
+
+def test_cli_stats_unrecognized_human(capsys, tmp_path):
+    (tmp_path / "ok.md").write_text(_OK_FEATURE)
+    (tmp_path / "notes.md").write_text(_PROSE_DOC)
+    assert main(["stats", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "Unrecognized" in out
+    assert "1 document matched no known artifact schema" in out
+    assert "notes.md" in out
+    # The unrecognized doc must not be reported as a broken feature.
+    assert "Invalid Features" not in out
+
+
+def test_cli_stats_unrecognized_json(capsys, tmp_path):
+    (tmp_path / "ok.md").write_text(_OK_FEATURE)
+    (tmp_path / "notes.md").write_text(_PROSE_DOC)
+    assert main(["stats", str(tmp_path), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["features"] == 1  # existing keys narrow to real requirements
+    assert payload["invalid"] == []
+    assert payload["unrecognized"]["count"] == 1
+    entry = payload["unrecognized"]["files"][0]
+    assert entry["file"].endswith("notes.md")
+    assert entry["name"] == "Notes"
+    assert entry["confidence"] == 0.0
+
+
+def test_cli_stats_unrecognized_only_exits_one(capsys, tmp_path):
+    # A directory of only unrecognized documents has no analysable known
+    # artifact -> exit 1 (the documented contract is unchanged).
+    (tmp_path / "notes.md").write_text(_PROSE_DOC)
+    rc = main(["stats", str(tmp_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "Unrecognized" in out
+    assert "Invalid Features" not in out
+
+
+def test_unrecognized_section_omitted_when_none(capsys):
+    # A portfolio of only known artifacts renders exactly as before: no section.
+    assert main(["stats", fixture_path("portfolio")]) == 0
+    assert "Unrecognized" not in capsys.readouterr().out
+
+
+def test_unrecognized_key_absent_from_json_when_none(capsys):
+    main(["stats", fixture_path("portfolio"), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert "unrecognized" not in payload

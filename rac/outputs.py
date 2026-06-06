@@ -289,6 +289,24 @@ def render_stats_human(s: PortfolioStats) -> str:
                 reasons = ", ".join(d.error_codes) or "unknown"
                 lines.append(f"  {_red(d.path)} — {reasons}")
 
+    # Unrecognized documents (ADR-010): files that matched no known artifact
+    # schema. Surfaced but rendered neutrally — they are not validation errors.
+    # Omitted entirely when there are none, so portfolios of only known artifacts
+    # render exactly as before.
+    if s.unrecognized:
+        count = s.unrecognized_count
+        noun = "document" if count == 1 else "documents"
+        lines += [
+            "",
+            _bold("Unrecognized"),
+            "============",
+            "",
+            f"{count} {noun} matched no known artifact schema "
+            "(not errors — see ADR-010):",
+        ]
+        for u in s.unrecognized:
+            lines.append(f"  {u.path}")
+
     # Declared relationship-presence counts (v0.7.0). Omitted entirely when no
     # artifact declares a relationship section, so existing portfolios are
     # unchanged. These are presence counts, not resolved/edge counts.
@@ -362,6 +380,17 @@ def render_stats_json(s: PortfolioStats) -> str:
             "valid": s.valid_designs,
             "invalid": [
                 {"file": d.path, "errors": d.error_codes} for d in s.invalid_designs
+            ],
+        }
+    # Additive: only present when the portfolio contains documents that matched
+    # no known artifact schema (ADR-010). Surfaced, not errors; ``confidence`` is
+    # the best-fit classification score for each document.
+    if s.unrecognized:
+        payload["unrecognized"] = {
+            "count": s.unrecognized_count,
+            "files": [
+                {"file": u.path, "name": u.name, "confidence": round(u.confidence, 2)}
+                for u in s.unrecognized
             ],
         }
     # Additive: only present when some artifact declares a relationship section.
