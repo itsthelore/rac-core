@@ -9,10 +9,11 @@ Commands:
     rac improve <file.md | -> [--json | --template]
     rac schema [--list] [type] [--json | --template]
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
+    rac portfolio <directory> [--json] [--top-level]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown; relationships found or
-       not; --validate with all references resolved)
+       not; --validate with all references resolved; portfolio summary produced)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found
@@ -34,6 +35,7 @@ from .classification import score_artifacts
 from .improve import improve_product
 from .inspect import build_inspection, inspect_directory
 from .parser import parse, parse_file
+from .portfolio import build_portfolio_summary
 from .relationships import (
     build_relationship_report,
     build_relationship_report_file,
@@ -290,6 +292,19 @@ def cmd_relationships(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_portfolio(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    recursive = not args.top_level
+    summary = build_portfolio_summary(args.directory, recursive=recursive)
+    if args.json:
+        print(outputs.render_portfolio_json(summary))
+    else:
+        print(outputs.render_portfolio_human(summary))
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     version_str = f"rac {__version__}"
 
@@ -469,6 +484,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_relationships.set_defaults(func=cmd_relationships)
+
+    p_portfolio = sub.add_parser(
+        "portfolio",
+        help="Repository intelligence summary: artifact counts, health score, and attention items.",
+        parents=[version_parent],
+    )
+    p_portfolio.add_argument("directory", help="Directory to scan recursively for *.md.")
+    p_portfolio.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_portfolio.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_portfolio.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_portfolio.set_defaults(func=cmd_portfolio)
 
     return parser
 
