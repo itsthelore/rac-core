@@ -366,16 +366,67 @@ def _parsed_items(paths: list) -> list[tuple[str, Product, ArtifactSpec | None]]
     return items
 
 
+# Identifier index: {casefold(ident) -> [(path, display_ident), ...]}
+_IdentIndex = dict[str, list[tuple[str, str]]]
+
+
+def _build_identifier_index(
+    items: list[tuple[str, Product, ArtifactSpec | None]],
+) -> _IdentIndex:
+    """Identifier index over *all* files (Unknown included — they can be targets)."""
+    index: _IdentIndex = {}
+    for path, product, spec in items:
+        ident = artifact_identifier(product, spec, path)
+        index.setdefault(ident.casefold(), []).append((path, ident))
+    return index
+
+
+def _resolve_references(
+    items: list[tuple[str, Product, ArtifactSpec | None]],
+    index: _IdentIndex,
+) -> tuple[int, list[RelationshipIssue], set[str]]:
+    """Resolve every explicit reference in ``items`` against ``index``.
+
+    Returns ``(checked, issues, resolved_target_paths)`` where
+    ``resolved_target_paths`` is the set of paths that appear as a *resolved*
+    target of at least one uniquely-matched reference — used by
+    ``summarize_relationships`` for orphan detection.
+    """
+    issues: list[RelationshipIssue] = []
+    resolved_targets: set[str] = set()
+    checked = 0
+
+    for path, product, spec in items:
+        if spec is None:
+            continue
+        for section, refs in extract_relationships_full(product, spec).items():
+            for ref in refs:
+                checked += 1
+                targets = [p for p, _ in index.get(ref.casefold(), [])]
+                if not targets:
+                    code = ISSUE_TARGET_NOT_FOUND
+                elif len(targets) > 1:
+                    code = ISSUE_TARGET_AMBIGUOUS
+                elif targets == [path]:
+                    code = ISSUE_SELF_REFERENCE
+                else:
+                    resolved_targets.add(targets[0])
+                    continue  # resolved uniquely to another artifact
+                issues.append(
+                    RelationshipIssue(
+                        code=code, source_path=path, relationship=section, target=ref
+                    )
+                )
+
+    return checked, issues, resolved_targets
+
+
 def _validate(
     directory: str,
     items: list[tuple[str, Product, ArtifactSpec | None]],
     recursive: bool,
 ) -> RelationshipValidation:
-    # Identifier index over *all* files (Unknown included — they can be targets).
-    index: dict[str, list[tuple[str, str]]] = {}
-    for path, product, spec in items:
-        ident = artifact_identifier(product, spec, path)
-        index.setdefault(ident.casefold(), []).append((path, ident))
+    index = _build_identifier_index(items)
 
     issues: list[RelationshipIssue] = []
 
@@ -392,28 +443,8 @@ def _validate(
             )
         )
 
-    # Per-reference resolution from known artifacts only (spec-driven).
-    checked = 0
-    for path, product, spec in items:
-        if spec is None:
-            continue
-        for section, refs in extract_relationships_full(product, spec).items():
-            for ref in refs:
-                checked += 1
-                targets = [p for p, _ in index.get(ref.casefold(), [])]
-                if not targets:
-                    code = ISSUE_TARGET_NOT_FOUND
-                elif len(targets) > 1:
-                    code = ISSUE_TARGET_AMBIGUOUS
-                elif targets == [path]:
-                    code = ISSUE_SELF_REFERENCE
-                else:
-                    continue  # resolved uniquely to another artifact
-                issues.append(
-                    RelationshipIssue(
-                        code=code, source_path=path, relationship=section, target=ref
-                    )
-                )
+    checked, ref_issues, _ = _resolve_references(items, index)
+    issues.extend(ref_issues)
 
     return RelationshipValidation(
         directory=directory,
@@ -438,3 +469,76 @@ def validate_relationships_file(path: str) -> RelationshipValidation:
     resolve — repository validation needs a directory.
     """
     return _validate(path, _parsed_items([path]), recursive=False)
+
+
+# --- Repository relationship summary (v0.7.3) ---------------------------------
+#
+# Aggregate relationship health for ``rac portfolio``. Returns counts and an
+# orphan count. An artifact is *orphaned* when no other artifact references it
+# with a successfully-resolved relationship — it may still declare outbound
+# relationships, but nothing points back to it. Coverage is the fraction of
+# non-unknown artifacts that declare at least one relationship.
+
+
+@dataclass
+class RelationshipSummary:
+    """Repository-level relationship health for ``PortfolioSummary``.
+
+    ``total`` counts every declared reference (same unit as
+    ``RelationshipReport.relationship_count``).  ``broken`` counts references
+    that could not be uniquely resolved (target-not-found, ambiguous, or
+    self-reference).  ``orphaned`` counts artifacts that are not the target of
+    any resolved reference.  ``coverage`` is the fraction of known (non-unknown)
+    artifacts that declare at least one outbound relationship; 1.0 when there
+    are no known artifacts.  ``issues`` holds the per-reference resolution
+    findings (``broken == len(issues)``); consumers like ``rac portfolio`` turn
+    them into attention items without a second relationship walk.
+    """
+
+    total: int
+    valid: int
+    broken: int
+    orphaned: int
+    coverage: float  # 0.0 – 1.0
+    issues: list[RelationshipIssue] = field(default_factory=list)
+
+
+def summarize_relationships(
+    directory: str, recursive: bool = True
+) -> RelationshipSummary:
+    """Aggregate relationship health across a directory (v0.7.3)."""
+    paths = find_markdown_files(directory, recursive=recursive)
+    items = _parsed_items(paths)
+
+    if not items:
+        return RelationshipSummary(
+            total=0, valid=0, broken=0, orphaned=0, coverage=1.0
+        )
+
+    index = _build_identifier_index(items)
+    checked, ref_issues, resolved_targets = _resolve_references(items, index)
+
+    broken = len(ref_issues)
+    valid = checked - broken
+
+    # Orphan = known (spec is not None) artifact whose path never appears as a
+    # resolved target of another artifact's reference.
+    all_known_paths = {path for path, _, spec in items if spec is not None}
+    orphaned = len(all_known_paths - resolved_targets)
+
+    # Coverage = fraction of known artifacts that declare >=1 outbound relationship.
+    artifacts_with_rels = sum(
+        1
+        for path, product, spec in items
+        if spec is not None and extract_relationships_full(product, spec)
+    )
+    coverage = artifacts_with_rels / len(all_known_paths) if all_known_paths else 1.0
+
+    return RelationshipSummary(
+        total=checked,
+        valid=valid,
+        broken=broken,
+        orphaned=orphaned,
+        coverage=round(coverage, 4),
+        issues=ref_issues,
+    )

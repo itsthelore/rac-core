@@ -754,3 +754,73 @@ def render_ingest_json(result: IngestResult, output_path: str | None) -> str:
         "markdown": result.markdown,
     }
     return json.dumps(payload, indent=2)
+
+
+# --- portfolio ---------------------------------------------------------------
+
+
+def render_portfolio_human(s) -> str:
+    """Human-readable `rac portfolio` output."""
+    lines = [
+        _bold("Repository Summary"),
+        "==================",
+        "",
+        f"Directory:  {s.directory}",
+        f"Artifacts:  {s.total_artifacts}",
+        "",
+        _bold("By Type"),
+        "-------",
+        "",
+    ]
+    for type_name, count in s.by_type.items():
+        if count > 0:
+            lines.append(f"  {type_name.title():<14} {count}")
+
+    lines += [
+        "",
+        _bold("Validation"),
+        "----------",
+        "",
+        f"  Valid:    {s.valid_artifacts}",
+        f"  Invalid:  {s.invalid_artifacts}",
+        "",
+        _bold("Completeness"),
+        "------------",
+        "",
+        f"  {s.completeness:.0%} ({s.filled_slots} / {s.recommended_slots} recommended slots filled)",
+        "",
+        _bold("Relationships"),
+        "-------------",
+        "",
+        f"  Total:    {s.relationships.total}",
+        f"  Valid:    {s.relationships.valid}",
+        f"  Broken:   {s.relationships.broken}",
+        f"  Orphaned: {s.relationships.orphaned}",
+        f"  Coverage: {s.relationships.coverage:.0%}",
+    ]
+
+    if s.attention:
+        lines += ["", _bold(f"Attention ({len(s.attention)} items)"), "----------", ""]
+        for item in s.attention:
+            icon = _red("✗") if item.severity == "error" else _yellow("!")
+            lines.append(f"  {icon} {item.identifier}")
+            lines.append(f"      {item.message}")
+    else:
+        lines += ["", _green("✓ No attention items.")]
+
+    score = s.health_score
+    score_color = _green if score >= 80 else _yellow if score >= 60 else _red
+    lines += [
+        "",
+        _bold("Health Score"),
+        "------------",
+        "",
+        f"  {score_color(str(score))} / 100",
+    ]
+
+    return "\n".join(lines)
+
+
+def render_portfolio_json(s) -> str:
+    """JSON `rac portfolio` output (stable contract, ADR-007)."""
+    return json.dumps(s.to_dict(), indent=2)

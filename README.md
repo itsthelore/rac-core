@@ -895,6 +895,153 @@ Notes:
 
 ---
 
+## Portfolio
+
+A single-command repository intelligence summary: artifact counts, validation
+health, completeness, relationship integrity, actionable attention items, and an
+overall health score — without manually combining output from multiple commands.
+
+```bash
+rac portfolio ./docs
+rac portfolio ./docs --json
+rac portfolio ./docs --top-level   # don't recurse into subdirectories
+```
+
+```text
+Repository Summary
+==================
+
+Directory:  ./docs
+Artifacts:  42
+
+By Type
+-------
+
+  Requirement    18
+  Decision       12
+  Roadmap        5
+  Prompt         4
+  Design         2
+  Unknown        1
+
+Validation
+----------
+
+  Valid:    40
+  Invalid:  2
+
+Completeness
+------------
+
+  78% (94 / 120 recommended slots filled)
+
+Relationships
+-------------
+
+  Total:    65
+  Valid:    63
+  Broken:   2
+  Orphaned: 4
+  Coverage: 71%
+
+Attention (4 items)
+----------
+
+  ✗ search
+      Validation errors: missing-requirements
+  ! adr-004
+      Missing recommended sections: Alternatives Considered
+  ! q3-roadmap
+      Related Requirements references missing artifact: REQ-999
+  ! req-041
+      Missing recommended sections: Risks
+
+Health Score
+------------
+
+  87 / 100
+```
+
+`--json` returns the stable machine contract (all fields present regardless of
+content, versioned with `schema_version`):
+
+```json
+{
+  "schema_version": "1",
+  "directory": "./docs",
+  "recursive": true,
+  "artifacts": {
+    "total": 42,
+    "by_type": {
+      "requirement": 18,
+      "decision": 12,
+      "roadmap": 5,
+      "prompt": 4,
+      "design": 2,
+      "unknown": 1
+    }
+  },
+  "validation": { "valid": 40, "invalid": 2 },
+  "completeness": { "recommended_slots": 120, "filled": 94, "ratio": 0.7833 },
+  "relationships": {
+    "total": 65,
+    "valid": 63,
+    "broken": 2,
+    "orphaned": 4,
+    "coverage": 0.7143
+  },
+  "attention": [
+    {
+      "path": "requirements/search.md",
+      "identifier": "search",
+      "severity": "error",
+      "code": "invalid-artifact",
+      "message": "Validation errors: missing-requirements"
+    },
+    {
+      "path": "roadmaps/q3-roadmap.md",
+      "identifier": "q3-roadmap",
+      "severity": "warning",
+      "code": "broken-relationship",
+      "message": "Related Requirements references missing artifact: REQ-999"
+    }
+  ],
+  "health": { "score": 87 }
+}
+```
+
+**Health score formula** (deterministic, no AI):
+
+```
+score = round(100 × (0.5 × validity + 0.25 × completeness + 0.25 × rel_integrity))
+```
+
+where each sub-score is a simple ratio that defaults to `1.0` when its
+denominator is zero, so an empty repository always scores 100.
+
+Notes:
+
+- **Advisory command.** `rac portfolio` always exits `0` when a summary is
+  produced (`2` for usage errors — not a directory). For CI hard gates, use
+  `rac relationships --validate` (exits `1` on broken refs).
+- **Attention severity.** `error` means the artifact is structurally invalid;
+  `warning` means it is valid but needs attention (missing recommended sections
+  or a stale relationship reference). Items are ordered errors-first, then by
+  path, then by code — deterministically.
+- **`identifier`** is the artifact's canonical identifier (the same one
+  `rac relationships --validate` resolves against): an explicit `## ID`, else a
+  recognised `TYPE-NNN` filename prefix, else the filename stem.
+- **`rac stats` vs `rac portfolio`.** `rac stats` provides per-feature
+  requirement and metric breakdowns for requirement-focused portfolios.
+  `rac portfolio` provides a whole-repository intelligence rollup across all
+  artifact types.
+- **Orphaned** means no other artifact holds a resolved inbound reference to
+  it — the artifact may still declare outbound relationships.
+- **Coverage** is the fraction of known (non-unknown) artifacts that declare
+  at least one outbound relationship section.
+
+---
+
 ## Review (Planned)
 
 AI-assisted product review.
