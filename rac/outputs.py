@@ -16,7 +16,14 @@ from .improve import ImprovementResult
 from .ingest import IngestResult
 from .inspect import DirectoryInspection, InspectionResult
 from .models import Diff, Issue, Product
-from .relationships import RelationshipReport
+from .relationships import (
+    ISSUE_DUPLICATE_IDENTIFIER,
+    ISSUE_SELF_REFERENCE,
+    ISSUE_TARGET_AMBIGUOUS,
+    ISSUE_TARGET_NOT_FOUND,
+    RelationshipReport,
+    RelationshipValidation,
+)
 from .schema import SchemaReference, template_sections
 from .stats import PortfolioStats
 
@@ -675,6 +682,63 @@ def render_relationships_json(report: RelationshipReport) -> str:
             }
             for artifact in report.artifacts
         ],
+    }
+    return json.dumps(payload, indent=2)
+
+
+# --- relationship validation -------------------------------------------------
+
+# Suffix shown after a broken reference, per issue code.
+_REF_ISSUE_SUFFIX = {
+    ISSUE_TARGET_NOT_FOUND: "not found",
+    ISSUE_TARGET_AMBIGUOUS: "ambiguous",
+    ISSUE_SELF_REFERENCE: "self-reference",
+}
+
+
+def render_relationship_validation_human(report: RelationshipValidation) -> str:
+    lines = [
+        _bold("Relationship Validation"),
+        "",
+        f"Relationships Checked: {report.relationships_checked}",
+        f"Validation Issues: {report.validation_issues}",
+    ]
+
+    duplicates = [i for i in report.issues if i.code == ISSUE_DUPLICATE_IDENTIFIER]
+    references = [i for i in report.issues if i.code != ISSUE_DUPLICATE_IDENTIFIER]
+
+    if duplicates:
+        lines += ["", _bold("Duplicate Identifiers")]
+        for issue in duplicates:
+            count = len(issue.paths or [])
+            lines.append(_red(f"✗ {issue.identifier} ({count} files)"))
+            lines.extend(f"  - {p}" for p in issue.paths or [])
+
+    if references:
+        lines += ["", _bold("Broken Relationships")]
+        current_source = None
+        current_section = None
+        for issue in references:
+            if issue.source_path != current_source:
+                current_source = issue.source_path
+                current_section = None
+                lines += ["", issue.source_path or "<input>"]
+            if issue.relationship != current_section:
+                current_section = issue.relationship
+                lines.append(f"  {_relationship_label(issue.relationship or '')}:")
+            suffix = _REF_ISSUE_SUFFIX.get(issue.code, issue.code)
+            lines.append(_red(f"  ✗ {issue.target} {suffix}"))
+
+    return "\n".join(lines)
+
+
+def render_relationship_validation_json(report: RelationshipValidation) -> str:
+    payload = {
+        "directory": report.directory,
+        "recursive": report.recursive,
+        "relationships_checked": report.relationships_checked,
+        "validation_issues": report.validation_issues,
+        "issues": [issue.to_dict() for issue in report.issues],
     }
     return json.dumps(payload, indent=2)
 

@@ -8,13 +8,14 @@ Commands:
     rac inspect <file.md | -> [--json]
     rac improve <file.md | -> [--json | --template]
     rac schema [--list] [type] [--json | --template]
-    rac relationships <dir | file.md> [--json] [--top-level]
+    rac relationships <dir | file.md> [--validate] [--json] [--top-level]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown; relationships found or
-       not)
+       not; --validate with all references resolved)
     1  validate: errors found; stats: no valid known artifacts; ingest:
-       conversion failed
+       conversion failed; relationships --validate: broken/ambiguous/self
+       references or duplicate identifiers found
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite)
 """
@@ -36,6 +37,8 @@ from .parser import parse, parse_file
 from .relationships import (
     build_relationship_report,
     build_relationship_report_file,
+    validate_relationships,
+    validate_relationships_file,
 )
 from .schema import available_schemas, schema_reference
 from .stats import collect_stats
@@ -244,10 +247,10 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 def cmd_relationships(args: argparse.Namespace) -> int:
     path = Path(args.path)
+    # --recursive is the default; --top-level disables it. If both are given,
+    # --top-level wins (mirrors `rac inspect`).
     if path.is_dir():
-        # --recursive is the default; --top-level disables it. If both are given,
-        # --top-level wins (mirrors `rac inspect`).
-        report = build_relationship_report(args.path, recursive=not args.top_level)
+        is_dir = True
     elif path.is_file():
         if path.suffix.lower() not in (".md", ".markdown"):
             print(
@@ -256,11 +259,28 @@ def cmd_relationships(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             raise SystemExit(EXIT_USAGE)
-        report = build_relationship_report_file(args.path)
+        is_dir = False
     else:
         print(f"rac: path not found: {args.path}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
 
+    if args.validate:
+        if is_dir:
+            report = validate_relationships(args.path, recursive=not args.top_level)
+        else:
+            report = validate_relationships_file(args.path)
+        if args.json:
+            print(outputs.render_relationship_validation_json(report))
+        else:
+            print(outputs.render_relationship_validation_human(report))
+        # Validation-style exit codes (REQ-007): 0 when everything resolves, 1 when
+        # any issue is found, 2 (above) for usage errors.
+        return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
+
+    if is_dir:
+        report = build_relationship_report(args.path, recursive=not args.top_level)
+    else:
+        report = build_relationship_report_file(args.path)
     if args.json:
         print(outputs.render_relationships_json(report))
     else:
@@ -431,6 +451,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_relationships.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_relationships.add_argument(
+        "--validate",
+        action="store_true",
+        help="Resolve references against discovered artifacts; exit 1 if any are "
+        "broken, ambiguous, self-referencing, or have duplicate identifiers.",
     )
     p_relationships.add_argument(
         "--top-level",
