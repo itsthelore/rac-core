@@ -8,9 +8,11 @@ Commands:
     rac inspect <file.md | -> [--json]
     rac improve <file.md | -> [--json | --template]
     rac schema [--list] [type] [--json | --template]
+    rac relationships <dir | file.md> [--json] [--top-level]
 
 Exit codes:
-    0  success (incl. inspect/improve reporting Unknown)
+    0  success (incl. inspect/improve reporting Unknown; relationships found or
+       not)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed
     2  usage / IO error (file not found, not a directory, unsupported type,
@@ -31,6 +33,10 @@ from .classification import score_artifacts
 from .improve import improve_product
 from .inspect import build_inspection, inspect_directory
 from .parser import parse, parse_file
+from .relationships import (
+    build_relationship_report,
+    build_relationship_report_file,
+)
 from .schema import available_schemas, schema_reference
 from .stats import collect_stats
 from .validate import has_errors, validate
@@ -236,6 +242,34 @@ def cmd_schema(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_relationships(args: argparse.Namespace) -> int:
+    path = Path(args.path)
+    if path.is_dir():
+        # --recursive is the default; --top-level disables it. If both are given,
+        # --top-level wins (mirrors `rac inspect`).
+        report = build_relationship_report(args.path, recursive=not args.top_level)
+    elif path.is_file():
+        if path.suffix.lower() not in (".md", ".markdown"):
+            print(
+                f"rac: relationships expects a Markdown file or directory; "
+                f"convert it first with: rac ingest {args.path}",
+                file=sys.stderr,
+            )
+            raise SystemExit(EXIT_USAGE)
+        report = build_relationship_report_file(args.path)
+    else:
+        print(f"rac: path not found: {args.path}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    if args.json:
+        print(outputs.render_relationships_json(report))
+    else:
+        print(outputs.render_relationships_human(report))
+    # A completed inspection always succeeds — finding no relationships is a valid
+    # outcome, not an error (REQ-010).
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     version_str = f"rac {__version__}"
 
@@ -386,6 +420,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit a full Markdown starter template.",
     )
     p_schema.set_defaults(func=cmd_schema)
+
+    p_relationships = sub.add_parser(
+        "relationships",
+        help="Inspect explicit relationships across a directory (or single file).",
+        parents=[version_parent],
+    )
+    p_relationships.add_argument(
+        "path", help="A directory to scan, or a single Markdown file."
+    )
+    p_relationships.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_relationships.add_argument(
+        "--top-level",
+        action="store_true",
+        help="When inspecting a directory, only its top-level files (no recursion).",
+    )
+    p_relationships.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_relationships.set_defaults(func=cmd_relationships)
 
     return parser
 

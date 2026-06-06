@@ -16,6 +16,7 @@ from .improve import ImprovementResult
 from .ingest import IngestResult
 from .inspect import DirectoryInspection, InspectionResult
 from .models import Diff, Issue, Product
+from .relationships import RelationshipReport
 from .schema import SchemaReference, template_sections
 from .stats import PortfolioStats
 
@@ -621,6 +622,61 @@ def render_schema_template(ref: SchemaReference) -> str:
             block += "\n\n" + "\n".join(f"<!-- {comment} -->" for comment in comments)
         blocks.append(block)
     return "\n\n".join(blocks) + "\n"
+
+
+# --- relationships -----------------------------------------------------------
+
+
+def _relationship_label(snake_section: str) -> str:
+    """``related_decisions`` -> ``Related Decisions``; ``supersedes`` -> ``Supersedes``."""
+    return snake_section.replace("_", " ").title()
+
+
+def render_relationships_human(report: RelationshipReport) -> str:
+    lines = [
+        _bold("Relationships"),
+        "",
+        f"Files Inspected: {report.total_files}",
+        f"Artifacts With Relationships: {report.artifacts_with_relationships}",
+        f"Relationships Found: {report.relationship_count}",
+    ]
+
+    counts = report.counts
+    if counts:
+        lines += ["", _bold("By Type:")]
+        lines.extend(
+            f"- {_relationship_label(section)}: {count}"
+            for section, count in counts.items()
+        )
+
+    # Per-artifact detail (REQ-005), only for artifacts that declare relationships.
+    for artifact in report.artifacts:
+        lines += ["", artifact.path]
+        for section, refs in artifact.relationships.items():
+            lines.append(f"  {_relationship_label(section)}:")
+            lines.extend(f"  - {ref}" for ref in refs)
+
+    return "\n".join(lines)
+
+
+def render_relationships_json(report: RelationshipReport) -> str:
+    payload = {
+        "directory": report.directory,
+        "recursive": report.recursive,
+        "total_files": report.total_files,
+        "artifacts_with_relationships": report.artifacts_with_relationships,
+        "relationship_count": report.relationship_count,
+        "counts": report.counts,
+        "artifacts": [
+            {
+                "path": artifact.path,
+                "type": artifact.type,
+                "relationships": artifact.relationships,
+            }
+            for artifact in report.artifacts
+        ],
+    }
+    return json.dumps(payload, indent=2)
 
 
 # --- ingest ------------------------------------------------------------------

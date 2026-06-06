@@ -823,6 +823,78 @@ registered schemas are supported; custom schemas are out of scope.
 
 ---
 
+## Relationships
+
+Inspect the explicit [relationship metadata](#relationship-metadata) declared
+across a repository — a deterministic, read-only view of how artifacts reference
+one another, without opening every file.
+
+```bash
+rac relationships planning/
+rac relationships planning/ --json
+rac relationships planning/ --top-level     # don't recurse into subdirectories
+rac relationships requirements/search.md    # a single file works too
+```
+
+```text
+Relationships
+
+Files Inspected: 24
+Artifacts With Relationships: 8
+Relationships Found: 14
+
+By Type:
+- Related Requirements: 4
+- Related Decisions: 6
+- Related Roadmaps: 2
+- Related Prompts: 1
+- Supersedes: 1
+
+requirements/search.md
+  Related Decisions:
+  - ADR-004
+```
+
+`--json` returns structured data for automation and future viewers (ADR-015 —
+relationship intelligence lives in RAC Core, not the UI):
+
+```json
+{
+  "directory": "planning",
+  "recursive": true,
+  "total_files": 24,
+  "artifacts_with_relationships": 8,
+  "relationship_count": 14,
+  "counts": { "related_decisions": 6, "related_requirements": 4 },
+  "artifacts": [
+    {
+      "path": "requirements/search.md",
+      "type": "requirement",
+      "relationships": { "related_decisions": ["ADR-004"] }
+    }
+  ]
+}
+```
+
+Notes:
+
+- **Counts are individual references.** `relationship_count` equals
+  `sum(counts.values())`; an artifact listing two decisions contributes two.
+- **`total_files`** counts every Markdown file considered — including files with
+  no relationships and Unknown artifacts.
+- **Supersedes is a relationship here.** Unlike `rac inspect` (where `supersedes`
+  is a top-level scalar), this command reports it alongside the `related_*`
+  sections, in both `counts` and per-artifact `relationships`.
+- **Spec-driven.** Extraction is keyed off each artifact type's declared sections.
+  Unknown artifacts are counted but contribute no relationships (and never appear
+  in `artifacts`); RAC does not scan arbitrary Markdown.
+- **Read-only and exit `0`.** The command never modifies files and exits `0`
+  whether or not relationships are found (`2` only for a missing path or a
+  non-Markdown file). It does **not** resolve or validate targets — broken-link
+  detection is a later release.
+
+---
+
 ## Review (Planned)
 
 AI-assisted product review.

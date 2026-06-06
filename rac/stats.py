@@ -19,11 +19,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .artifacts import RELATIONSHIP_SECTIONS, spec_for
+from .artifacts import spec_for
 from .fs import find_markdown_files
 from .inspect import build_inspection
 from .parser import parse_file
-from .relationships import present_relationship_sections
+from .relationships import RELATIONSHIP_SECTIONS, present_relationship_sections
 from .validate import validate
 
 

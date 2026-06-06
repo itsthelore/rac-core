@@ -68,23 +68,11 @@ class ArtifactSpec:
 # extracted, but never scored, never templated, never reported as missing
 # (REQ-002). v0.7.0 treats them as metadata only — RAC extracts and counts the
 # references but does not resolve, validate, or graph them.
-
-# The cross-artifact "Related X" sections. These populate the ``relationships``
-# dict in ``rac inspect`` output. ``related designs`` is included so every peer
-# artifact type can be referenced.
-RELATED_SECTIONS: tuple[str, ...] = (
-    "related requirements",
-    "related decisions",
-    "related roadmaps",
-    "related prompts",
-    "related designs",
-)
-
-# The full relationship-section vocabulary, including ``supersedes``. ``stats``
-# counts presence across all of these. ``supersedes`` is the one exception that
-# does *not* appear in the inspect ``relationships`` dict: it remains a top-level
-# scalar field for backwards compatibility (see rac.inspect / ADR-007).
-RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",)
+#
+# The relationship-section vocabulary and its canonical ordering live in
+# :mod:`rac.relationships` (the module that owns relationship logic). This module
+# only owns the human-facing ``descriptions`` for those sections, which the specs
+# below consume.
 
 # One-line descriptions for every relationship section, surfaced by `rac schema`.
 # Relationship sections deliberately carry no ``guidance`` — guidance gates
