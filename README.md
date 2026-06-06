@@ -944,14 +944,16 @@ Relationships
   Orphaned: 4
   Coverage: 71%
 
-Attention (3 items)
+Attention (4 items)
 ----------
 
-  ✗ Search Feature
+  ✗ search
       Validation errors: missing-requirements
-  ! ADR-004 Parser Strategy
+  ! adr-004
       Missing recommended sections: Alternatives Considered
-  ! REQ-041 Payment Retry
+  ! q3-roadmap
+      Related Requirements references missing artifact: REQ-999
+  ! req-041
       Missing recommended sections: Risks
 
 Health Score
@@ -991,10 +993,17 @@ content, versioned with `schema_version`):
   "attention": [
     {
       "path": "requirements/search.md",
-      "identifier": "Search Feature",
+      "identifier": "search",
       "severity": "error",
       "code": "invalid-artifact",
       "message": "Validation errors: missing-requirements"
+    },
+    {
+      "path": "roadmaps/q3-roadmap.md",
+      "identifier": "q3-roadmap",
+      "severity": "warning",
+      "code": "broken-relationship",
+      "message": "Related Requirements references missing artifact: REQ-999"
     }
   ],
   "health": { "score": 87 }
@@ -1015,6 +1024,13 @@ Notes:
 - **Advisory command.** `rac portfolio` always exits `0` when a summary is
   produced (`2` for usage errors — not a directory). For CI hard gates, use
   `rac relationships --validate` (exits `1` on broken refs).
+- **Attention severity.** `error` means the artifact is structurally invalid;
+  `warning` means it is valid but needs attention (missing recommended sections
+  or a stale relationship reference). Items are ordered errors-first, then by
+  path, then by code — deterministically.
+- **`identifier`** is the artifact's canonical identifier (the same one
+  `rac relationships --validate` resolves against): an explicit `## ID`, else a
+  recognised `TYPE-NNN` filename prefix, else the filename stem.
 - **`rac stats` vs `rac portfolio`.** `rac stats` provides per-feature
   requirement and metric breakdowns for requirement-focused portfolios.
   `rac portfolio` provides a whole-repository intelligence rollup across all

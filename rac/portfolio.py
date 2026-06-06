@@ -26,12 +26,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .artifacts import spec_for
+from .artifacts import ARTIFACT_SPECS, spec_for
 from .classification import classify, missing_sections
 from .fs import find_markdown_files
 from .parser import parse_file
 from .relationships import (
+    ISSUE_SELF_REFERENCE,
+    ISSUE_TARGET_AMBIGUOUS,
+    ISSUE_TARGET_NOT_FOUND,
     RelationshipSummary,
+    artifact_identifier,
     summarize_relationships,
 )
 from .validate import has_errors, validate
@@ -40,6 +44,13 @@ from .validate import has_errors, validate
 ATTENTION_INVALID = "invalid-artifact"
 ATTENTION_MISSING_RECOMMENDED = "missing-recommended-sections"
 ATTENTION_BROKEN_RELATIONSHIP = "broken-relationship"
+
+# Human phrasing for each relationship-resolution issue in attention messages.
+_REL_ISSUE_PHRASE = {
+    ISSUE_TARGET_NOT_FOUND: "references missing artifact",
+    ISSUE_TARGET_AMBIGUOUS: "has an ambiguous reference to",
+    ISSUE_SELF_REFERENCE: "references itself via",
+}
 
 
 @dataclass
@@ -134,19 +145,10 @@ class PortfolioSummary:
         }
 
 
-def _identifier_for(path: str, product) -> str:
-    """Best display identifier for ``path``: title, else stem."""
-    from pathlib import Path
-
-    return product.title or Path(path).stem
-
-
 def build_portfolio_summary(
     directory: str, recursive: bool = True
 ) -> PortfolioSummary:
     """Walk ``directory`` and compute a full repository intelligence summary."""
-    from .artifacts import ARTIFACT_SPECS
-
     paths = find_markdown_files(directory, recursive=recursive)
 
     # --- per-artifact pass ---------------------------------------------------
@@ -158,9 +160,10 @@ def build_portfolio_summary(
     recommended_slots = 0
     filled_slots = 0
     attention: list[AttentionItem] = []
-
-    # Broken-relationship attention: resolved separately so we avoid a second
-    # full walk. We collect the relationship summary after the artifact loop.
+    # path -> canonical identifier, for mapping relationship issues (whose
+    # source_path is always a known artifact) back to an identifier without a
+    # second identifier pass.
+    path_to_identifier: dict[str, str] = {}
 
     for path in paths:
         product = parse_file(str(path))
@@ -172,6 +175,9 @@ def build_portfolio_summary(
             # Unknown artifacts: not validated, not scored for completeness.
             continue
 
+        identifier = artifact_identifier(product, spec, str(path))
+        path_to_identifier[str(path)] = identifier
+
         # Validation
         issues = validate(product)
         if has_errors(issues):
@@ -180,7 +186,7 @@ def build_portfolio_summary(
             attention.append(
                 AttentionItem(
                     path=str(path),
-                    identifier=_identifier_for(str(path), product),
+                    identifier=identifier,
                     severity="error",
                     code=ATTENTION_INVALID,
                     message=f"Validation errors: {', '.join(error_codes)}",
@@ -202,7 +208,7 @@ def build_portfolio_summary(
             attention.append(
                 AttentionItem(
                     path=str(path),
-                    identifier=_identifier_for(str(path), product),
+                    identifier=identifier,
                     severity="warning",
                     code=ATTENTION_MISSING_RECOMMENDED,
                     message=f"Missing recommended sections: {names}",
@@ -210,7 +216,22 @@ def build_portfolio_summary(
             )
 
     # --- relationship summary ------------------------------------------------
+    # One relationship walk; its per-reference issues become attention items so
+    # broken references are surfaced, not just counted (roadmap Initiative 3).
     rel_summary = summarize_relationships(directory, recursive=recursive)
+    for issue in rel_summary.issues:
+        source = issue.source_path or ""
+        label = (issue.relationship or "").replace("_", " ").title()
+        phrase = _REL_ISSUE_PHRASE.get(issue.code, "has an unresolved reference")
+        attention.append(
+            AttentionItem(
+                path=source,
+                identifier=path_to_identifier.get(source, source),
+                severity="warning",
+                code=ATTENTION_BROKEN_RELATIONSHIP,
+                message=f"{label} {phrase}: {issue.target}",
+            )
+        )
 
     # Sort attention: errors before warnings, then path, then code (deterministic).
     _SEV_ORDER = {"error": 0, "warning": 1}

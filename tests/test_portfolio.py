@@ -111,6 +111,22 @@ def test_broken_rels_health_penalised():
     assert s_broken.health_score < s_clean.health_score
 
 
+def test_broken_rels_surface_in_attention():
+    # A broken reference must be an attention item, not merely a count
+    # (roadmap Initiative 3: "ADR-012 references missing artifact").
+    s = summary("broken_rels")
+    broken = [a for a in s.attention if a.code == ATTENTION_BROKEN_RELATIONSHIP]
+    assert len(broken) == 1
+    assert "ADR-MISSING" in broken[0].message
+    # Identifier is the SOURCE artifact's canonical identifier, not the target.
+    assert broken[0].identifier == "source"
+
+
+def test_no_broken_attention_when_all_resolved():
+    s = summary("valid_clean")
+    assert not [a for a in s.attention if a.code == ATTENTION_BROKEN_RELATIONSHIP]
+
+
 # ---------------------------------------------------------------------------
 # All-types fixture — non-misclassification
 # ---------------------------------------------------------------------------
@@ -121,6 +137,37 @@ def test_all_types_no_misclassification():
     # Each known type must appear exactly once; none should collapse into another.
     for t in ("requirement", "decision", "roadmap", "prompt", "design"):
         assert s.by_type[t] == 1, f"{t} count wrong"
+
+
+# ---------------------------------------------------------------------------
+# Incomplete-but-recognizable: classifies as a known type, fails validation
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_known_artifact_classifies_then_fails():
+    # A titleless requirement still classifies as a requirement (Problem +
+    # Requirements present) but fails validation on missing-title.
+    s = summary("invalid_known")
+    assert s.by_type["requirement"] == 1  # recognized, not Unknown
+    assert s.by_type["unknown"] == 0
+    assert s.invalid_artifacts == 1
+    assert s.valid_artifacts == 0
+
+
+def test_invalid_known_artifact_surfaces_in_attention():
+    s = summary("invalid_known")
+    invalid = [a for a in s.attention if a.code == ATTENTION_INVALID]
+    assert len(invalid) == 1
+    assert invalid[0].severity == "error"
+    assert "missing-title" in invalid[0].message
+
+
+def test_attention_identifier_is_canonical_not_title():
+    # The identifier must come from the shared artifact_identifier (stem here),
+    # not a separate title-based source of truth.
+    s = summary("invalid_known")
+    invalid = [a for a in s.attention if a.code == ATTENTION_INVALID][0]
+    assert invalid.identifier == "req-no-title"
 
 
 # ---------------------------------------------------------------------------

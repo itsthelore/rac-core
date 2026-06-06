@@ -490,7 +490,9 @@ class RelationshipSummary:
     self-reference).  ``orphaned`` counts artifacts that are not the target of
     any resolved reference.  ``coverage`` is the fraction of known (non-unknown)
     artifacts that declare at least one outbound relationship; 1.0 when there
-    are no known artifacts.
+    are no known artifacts.  ``issues`` holds the per-reference resolution
+    findings (``broken == len(issues)``); consumers like ``rac portfolio`` turn
+    them into attention items without a second relationship walk.
     """
 
     total: int
@@ -498,6 +500,7 @@ class RelationshipSummary:
     broken: int
     orphaned: int
     coverage: float  # 0.0 – 1.0
+    issues: list[RelationshipIssue] = field(default_factory=list)
 
 
 def summarize_relationships(
@@ -537,4 +540,5 @@ def summarize_relationships(
         broken=broken,
         orphaned=orphaned,
         coverage=round(coverage, 4),
+        issues=ref_issues,
     )
