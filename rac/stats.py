@@ -19,10 +19,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .artifacts import spec_for
+from .artifacts import RELATIONSHIP_SECTIONS, spec_for
 from .fs import find_markdown_files
 from .inspect import build_inspection
 from .parser import parse_file
+from .relationships import present_relationship_sections
 from .validate import validate
 
 
@@ -103,6 +104,10 @@ class PortfolioStats:
     roadmaps: list[RoadmapStat] = field(default_factory=list)
     prompts: list[PromptStat] = field(default_factory=list)
     designs: list[DesignStat] = field(default_factory=list)
+    # Declared relationship-presence counts (v0.7.0, REQ-011): {normalized
+    # section -> number of artifacts that declare it with >=1 reference}. Ordered
+    # by RELATIONSHIP_SECTIONS. Not resolution, not edge totals — just presence.
+    relationship_counts: dict[str, int] = field(default_factory=dict)
 
     # --- counts (requirement features) ---
     @property
@@ -257,10 +262,17 @@ def collect_stats(directory: str) -> PortfolioStats:
     for requirement repositories).
     """
     stats = PortfolioStats(directory=directory)
+    rel_counts: dict[str, int] = {}
     for path in find_markdown_files(directory):
         product = parse_file(str(path))
         name = product.title or path.stem
         result = build_inspection(product)
+        # Declared relationship-presence counts span every artifact type, so they
+        # are tallied before the per-type routing below (each branch continues).
+        spec = spec_for(result.type)
+        if spec is not None:
+            for section in present_relationship_sections(product, spec):
+                rel_counts[section] = rel_counts.get(section, 0) + 1
         if result.type == "decision":
             stats.decisions.append(
                 DecisionStat(
@@ -321,4 +333,10 @@ def collect_stats(directory: str) -> PortfolioStats:
                 risks=len(product.risks),
             )
         )
+    # Order the relationship counts by the canonical vocabulary for stable output.
+    stats.relationship_counts = {
+        section: rel_counts[section]
+        for section in RELATIONSHIP_SECTIONS
+        if section in rel_counts
+    }
     return stats

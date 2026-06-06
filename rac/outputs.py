@@ -281,6 +281,14 @@ def render_stats_human(s: PortfolioStats) -> str:
                 reasons = ", ".join(d.error_codes) or "unknown"
                 lines.append(f"  {_red(d.path)} — {reasons}")
 
+    # Declared relationship-presence counts (v0.7.0). Omitted entirely when no
+    # artifact declares a relationship section, so existing portfolios are
+    # unchanged. These are presence counts, not resolved/edge counts.
+    if s.relationship_counts:
+        lines += ["", _bold("Relationships"), "=============", ""]
+        for section, count in s.relationship_counts.items():
+            lines.append(f"Artifacts with {section.title()}: {count}")
+
     return "\n".join(lines)
 
 
@@ -348,6 +356,13 @@ def render_stats_json(s: PortfolioStats) -> str:
                 {"file": d.path, "errors": d.error_codes} for d in s.invalid_designs
             ],
         }
+    # Additive: only present when some artifact declares a relationship section.
+    # Declared-presence counts (REQ-011), snake_case keys — not resolution.
+    if s.relationship_counts:
+        payload["relationships"] = {
+            section.replace(" ", "_"): count
+            for section, count in s.relationship_counts.items()
+        }
     return json.dumps(payload, indent=2)
 
 
@@ -369,7 +384,18 @@ def render_inspect_human(result: InspectionResult) -> str:
         lines += ["", _bold("Missing Sections:")]
         lines.extend(_red(f"  ✗ {s.title()}") for s in result.missing_sections)
     _append_decision_metadata(lines, result)
+    _append_relationships(lines, result)
     return "\n".join(lines)
+
+
+def _append_relationships(lines: list[str], result: InspectionResult) -> None:
+    """Add a Relationships block when the artifact declares related artifacts."""
+    if not result.relationships:
+        return
+    lines += ["", _bold("Relationships:")]
+    for section, refs in result.relationships.items():
+        lines.append(f"  {section.replace('_', ' ').title()}:")
+        lines.extend(f"    - {ref}" for ref in refs)
 
 
 def _append_decision_metadata(lines: list[str], result: InspectionResult) -> None:

@@ -164,6 +164,7 @@ def test_schema_reference_shape():
         "related requirements",
         "related decisions",
         "related roadmaps",
+        "related designs",
     ]
 
 
@@ -177,6 +178,7 @@ def test_schema_json_includes_optional_relationship_sections(capsys):
         "related_requirements",
         "related_decisions",
         "related_roadmaps",
+        "related_designs",
     ]
 
 

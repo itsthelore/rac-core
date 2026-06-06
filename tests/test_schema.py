@@ -69,7 +69,9 @@ def test_schema_human_requirement(capsys):
     assert "Guidance:" in out
     assert "What user or business problem does this solve?" in out
     assert "Optional Sections:" in out
-    assert "  (none)" in out
+    # v0.7.0: requirements now declare relationship sections as optional.
+    assert "Related Decisions" in out
+    assert "Decision artifacts this artifact references" in out
 
 
 def test_schema_human_decision_includes_metadata(capsys):
@@ -100,7 +102,12 @@ def test_schema_json_requirement_shape(capsys):
     assert payload["type"] == "requirement"
     assert payload["required"] == ["problem", "requirements"]
     assert payload["recommended"] == ["success_metrics", "risks", "assumptions"]
-    assert payload["optional"] == []
+    assert payload["optional"] == [
+        "related_decisions",
+        "related_roadmaps",
+        "related_prompts",
+        "related_designs",
+    ]
     assert "success_metrics" in payload["descriptions"]
     assert "success_metrics" in payload["guidance"]
     assert payload["metadata"] == {}
@@ -111,7 +118,12 @@ def test_schema_json_decision_metadata_values(capsys):
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["type"] == "decision"
-    assert payload["optional"] == ["supersedes"]
+    assert payload["optional"] == [
+        "supersedes",
+        "related_requirements",
+        "related_roadmaps",
+        "related_designs",
+    ]
     assert payload["metadata"]["status"] == [
         "Proposed",
         "Accepted",

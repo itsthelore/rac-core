@@ -420,9 +420,23 @@ Invalid Designs (1)
   ./planning/design/draft.md — missing-constraints
 ```
 
+When artifacts declare [relationship metadata](#relationship-metadata), a
+`Relationships` section reports **declared-presence counts** — how many artifacts
+contain each relationship section with at least one reference. These are presence
+counts, not resolved links or edge totals:
+
+```text
+Relationships
+=============
+
+Artifacts with Related Decisions: 6
+Artifacts with Related Requirements: 4
+Artifacts with Supersedes: 2
+```
+
 Add `--json` for machine-readable output. Artifact-specific blocks such as
-`decisions`, `roadmaps`, `prompts`, and `designs` are included only when those
-artifacts are present. `stats` exits `0` when the directory has at least one
+`decisions`, `roadmaps`, `prompts`, `designs`, and `relationships` are included
+only when those artifacts (or relationship sections) are present. `stats` exits `0` when the directory has at least one
 valid known artifact, `1` if none, and `2` if the path is not a directory. (A
 `--strict` flag for failing on *any* invalid file — handy in CI — is planned.)
 
@@ -504,7 +518,9 @@ RAC classifies the document against known artifact schemas (no AI) and reports a
 confidence score. RAC recognizes **Requirement**, **Decision**, **Roadmap**,
 **Prompt**, and **Design** artifacts; anything that doesn't fit well is reported
 as **Unknown** (a valid, successful result — not an error). `--json` emits
-`{ type, confidence, present_sections, missing_sections }`.
+`{ type, confidence, present_sections, missing_sections }`, plus an additive
+`relationships` object when the artifact declares relationship sections (see
+[Relationship metadata](#relationship-metadata)).
 
 ### Inspect a directory
 
@@ -582,6 +598,57 @@ ADR-012
 **optional**: a decision without it is still valid. Only an *unsupported* Status
 or Category value fails validation (`invalid-decision-status` /
 `invalid-decision-category`); values are matched case-insensitively.
+
+### Relationship metadata
+
+Artifacts can reference each other with explicit Markdown sections (v0.7.0). RAC
+extracts these as **metadata only** — it records the references but does **not**
+resolve, validate, or graph them (those come in a later v0.7.x release).
+
+```markdown
+## Related Decisions
+
+- ADR-004
+- ADR-012
+
+## Related Roadmaps
+
+- ROADMAP-Q3-PLATFORM
+```
+
+Each artifact type recognizes the relationship sections that make sense for it:
+
+| Artifact | Relationship sections |
+|-------------|--------------------------------------------------------------------------|
+| Requirement | Related Decisions, Related Roadmaps, Related Prompts, Related Designs |
+| Decision | Supersedes, Related Requirements, Related Roadmaps, Related Designs |
+| Roadmap | Related Decisions, Related Requirements, Related Prompts, Related Designs |
+| Prompt | Related Requirements, Related Decisions, Related Roadmaps, Related Designs |
+| Design | Related Requirements, Related Decisions, Related Roadmaps, Related Prompts |
+
+Relationship sections are **optional**: they are never scored, never reported as
+missing, and never appear in starter templates — an artifact without them stays
+valid. `inspect` surfaces them under a **Relationships** block, and in `--json`
+as an additive `relationships` object (snake_case keys, string arrays, present
+only when at least one reference is declared):
+
+```json
+{
+  "type": "requirement",
+  "present_sections": ["problem", "requirements"],
+  "relationships": {
+    "related_decisions": ["ADR-004", "ADR-012"],
+    "related_roadmaps": ["ROADMAP-Q3-PLATFORM"]
+  }
+}
+```
+
+References are kept verbatim (an `ADR-004`, a `REQ-001`, or a relative path are
+all valid) — RAC does not parse out IDs or check that the targets exist.
+
+**`supersedes` is a backwards-compatible exception:** it remains a top-level
+scalar (`"supersedes": "ADR-012"`) rather than moving into `relationships`, so the
+existing Decision contract is unchanged.
 
 ### Synonyms
 

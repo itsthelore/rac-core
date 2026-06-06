@@ -61,18 +61,75 @@ class ArtifactSpec:
         return self.required + self.recommended
 
 
+# --- Relationship metadata (v0.7.0) -----------------------------------------
+#
+# Relationships are explicit Markdown sections that reference other artifacts
+# (ADR-016). They ride the existing ``optional`` mechanism: recognized and
+# extracted, but never scored, never templated, never reported as missing
+# (REQ-002). v0.7.0 treats them as metadata only — RAC extracts and counts the
+# references but does not resolve, validate, or graph them.
+
+# The cross-artifact "Related X" sections. These populate the ``relationships``
+# dict in ``rac inspect`` output. ``related designs`` is included so every peer
+# artifact type can be referenced.
+RELATED_SECTIONS: tuple[str, ...] = (
+    "related requirements",
+    "related decisions",
+    "related roadmaps",
+    "related prompts",
+    "related designs",
+)
+
+# The full relationship-section vocabulary, including ``supersedes``. ``stats``
+# counts presence across all of these. ``supersedes`` is the one exception that
+# does *not* appear in the inspect ``relationships`` dict: it remains a top-level
+# scalar field for backwards compatibility (see rac.inspect / ADR-007).
+RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",)
+
+# One-line descriptions for every relationship section, surfaced by `rac schema`.
+# Relationship sections deliberately carry no ``guidance`` — guidance gates
+# `rac improve`, and relationships must stay out of improve and templates.
+RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
+    "related requirements": "Requirement artifacts this artifact references",
+    "related decisions": "Decision artifacts this artifact references",
+    "related roadmaps": "Roadmap artifacts this artifact references",
+    "related prompts": "Prompt artifacts this artifact references",
+    "related designs": "Design artifacts this artifact references",
+    "supersedes": "The artifact this one supersedes",
+}
+
+
+def _relationship_descriptions(*sections: str) -> dict[str, str]:
+    """Descriptions for the given relationship ``sections`` (declaration order)."""
+    return {section: RELATIONSHIP_DESCRIPTIONS[section] for section in sections}
+
+
 ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec(
         name="requirement",
         display="Requirement",
         required=("problem", "requirements"),
         recommended=("success metrics", "risks", "assumptions"),
+        # Relationship sections (v0.7.0): metadata only — extracted and counted,
+        # never scored or templated (REQ-003).
+        optional=(
+            "related decisions",
+            "related roadmaps",
+            "related prompts",
+            "related designs",
+        ),
         descriptions={
             "problem": "The user or business problem this addresses",
             "requirements": "Numbered requirement statements, e.g. [REQ-001] ...",
             "success metrics": "How success will be measured",
             "risks": "Potential implementation, delivery, or adoption risks",
             "assumptions": "Assumptions this artifact depends on",
+            **_relationship_descriptions(
+                "related decisions",
+                "related roadmaps",
+                "related prompts",
+                "related designs",
+            ),
         },
         guidance={
             "problem": (
@@ -107,11 +164,25 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         display="Decision",
         required=("context", "decision", "consequences"),
         recommended=("status", "category", "alternatives considered"),
-        optional=("supersedes",),
+        # ``supersedes`` stays first (the original v0.4.2 entry). The remaining
+        # relationship sections are added in v0.7.0 (REQ-004). All are metadata
+        # only; ``supersedes`` is also surfaced as a top-level scalar by inspect.
+        optional=(
+            "supersedes",
+            "related requirements",
+            "related roadmaps",
+            "related designs",
+        ),
         metadata={
             "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
             "category": ("Architecture", "Product", "Process", "Technical", "Other"),
         },
+        descriptions=_relationship_descriptions(
+            "supersedes",
+            "related requirements",
+            "related roadmaps",
+            "related designs",
+        ),
         guidance={
             "context": (
                 "What forces, constraints, or problems led to this decision?",
@@ -147,15 +218,27 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         required=("outcomes", "initiatives"),
         recommended=("success measures", "assumptions", "risks"),
         # Relationship sections are recognized but never scored or templated; they
-        # exist so v0.6.0 roadmaps can reference Decisions/Requirements as text
-        # without RAC analyzing those links (relationship analysis is v0.7.x).
-        optional=("related decisions", "related requirements"),
+        # let a roadmap reference Decisions/Requirements/Prompts/Designs as text.
+        # The first two predate v0.7.0; ``related prompts``/``related designs`` are
+        # added in v0.7.0 (REQ-005). Order is append-only (ADR-007).
+        optional=(
+            "related decisions",
+            "related requirements",
+            "related prompts",
+            "related designs",
+        ),
         descriptions={
             "outcomes": "The user, business, or operational outcomes this roadmap pursues",
             "initiatives": "The major bodies of work that support those outcomes",
             "success measures": "How progress toward the outcomes will be measured",
             "assumptions": "Conditions that must hold for this roadmap to stay valid",
             "risks": "What could prevent the outcomes from being achieved",
+            **_relationship_descriptions(
+                "related decisions",
+                "related requirements",
+                "related prompts",
+                "related designs",
+            ),
         },
         guidance={
             "outcomes": (
@@ -190,9 +273,14 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         required=("objective", "input", "instructions", "output"),
         recommended=("constraints", "examples", "evaluation"),
         # Relationship sections are recognized but never scored or templated; they
-        # let a Prompt reference other artifacts as text without RAC analyzing those
-        # links (relationship analysis is v0.7.x).
-        optional=("related requirements", "related decisions", "related roadmaps"),
+        # let a Prompt reference other artifacts as text. ``related designs`` is
+        # added in v0.7.0 (REQ-006); order is append-only (ADR-007).
+        optional=(
+            "related requirements",
+            "related decisions",
+            "related roadmaps",
+            "related designs",
+        ),
         descriptions={
             "objective": "What this prompt is intended to achieve",
             "input": "The information, context, or source material the prompt expects",
@@ -202,6 +290,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "examples": "Example inputs and outputs that clarify intended behavior",
             # Human criteria for judging a response — not automated testing or scoring.
             "evaluation": "Human criteria for judging whether a response is good",
+            **_relationship_descriptions(
+                "related requirements",
+                "related decisions",
+                "related roadmaps",
+                "related designs",
+            ),
         },
         guidance={
             "objective": (
@@ -272,6 +366,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "accessibility": "Accessibility needs and expectations for the design",
             "style guidance": "Visual, tone, layout, or interaction style guidance",
             "open questions": "Unresolved design questions to validate or decide later",
+            **_relationship_descriptions(
+                "related requirements",
+                "related decisions",
+                "related roadmaps",
+                "related prompts",
+            ),
         },
         guidance={
             "context": (

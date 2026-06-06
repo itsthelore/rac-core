@@ -11,13 +11,14 @@ delegated to :mod:`rac.classification` (the shared, AI-optional heuristic).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .artifacts import ARTIFACT_SPECS, spec_for
 from .classification import classify
 from .fs import find_markdown_files
 from .models import Product
 from .parser import parse, parse_file
+from .relationships import extract_relationships
 
 
 @dataclass
@@ -26,7 +27,7 @@ class InspectionResult:
 
     Section names are stored normalized (e.g. ``"success metrics"``); renderers
     format them. ``to_dict`` is the JSON contract and is additive-friendly:
-    decision metadata fields appear only when present.
+    decision metadata fields and ``relationships`` appear only when present.
     """
 
     type: str  # artifact name, or "unknown"
@@ -36,7 +37,13 @@ class InspectionResult:
     # Decision metadata — populated only for decisions that declare it.
     status: str | None = None
     category: str | None = None
+    # ``supersedes`` is a relationship section but, for backwards compatibility
+    # (v0.4.2 / ADR-007), it stays a top-level scalar here rather than going into
+    # ``relationships`` — the documented exception to the v0.7.0 model.
     supersedes: str | None = None
+    # Cross-artifact relationship metadata (v0.7.0): {snake_section -> [refs]}.
+    # Holds only the ``related_*`` sections; never resolved or validated.
+    relationships: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         payload = {
@@ -49,6 +56,9 @@ class InspectionResult:
             value = getattr(self, key)
             if value is not None:
                 payload[key] = value
+        # Additive: only present when the artifact declares relationship sections.
+        if self.relationships:
+            payload["relationships"] = self.relationships
         return payload
 
 
@@ -126,7 +136,7 @@ def _attach_decision_metadata(result: InspectionResult, product: Product) -> Non
 
 
 def build_inspection(product: Product) -> InspectionResult:
-    """Classify ``product`` and attach decision metadata when applicable."""
+    """Classify ``product``, attach decision metadata and relationships."""
     c = classify(product)
     result = InspectionResult(
         type=c.type,
@@ -136,6 +146,11 @@ def build_inspection(product: Product) -> InspectionResult:
     )
     if c.type == "decision":
         _attach_decision_metadata(result, product)
+    # Relationship metadata is spec-driven, so it applies to any recognized type
+    # (Unknown has no spec and therefore no relationships).
+    spec = spec_for(c.type)
+    if spec is not None:
+        result.relationships = extract_relationships(product, spec)
     return result
 
 

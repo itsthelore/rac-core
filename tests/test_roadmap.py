@@ -98,7 +98,12 @@ def test_schema_reference_shape():
     assert ref is not None
     assert ref.required == ["outcomes", "initiatives"]
     assert ref.recommended == ["success measures", "assumptions", "risks"]
-    assert ref.optional == ["related decisions", "related requirements"]
+    assert ref.optional == [
+        "related decisions",
+        "related requirements",
+        "related prompts",
+        "related designs",
+    ]
 
 
 def test_schema_json_includes_optional_relationship_sections(capsys):
@@ -107,7 +112,12 @@ def test_schema_json_includes_optional_relationship_sections(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["type"] == "roadmap"
     assert payload["required"] == ["outcomes", "initiatives"]
-    assert payload["optional"] == ["related_decisions", "related_requirements"]
+    assert payload["optional"] == [
+        "related_decisions",
+        "related_requirements",
+        "related_prompts",
+        "related_designs",
+    ]
 
 
 def test_schema_human_shows_optional_relationship_sections(capsys):
