@@ -14,7 +14,7 @@ validator), Decision (the ADR format used in this repository), Roadmap (outcome-
 initiative-focused knowledge, added in v0.6.0), and Prompt (structured AI prompts as
 knowledge, added in v0.6.2), and Design (UX and interaction knowledge, added in
 v0.6.3). Meeting is intentionally deferred until its schema is formalized — see
-planning/roadmap/.
+rac/roadmaps/.
 """
 
 from __future__ import annotations

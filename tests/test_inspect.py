@@ -78,8 +78,8 @@ def test_unknown_for_empty():
 
 def test_dogfood_repo_artifacts():
     # RAC against RAC: an ADR is a Decision; a roadmap spec is a Requirement.
-    adr = REPO_ROOT / "planning/adr/adr-010-documents-are-not-artifacts.md"
-    roadmap = REPO_ROOT / "planning/roadmap/v0.4-inspect.md"
+    adr = REPO_ROOT / "rac/decisions/adr-010-documents-are-not-artifacts.md"
+    roadmap = REPO_ROOT / "rac/roadmaps/v0.4-inspect.md"
     assert inspect_file(str(adr)).type == "decision"
     assert inspect_file(str(roadmap)).type == "requirement"
 
@@ -179,16 +179,16 @@ def test_cli_dir_inspect_recursive_flag_accepted(capsys):
 def test_dogfood_directory_targets():
     # RAC-formatted roadmap specs classify as Requirements; newer exploratory
     # roadmap formats may remain Unknown until their schemas are formalized.
-    roadmap = inspect_directory(str(REPO_ROOT / "planning/roadmap"))
+    roadmap = inspect_directory(str(REPO_ROOT / "rac/roadmaps"))
     paths_by_type = {f.path: f.type for f in roadmap.files}
     assert paths_by_type[
-        str(REPO_ROOT / "planning/roadmap/v0.5.2-schema.md")
+        str(REPO_ROOT / "rac/roadmaps/v0.5.2-schema.md")
     ] == "requirement"
     assert paths_by_type[
-        str(REPO_ROOT / "planning/roadmap/v0.6.0-roadmap-artifacts.md")
+        str(REPO_ROOT / "rac/roadmaps/v0.6.0-roadmap-artifacts.md")
     ] == "requirement"
     # The well-formed ADRs classify as Decision.
-    adr = REPO_ROOT / "planning/adr/adr-010-documents-are-not-artifacts.md"
+    adr = REPO_ROOT / "rac/decisions/adr-010-documents-are-not-artifacts.md"
     assert inspect_file(str(adr)).type == "decision"
 
 
