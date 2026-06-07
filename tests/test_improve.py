@@ -79,7 +79,7 @@ def test_improve_does_not_depend_on_typescore():
     # Decoupling guard: improvement must not reach into classification scoring.
     import inspect as _inspect
 
-    import rac.improve as improve_mod
+    import rac.services.improve as improve_mod
 
     src = _inspect.getsource(improve_mod)
     assert "TypeScore" not in src

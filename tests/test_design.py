@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 import json
 
-import rac.improve as improve_mod
+import rac.services.improve as improve_mod
 from rac.artifacts import ARTIFACT_SPECS, spec_for
 from rac.cli import main
 from rac.classification import classify

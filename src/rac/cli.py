@@ -28,23 +28,23 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from . import outputs
-from .diff import diff as diff_asts
-from .ingest import ConversionError, UnsupportedDocument, ingest
-from .classification import score_artifacts
-from .improve import improve_product
-from .inspect import build_inspection, inspect_directory
-from .parser import parse, parse_file
-from .portfolio import build_portfolio_summary
-from .relationships import (
+from rac import output as outputs
+from rac.core.classification import score_artifacts
+from rac.core.markdown import parse, parse_file
+from rac.core.schema import available_schemas, schema_reference
+from rac.core.validation import has_errors, validate
+from rac.services.diff import diff as diff_asts
+from rac.services.improve import improve_product
+from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
+from rac.services.inspect import build_inspection, inspect_directory
+from rac.services.portfolio import build_portfolio_summary
+from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
     validate_relationships,
     validate_relationships_file,
 )
-from .schema import available_schemas, schema_reference
-from .stats import collect_stats
-from .validate import has_errors, validate
+from rac.services.stats import collect_stats
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1

@@ -54,10 +54,15 @@ dev = [
 rac = "rac.cli:main"
 
 [tool.setuptools]
-# src/ layout: the package root is src/, so the import package `rac` lives at
-# src/rac/. The distribution and import names are unchanged.
+# src/ layout: the package root is src/, so the import package `rac` (and its
+# layer subpackages rac.core/rac.services/rac.output/rac.explorer) lives under
+# src/. The distribution and import names are unchanged.
 package-dir = {"" = "src"}
-packages = ["rac"]
+
+[tool.setuptools.packages.find]
+# Discover rac and every rac.* subpackage automatically, so new layer packages
+# do not need to be enumerated here.
+where = ["src"]
 
 [tool.setuptools_scm]
 # Defaults are fine: version comes from the latest `vX.Y.Z` git tag.

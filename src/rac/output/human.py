@@ -1,0 +1,610 @@
+"""Human-readable rendering for RAC command results.
+
+Keeping rendering out of :mod:`rac.cli` lets the CLI stay thin and makes the
+output formats easy to test directly. JSON lives in :mod:`rac.output.json` and
+Markdown templates in :mod:`rac.output.templates`.
+"""
+
+from __future__ import annotations
+
+import sys
+
+from rac.core.artifacts import ARTIFACT_SPECS
+from rac.core.classification import CONFIDENCE_THRESHOLD, TypeScore
+from rac.core.models import Diff, Issue, Product
+from rac.core.schema import SchemaReference
+from rac.services.improve import ImprovementResult
+from rac.services.inspect import DirectoryInspection, InspectionResult
+from rac.services.relationships import (
+    ISSUE_DUPLICATE_IDENTIFIER,
+    ISSUE_SELF_REFERENCE,
+    ISSUE_TARGET_AMBIGUOUS,
+    ISSUE_TARGET_NOT_FOUND,
+    RelationshipReport,
+    RelationshipValidation,
+)
+from rac.services.stats import PortfolioStats
+
+from ._shared import _UNKNOWN_MESSAGE, _unsupported_message
+
+# --- Minimal color (auto-disabled when not writing to a TTY) ----------------
+
+_USE_COLOR = sys.stdout.isatty()
+
+
+def _c(text: str, code: str) -> str:
+    if not _USE_COLOR:
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def _green(t: str) -> str:
+    return _c(t, "32")
+
+
+def _red(t: str) -> str:
+    return _c(t, "31")
+
+
+def _yellow(t: str) -> str:
+    return _c(t, "33")
+
+
+def _bold(t: str) -> str:
+    return _c(t, "1")
+
+
+def _loc(file: str, line: int | None) -> str:
+    return f"{file}:{line}" if line is not None else file
+
+
+# --- validate ---------------------------------------------------------------
+
+
+def render_validation_human(product: Product, issues: list[Issue]) -> str:
+    errors = [i for i in issues if i.severity == "error"]
+    warnings = [i for i in issues if i.severity == "warning"]
+    file = product.source_path or "<input>"
+
+    lines: list[str] = []
+    if errors:
+        lines.append(_red(_bold(f"FAIL  {file}")))
+    else:
+        lines.append(_green(_bold(f"PASS  {file}")))
+
+    for issue in errors:
+        lines.append(f"  {_red('error')}   [{issue.code}] {_loc(file, issue.line)}")
+        lines.append(f"          {issue.message}")
+    for issue in warnings:
+        lines.append(
+            f"  {_yellow('warning')} [{issue.code}] {_loc(file, issue.line)}"
+        )
+        lines.append(f"          {issue.message}")
+
+    lines.append("")
+    lines.append(
+        f"{len(errors)} error(s), {len(warnings)} warning(s)."
+    )
+    return "\n".join(lines)
+
+
+# --- diff -------------------------------------------------------------------
+
+
+def render_diff_human(d: Diff, old_path: str, new_path: str) -> str:
+    if d.is_empty():
+        return "No changes."
+
+    blocks: list[str] = []
+
+    def list_block(title: str, items: list[str], sign: str) -> None:
+        """A titled block of single-line +/- entries (added/removed)."""
+        if not items:
+            return
+        color = _green if sign == "+" else _red
+        lines = [_bold(title), ""]
+        lines.extend(color(f"{sign} {item}") for item in items)
+        blocks.append("\n".join(lines))
+
+    list_block(
+        "Added Requirements",
+        [f"{r.id} {r.text}" for r in d.added_requirements],
+        "+",
+    )
+    list_block(
+        "Removed Requirements",
+        [f"{r.id} {r.text}" for r in d.removed_requirements],
+        "-",
+    )
+
+    if d.modified_requirements:
+        lines = [_bold("Modified Requirements"), ""]
+        for i, c in enumerate(d.modified_requirements):
+            if i:
+                lines.append("")
+            lines.append(f"~ {c.id}")
+            lines.append("")
+            lines.append("Before:")
+            lines.append(_red(c.old_text))
+            lines.append("")
+            lines.append("After:")
+            lines.append(_green(c.new_text))
+        blocks.append("\n".join(lines))
+
+    list_block("Added Metrics", d.added_metrics, "+")
+    list_block("Removed Metrics", d.removed_metrics, "-")
+    list_block("Added Risks", d.added_risks, "+")
+    list_block("Removed Risks", d.removed_risks, "-")
+
+    # Blank line between blocks.
+    return "\n\n".join(blocks)
+
+
+# --- stats -------------------------------------------------------------------
+
+
+def render_stats_human(s: PortfolioStats) -> str:
+    lines = [
+        _bold("Portfolio Overview"),
+        "==================",
+        "",
+        f"Features: {s.files_found}",
+        f"Requirements: {s.total_requirements}",
+        f"Metrics: {s.total_metrics}",
+        f"Risks: {s.total_risks}",
+        "",
+        _bold("Quality"),
+        "=======",
+        "",
+    ]
+
+    def missing_block(label: str, names: list[str]) -> None:
+        lines.append(f"{label}: {len(names)}")
+        for name in names:
+            lines.append(f"  - {name}")
+
+    missing_block("Features Missing Metrics", s.missing_metrics)
+    missing_block("Features Missing Risks", s.missing_risks)
+    lines.append(
+        f"Average Requirements Per Feature: {s.average_requirements:.1f}"
+    )
+
+    largest = s.largest_feature
+    if largest is not None:
+        lines.append(
+            f"Largest Feature: {largest.name} ({largest.requirements} requirements)"
+        )
+    else:
+        lines.append("Largest Feature: (none)")
+
+    lines += ["", _bold("Requirements by Feature"), "=======================", ""]
+    by_feature = s.requirements_by_feature
+    if by_feature:
+        width = max(len(f.name) for f in by_feature) + 4
+        for f in by_feature:
+            lines.append(f"{f.name:<{width}}{f.requirements}")
+    else:
+        lines.append("(none)")
+
+    if s.invalid:
+        lines += ["", _bold(f"Invalid Features ({len(s.invalid)})")]
+        for f in s.invalid:
+            reasons = ", ".join(f.error_codes) or "unknown"
+            lines.append(f"  {_red(f.path)} — {reasons}")
+
+    # Decisions are reported separately; omit the section entirely when there are
+    # none so requirement-only portfolios render exactly as before.
+    if s.decisions:
+        lines += ["", _bold("Decisions"), "=========", "", f"Total: {s.decision_count}"]
+
+        def breakdown(label: str, counts: dict[str, int]) -> None:
+            lines.extend(["", _bold(label)])
+            if counts:
+                for name, count in counts.items():
+                    lines.append(f"  - {name}: {count}")
+            else:
+                lines.append("  (none recorded)")
+
+        breakdown("Status", s.decision_status_counts)
+        breakdown("Category", s.decision_category_counts)
+
+    # Roadmaps are reported separately and lightly (count + invalid only); the
+    # section is omitted entirely when there are none.
+    if s.roadmaps:
+        lines += [
+            "",
+            _bold("Roadmaps"),
+            "========",
+            "",
+            f"Total: {s.roadmap_count}",
+            f"Valid: {s.valid_roadmaps}",
+        ]
+        invalid_roadmaps = s.invalid_roadmaps
+        if invalid_roadmaps:
+            lines += ["", _bold(f"Invalid Roadmaps ({len(invalid_roadmaps)})")]
+            for r in invalid_roadmaps:
+                reasons = ", ".join(r.error_codes) or "unknown"
+                lines.append(f"  {_red(r.path)} — {reasons}")
+
+    # Prompts are reported separately and lightly (count + invalid only); the
+    # section is omitted entirely when there are none.
+    if s.prompts:
+        lines += [
+            "",
+            _bold("Prompts"),
+            "=======",
+            "",
+            f"Total: {s.prompt_count}",
+            f"Valid: {s.valid_prompts}",
+        ]
+        invalid_prompts = s.invalid_prompts
+        if invalid_prompts:
+            lines += ["", _bold(f"Invalid Prompts ({len(invalid_prompts)})")]
+            for p in invalid_prompts:
+                reasons = ", ".join(p.error_codes) or "unknown"
+                lines.append(f"  {_red(p.path)} — {reasons}")
+
+    # Designs are reported separately and lightly (count + invalid only); the
+    # section is omitted entirely when there are none.
+    if s.designs:
+        lines += [
+            "",
+            _bold("Designs"),
+            "=======",
+            "",
+            f"Total: {s.design_count}",
+            f"Valid: {s.valid_designs}",
+        ]
+        invalid_designs = s.invalid_designs
+        if invalid_designs:
+            lines += ["", _bold(f"Invalid Designs ({len(invalid_designs)})")]
+            for d in invalid_designs:
+                reasons = ", ".join(d.error_codes) or "unknown"
+                lines.append(f"  {_red(d.path)} — {reasons}")
+
+    # Unrecognized documents (ADR-010): files that matched no known artifact
+    # schema. Surfaced but rendered neutrally — they are not validation errors.
+    # Omitted entirely when there are none, so portfolios of only known artifacts
+    # render exactly as before.
+    if s.unrecognized:
+        count = s.unrecognized_count
+        noun = "document" if count == 1 else "documents"
+        lines += [
+            "",
+            _bold("Unrecognized"),
+            "============",
+            "",
+            f"{count} {noun} matched no known artifact schema "
+            "(not errors — see ADR-010):",
+        ]
+        for u in s.unrecognized:
+            lines.append(f"  {u.path}")
+
+    # Declared relationship-presence counts (v0.7.0). Omitted entirely when no
+    # artifact declares a relationship section, so existing portfolios are
+    # unchanged. These are presence counts, not resolved/edge counts.
+    if s.relationship_counts:
+        lines += ["", _bold("Relationships"), "=============", ""]
+        for section, count in s.relationship_counts.items():
+            lines.append(f"Artifacts with {section.title()}: {count}")
+
+    return "\n".join(lines)
+
+
+# --- inspect -----------------------------------------------------------------
+
+
+def render_inspect_human(result: InspectionResult) -> str:
+    lines = [
+        _bold(f"Artifact Type: {result.type.title()}"),
+        f"Confidence: {result.confidence:.0%}",
+        "",
+        _bold("Present Sections:"),
+    ]
+    if result.present_sections:
+        lines.extend(_green(f"  ✓ {s.title()}") for s in result.present_sections)
+    else:
+        lines.append("  (none)")
+    if result.missing_sections:
+        lines += ["", _bold("Missing Sections:")]
+        lines.extend(_red(f"  ✗ {s.title()}") for s in result.missing_sections)
+    _append_decision_metadata(lines, result)
+    _append_relationships(lines, result)
+    return "\n".join(lines)
+
+
+def _append_relationships(lines: list[str], result: InspectionResult) -> None:
+    """Add a Relationships block when the artifact declares related artifacts."""
+    if not result.relationships:
+        return
+    lines += ["", _bold("Relationships:")]
+    for section, refs in result.relationships.items():
+        lines.append(f"  {section.replace('_', ' ').title()}:")
+        lines.extend(f"    - {ref}" for ref in refs)
+
+
+def _append_decision_metadata(lines: list[str], result: InspectionResult) -> None:
+    """Add Status / Category / Supersedes lines when a decision declares them."""
+    pairs = [
+        ("Status", result.status),
+        ("Category", result.category),
+        ("Supersedes", result.supersedes),
+    ]
+    shown = [(label, value) for label, value in pairs if value]
+    if shown:
+        lines += ["", _bold("Decision Metadata:")]
+        lines.extend(f"  {label}: {value}" for label, value in shown)
+
+
+def render_inspect_verbose(
+    result: InspectionResult, scores: list[TypeScore]
+) -> str:
+    """Explainable single-file output: matches, misses, and the score math."""
+    chosen = next((s for s in scores if s.name == result.type), None)
+    if chosen is None:  # Unknown — explain via the closest candidate
+        chosen = scores[0] if scores else None
+
+    lines = [
+        _bold(f"Artifact Type: {result.type.title()}"),
+        f"Confidence: {result.confidence:.0%}",
+    ]
+    if chosen is None:
+        return "\n".join(lines)
+    if result.type == "unknown":
+        lines.append(f"Closest match: {chosen.display}")
+
+    def block(title: str, names: list[str]) -> None:
+        lines.extend(["", _bold(title)])
+        if names:
+            lines.extend(_green(f"  ✓ {s.title()}") for s in names)
+        else:
+            lines.append("  (none)")
+
+    block("Required Matches:", chosen.matched_required)
+    block("Recommended Matches:", chosen.matched_recommended)
+    if chosen.missing:
+        lines.extend(["", _bold("Missing:")])
+        lines.extend(_red(f"  ✗ {s.title()}") for s in chosen.missing)
+
+    req, rec = len(chosen.matched_required), len(chosen.matched_recommended)
+    lines.extend(
+        [
+            "",
+            _bold("Score:")
+            + f" {req} + 0.5 × {rec} = {chosen.points:g} / {chosen.ceiling:g}"
+            + f" = {round(chosen.fit, 2)}",
+        ]
+    )
+    if result.type == "unknown":
+        lines.append(f"(below the {CONFIDENCE_THRESHOLD:.0%} threshold → Unknown)")
+    return "\n".join(lines)
+
+
+def render_dir_inspect_human(d: DirectoryInspection) -> str:
+    counts = d.counts
+    lines = [_bold(f"Files Inspected: {d.total_files}"), ""]
+    for spec in ARTIFACT_SPECS:
+        lines.append(f"{spec.display}s: {counts.get(spec.name, 0)}")
+    lines.append(f"Unknown: {counts.get('unknown', 0)}")
+    return "\n".join(lines)
+
+
+# --- improve -----------------------------------------------------------------
+
+
+def render_improve_human(result: ImprovementResult) -> str:
+    if result.type == "unknown":
+        return _UNKNOWN_MESSAGE
+    if not result.supported:
+        return _unsupported_message(result)
+
+    lines = [_bold(f"Artifact Type: {result.type.title()}"), ""]
+    if not result.missing_required and not result.missing_recommended:
+        lines.append("Nothing to improve — all expected sections present.")
+        return "\n".join(lines)
+
+    def block(title: str, names: list[str]) -> None:
+        lines.append(_bold(title))
+        if names:
+            for s in names:
+                lines.append(f"  - {s.title()}")
+                lines.extend(f"      • {q}" for q in result.guidance.get(s, []))
+        else:
+            lines.append("  (none)")
+        lines.append("")
+
+    block("Missing Required:", result.missing_required)
+    block("Missing Recommended:", result.missing_recommended)
+    return "\n".join(lines).rstrip()
+
+
+# --- schema ------------------------------------------------------------------
+
+
+def render_schema_list_human(names: list[str]) -> str:
+    lines = [_bold("Available Schemas:")]
+    lines.extend(f"- {name}" for name in names)
+    return "\n".join(lines)
+
+
+def render_unknown_schema(name: str, available: list[str]) -> str:
+    lines = [f"Unknown schema: {name}", "", "Available schemas:"]
+    lines.extend(f"- {schema}" for schema in available)
+    return "\n".join(lines)
+
+
+def render_schema_human(ref: SchemaReference) -> str:
+    lines = [_bold(f"Artifact Type: {ref.display}"), ""]
+
+    def section_block(title: str, names: list[str]) -> None:
+        lines.extend([_bold(title)])
+        if not names:
+            lines.append("  (none)")
+            lines.append("")
+            return
+        for name in names:
+            lines.append(f"  - {name.title()}")
+            description = ref.descriptions.get(name)
+            if description:
+                lines.append(f"      Description: {description}")
+            guidance = ref.guidance.get(name, [])
+            if guidance:
+                lines.append("      Guidance:")
+                lines.extend(f"        - {item}" for item in guidance)
+        lines.append("")
+
+    section_block("Required Sections:", ref.required)
+    section_block("Recommended Sections:", ref.recommended)
+    section_block("Optional Sections:", ref.optional)
+
+    if ref.metadata:
+        lines.append(_bold("Metadata Fields:"))
+        for name, values in ref.metadata.items():
+            lines.append(f"  - {name.title()}: {' | '.join(values)}")
+    return "\n".join(lines).rstrip()
+
+
+# --- relationships -----------------------------------------------------------
+
+
+def _relationship_label(snake_section: str) -> str:
+    """``related_decisions`` -> ``Related Decisions``; ``supersedes`` -> ``Supersedes``."""
+    return snake_section.replace("_", " ").title()
+
+
+def render_relationships_human(report: RelationshipReport) -> str:
+    lines = [
+        _bold("Relationships"),
+        "",
+        f"Files Inspected: {report.total_files}",
+        f"Artifacts With Relationships: {report.artifacts_with_relationships}",
+        f"Relationships Found: {report.relationship_count}",
+    ]
+
+    counts = report.counts
+    if counts:
+        lines += ["", _bold("By Type:")]
+        lines.extend(
+            f"- {_relationship_label(section)}: {count}"
+            for section, count in counts.items()
+        )
+
+    # Per-artifact detail (REQ-005), only for artifacts that declare relationships.
+    for artifact in report.artifacts:
+        lines += ["", artifact.path]
+        for section, refs in artifact.relationships.items():
+            lines.append(f"  {_relationship_label(section)}:")
+            lines.extend(f"  - {ref}" for ref in refs)
+
+    return "\n".join(lines)
+
+
+# --- relationship validation -------------------------------------------------
+
+# Suffix shown after a broken reference, per issue code.
+_REF_ISSUE_SUFFIX = {
+    ISSUE_TARGET_NOT_FOUND: "not found",
+    ISSUE_TARGET_AMBIGUOUS: "ambiguous",
+    ISSUE_SELF_REFERENCE: "self-reference",
+}
+
+
+def render_relationship_validation_human(report: RelationshipValidation) -> str:
+    lines = [
+        _bold("Relationship Validation"),
+        "",
+        f"Relationships Checked: {report.relationships_checked}",
+        f"Validation Issues: {report.validation_issues}",
+    ]
+
+    duplicates = [i for i in report.issues if i.code == ISSUE_DUPLICATE_IDENTIFIER]
+    references = [i for i in report.issues if i.code != ISSUE_DUPLICATE_IDENTIFIER]
+
+    if duplicates:
+        lines += ["", _bold("Duplicate Identifiers")]
+        for issue in duplicates:
+            count = len(issue.paths or [])
+            lines.append(_red(f"✗ {issue.identifier} ({count} files)"))
+            lines.extend(f"  - {p}" for p in issue.paths or [])
+
+    if references:
+        lines += ["", _bold("Broken Relationships")]
+        current_source = None
+        current_section = None
+        for issue in references:
+            if issue.source_path != current_source:
+                current_source = issue.source_path
+                current_section = None
+                lines += ["", issue.source_path or "<input>"]
+            if issue.relationship != current_section:
+                current_section = issue.relationship
+                lines.append(f"  {_relationship_label(issue.relationship or '')}:")
+            suffix = _REF_ISSUE_SUFFIX.get(issue.code, issue.code)
+            lines.append(_red(f"  ✗ {issue.target} {suffix}"))
+
+    return "\n".join(lines)
+
+
+# --- portfolio ---------------------------------------------------------------
+
+
+def render_portfolio_human(s) -> str:
+    """Human-readable `rac portfolio` output."""
+    lines = [
+        _bold("Repository Summary"),
+        "==================",
+        "",
+        f"Directory:  {s.directory}",
+        f"Artifacts:  {s.total_artifacts}",
+        "",
+        _bold("By Type"),
+        "-------",
+        "",
+    ]
+    for type_name, count in s.by_type.items():
+        if count > 0:
+            lines.append(f"  {type_name.title():<14} {count}")
+
+    lines += [
+        "",
+        _bold("Validation"),
+        "----------",
+        "",
+        f"  Valid:    {s.valid_artifacts}",
+        f"  Invalid:  {s.invalid_artifacts}",
+        "",
+        _bold("Completeness"),
+        "------------",
+        "",
+        f"  {s.completeness:.0%} ({s.filled_slots} / {s.recommended_slots} recommended slots filled)",
+        "",
+        _bold("Relationships"),
+        "-------------",
+        "",
+        f"  Total:    {s.relationships.total}",
+        f"  Valid:    {s.relationships.valid}",
+        f"  Broken:   {s.relationships.broken}",
+        f"  Orphaned: {s.relationships.orphaned}",
+        f"  Coverage: {s.relationships.coverage:.0%}",
+    ]
+
+    if s.attention:
+        lines += ["", _bold(f"Attention ({len(s.attention)} items)"), "----------", ""]
+        for item in s.attention:
+            icon = _red("✗") if item.severity == "error" else _yellow("!")
+            lines.append(f"  {icon} {item.identifier}")
+            lines.append(f"      {item.message}")
+    else:
+        lines += ["", _green("✓ No attention items.")]
+
+    score = s.health_score
+    score_color = _green if score >= 80 else _yellow if score >= 60 else _red
+    lines += [
+        "",
+        _bold("Health Score"),
+        "------------",
+        "",
+        f"  {score_color(str(score))} / 100",
+    ]
+
+    return "\n".join(lines)
