@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from rac.diff import diff
-from rac.parser import parse_file
+from rac.services.diff import diff
+from rac.core.markdown import parse_file
 
 from conftest import fixture_path
 

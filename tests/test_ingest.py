@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from rac.cli import main
-from rac.ingest import (
+from rac.services.ingest import (
     MarkdownConverter,
     MarkItDownConverter,
     UnsupportedDocument,
@@ -50,7 +50,7 @@ def test_unsupported_type_raises(tmp_path):
 
 
 def test_missing_extra_message_points_at_right_extra():
-    from rac.ingest import _missing_extra_message
+    from rac.services.ingest import _missing_extra_message
 
     assert "[ingest-pdf]" in _missing_extra_message(".pdf")
     assert "[ingest-office]" in _missing_extra_message(".pptx")
@@ -201,7 +201,7 @@ def test_missing_dependency_detection():
         MissingDependencyException,
     )
 
-    from rac.ingest import _is_missing_dependency
+    from rac.services.ingest import _is_missing_dependency
 
     assert _is_missing_dependency(MissingDependencyException("x")) is True
     attempt = SimpleNamespace(

@@ -17,12 +17,12 @@ import json
 import pytest
 
 from rac.cli import main
-from rac.inspect import inspect_file, inspect_text
-from rac.parser import parse
-from rac.relationships import parse_references
-from rac.schema import schema_reference
-from rac.stats import collect_stats
-from rac.validate import has_errors, validate
+from rac.services.inspect import inspect_file, inspect_text
+from rac.core.markdown import parse
+from rac.services.relationships import parse_references
+from rac.core.schema import schema_reference
+from rac.services.stats import collect_stats
+from rac.core.validation import has_errors, validate
 
 from conftest import fixture_path
 

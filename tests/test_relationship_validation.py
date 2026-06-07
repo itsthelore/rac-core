@@ -15,11 +15,11 @@ from dataclasses import replace
 
 import pytest
 
-from rac.artifacts import spec_for
+from rac.core.artifacts import spec_for
 from rac.cli import main
-from rac.classification import classify
-from rac.parser import parse, parse_file
-from rac.relationships import (
+from rac.core.classification import classify
+from rac.core.markdown import parse, parse_file
+from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_SELF_REFERENCE,
     ISSUE_TARGET_AMBIGUOUS,

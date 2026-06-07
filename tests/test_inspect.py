@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from rac.artifacts import ARTIFACT_SPECS
-from rac.classification import CONFIDENCE_THRESHOLD, score_artifacts
+from rac.core.artifacts import ARTIFACT_SPECS
+from rac.core.classification import CONFIDENCE_THRESHOLD, score_artifacts
 from rac.cli import main
-from rac.inspect import (
+from rac.services.inspect import (
     inspect_directory,
     inspect_file,
     inspect_text,
 )
-from rac.parser import parse
+from rac.core.markdown import parse
 
 from conftest import fixture_path
 

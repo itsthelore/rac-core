@@ -16,7 +16,7 @@ import json
 import pytest
 
 from rac.cli import main
-from rac.relationships import (
+from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
 )

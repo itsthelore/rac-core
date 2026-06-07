@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from rac.parser import parse, parse_file
-from rac.validate import has_errors, validate
+from rac.core.markdown import parse, parse_file
+from rac.core.validation import has_errors, validate
 
 from conftest import fixture_path
 

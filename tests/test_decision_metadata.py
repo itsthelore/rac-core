@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 
 from rac.cli import main
-from rac.inspect import inspect_file
-from rac.parser import parse_file
-from rac.stats import collect_stats
-from rac.validate import has_errors, validate
+from rac.services.inspect import inspect_file
+from rac.core.markdown import parse_file
+from rac.services.stats import collect_stats
+from rac.core.validation import has_errors, validate
 
 from conftest import fixture_path
 
@@ -110,13 +110,13 @@ def test_all_supported_status_values_pass():
             f"# ADR\n\n## Status\n\n{status}\n\n## Context\n\nc\n\n"
             "## Decision\n\nd\n\n## Consequences\n\nx\n"
         )
-        from rac.parser import parse
+        from rac.core.markdown import parse
 
         assert "invalid-decision-status" not in codes(validate(parse(text)))
 
 
 def test_all_supported_category_values_pass():
-    from rac.parser import parse
+    from rac.core.markdown import parse
 
     for category in ("Architecture", "Product", "Process", "Technical", "Other"):
         text = (
@@ -127,7 +127,7 @@ def test_all_supported_category_values_pass():
 
 
 def test_status_value_match_is_case_insensitive():
-    from rac.parser import parse
+    from rac.core.markdown import parse
 
     text = (
         "# ADR\n\n## Status\n\naccepted\n\n## Context\n\nc\n\n"
@@ -137,7 +137,7 @@ def test_status_value_match_is_case_insensitive():
 
 
 def test_missing_required_decision_section_is_an_error():
-    from rac.parser import parse
+    from rac.core.markdown import parse
 
     # A decision missing ## Consequences (still classifies as a decision).
     text = "# ADR\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n"

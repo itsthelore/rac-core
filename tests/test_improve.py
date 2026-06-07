@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from rac.artifacts import ARTIFACT_SPECS, spec_for
-from rac.classification import classify
+from rac.core.artifacts import ARTIFACT_SPECS, spec_for
+from rac.core.classification import classify
 from rac.cli import main
-from rac.improve import improve_file, improve_text, supports_improve
-from rac.parser import parse, parse_file
-from rac.stats import collect_stats
-from rac.validate import validate
+from rac.services.improve import improve_file, improve_text, supports_improve
+from rac.core.markdown import parse, parse_file
+from rac.services.stats import collect_stats
+from rac.core.validation import validate
 
 from conftest import fixture_path
 

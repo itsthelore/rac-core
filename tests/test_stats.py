@@ -7,7 +7,7 @@ import json
 import pytest
 
 from rac.cli import main
-from rac.stats import collect_stats
+from rac.services.stats import collect_stats
 
 from conftest import fixture_path
 

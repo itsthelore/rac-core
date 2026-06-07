@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from rac.portfolio import (
+from rac.services.portfolio import (
     ATTENTION_BROKEN_RELATIONSHIP,
     ATTENTION_INVALID,
     ATTENTION_MISSING_RECOMMENDED,

@@ -7,9 +7,9 @@ import json
 
 import pytest
 
-from rac.artifacts import spec_for
+from rac.core.artifacts import spec_for
 from rac.cli import main
-from rac.schema import available_schemas, schema_reference
+from rac.core.schema import available_schemas, schema_reference
 
 from conftest import fixture_path
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rac.parser import parse, parse_file
+from rac.core.markdown import parse, parse_file
 
 from conftest import fixture_path
 

@@ -15,15 +15,15 @@ import json
 import pytest
 
 import rac.services.improve as improve_mod
-from rac.artifacts import ARTIFACT_SPECS, spec_for
+from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.cli import main
-from rac.classification import classify
-from rac.improve import improve_file, improve_text, supports_improve
-from rac.inspect import inspect_file
-from rac.parser import parse, parse_file
-from rac.schema import available_schemas, schema_reference
-from rac.stats import collect_stats
-from rac.validate import has_errors, validate
+from rac.core.classification import classify
+from rac.services.improve import improve_file, improve_text, supports_improve
+from rac.services.inspect import inspect_file
+from rac.core.markdown import parse, parse_file
+from rac.core.schema import available_schemas, schema_reference
+from rac.services.stats import collect_stats
+from rac.core.validation import has_errors, validate
 
 from conftest import fixture_path
 
@@ -143,7 +143,7 @@ def test_template_omits_optional_relationship_sections(capsys):
 def test_template_passes_validation(monkeypatch):
     ref = schema_reference("roadmap")
     assert ref is not None
-    from rac.outputs import render_schema_template
+    from rac.output import render_schema_template
 
     template = render_schema_template(ref)
     _stdin(monkeypatch, template)
