@@ -168,7 +168,7 @@ feat(relationships): add validation command [roadmap:v0.7.2]
 When useful, include the artifact path in the commit body:
 
 ```text
-Implements planning/roadmap/v0.7.2-relationship-validation.md.
+Implements rac/roadmaps/v0.7.2-relationship-validation.md.
 
 Adds:
 - rac relationships --validate
