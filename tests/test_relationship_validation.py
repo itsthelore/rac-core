@@ -11,20 +11,17 @@ Fixtures live under `fixtures/relationship_validation/<scenario>/`.
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 
 import pytest
 
-from rac.core.artifacts import spec_for
 from rac.cli import main
 from rac.core.classification import classify
-from rac.core.markdown import parse, parse_file
+from rac.core.markdown import parse_file
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_SELF_REFERENCE,
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
-    artifact_identifier,
     validate_relationships,
     validate_relationships_file,
 )
@@ -37,31 +34,6 @@ def _scenario(name: str) -> str:
 
 
 # --- identifier resolution precedence (REQ-002) -----------------------------
-
-
-def test_identifier_explicit_id_section_wins():
-    # Step 1: an explicit ## ID section overrides everything, casing preserved.
-    product = parse("# Title\n\n## ID\n\nADR-XYZ\n\n## Context\n\nc\n")
-    assert artifact_identifier(product, spec_for("decision"), "/x/adr-004-foo.md") == "ADR-XYZ"
-
-
-def test_identifier_spec_id_field():
-    # Step 2: the type's declared id_field section (no real spec sets it today).
-    product = parse("# Title\n\n## Key\n\nDEC-7\n")
-    spec = replace(spec_for("decision"), id_field="key")
-    assert artifact_identifier(product, spec, "/x/whatever.md") == "DEC-7"
-
-
-def test_identifier_recognized_prefix_from_stem():
-    # Step 3: leading <letters>-<digits> prefix of the filename stem.
-    product = parse("# Parser Strategy\n\n## Context\n\nc\n")
-    assert artifact_identifier(product, spec_for("decision"), "/x/adr-004-parser-strategy.md") == "adr-004"
-
-
-def test_identifier_falls_back_to_full_stem():
-    # Step 4: no recognized prefix -> the whole stem.
-    product = parse("# Q3 Roadmap\n\n## Outcomes\n\no\n\n## Initiatives\n\ni\n")
-    assert artifact_identifier(product, spec_for("roadmap"), "/x/roadmap-q3.md") == "roadmap-q3"
 
 
 def test_identifier_matching_is_case_insensitive():

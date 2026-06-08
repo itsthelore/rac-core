@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
 from rac.core.fs import find_markdown_files
+from rac.core.identity import artifact_identifier
 from rac.core.models import Product
 from rac.core.markdown import parse_file
 
@@ -249,57 +249,11 @@ def build_relationship_report_file(path: str) -> RelationshipReport:
 # ambiguous, and self-referencing targets plus duplicate identifiers. Read-only
 # and deterministic; no resolution heuristics, inference, or graphs (ADR-016).
 
-# A recognized leading ID prefix in a filename stem: <letters>-<digits>, e.g.
-# "adr-004" from "adr-004-parser-strategy". Case-insensitive at comparison time.
-_ID_PREFIX_RE = re.compile(r"^[A-Za-z]+-\d+")
-
-# The universal explicit-identifier section (normalized heading).
-_ID_SECTION = "id"
-
 # Stable issue codes (part of the JSON contract).
 ISSUE_DUPLICATE_IDENTIFIER = "duplicate-artifact-identifier"
 ISSUE_TARGET_NOT_FOUND = "relationship-target-not-found"
 ISSUE_TARGET_AMBIGUOUS = "relationship-target-ambiguous"
 ISSUE_SELF_REFERENCE = "relationship-self-reference"
-
-
-def _first_value(body: str | None) -> str:
-    """First non-empty line of a section body, leading list marker stripped."""
-    if not body:
-        return ""
-    for line in body.splitlines():
-        stripped = line.strip()
-        if stripped:
-            return _LIST_MARKER_RE.sub("", stripped, count=1).strip()
-    return ""
-
-
-def artifact_identifier(
-    product: Product, spec: ArtifactSpec | None, path: str
-) -> str:
-    """The deterministic identifier for the artifact at ``path`` (v0.7.2).
-
-    Precedence (first match wins); the discovered casing is preserved:
-
-    1. an explicit ``## ID`` section value;
-    2. the artifact type's declared ``spec.id_field`` section value;
-    3. a recognized ``<letters>-<digits>`` prefix of the filename stem
-       (e.g. ``adr-004`` from ``adr-004-parser-strategy.md``);
-    4. the whole filename stem.
-
-    The document title is never used, and inline ``[REQ-NNN]`` requirement lines
-    are not identifiers — relationship targets are whole artifact files.
-    """
-    explicit = _first_value(product.sections.get(_ID_SECTION))
-    if explicit:
-        return explicit
-    if spec is not None and spec.id_field:
-        declared = _first_value(product.sections.get(spec.id_field))
-        if declared:
-            return declared
-    stem = Path(path).stem
-    prefix = _ID_PREFIX_RE.match(stem)
-    return prefix.group(0) if prefix else stem
 
 
 @dataclass

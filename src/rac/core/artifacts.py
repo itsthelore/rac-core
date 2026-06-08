@@ -52,7 +52,7 @@ class ArtifactSpec:
     synonyms: dict[str, str] = field(default_factory=dict)
     # Canonical-identifier section (v0.7.2 relationship validation): the normalized
     # section name whose value is this artifact type's identifier, consulted by
-    # ``rac.relationships.artifact_identifier`` before falling back to the filename
+    # ``rac.core.identity.artifact_identifier`` before falling back to the filename
     # stem. A forward hook — no spec sets it today; relationship resolution works
     # from the ``## ID`` section and filename stem until a type opts in.
     id_field: str | None = None

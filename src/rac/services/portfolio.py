@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import classify, missing_sections
 from rac.core.fs import find_markdown_files
+from rac.core.identity import artifact_identifier
 from rac.core.markdown import parse_file
 from rac.core.validation import has_errors, validate
 
@@ -37,7 +38,6 @@ from .relationships import (
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
     RelationshipSummary,
-    artifact_identifier,
     summarize_relationships,
 )
 
