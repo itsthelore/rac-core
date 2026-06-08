@@ -1,4 +1,4 @@
-# Requirement: Product Intent CI
+# Requirement: Product Intent CI (Watchkeeper)
 
 ## Status
 
@@ -20,10 +20,11 @@ Requirements, decisions, roadmaps, designs, and prompts often change without rev
 
 - what product intent changed
 - what relationships were affected
-- whether documentation remains valid
+- whether artifacts remain valid
 - whether important context was removed
+- whether requirements became less precise
 
-This risk increases as AI agents begin contributing directly to product artifacts.
+This risk increases as AI agents become active contributors to product documentation.
 
 RAC already provides deterministic product knowledge intelligence through:
 
@@ -46,6 +47,10 @@ RAC shall provide a Git-native product knowledge review layer called:
 **RAC Watchkeeper**
 
 Watchkeeper shall observe product artifact changes and surface RAC intelligence during pull request workflows.
+
+It shall help reviewers answer:
+
+> What changed, and does this product intent need attention?
 
 ## Product Goal
 
@@ -79,7 +84,7 @@ Watchkeeper helps users understand changing knowledge.
 
 As a team storing product knowledge in Git,
 
-when humans or AI agents modify requirements, decisions, or roadmaps,
+when humans or AI agents modify requirements, decisions, roadmaps, designs, or prompts,
 
 I want RAC to review those changes automatically,
 
@@ -91,11 +96,12 @@ Watchkeeper consumes existing RAC capabilities:
 
 - Repository Review Mode
 - Artifact validation
+- Artifact inspection
 - Artifact diffing
 - Relationship validation
 - Repository statistics
+- Schema suggestions
 - Improvement suggestions
-- AI Spec Safety checks
 
 Watchkeeper shall not implement independent analysis logic.
 
@@ -153,20 +159,20 @@ Internally:
 ```text
 Watchkeeper
       |
-      +-- Review Mode
+      +-- Repository Review
       |
-      +-- Diff Analysis
+      +-- Artifact Diff
       |
       +-- Relationship Checks
       |
-      +-- Safety Analysis
+      +-- Intent Safety Checks
 ```
 
 ## Functional Requirements
 
 ## Pull Request Review Summary
 
-Watchkeeper shall publish a product knowledge summary.
+Watchkeeper shall publish a product knowledge review.
 
 Example:
 
@@ -206,14 +212,130 @@ Watchkeeper shall identify:
 Example:
 
 ```text
-Changed:
-
 Added:
+
 + requirements/billing-upgrade.md
 
 Modified:
+
 ~ decisions/payment-provider.md
 ```
+
+## Product Knowledge Diff
+
+Watchkeeper shall summarize meaningful artifact changes.
+
+Examples:
+
+- requirements added
+- decisions changed
+- acceptance criteria modified
+- constraints removed
+- success measures changed
+
+The output should describe product impact rather than raw Markdown differences.
+
+Example:
+
+```text
+Requirement changed:
+
+REQ-004 Checkout Performance
+
+Previous:
+Payment confirmation within 2 seconds.
+
+Current:
+Payment confirmation should happen quickly.
+
+Finding:
+Specific measurable criteria removed.
+```
+
+## Intent Safety Checks
+
+Watchkeeper shall detect changes that reduce product clarity.
+
+These checks apply regardless of whether the change was created by:
+
+- a human
+- an AI agent
+- an automation
+
+The concern is the change itself, not authorship.
+
+## Specificity Regression Detection
+
+Watchkeeper shall identify when precise requirements become vague.
+
+Example:
+
+```diff
+- Upload must complete within 5 seconds.
++ Upload should complete quickly.
+```
+
+Finding:
+
+```text
+Specificity regression detected.
+
+A measurable requirement was replaced with ambiguous wording.
+```
+
+## Ambiguity Detection
+
+Watchkeeper shall identify unclear product language without measurable criteria.
+
+Examples:
+
+- fast
+- easy
+- simple
+- seamless
+- intuitive
+- user-friendly
+- scalable
+
+Example:
+
+```text
+Issue:
+
+"Checkout should be seamless."
+
+Reason:
+
+No measurable success criteria provided.
+```
+
+## Constraint Change Detection
+
+Watchkeeper shall detect removed or weakened constraints.
+
+Examples:
+
+- acceptance criteria removed
+- success metrics removed
+- requirements weakened
+- mandatory language changed
+
+Example:
+
+```diff
+- System must support WCAG 2.2 AA.
++ System should be accessible.
+```
+
+## Unlinked Scope Detection
+
+Watchkeeper shall identify new product scope without supporting context.
+
+Examples:
+
+- new requirement without roadmap relationship
+- new dependency without decision record
+- new design behavior without linked requirement
 
 ## Relationship Change Reporting
 
@@ -260,20 +382,22 @@ Invalid artifacts:
 
 ## Review Recommendations
 
-Watchkeeper shall recommend human review when needed.
+Watchkeeper shall recommend human attention when needed.
 
 Example:
 
 ```text
-Review recommended:
+Review recommended.
 
-Reason:
-Acceptance criteria removed from Requirement.
+Reasons:
+
+- Acceptance criteria removed
+- New requirement introduced without linked decision
 ```
 
 Watchkeeper does not determine whether a product decision is correct.
 
-It identifies changes requiring attention.
+It identifies changes requiring review.
 
 ## Configurable Review Policies
 
@@ -286,14 +410,16 @@ watchkeeper:
   require_review:
     - broken_relationship
     - acceptance_criteria_removed
+    - specificity_regression
 
   warn_on:
     - missing_recommended_section
+    - ambiguity_introduced
 ```
 
 Policies determine workflow behavior.
 
-The underlying RAC analysis remains unchanged.
+The underlying RAC analysis remains deterministic.
 
 ## GitHub Integration
 
@@ -330,6 +456,7 @@ Watchkeeper shall not:
 - replace product reviewers
 - approve product decisions automatically
 - rewrite requirements
+- determine whether content was AI-generated
 - require GitHub specifically
 - require hosted infrastructure
 - duplicate RAC core logic
@@ -362,11 +489,13 @@ A team can:
 1. Initialize RAC.
 2. Open a pull request changing product artifacts.
 3. Receive a Watchkeeper report containing:
-   - changed artifacts
-   - validation status
-   - relationship impact
-   - repository changes
-   - review recommendations
+
+- changed artifacts
+- validation status
+- relationship impact
+- statistics changes
+- intent safety findings
+- review recommendations
 
 without manually running RAC commands.
 
@@ -376,14 +505,13 @@ Watchkeeper succeeds when:
 
 - product knowledge changes become visible during review
 - reviewers understand intent changes before merge
-- AI-generated artifact changes become easier to verify
+- AI-generated artifact changes become safer
 - RAC becomes part of normal engineering workflows
 - product artifacts receive the same review discipline as code
 
 ## Related Artifacts
 
 - Requirement: Repository Review Mode
-- Requirement: AI Spec Safety
 - ADR: Markdown First
 - ADR: Repository Intelligence as the Value Layer
 - ADR: Explorer as a Consumer
