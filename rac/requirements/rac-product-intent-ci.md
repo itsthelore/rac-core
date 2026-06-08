@@ -6,69 +6,98 @@ Proposed
 
 ## Context
 
-Software engineering workflows protect code changes through automated quality gates:
+Software engineering workflows protect code changes through automated review systems:
 
 - tests
 - linting
 - formatting
 - static analysis
-- security checks
-- dependency checks
+- CI checks
 
-Product knowledge rarely receives equivalent protection.
+Product knowledge rarely receives the same level of visibility.
 
-Requirements, decisions, roadmaps, designs, and prompts are often modified without automated verification.
+Requirements, decisions, roadmaps, designs, and prompts often change without reviewers understanding:
 
-This risk increases as AI coding agents begin generating and modifying product intent directly.
+- what product intent changed
+- what relationships were affected
+- whether documentation remains valid
+- whether important context was removed
 
-A change can appear correct while silently introducing:
+This risk increases as AI agents begin contributing directly to product artifacts.
 
-- invalid requirements
-- ambiguous language
-- broken relationships
-- missing decisions
-- removed acceptance criteria
-- unintended scope changes
+RAC already provides deterministic product knowledge intelligence through:
 
-RAC should provide the missing CI layer for product knowledge.
+- artifact inspection
+- validation
+- diffing
+- repository statistics
+- schema analysis
+- improvement guidance
+- relationship validation
+
+The next step is surfacing that intelligence where teams already review change:
+
+Pull Requests.
 
 ## Requirement
 
-RAC shall provide CI-native verification of product intent changes before they are merged.
+RAC shall provide a Git-native product knowledge review layer called:
 
-Teams should be able to install RAC once and continuously verify product artifacts through their existing development workflow.
+**RAC Watchkeeper**
+
+Watchkeeper shall observe product artifact changes and surface RAC intelligence during pull request workflows.
 
 ## Product Goal
 
 Move RAC from:
 
-> A CLI toolkit for Markdown product artifacts.
+> A CLI toolkit users manually execute.
 
 toward:
 
-> CI for product intent.
+> Continuous review for product intent changes.
+
+## Product Model
+
+RAC provides multiple surfaces over the same intelligence:
+
+```text
+RAC Core
+    |
+    +-- Explorer
+    |     Navigate product knowledge
+    |
+    +-- Watchkeeper
+          Review product knowledge changes
+```
+
+Explorer helps users understand existing knowledge.
+
+Watchkeeper helps users understand changing knowledge.
 
 ## User Story
 
 As a team storing product knowledge in Git,
 
-when humans or AI agents modify product artifacts,
+when humans or AI agents modify requirements, decisions, or roadmaps,
 
-I want automated checks before merge,
+I want RAC to review those changes automatically,
 
-so that unsafe product changes are caught before they reach engineering.
+so that reviewers understand product impact before merge.
 
 ## Dependency
 
-Product Intent CI depends on:
+Watchkeeper consumes existing RAC capabilities:
 
-- Repository Review Mode for repository health analysis.
-- AI Spec Safety for intent-change analysis.
-- RAC diff capabilities for artifact change detection.
+- Repository Review Mode
+- Artifact validation
+- Artifact diffing
+- Relationship validation
+- Repository statistics
+- Improvement suggestions
+- AI Spec Safety checks
 
-This requirement defines where product checks execute.
-
-It does not redefine the checks themselves.
+Watchkeeper shall not implement independent analysis logic.
 
 ## User Workflow
 
@@ -78,7 +107,7 @@ A user installs RAC:
 uv tool install requirements-as-code
 ```
 
-Then initializes a repository:
+Then initializes repository workflows:
 
 ```bash
 rac init
@@ -99,275 +128,257 @@ rac/
     rac.yml
 ```
 
-The generated workflow enables automatic product intent checks on pull requests.
+Pull requests automatically receive Watchkeeper reviews.
 
-## Primary Interface
+## Interface
 
-Product Intent CI shall expose a single command:
+Required:
 
 ```bash
-rac guard
+rac watchkeeper
 ```
 
 Optional:
 
 ```bash
-rac guard --base main --head HEAD
+rac watchkeeper --base main --head HEAD
 
-rac guard --format json
+rac watchkeeper --format json
 
-rac guard --format github
+rac watchkeeper --format github
 ```
-
-Users should not need to manually compose lower-level RAC commands.
 
 Internally:
 
 ```text
-rac guard
-     |
-     +-- Repository Review
-     |
-     +-- Artifact Diff
-     |
-     +-- AI Spec Safety
+Watchkeeper
+      |
+      +-- Review Mode
+      |
+      +-- Diff Analysis
+      |
+      +-- Relationship Checks
+      |
+      +-- Safety Analysis
 ```
 
 ## Functional Requirements
 
-## GitHub Action Integration
+## Pull Request Review Summary
 
-RAC shall provide a standard GitHub Actions workflow.
-
-Example:
-
-```yaml
-name: RAC Product Intent Check
-
-on:
-  pull_request:
-
-jobs:
-  rac:
-    steps:
-      - run: rac guard --format github
-```
-
-The workflow shall support:
-
-- installing RAC
-- detecting changed product artifacts
-- executing product safety checks
-- reporting results to pull requests
-
-## Pull Request Safety Gate
-
-RAC shall determine whether a product change is safe to merge.
+Watchkeeper shall publish a product knowledge summary.
 
 Example:
 
 ```text
-RAC Guard
+RAC Watchkeeper
 
-Status:
-Review Required
+Product knowledge changes detected.
 
 Changed:
 
 + 3 Requirements
-~ 2 Decisions
+~ 1 Decision
+~ 1 Roadmap
 
-Issues:
+Validation:
 
-BLOCK:
-- REQ-004 missing Acceptance Criteria
-- ADR-007 references missing ADR-002
+✓ All artifacts valid
 
-WARN:
-- ROADMAP-Q3 missing Success Measures
+Relationships:
+
+⚠ REQ-004 references missing ADR-002
+
+Suggestions:
+
+Add Success Measures section.
 ```
 
-## Product Knowledge Diff
+## Changed Artifact Detection
 
-RAC shall summarize product-level changes.
+Watchkeeper shall identify:
 
-The output should explain intent changes, not raw Markdown changes.
+- added artifacts
+- modified artifacts
+- removed artifacts
+- artifact type changes
 
 Example:
 
 ```text
-This PR:
+Changed:
 
 Added:
-+ Billing upgrade requirement
++ requirements/billing-upgrade.md
 
 Modified:
-~ Checkout decision
-
-Removed:
-- Legacy payment constraint
-
-Impact:
-
-1 downstream roadmap affected
+~ decisions/payment-provider.md
 ```
 
-## Configurable Quality Gates
+## Relationship Change Reporting
 
-Teams shall configure which issues:
+Watchkeeper shall identify relationship impact.
 
-- block merges
-- require review
-- generate warnings
+Including:
+
+- new relationships
+- removed relationships
+- broken references
+- ambiguous references
+
+Example:
+
+```text
+Relationship Impact:
+
+REQ-010 modified.
+
+Affected:
+
+- ROADMAP-Q3
+- ADR-004
+```
+
+## Repository Statistics Delta
+
+Watchkeeper shall summarize repository-level changes.
+
+Example:
+
+```text
+Repository Changes:
+
+Requirements:
+42 → 45
+
+Decisions:
+12 → 13
+
+Invalid artifacts:
+0 → 1
+```
+
+## Review Recommendations
+
+Watchkeeper shall recommend human review when needed.
+
+Example:
+
+```text
+Review recommended:
+
+Reason:
+Acceptance criteria removed from Requirement.
+```
+
+Watchkeeper does not determine whether a product decision is correct.
+
+It identifies changes requiring attention.
+
+## Configurable Review Policies
+
+Teams shall configure review behavior.
 
 Example:
 
 ```yaml
-guard:
-  fail_on:
-    - invalid_artifact
-    - broken_relationship
-    - duplicate_identifier
-
+watchkeeper:
   require_review:
+    - broken_relationship
     - acceptance_criteria_removed
-    - scope_added
-    - ambiguity_introduced
 
   warn_on:
     - missing_recommended_section
 ```
 
-## GitHub Review Output
+Policies determine workflow behavior.
 
-RAC shall provide human-readable pull request feedback.
+The underlying RAC analysis remains unchanged.
 
-Example:
+## GitHub Integration
 
-```text
-RAC Product Intent Report
+Watchkeeper shall support GitHub-native output.
 
-4 artifacts changed.
+Including:
 
-✓ Structure valid
-✓ Relationships valid
+- pull request comments
+- check summaries
+- inline annotations where appropriate
 
-⚠ Human review recommended
-
-Reasons:
-
-- 2 requirements became less specific
-- 1 new dependency added without Decision
-```
-
-## GitHub Check Annotations
-
-RAC should support native review annotations.
-
-Example:
-
-```text
-requirements/payment.md
-
-"Payment should complete quickly"
-
-Issue:
-"quickly" is ambiguous.
-
-Recommendation:
-Use measurable criteria.
-```
-
-## Product Ownership Rules
-
-RAC may support ownership policies for product knowledge.
-
-Example:
-
-```yaml
-ownership:
-  requirements/billing/*:
-    reviewers:
-      - billing-owner
-```
-
-Changes affecting owned areas may require explicit review.
+Users should not need to run RAC locally to understand product artifact changes.
 
 ## Machine Readable Contract
 
-All CI integrations shall consume structured RAC output.
-
-Required:
+Watchkeeper shall expose structured output:
 
 ```bash
-rac guard --format json
+rac watchkeeper --format json
 ```
 
 Consumers include:
 
 - GitHub Actions
-- CI providers
+- CI systems
 - MCP servers
 - AI agents
 - Explorer
 
 ## Non-Goals
 
-Product Intent CI shall not:
+Watchkeeper shall not:
 
-- replace human product ownership
-- determine whether product strategy is correct
-- rewrite requirements automatically
+- replace product reviewers
+- approve product decisions automatically
+- rewrite requirements
 - require GitHub specifically
 - require hosted infrastructure
-- duplicate RAC analysis logic
+- duplicate RAC core logic
 
 ## Architecture Requirements
 
-Product Intent CI shall follow:
+Implementation order:
 
 ```text
-Core RAC Intelligence
-          |
-          |
-     rac guard
-          |
-          |
- JSON / GitHub Output
-          |
-          |
- CI / Agents / Explorer
+RAC Intelligence
+        |
+        |
+ Repository Review
+        |
+        |
+ Watchkeeper
+        |
+        |
+ GitHub / CI / Agents
 ```
 
-GitHub Actions are consumers of RAC intelligence.
+Watchkeeper is a consumer of RAC intelligence.
 
-They are not the source of product intelligence.
+It is not a separate intelligence engine.
 
 ## Acceptance Criteria
 
 A team can:
 
-1. Install RAC.
-2. Run `rac init`.
-3. Open a pull request modifying product artifacts.
-4. Automatically receive:
-   - repository health results
-   - artifact change summary
-   - relationship validation
-   - intent safety findings
-   - merge recommendation
+1. Initialize RAC.
+2. Open a pull request changing product artifacts.
+3. Receive a Watchkeeper report containing:
+   - changed artifacts
+   - validation status
+   - relationship impact
+   - repository changes
+   - review recommendations
 
 without manually running RAC commands.
 
 ## Success Measures
 
-Product Intent CI succeeds when:
+Watchkeeper succeeds when:
 
-- product changes receive automated review like code changes
-- AI-generated specification changes become safer
-- unsafe requirement changes are detected before implementation
-- teams trust agents to modify product artifacts with guardrails
-- product knowledge becomes continuously verified
+- product knowledge changes become visible during review
+- reviewers understand intent changes before merge
+- AI-generated artifact changes become easier to verify
+- RAC becomes part of normal engineering workflows
+- product artifacts receive the same review discipline as code
 
 ## Related Artifacts
 
@@ -379,13 +390,12 @@ Product Intent CI succeeds when:
 
 ## Future Considerations
 
-Future versions may support:
+Future versions may add:
 
 - additional CI providers
-- advanced ownership workflows
-- product approval rules
-- product impact graphs
+- ownership workflows
+- approval policies
 - release intent summaries
-- historical drift detection
-- organization policy packs
+- historical drift reports
+- advanced agent integrations
 ```
