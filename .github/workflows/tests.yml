@@ -1,0 +1,39 @@
+name: Tests
+
+# Reusable workflow — the single definition of how RAC's test suite runs.
+# Called by ci.yml (push / pull_request) and by python-publish.yml (release gate),
+# so the test steps live in one place rather than being duplicated.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # setuptools-scm derives the version from git tags; fetch them so the
+          # editable install can resolve a version (mirrors python-publish.yml).
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package with dev/test extras
+        run: |
+          python -m pip install --upgrade pip
+          # The dev extra pulls pytest plus the document libraries that
+          # tests/test_ingest.py uses to generate fixtures.
+          python -m pip install -e .[dev]
+
+      - name: Run tests
+        run: python -m pytest -q

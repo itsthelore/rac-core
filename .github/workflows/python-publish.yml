@@ -16,7 +16,13 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    # Gate the release on the full test suite (reusable workflow). Tests must
+    # pass before anything is built or published.
+    uses: ./.github/workflows/tests.yml
+
   release-build:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:

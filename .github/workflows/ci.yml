@@ -1,0 +1,17 @@
+name: CI
+
+# Run the test suite on every pull request and on pushes to main. Push is
+# limited to main so PR branches don't run twice (once for push, once for the PR).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref (e.g. a new push to an open PR branch).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
