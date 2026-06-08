@@ -123,6 +123,16 @@ Understand:
 
 Your product knowledge becomes queryable.
 
+Or list everything as a machine-readable inventory:
+
+```bash
+rac index
+rac index --json
+```
+
+`rac index` answers one question — what exists, where, and what type — so consumers
+like Explorer, IDEs, CI, and AI agents can build navigation without re-scanning files.
+
 ---
 
 ## Built for AI-native development
