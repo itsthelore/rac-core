@@ -168,6 +168,12 @@ class RelationshipReport:
     recursive: bool
     total_files: int
     artifacts: list[ArtifactRelationships] = field(default_factory=list)
+    # Human-friendly resolution (v0.7.12): {casefold(ref) -> "Title (type · ID)"}
+    # for every reference that resolves uniquely. Presentation context only —
+    # the stored reference remains the source of truth, and JSON output does
+    # not include labels (ADR-007: resolved fields would be an additive,
+    # explicitly versioned change).
+    labels: dict[str, str] = field(default_factory=dict)
 
     @property
     def artifacts_with_relationships(self) -> int:
@@ -192,30 +198,54 @@ class RelationshipReport:
         return sum(self.counts.values())
 
 
-def _artifact_relationships(path: str) -> tuple[str, dict[str, list[str]]]:
-    """Classify the file at ``path`` and extract its full relationships.
+def _resolution_labels(
+    artifacts: list[ArtifactRelationships],
+    items: list[tuple[str, "Product", "ArtifactSpec | None"]],
+) -> dict[str, str]:
+    """Human-friendly labels for every uniquely-resolved reference (v0.7.12).
 
-    Returns ``(type, relationships)``. Unknown artifacts (no spec) yield an empty
-    relationship dict — extraction stays spec-driven (REQ-007), no generic scan.
+    Resolution runs over the same alias index relationship validation uses
+    (one identity model); ambiguous and unknown references get no label —
+    `--validate` is the place that reports them.
     """
-    product = parse_file(path)
-    artifact_type = classify(product).type
-    spec = spec_for(artifact_type)
-    relationships = extract_relationships_full(product, spec) if spec else {}
-    return artifact_type, relationships
+    index = _build_resolution_index(items)
+    info = {
+        path: (artifact_identifier(product, spec, path), spec, product.title)
+        for path, product, spec in items
+    }
+    labels: dict[str, str] = {}
+    for artifact in artifacts:
+        for refs in artifact.relationships.values():
+            for ref in refs:
+                key = ref.casefold()
+                if key in labels:
+                    continue
+                entries = index.get(key, [])
+                paths = {p for p, _ in entries}
+                if len(paths) != 1:
+                    continue
+                canonical, spec, title = info[next(iter(paths))]
+                type_name = spec.name if spec else "unknown"
+                labels[key] = (
+                    f"{title or canonical} ({type_name} · {canonical})"
+                )
+    return labels
 
 
 def _build_report(
     directory: str, paths: list, recursive: bool
 ) -> RelationshipReport:
     """Assemble a :class:`RelationshipReport` from ``paths`` (already ordered)."""
+    items = _parsed_items(paths)
     artifacts: list[ArtifactRelationships] = []
-    for path in paths:
-        artifact_type, relationships = _artifact_relationships(str(path))
+    for path, product, spec in items:
+        relationships = extract_relationships_full(product, spec) if spec else {}
         if relationships:
             artifacts.append(
                 ArtifactRelationships(
-                    path=str(path), type=artifact_type, relationships=relationships
+                    path=path,
+                    type=spec.name if spec else "unknown",
+                    relationships=relationships,
                 )
             )
     return RelationshipReport(
@@ -223,6 +253,7 @@ def _build_report(
         recursive=recursive,
         total_files=len(paths),
         artifacts=artifacts,
+        labels=_resolution_labels(artifacts, items),
     )
 
 
