@@ -1,4 +1,4 @@
-# ADR-016: RAC Is Not a Content Store
+# ADR-024: RAC Is Not a Content Store
 
 ## Status
 
