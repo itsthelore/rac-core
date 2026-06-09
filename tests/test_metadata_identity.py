@@ -90,6 +90,42 @@ def test_index_exposes_frontmatter_ids(tmp_path):
     assert index.artifacts[0].id == "RAC-01JY4M8X2QZ7"
 
 
+def test_legacy_references_resolve_after_frontmatter_adoption(tmp_path):
+    # Migration alias (Initiative 7): adopting a canonical ID must not break
+    # existing human-readable references to the legacy identity.
+    (tmp_path / "adr-015-explorer.md").write_text(
+        FRONTMATTER + DECISION_BODY, encoding="utf-8"
+    )
+    (tmp_path / "consumer.md").write_text(
+        DECISION_BODY + "\n## Related Decisions\n\n- ADR-015: Explorer\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+
+
+def test_canonical_id_references_resolve(tmp_path):
+    (tmp_path / "target.md").write_text(
+        FRONTMATTER + DECISION_BODY, encoding="utf-8"
+    )
+    (tmp_path / "consumer.md").write_text(
+        DECISION_BODY + "\n## Related Decisions\n\n- RAC-01JY4M8X2QZ7\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+
+
+def test_alias_never_creates_duplicate_identity(tmp_path):
+    # Same file answering to several aliases is not a duplicate; duplicates
+    # require two files sharing a *canonical* identifier.
+    (tmp_path / "adr-015-explorer.md").write_text(
+        FRONTMATTER + DECISION_BODY, encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+
+
 def test_duplicate_canonical_ids_fail_repository_validation(tmp_path):
     (tmp_path / "a.md").write_text(FRONTMATTER + DECISION_BODY, encoding="utf-8")
     (tmp_path / "b.md").write_text(FRONTMATTER + DECISION_BODY, encoding="utf-8")

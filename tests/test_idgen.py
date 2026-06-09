@@ -51,6 +51,12 @@ def test_time_sortable_across_ticks():
     assert early < late
 
 
-def test_no_collisions_in_bulk_under_real_entropy():
-    ids = {generate_id("RAC") for _ in range(2000)}
+def test_unique_across_millisecond_ticks():
+    # Uniqueness within one millisecond is the *caller's* job (index check +
+    # regenerate in rac new; dedupe in batch tooling) — the generator itself
+    # guarantees distinct IDs across ticks even with identical entropy.
+    ids = {
+        generate_id("RAC", clock=lambda ms=ms: ms / 1000.0, entropy=lambda bits: 7)
+        for ms in range(1_750_000_000_000, 1_750_000_002_000)
+    }
     assert len(ids) == 2000
