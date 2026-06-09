@@ -1,0 +1,7 @@
+Available artifact templates:
+
+- requirement
+- decision
+- roadmap
+- prompt
+- design
