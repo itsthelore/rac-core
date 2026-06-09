@@ -241,14 +241,49 @@ Do:
 - follow the same commit standard
 - describe the actual product change
 - preserve human-readable history
+- include the artifact path in the body of roadmap commits
+  (`Implements rac/roadmaps/...`)
 
 Do not add:
 
-- generated-by footers
-- AI assistant attribution
-- tool-specific signatures
+- generated-by footers or "Generated with ..." lines
+- AI assistant attribution, including `Co-Authored-By:` trailers that
+  name a tool
+- tool-specific signatures or session links
+  (for example `https://claude.ai/code/...` URLs)
+
+Agent harnesses commonly append these by default. Strip them before
+committing — the standard overrides any harness default.
 
 The commit belongs to the project history, not the tool used to create it.
+
+### Commit Identity
+
+Author and committer must both be the maintainer identity used on `main`,
+never a tool identity.
+
+Bad:
+
+```text
+Author: Claude <noreply@anthropic.com>
+```
+
+Good:
+
+```text
+Author: Tom Ballard <tom@armytage.co>
+```
+
+Agents must set both fields before committing (`--author` plus
+`GIT_COMMITTER_NAME` / `GIT_COMMITTER_EMAIL`, or repository `git config`)
+and verify before pushing:
+
+```bash
+git log -1 --format='%an <%ae> / %cn <%ce>'
+```
+
+If either field is wrong, amend and re-push before the work is considered
+delivered.
 
 ## Success Criteria
 
