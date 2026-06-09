@@ -91,6 +91,10 @@ class PortfolioSummary:
     filled_slots: int
     relationships: RelationshipSummary
     attention: list[AttentionItem] = field(default_factory=list)
+    # Paths of unknown-type files (v0.7.9, additive): they are counted in
+    # ``by_type`` but neither validated nor completeness-scored, so consumers
+    # like ``rac review`` need the paths to surface them without a second walk.
+    unknown_paths: list[str] = field(default_factory=list)
 
     @property
     def total_artifacts(self) -> int:
@@ -122,6 +126,8 @@ class PortfolioSummary:
             "artifacts": {
                 "total": self.total_artifacts,
                 "by_type": self.by_type,
+                # Additive in v0.7.9 (ADR-007): unknown files listed by path.
+                "unknown_paths": self.unknown_paths,
             },
             "validation": {
                 "valid": self.valid_artifacts,
@@ -161,6 +167,7 @@ def build_portfolio_summary(
     recommended_slots = 0
     filled_slots = 0
     attention: list[AttentionItem] = []
+    unknown_paths: list[str] = []
     # path -> canonical identifier, for mapping relationship issues (whose
     # source_path is always a known artifact) back to an identifier without a
     # second identifier pass.
@@ -174,6 +181,7 @@ def build_portfolio_summary(
         spec = spec_for(artifact_type)
         if spec is None:
             # Unknown artifacts: not validated, not scored for completeness.
+            unknown_paths.append(str(path))
             continue
 
         identifier = artifact_identifier(product, spec, str(path))
@@ -248,4 +256,5 @@ def build_portfolio_summary(
         filled_slots=filled_slots,
         relationships=rel_summary,
         attention=attention,
+        unknown_paths=unknown_paths,
     )

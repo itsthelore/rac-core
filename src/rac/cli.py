@@ -9,6 +9,7 @@ Commands:
     rac improve <file.md | -> [--json | --template]
     rac schema [--list] [type] [--json | --template]
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
+    rac review <directory> [--json] [--top-level]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
 
@@ -18,7 +19,8 @@ Exit codes:
        index produced)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
-       references or duplicate identifiers found
+       references or duplicate identifiers found; review: invalid artifacts
+       or broken relationships found (priority 1-2 issues)
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite)
 """
@@ -41,6 +43,7 @@ from rac.services.index import build_repository_index
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.inspect import build_inspection, inspect_directory
 from rac.services.portfolio import build_portfolio_summary
+from rac.services.review import build_review
 from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
@@ -307,6 +310,20 @@ def cmd_relationships(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_review(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    report = build_review(args.directory, recursive=not args.top_level)
+    if args.json:
+        print(outputs.render_review_json(report))
+    else:
+        print(outputs.render_review_human(report))
+    # Priority 1-2 findings (invalid artifacts, broken relationships) fail the
+    # review; priority 3-4 findings are advisory (REQ-Repository-Review-Mode).
+    return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
+
+
 def cmd_portfolio(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
@@ -523,6 +540,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_relationships.set_defaults(func=cmd_relationships)
+
+    p_review = sub.add_parser(
+        "review",
+        help="Review a repository: prioritized issues and suggested actions.",
+        parents=[version_parent],
+    )
+    p_review.add_argument("directory", help="Directory to scan recursively for *.md.")
+    p_review.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_review.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_review.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_review.set_defaults(func=cmd_review)
 
     p_portfolio = sub.add_parser(
         "portfolio",

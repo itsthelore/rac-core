@@ -24,6 +24,13 @@ from rac.services.relationships import (
     RelationshipReport,
     RelationshipValidation,
 )
+from rac.services.review import (
+    PRIORITY_BROKEN_RELATIONSHIP,
+    PRIORITY_INVALID_ARTIFACT,
+    PRIORITY_MISSING_RECOMMENDED,
+    PRIORITY_UNKNOWN_ARTIFACT,
+    ReviewReport,
+)
 from rac.services.stats import PortfolioStats
 from rac.services.validate import STATUS_INVALID, DirectoryValidation
 
@@ -644,6 +651,85 @@ def render_portfolio_human(s) -> str:
         f"  {score_color(str(score))} / 100",
     ]
 
+    return "\n".join(lines)
+
+
+# --- review ------------------------------------------------------------------
+
+_PRIORITY_LABELS = {
+    PRIORITY_INVALID_ARTIFACT: "Invalid artifacts",
+    PRIORITY_BROKEN_RELATIONSHIP: "Broken relationships",
+    PRIORITY_UNKNOWN_ARTIFACT: "Unrecognized artifacts",
+    PRIORITY_MISSING_RECOMMENDED: "Missing recommended information",
+}
+
+
+def render_review_human(r: ReviewReport) -> str:
+    """Human-readable `rac review` output (v0.7.9).
+
+    One report answering "what needs attention?": inventory, validation and
+    relationship summaries, issues grouped by priority, deduplicated suggested
+    actions, and the health score.
+    """
+    p = r.portfolio
+    lines = [
+        _bold("Repository Review"),
+        "=================",
+        "",
+        f"Directory:  {r.directory}",
+        f"Artifacts:  {p.total_artifacts}",
+        "",
+    ]
+    for type_name, count in p.by_type.items():
+        if count > 0:
+            lines.append(f"  {type_name.title():<14} {count}")
+
+    lines += [
+        "",
+        _bold("Validation"),
+        "----------",
+        "",
+        f"  Valid:    {p.valid_artifacts}",
+        f"  Invalid:  {p.invalid_artifacts}",
+        "",
+        _bold("Relationships"),
+        "-------------",
+        "",
+        f"  Total:    {p.relationships.total}",
+        f"  Valid:    {p.relationships.valid}",
+        f"  Broken:   {p.relationships.broken}",
+    ]
+
+    if r.issues:
+        lines += ["", _bold(f"Issues ({len(r.issues)})"), "------"]
+        for priority, label in _PRIORITY_LABELS.items():
+            group = [i for i in r.issues if i.priority == priority]
+            if not group:
+                continue
+            lines += ["", f"  Priority {priority} — {label}:"]
+            for issue in group:
+                icon = (
+                    _red("✗")
+                    if issue.severity == "error"
+                    else _yellow("!") if issue.severity == "warning" else "·"
+                )
+                lines.append(f"    {icon} {issue.identifier}")
+                lines.append(f"        {issue.message}")
+        lines += ["", _bold("Suggested Actions"), "-----------------", ""]
+        for n, action in enumerate(r.actions, start=1):
+            lines.append(f"  {n}. {action}")
+    else:
+        lines += ["", _green("✓ Nothing needs attention.")]
+
+    score = p.health_score
+    score_color = _green if score >= 80 else _yellow if score >= 60 else _red
+    lines += [
+        "",
+        _bold("Health Score"),
+        "------------",
+        "",
+        f"  {score_color(str(score))} / 100",
+    ]
     return "\n".join(lines)
 
 
