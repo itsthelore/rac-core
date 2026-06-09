@@ -326,3 +326,12 @@ def test_orphan_not_double_counted_when_broken(tmp_path):
     s = summary("broken_rels")
     # Only 1 known artifact (requirement) in the fixture.
     assert s.relationships.orphaned == 1
+
+
+def test_unknown_paths_listed_additively():
+    # v0.7.9 additive contract field (ADR-007): unknown files listed by path so
+    # consumers like `rac review` can surface them without a second walk.
+    s = summary("all_types")
+    assert len(s.unknown_paths) == s.by_type["unknown"] == 1
+    assert s.unknown_paths[0].endswith("unknown.md")
+    assert s.to_dict()["artifacts"]["unknown_paths"] == s.unknown_paths
