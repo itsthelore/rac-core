@@ -18,6 +18,11 @@ from rac.services.improve import ImprovementResult
 from rac.services.init import InitResult
 from rac.services.index import RepositoryIndex
 from rac.services.inspect import DirectoryInspection, InspectionResult
+from rac.services.migrate import (
+    STATUS_MIGRATED,
+    STATUS_SKIPPED_UNKNOWN,
+    MigrationReport,
+)
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_SELF_REFERENCE,
@@ -825,4 +830,38 @@ def render_find_human(result: SearchResult) -> str:
     ]
     lines.append("")
     lines.append(f"{result.match_count} match(es) for {result.query!r}.")
+    return "\n".join(lines)
+
+
+# --- migrate (v0.7.13) ----------------------------------------------------------
+
+
+def render_migrate_human(report: MigrationReport) -> str:
+    """Human `rac migrate metadata` output: assigned IDs and what remains."""
+    lines: list[str] = []
+    if report.dry_run:
+        lines += [_bold("Dry run — no files were written."), ""]
+
+    migrated = [f for f in report.files if f.status == STATUS_MIGRATED]
+    unknown = [f for f in report.files if f.status == STATUS_SKIPPED_UNKNOWN]
+
+    verb = "Would migrate" if report.dry_run else "Migrated"
+    if migrated:
+        lines.append(_bold(f"{verb} {len(migrated)} artifact(s):"))
+        path_w = max(len(f.path) for f in migrated)
+        for f in migrated:
+            lines.append(f"  {f.path:<{path_w}}  {f.id}  ({f.type})")
+    else:
+        lines.append(f"{verb} 0 artifact(s) — nothing to migrate.")
+
+    if unknown:
+        lines += ["", _bold(f"Skipped {len(unknown)} unrecognized document(s):")]
+        lines.extend(f"  - {f.path}" for f in unknown)
+
+    lines += [
+        "",
+        f"{len(report.files)} file(s): {report.migrated} migrated, "
+        f"{report.already_canonical} already canonical, "
+        f"{report.skipped_unknown} skipped (unknown type).",
+    ]
     return "\n".join(lines)

@@ -49,6 +49,8 @@ CASES = [
     ("find_human", ["find", "markdown", "tests/fixtures/resolve"], 0),
     ("find_json", ["find", "markdown", "tests/fixtures/resolve", "--json"], 0),
     ("relationships_resolved_human", ["relationships", "tests/fixtures/resolve"], 0),
+    ("migrate_dry_run_human", ["migrate", "metadata", "tests/fixtures/migrate", "--dry-run"], 0),
+    ("migrate_dry_run_json", ["migrate", "metadata", "tests/fixtures/migrate", "--dry-run", "--json"], 0),
 ]
 
 
@@ -58,6 +60,12 @@ def test_golden(name, argv, expected_rc, capsys, monkeypatch):
     # Force plain output: golden files must not depend on whether the test
     # runner happens to attach a TTY.
     monkeypatch.setattr("rac.output.human._USE_COLOR", False)
+    # Deterministic IDs for migrate cases (dry runs, so fixtures stay clean);
+    # the suffix is valid Crockford base32. Same seam pattern as _USE_COLOR.
+    monkeypatch.setattr(
+        "rac.services.migrate._DEFAULT_ID_GENERATOR",
+        lambda key: f"{key}-00000000TEST",
+    )
 
     rc = main(argv)
     out = capsys.readouterr().out

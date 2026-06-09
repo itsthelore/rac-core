@@ -1,0 +1,32 @@
+{
+  "schema_version": "1",
+  "directory": "tests/fixtures/migrate",
+  "recursive": true,
+  "dry_run": true,
+  "summary": {
+    "total_files": 3,
+    "migrated": 1,
+    "already_canonical": 1,
+    "skipped_unknown": 1
+  },
+  "files": [
+    {
+      "path": "tests/fixtures/migrate/adr-001-legacy.md",
+      "status": "migrated",
+      "id": "RAC-00000000TEST",
+      "type": "decision"
+    },
+    {
+      "path": "tests/fixtures/migrate/canonical.md",
+      "status": "already-canonical",
+      "id": null,
+      "type": null
+    },
+    {
+      "path": "tests/fixtures/migrate/notes.md",
+      "status": "skipped-unknown",
+      "id": null,
+      "type": null
+    }
+  ]
+}

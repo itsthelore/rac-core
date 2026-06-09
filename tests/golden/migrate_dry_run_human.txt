@@ -1,0 +1,9 @@
+Dry run — no files were written.
+
+Would migrate 1 artifact(s):
+  tests/fixtures/migrate/adr-001-legacy.md  RAC-00000000TEST  (decision)
+
+Skipped 1 unrecognized document(s):
+  - tests/fixtures/migrate/notes.md
+
+3 file(s): 1 migrated, 1 already canonical, 1 skipped (unknown type).

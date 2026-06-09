@@ -17,19 +17,21 @@ Commands:
     rac init [directory] [--key KEY] [--json]
     rac resolve <ID> [directory] [--json]
     rac find <query> [directory] [--type TYPE] [--json]
+    rac migrate metadata <directory> [--dry-run] [--json]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown; relationships found or
        not; --validate with all references resolved; portfolio summary produced;
        index produced; artifact created; templates listed; find with or without
-       matches)
+       matches; migration or dry run completed, even with nothing to migrate)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
        or broken relationships found (priority 1-2 issues); new: packaged
        template missing (broken installation) or malformed repository config;
        init: established key conflicts with the requested one; resolve:
-       artifact not found or duplicate ID
+       artifact not found or duplicate ID; migrate: malformed repository
+       config or ID generation exhausted
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite, missing output directory, repository not
        initialized, invalid repository key)
@@ -73,6 +75,7 @@ from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.inspect import build_inspection, inspect_directory
 from rac.services.portfolio import build_portfolio_summary
 from rac.services.review import build_review
+from rac.services.migrate import migrate_metadata
 from rac.services.resolve import (
     OUTCOME_DUPLICATE,
     OUTCOME_RESOLVED,
@@ -452,6 +455,31 @@ def cmd_find(args: argparse.Namespace) -> int:
     else:
         print(outputs.render_find_human(result))
     # An empty result is a valid outcome, not an error.
+    return EXIT_OK
+
+
+def cmd_migrate(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    try:
+        report = migrate_metadata(
+            args.directory,
+            dry_run=args.dry_run,
+            recursive=not args.top_level,
+        )
+    except MissingRepositoryConfig as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    except (MalformedRepositoryConfig, IdGenerationExhausted) as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if args.json:
+        print(outputs.render_migrate_json(report))
+    else:
+        print(outputs.render_migrate_human(report))
+    # Completed migration (or dry run) always succeeds — nothing to migrate
+    # is a valid outcome.
     return EXIT_OK
 
 
@@ -849,6 +877,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_find.set_defaults(func=cmd_find)
+
+    p_migrate = sub.add_parser(
+        "migrate",
+        help="Migrate existing artifacts onto canonical frontmatter identity.",
+        parents=[version_parent],
+    )
+    p_migrate.add_argument(
+        "target",
+        choices=["metadata"],
+        help="What to migrate (this release: metadata).",
+    )
+    p_migrate.add_argument(
+        "directory",
+        help="Directory to scan recursively for *.md.",
+    )
+    p_migrate.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be migrated without writing any file.",
+    )
+    p_migrate.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_migrate.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_migrate.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_migrate.set_defaults(func=cmd_migrate)
 
     return parser
 
