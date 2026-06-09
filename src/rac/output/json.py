@@ -18,6 +18,7 @@ from rac.services.index import RepositoryIndex
 from rac.services.init import InitResult
 from rac.services.ingest import IngestResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
+from rac.services.migrate import MigrationReport
 from rac.services.relationships import RelationshipReport, RelationshipValidation
 from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
@@ -294,3 +295,11 @@ def render_resolve_json(result: ResolutionResult) -> str:
 def render_find_json(result: SearchResult) -> str:
     """JSON `rac find` output (stable contract, ADR-007)."""
     return json.dumps(result.to_dict(), indent=2)
+
+
+# --- migrate (v0.7.13) ----------------------------------------------------------
+
+
+def render_migrate_json(report: MigrationReport) -> str:
+    """JSON `rac migrate metadata` output (stable contract, ADR-007)."""
+    return json.dumps(report.to_dict(), indent=2)
