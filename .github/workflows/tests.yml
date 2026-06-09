@@ -1,8 +1,13 @@
 name: Tests
 
 # Reusable workflow — the single definition of how RAC's test suite runs.
-# Called by ci.yml (push / pull_request) and by python-publish.yml (release gate),
+# Called by ci.yml (push to main) and by python-publish.yml (release gate),
 # so the test steps live in one place rather than being duplicated.
+#
+# Tests are split into one "battery" per .py service (plus grouped core / cli /
+# artifacts) and run across every supported Python version, so the Actions UI
+# names the service + version that failed (e.g. "relationships (py3.11)")
+# instead of a single opaque "pytest (3.11)". See ADR-027.
 
 on:
   workflow_call:
@@ -12,11 +17,37 @@ permissions:
 
 jobs:
   pytest:
+    name: ${{ matrix.battery.name }} (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
+        # One battery per .py service, plus grouped core / cli / artifacts.
+        # Every tests/test_*.py belongs to exactly one battery (no orphans).
+        battery:
+          - name: core
+            paths: "tests/test_validate.py tests/test_parser.py tests/test_schema.py tests/test_identity.py"
+          - name: cli
+            paths: "tests/test_cli.py"
+          - name: artifacts
+            paths: "tests/test_design.py tests/test_roadmap.py tests/test_prompt.py tests/test_decision_metadata.py"
+          - name: diff
+            paths: "tests/test_diff.py"
+          - name: improve
+            paths: "tests/test_improve.py"
+          - name: index
+            paths: "tests/test_index.py"
+          - name: ingest
+            paths: "tests/test_ingest.py"
+          - name: inspect
+            paths: "tests/test_inspect.py"
+          - name: portfolio
+            paths: "tests/test_portfolio.py"
+          - name: relationships
+            paths: "tests/test_relationships.py tests/test_relationships_cmd.py tests/test_relationship_validation.py"
+          - name: stats
+            paths: "tests/test_stats.py"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,5 +66,5 @@ jobs:
           # tests/test_ingest.py uses to generate fixtures.
           python -m pip install -e .[dev]
 
-      - name: Run tests
-        run: python -m pytest -q
+      - name: Run ${{ matrix.battery.name }} battery
+        run: python -m pytest -q ${{ matrix.battery.paths }}
