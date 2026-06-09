@@ -1,0 +1,86 @@
+{
+  "schema_version": "1",
+  "directory": "tests/fixtures/portfolio",
+  "recursive": true,
+  "ok": false,
+  "artifacts": {
+    "total": 4,
+    "by_type": {
+      "requirement": 4,
+      "decision": 0,
+      "roadmap": 0,
+      "prompt": 0,
+      "design": 0,
+      "unknown": 0
+    },
+    "unknown_paths": []
+  },
+  "validation": {
+    "valid": 3,
+    "invalid": 1
+  },
+  "relationships": {
+    "total": 0,
+    "valid": 0,
+    "broken": 0,
+    "orphaned": 4,
+    "coverage": 0.0
+  },
+  "health": {
+    "score": 67
+  },
+  "issues": [
+    {
+      "priority": 1,
+      "severity": "error",
+      "path": "tests/fixtures/portfolio/broken.md",
+      "identifier": "broken",
+      "code": "invalid-artifact",
+      "message": "Validation errors: missing-title",
+      "action": "Run: rac validate tests/fixtures/portfolio/broken.md"
+    },
+    {
+      "priority": 4,
+      "severity": "warning",
+      "path": "tests/fixtures/portfolio/broken.md",
+      "identifier": "broken",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Success Metrics, Risks, Assumptions",
+      "action": "Run: rac improve tests/fixtures/portfolio/broken.md --template"
+    },
+    {
+      "priority": 4,
+      "severity": "warning",
+      "path": "tests/fixtures/portfolio/feature_a.md",
+      "identifier": "feature_a",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Assumptions",
+      "action": "Run: rac improve tests/fixtures/portfolio/feature_a.md --template"
+    },
+    {
+      "priority": 4,
+      "severity": "warning",
+      "path": "tests/fixtures/portfolio/feature_b.md",
+      "identifier": "feature_b",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Success Metrics, Risks, Assumptions",
+      "action": "Run: rac improve tests/fixtures/portfolio/feature_b.md --template"
+    },
+    {
+      "priority": 4,
+      "severity": "warning",
+      "path": "tests/fixtures/portfolio/sub/feature_c.md",
+      "identifier": "feature_c",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Success Metrics, Risks, Assumptions",
+      "action": "Run: rac improve tests/fixtures/portfolio/sub/feature_c.md --template"
+    }
+  ],
+  "actions": [
+    "Run: rac validate tests/fixtures/portfolio/broken.md",
+    "Run: rac improve tests/fixtures/portfolio/broken.md --template",
+    "Run: rac improve tests/fixtures/portfolio/feature_a.md --template",
+    "Run: rac improve tests/fixtures/portfolio/feature_b.md --template",
+    "Run: rac improve tests/fixtures/portfolio/sub/feature_c.md --template"
+  ]
+}

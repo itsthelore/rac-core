@@ -1,0 +1,9 @@
+FAIL  tests/fixtures/invalid/duplicate_ids.md
+  error   [duplicate-req-id] tests/fixtures/invalid/duplicate_ids.md:9
+          Duplicate requirement ID REQ-001 (used 2 times).
+  warning [missing-success-metrics] tests/fixtures/invalid/duplicate_ids.md
+          No ## Success Metrics section (optional, but recommended).
+  warning [missing-risks] tests/fixtures/invalid/duplicate_ids.md
+          No ## Risks section (optional, but recommended).
+
+1 error(s), 2 warning(s).

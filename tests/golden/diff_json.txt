@@ -1,0 +1,35 @@
+{
+  "old": "examples/example_dashboard_v1.md",
+  "new": "examples/example_dashboard_v2.md",
+  "added_requirements": [
+    {
+      "id": "REQ-004",
+      "text": "User can schedule a weekly usage summary email",
+      "line": 13
+    }
+  ],
+  "removed_requirements": [
+    {
+      "id": "REQ-003",
+      "text": "User can export the current chart as a CSV file",
+      "line": 13
+    }
+  ],
+  "modified_requirements": [
+    {
+      "id": "REQ-002",
+      "old_text": "User can filter usage charts by date range",
+      "new_text": "User can filter usage charts by date range and by team"
+    }
+  ],
+  "added_metrics": [
+    "25% of accounts schedule at least one summary email"
+  ],
+  "removed_metrics": [
+    "p95 dashboard load time stays under 2 seconds"
+  ],
+  "added_risks": [
+    "Scheduled emails could be flagged as spam by strict mail filters"
+  ],
+  "removed_risks": []
+}

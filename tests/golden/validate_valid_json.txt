@@ -1,0 +1,6 @@
+{
+  "file": "tests/fixtures/valid/feature.md",
+  "valid": true,
+  "errors": [],
+  "warnings": []
+}
