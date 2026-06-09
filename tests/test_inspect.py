@@ -79,7 +79,7 @@ def test_unknown_for_empty():
 def test_dogfood_repo_artifacts():
     # RAC against RAC: an ADR is a Decision; a roadmap spec is a Requirement.
     adr = REPO_ROOT / "rac/decisions/adr-010-documents-are-not-artifacts.md"
-    roadmap = REPO_ROOT / "rac/roadmaps/v0.4-inspect.md"
+    roadmap = REPO_ROOT / "rac/roadmaps/v0.4.x-intelligence/v0.4-inspect.md"
     assert inspect_file(str(adr)).type == "decision"
     assert inspect_file(str(roadmap)).type == "requirement"
 
@@ -182,10 +182,10 @@ def test_dogfood_directory_targets():
     roadmap = inspect_directory(str(REPO_ROOT / "rac/roadmaps"))
     paths_by_type = {f.path: f.type for f in roadmap.files}
     assert paths_by_type[
-        str(REPO_ROOT / "rac/roadmaps/v0.5.2-schema.md")
+        str(REPO_ROOT / "rac/roadmaps/v0.5.x-awareness/v0.5.2-schema.md")
     ] == "requirement"
     assert paths_by_type[
-        str(REPO_ROOT / "rac/roadmaps/v0.6.0-roadmap-artifacts.md")
+        str(REPO_ROOT / "rac/roadmaps/v0.6.x-relationships/v0.6.0-roadmap-artifacts.md")
     ] == "requirement"
     # The well-formed ADRs classify as Decision.
     adr = REPO_ROOT / "rac/decisions/adr-010-documents-are-not-artifacts.md"
