@@ -1,4 +1,4 @@
-# ADR-XXX Opaque System-Assigned Artifact Identity
+# ADR-026: Opaque System-Assigned Artifact Identity
 
 ## Status
 
