@@ -13,6 +13,7 @@ from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import CONFIDENCE_THRESHOLD, TypeScore
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
+from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
 from rac.services.inspect import DirectoryInspection, InspectionResult
@@ -760,3 +761,22 @@ def render_index_human(index: RepositoryIndex) -> str:
             f"  {e.id:<{id_w}}  {e.type:<{type_w}}  {title:<{title_w}}  {e.path}"
         )
     return "\n".join(lines)
+
+
+# --- create (rac new / rac templates, v0.7.10) -------------------------------
+
+
+def render_templates_human(names: list[str]) -> str:
+    """Human `rac templates` output: the canonical template set."""
+    lines = [_bold("Available artifact templates:"), ""]
+    lines.extend(f"- {name}" for name in names)
+    return "\n".join(lines)
+
+
+def render_new_human(created: CreatedArtifact) -> str:
+    """Human `rac new` output: what was created and where."""
+    return (
+        f"Created {created.artifact_type} artifact: {created.path}\n"
+        f"\n"
+        f"Edit the TODO placeholders, then check it with: rac validate {created.path}"
+    )

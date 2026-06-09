@@ -12,6 +12,7 @@ from dataclasses import asdict
 
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
+from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
 from rac.services.ingest import IngestResult
@@ -260,3 +261,16 @@ def render_portfolio_json(s) -> str:
 def render_index_json(index: RepositoryIndex) -> str:
     """JSON `rac index` output (stable contract, ADR-007)."""
     return json.dumps(index.to_dict(), indent=2)
+
+
+# --- create (rac new / rac templates, v0.7.10) -------------------------------
+
+
+def render_templates_json(names: list[str]) -> str:
+    """JSON `rac templates` output (stable contract, ADR-007)."""
+    return json.dumps({"schema_version": "1", "templates": names}, indent=2)
+
+
+def render_new_json(created: CreatedArtifact) -> str:
+    """JSON `rac new` output (stable contract, ADR-007)."""
+    return json.dumps(created.to_dict(), indent=2)

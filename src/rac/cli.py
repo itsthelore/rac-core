@@ -12,17 +12,20 @@ Commands:
     rac review <directory> [--json] [--top-level]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
+    rac new <artifact-type> <output-path> [--json]
+    rac templates [--json]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown; relationships found or
        not; --validate with all references resolved; portfolio summary produced;
-       index produced)
+       index produced; artifact created; templates listed)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
-       or broken relationships found (priority 1-2 issues)
+       or broken relationships found (priority 1-2 issues); new: packaged
+       template missing (broken installation)
     2  usage / IO error (file not found, not a directory, unsupported type,
-       refuse-to-overwrite)
+       refuse-to-overwrite, missing output directory)
 """
 
 from __future__ import annotations
@@ -37,6 +40,16 @@ from rac.core.classification import score_artifacts
 from rac.core.markdown import parse, parse_file
 from rac.core.schema import available_schemas, schema_reference
 from rac.core.validation import has_errors, validate
+from rac.core.templates import (
+    TemplateNotFound,
+    TemplateResourceMissing,
+    available_templates,
+)
+from rac.services.create import (
+    OutputDirectoryMissing,
+    OutputPathExists,
+    create_artifact,
+)
 from rac.services.diff import diff as diff_asts
 from rac.services.improve import improve_product
 from rac.services.index import build_repository_index
@@ -350,6 +363,34 @@ def cmd_index(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_new(args: argparse.Namespace) -> int:
+    try:
+        created = create_artifact(args.type, args.output_path)
+    except TemplateNotFound as exc:  # unsupported type → usage error
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    except (OutputPathExists, OutputDirectoryMissing) as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    except TemplateResourceMissing as exc:  # broken installation → operational
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if args.json:
+        print(outputs.render_new_json(created))
+    else:
+        print(outputs.render_new_human(created))
+    return EXIT_OK
+
+
+def cmd_templates(args: argparse.Namespace) -> int:
+    names = available_templates()
+    if args.json:
+        print(outputs.render_templates_json(names))
+    else:
+        print(outputs.render_templates_human(names))
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     version_str = f"rac {__version__}"
 
@@ -608,6 +649,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_index.set_defaults(func=cmd_index)
+
+    p_new = sub.add_parser(
+        "new",
+        help="Create a new artifact from its canonical template.",
+        parents=[version_parent],
+    )
+    p_new.add_argument(
+        "type",
+        help="Artifact type, e.g. requirement, decision, roadmap, prompt, or design.",
+    )
+    p_new.add_argument(
+        "output_path",
+        help="Where to write the artifact (taken literally; never overwritten).",
+    )
+    p_new.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_new.set_defaults(func=cmd_new)
+
+    p_templates = sub.add_parser(
+        "templates",
+        help="List the canonical artifact templates available to `rac new`.",
+        parents=[version_parent],
+    )
+    p_templates.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_templates.set_defaults(func=cmd_templates)
 
     return parser
 

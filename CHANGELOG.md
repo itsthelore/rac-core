@@ -8,6 +8,11 @@ details, release history over commit history.
 
 ### Added
 
+- `rac new <type> <output-path>` — create a valid artifact from its canonical
+  bundled template; deterministic, AI-free, and never overwrites an existing
+  file (v0.7.10).
+- `rac templates` — list the canonical artifact templates available to
+  `rac new`, with `--json` for tools (v0.7.10).
 - `rac validate <directory>` — validate every recognized artifact in a tree in
   one command; unrecognized documents are skipped, not failed.
 - `rac review <directory>` — full repository review: validation, relationship

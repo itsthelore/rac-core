@@ -41,6 +41,8 @@ CASES = [
     ("schema_requirement_template", ["schema", "requirement", "--template"], 0),
     ("review_human", ["review", "tests/fixtures/portfolio"], 1),
     ("review_json", ["review", "tests/fixtures/portfolio", "--json"], 1),
+    ("templates_human", ["templates"], 0),
+    ("templates_json", ["templates", "--json"], 0),
 ]
 
 

@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with eleven subcommands. This page documents each
+RAC ships a single command, `rac`, with thirteen subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -331,5 +331,61 @@ rac index rac/ --json
       "path": "rac/requirements/rac-documentation-structure.md"
     }
   ]
+}
+```
+
+---
+
+## new
+
+Create a new artifact from its canonical bundled template. The generated file
+uses the same structure the validators expect: edit the `TODO` placeholders and
+it passes `rac validate`.
+
+- **Input:** `rac new <type> <output-path>` — type is `requirement`,
+  `decision`, `roadmap`, `prompt`, or `design`; the output path is taken
+  literally (no filename derivation, no extension magic).
+- **Options:** `--json`
+- **Exit codes:** `0` created · `1` packaged template missing (broken
+  installation) · `2` unsupported type, output file already exists, or output
+  directory missing
+
+`rac new` never overwrites an existing file and never creates directories.
+
+```bash
+rac new requirement rac/requirements/user-authentication.md
+rac new decision rac/decisions/adr-029-example.md --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "created": true,
+  "type": "decision",
+  "path": "rac/decisions/adr-029-example.md"
+}
+```
+
+---
+
+## templates
+
+List the canonical artifact templates available to `rac new`. The set is the
+artifact spec registry itself — the same source that drives classification and
+validation.
+
+- **Input:** `rac templates`
+- **Options:** `--json`
+- **Exit codes:** `0` success
+
+```bash
+rac templates
+rac templates --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "templates": ["requirement", "decision", "roadmap", "prompt", "design"]
 }
 ```
