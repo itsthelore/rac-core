@@ -1,7 +1,7 @@
 """Command-line interface for RAC.
 
 Commands:
-    rac validate <file.md | -> [--json]
+    rac validate <file.md | dir | -> [--json] [--top-level]
     rac diff <old.md> <new.md> [--json]
     rac stats <directory> [--json]
     rac ingest <file> [-o OUT | --stdout] [--force] [--json]
@@ -48,6 +48,7 @@ from rac.services.relationships import (
     validate_relationships_file,
 )
 from rac.services.stats import collect_stats
+from rac.services.validate import validate_directory
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
@@ -74,6 +75,17 @@ def _read_validate_input(target: str):
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
+    # Directory? Validate every recognized artifact beneath it (v0.7.9).
+    # Unknown-type files are skipped, matching `rac portfolio` semantics; the
+    # legacy requirement fallback applies only to explicit single-file input.
+    if args.file != "-" and Path(args.file).is_dir():
+        result = validate_directory(args.file, recursive=not args.top_level)
+        if args.json:
+            print(outputs.render_validate_dir_json(result))
+        else:
+            print(outputs.render_validate_dir_human(result))
+        return EXIT_OK if result.ok else EXIT_VALIDATION_FAILED
+
     product = _read_validate_input(args.file)
     issues = validate(product)
     if args.json:
@@ -340,14 +352,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_validate = sub.add_parser(
         "validate",
-        help="Validate a single requirement file.",
+        help="Validate an artifact file, or every recognized artifact in a directory.",
         parents=[version_parent],
     )
     p_validate.add_argument(
-        "file", help="Path to a requirement Markdown file, or '-' to read from stdin."
+        "file",
+        help="A Markdown artifact file, a directory, or '-' to read from stdin.",
     )
     p_validate.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_validate.add_argument(
+        "--top-level",
+        action="store_true",
+        help="When validating a directory, only its top-level files (no recursion).",
+    )
+    p_validate.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_validate.set_defaults(func=cmd_validate)
 

@@ -97,3 +97,102 @@ def test_too_many_requirements_warning():
     text = f"# T\n\n## Problem\n\nx\n\n## Requirements\n\n{reqs}\n"
     issues = validate(parse(text))
     assert "too-many-requirements" in codes(issues)
+
+
+# ---------------------------------------------------------------------------
+# Directory validation (v0.7.9) — `rac validate <directory>`
+# ---------------------------------------------------------------------------
+
+import json
+
+from rac.cli import main
+from rac.services.validate import (
+    STATUS_INVALID,
+    STATUS_SKIPPED,
+    STATUS_VALID,
+    validate_directory,
+)
+
+
+def test_directory_counts_valid_and_invalid():
+    result = validate_directory(fixture_path("portfolio"))
+    assert result.checked == 4  # feature_a, feature_b, broken, sub/feature_c
+    assert result.valid == 3
+    assert result.invalid == 1
+    assert not result.ok
+    by_path = {f.path: f for f in result.files}
+    broken = by_path[fixture_path("portfolio", "broken.md")]
+    assert broken.status == STATUS_INVALID
+    assert "missing-title" in {i.code for i in broken.issues}
+
+
+def test_directory_top_level_skips_subdirectories():
+    result = validate_directory(fixture_path("portfolio"), recursive=False)
+    assert result.checked == 3  # sub/feature_c.md excluded
+
+
+def test_directory_skips_unknown_artifacts():
+    # all_types contains one file per artifact type plus one unknown document;
+    # the unknown file is reported as skipped, never validated (portfolio
+    # semantics — the requirement fallback is single-file only).
+    result = validate_directory(fixture_path("portfolio_summary", "all_types"))
+    assert result.skipped == 1
+    statuses = {f.artifact_type: f.status for f in result.files}
+    assert statuses["unknown"] == STATUS_SKIPPED
+    assert all(
+        f.status in (STATUS_VALID, STATUS_INVALID)
+        for f in result.files
+        if f.artifact_type != "unknown"
+    )
+
+
+def test_directory_results_sorted_by_path():
+    result = validate_directory(fixture_path("portfolio"))
+    paths = [f.path for f in result.files]
+    assert paths == sorted(paths)
+
+
+def test_directory_empty_is_ok(tmp_path):
+    result = validate_directory(str(tmp_path))
+    assert result.ok
+    assert result.files == []
+
+
+def test_cli_directory_exit_codes(capsys):
+    assert main(["validate", fixture_path("portfolio")]) == 1
+    capsys.readouterr()
+    assert main(["validate", fixture_path("valid")]) == 0
+
+
+def test_cli_directory_human_output(capsys):
+    main(["validate", fixture_path("portfolio")])
+    out = capsys.readouterr().out
+    assert "FAIL" in out
+    assert "broken.md" in out
+    assert "missing-title" in out
+    # valid files are counted, not listed
+    assert "feature_a.md" not in out
+    assert "3 valid, 1 invalid" in out
+
+
+def test_cli_directory_json_contract(capsys):
+    rc = main(["validate", fixture_path("portfolio"), "--json"])
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "1"
+    assert payload["valid"] is False
+    assert payload["summary"] == {
+        "total_files": 4,
+        "checked": 4,
+        "valid": 3,
+        "invalid": 1,
+        "skipped_unknown": 0,
+    }
+    statuses = {f["path"]: f["status"] for f in payload["files"]}
+    assert statuses[fixture_path("portfolio", "broken.md")] == "invalid"
+
+
+def test_cli_single_file_behavior_unchanged(capsys):
+    # Unknown single files still fall back to the legacy requirement rules.
+    rc = main(["validate", fixture_path("portfolio_summary", "all_types", "unknown.md")])
+    assert rc == 1

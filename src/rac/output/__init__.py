@@ -20,6 +20,7 @@ from .human import (
     render_schema_list_human,
     render_stats_human,
     render_unknown_schema,
+    render_validate_dir_human,
     render_validation_human,
 )
 from .json import (
@@ -35,6 +36,7 @@ from .json import (
     render_schema_json,
     render_schema_list_json,
     render_stats_json,
+    render_validate_dir_json,
     render_validation_json,
 )
 from .templates import render_improve_template, render_schema_template
@@ -67,6 +69,8 @@ __all__ = [
     "render_stats_human",
     "render_stats_json",
     "render_unknown_schema",
+    "render_validate_dir_human",
+    "render_validate_dir_json",
     "render_validation_human",
     "render_validation_json",
 ]

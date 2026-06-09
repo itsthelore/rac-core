@@ -18,6 +18,7 @@ from rac.services.ingest import IngestResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.relationships import RelationshipReport, RelationshipValidation
 from rac.services.stats import PortfolioStats
+from rac.services.validate import DirectoryValidation
 
 
 # --- validate ---------------------------------------------------------------
@@ -33,6 +34,11 @@ def render_validation_json(product: Product, issues: list[Issue]) -> str:
         "warnings": warnings,
     }
     return json.dumps(payload, indent=2)
+
+
+def render_validate_dir_json(result: DirectoryValidation) -> str:
+    """JSON directory `rac validate` output (stable contract, ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)
 
 
 # --- diff -------------------------------------------------------------------
