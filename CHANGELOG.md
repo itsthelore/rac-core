@@ -8,6 +8,11 @@ details, release history over commit history.
 
 ### Added
 
+- `rac migrate metadata <directory>` — migrate existing recognized artifacts
+  onto canonical frontmatter identity: idempotent, byte-preserving, with
+  `--dry-run` preview; unrecognized documents are reported, never guessed at
+  (v0.7.13).
+
 - `rac resolve <ID>` — resolve any artifact ID (canonical or legacy alias) to
   its type, title, and path; duplicates are reported with every path, never
   silently resolved (v0.7.12).
