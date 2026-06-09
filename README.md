@@ -1,5 +1,8 @@
 # Requirements as Code
 
+[![CI](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml/badge.svg)](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/)
+
 > **Treat product knowledge like source code.**
 
 RAC is a command-line tool for managing requirements, decisions, roadmaps, prompts,
@@ -40,8 +43,10 @@ uv tool install requirements-as-code
 
 ```bash
 rac validate requirement.md   # check one artifact
+rac validate rac/             # check every artifact in a directory
 rac inspect requirement.md    # see its type and completeness
 rac stats rac/                # summarize a directory of artifacts
+rac review rac/               # full repository review, worst problems first
 ```
 
 New to RAC? Walk through your first artifact in five minutes:
@@ -67,10 +72,25 @@ Everything stays plain Markdown — see **[docs/artifacts.md](docs/artifacts.md)
 - [Testing & contributing](docs/testing.md) — local setup and verification
 - [Examples](docs/examples.md) — small, realistic artifacts
 
+## How RAC earns trust
+
+RAC asks you to trust it with your product knowledge, so it holds itself to the
+same standard it applies to your repository:
+
+- **It dogfoods itself.** RAC's own planning corpus under [`rac/`](rac/) is
+  validated by RAC in CI (`rac validate rac/`, `rac relationships rac/ --validate`,
+  `rac review rac/`) — if the tool's rules break the tool's own artifacts, the
+  build fails.
+- **Output is a contract.** Golden tests pin the CLI's human and JSON output
+  byte-for-byte; any change to what RAC prints is reviewed as a product change.
+- **JSON is versioned.** Machine-readable output carries a `schema_version` and
+  only changes additively.
+
 ## Project Status
 
 RAC is early and evolving quickly. A terminal Explorer for browsing your knowledge
-base is planned. Contributions, ideas, and experiments are welcome.
+base is planned. Contributions, ideas, and experiments are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
