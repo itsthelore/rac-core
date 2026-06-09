@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with fourteen subcommands. This page documents each
+RAC ships a single command, `rac`, with sixteen subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -435,5 +435,74 @@ rac init docs/ --json
   "repository_key": "PROJ",
   "config_path": ".rac/config.yaml",
   "created": true
+}
+```
+
+
+---
+
+## resolve
+
+Resolve an artifact ID to its type, title, and path. Matching is
+case-insensitive and covers canonical IDs and legacy aliases (`## ID` values,
+filename prefixes, stems), so lookups survive renames, moves, and identity
+migration.
+
+- **Input:** `rac resolve <ID> [directory]` — directory defaults to the
+  current directory.
+- **Options:** `--json` · `--top-level` · `--recursive`
+- **Exit codes:** `0` resolved · `1` not found, or duplicate ID (paths listed
+  on stderr; never silently resolved by path order) · `2` not a directory
+
+```bash
+rac resolve RAC-01JY4M8X2QZ7 rac/
+rac resolve adr-015 rac/ --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "id": "RAC-01JY4M8X2QZ7",
+  "type": "decision",
+  "title": "Markdown Is the Canonical Source Format",
+  "path": "rac/decisions/markdown-first.md"
+}
+```
+
+---
+
+## find
+
+Search artifacts by ID, title, filename, or path — a deterministic,
+case-insensitive substring match (no ranking heuristics). Results are ordered
+by match field (ID, then title, then filename/path) with sorted path as the
+tiebreak. An empty result is a valid outcome, not an error.
+
+- **Input:** `rac find <query> [directory]` — directory defaults to the
+  current directory.
+- **Options:** `--type TYPE` (only match one artifact type) · `--json` ·
+  `--top-level` · `--recursive`
+- **Exit codes:** `0` search completed (matches or none) · `2` not a directory
+
+```bash
+rac find markdown rac/
+rac find explorer rac/ --type decision
+rac find "canonical format" rac/ --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "query": "markdown",
+  "type": null,
+  "match_count": 1,
+  "matches": [
+    {
+      "id": "RAC-01JY4M8X2QZ7",
+      "type": "decision",
+      "title": "Markdown Is the Canonical Source Format",
+      "path": "rac/decisions/markdown-first.md"
+    }
+  ]
 }
 ```
