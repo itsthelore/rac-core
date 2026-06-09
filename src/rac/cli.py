@@ -15,17 +15,21 @@ Commands:
     rac new <artifact-type> <output-path> [--json]
     rac templates [--json]
     rac init [directory] [--key KEY] [--json]
+    rac resolve <ID> [directory] [--json]
+    rac find <query> [directory] [--type TYPE] [--json]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown; relationships found or
        not; --validate with all references resolved; portfolio summary produced;
-       index produced; artifact created; templates listed)
+       index produced; artifact created; templates listed; find with or without
+       matches)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
        or broken relationships found (priority 1-2 issues); new: packaged
        template missing (broken installation) or malformed repository config;
-       init: established key conflicts with the requested one
+       init: established key conflicts with the requested one; resolve:
+       artifact not found or duplicate ID
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite, missing output directory, repository not
        initialized, invalid repository key)
@@ -69,6 +73,12 @@ from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.inspect import build_inspection, inspect_directory
 from rac.services.portfolio import build_portfolio_summary
 from rac.services.review import build_review
+from rac.services.resolve import (
+    OUTCOME_DUPLICATE,
+    OUTCOME_RESOLVED,
+    find_artifacts,
+    resolve_artifact,
+)
 from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
@@ -399,6 +409,49 @@ def cmd_new(args: argparse.Namespace) -> int:
         print(outputs.render_new_json(created))
     else:
         print(outputs.render_new_human(created))
+    return EXIT_OK
+
+
+def cmd_resolve(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    result = resolve_artifact(
+        args.directory, args.id, recursive=not args.top_level
+    )
+    if args.json:
+        print(outputs.render_resolve_json(result))
+    else:
+        if result.outcome == OUTCOME_RESOLVED:
+            print(outputs.render_resolve_human(result))
+        elif result.outcome == OUTCOME_DUPLICATE:
+            print(
+                f"rac: duplicate artifact ID: {args.id}\n\nFound in:\n"
+                + "\n".join(f"- {p}" for p in result.duplicate_paths),
+                file=sys.stderr,
+            )
+        else:
+            print(f"rac: artifact not found: {args.id}", file=sys.stderr)
+    # Not-found and duplicate identity are both repository findings (exit 1);
+    # they stay distinguishable by message and by the JSON error field.
+    return EXIT_OK if result.outcome == OUTCOME_RESOLVED else EXIT_VALIDATION_FAILED
+
+
+def cmd_find(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    result = find_artifacts(
+        args.directory,
+        args.query,
+        artifact_type=args.type,
+        recursive=not args.top_level,
+    )
+    if args.json:
+        print(outputs.render_find_json(result))
+    else:
+        print(outputs.render_find_human(result))
+    # An empty result is a valid outcome, not an error.
     return EXIT_OK
 
 
@@ -738,6 +791,64 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_init.set_defaults(func=cmd_init)
+
+    p_resolve = sub.add_parser(
+        "resolve",
+        help="Resolve an artifact ID to its type, title, and path.",
+        parents=[version_parent],
+    )
+    p_resolve.add_argument("id", help="Artifact ID (canonical or legacy alias).")
+    p_resolve.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Directory to scan recursively for *.md (default: current directory).",
+    )
+    p_resolve.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_resolve.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_resolve.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_resolve.set_defaults(func=cmd_resolve)
+
+    p_find = sub.add_parser(
+        "find",
+        help="Search artifacts by ID, title, filename, or path.",
+        parents=[version_parent],
+    )
+    p_find.add_argument("query", help="Case-insensitive substring to search for.")
+    p_find.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Directory to scan recursively for *.md (default: current directory).",
+    )
+    p_find.add_argument(
+        "--type",
+        help="Only match artifacts of this type (requirement, decision, ...).",
+    )
+    p_find.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_find.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_find.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_find.set_defaults(func=cmd_find)
 
     return parser
 
