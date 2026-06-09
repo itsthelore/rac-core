@@ -1,0 +1,5 @@
+RAC-01JY4M8X2QZ7
+
+Type: decision
+Title: Markdown Is the Canonical Source Format
+Path: tests/fixtures/resolve/markdown-first.md

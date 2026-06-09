@@ -1,0 +1,12 @@
+Relationships
+
+Files Inspected: 2
+Artifacts With Relationships: 1
+Relationships Found: 1
+
+By Type:
+- Related Roadmaps: 1
+
+tests/fixtures/resolve/markdown-first.md
+  Related Roadmaps:
+  - v0-canonical-format — Canonical Format Roadmap (roadmap · v0-canonical-format)

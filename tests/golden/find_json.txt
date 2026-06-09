@@ -1,0 +1,14 @@
+{
+  "schema_version": "1",
+  "query": "markdown",
+  "type": null,
+  "match_count": 1,
+  "matches": [
+    {
+      "id": "RAC-01JY4M8X2QZ7",
+      "type": "decision",
+      "title": "Markdown Is the Canonical Source Format",
+      "path": "tests/fixtures/resolve/markdown-first.md"
+    }
+  ]
+}

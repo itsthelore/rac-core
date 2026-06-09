@@ -87,9 +87,12 @@ def test_titleless_but_recognizable_requirement(tmp_path):
 
 
 def test_entry_dict_keys_are_exact():
+    # "aliases" added in v0.7.12 (additive, ADR-007): canonical-first list of
+    # every identifier the artifact answers to, for resolver consumers.
     index = build_repository_index(str(ALL_TYPES))
     for e in index.artifacts:
-        assert set(e.to_dict()) == {"id", "type", "title", "path"}
+        assert set(e.to_dict()) == {"id", "type", "title", "path", "aliases"}
+        assert e.to_dict()["aliases"][0] == e.id
 
 
 def test_no_status_or_date_fields():
@@ -194,7 +197,8 @@ def test_cli_index_json_output(capsys):
     assert payload["schema_version"] == "1"
     assert payload["artifact_count"] == 6
     assert all(
-        set(e) == {"id", "type", "title", "path"} for e in payload["artifacts"]
+        set(e) == {"id", "type", "title", "path", "aliases"}
+        for e in payload["artifacts"]
     )
 
 
