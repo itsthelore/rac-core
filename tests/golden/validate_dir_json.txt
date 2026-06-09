@@ -1,0 +1,84 @@
+{
+  "schema_version": "1",
+  "directory": "tests/fixtures/portfolio",
+  "recursive": true,
+  "summary": {
+    "total_files": 4,
+    "checked": 4,
+    "valid": 3,
+    "invalid": 1,
+    "skipped_unknown": 0
+  },
+  "valid": false,
+  "files": [
+    {
+      "path": "tests/fixtures/portfolio/broken.md",
+      "artifact_type": "requirement",
+      "status": "invalid",
+      "issues": [
+        {
+          "severity": "error",
+          "code": "missing-title",
+          "message": "File has no top-level # title.",
+          "line": null
+        },
+        {
+          "severity": "warning",
+          "code": "missing-success-metrics",
+          "message": "No ## Success Metrics section (optional, but recommended).",
+          "line": null
+        },
+        {
+          "severity": "warning",
+          "code": "missing-risks",
+          "message": "No ## Risks section (optional, but recommended).",
+          "line": null
+        }
+      ]
+    },
+    {
+      "path": "tests/fixtures/portfolio/feature_a.md",
+      "artifact_type": "requirement",
+      "status": "valid",
+      "issues": []
+    },
+    {
+      "path": "tests/fixtures/portfolio/feature_b.md",
+      "artifact_type": "requirement",
+      "status": "valid",
+      "issues": [
+        {
+          "severity": "warning",
+          "code": "missing-success-metrics",
+          "message": "No ## Success Metrics section (optional, but recommended).",
+          "line": null
+        },
+        {
+          "severity": "warning",
+          "code": "missing-risks",
+          "message": "No ## Risks section (optional, but recommended).",
+          "line": null
+        }
+      ]
+    },
+    {
+      "path": "tests/fixtures/portfolio/sub/feature_c.md",
+      "artifact_type": "requirement",
+      "status": "valid",
+      "issues": [
+        {
+          "severity": "warning",
+          "code": "missing-success-metrics",
+          "message": "No ## Success Metrics section (optional, but recommended).",
+          "line": null
+        },
+        {
+          "severity": "warning",
+          "code": "missing-risks",
+          "message": "No ## Risks section (optional, but recommended).",
+          "line": null
+        }
+      ]
+    }
+  ]
+}

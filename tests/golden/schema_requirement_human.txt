@@ -1,0 +1,40 @@
+Artifact Type: Requirement
+
+Required Sections:
+  - Problem
+      Description: The user or business problem this addresses
+      Guidance:
+        - What user or business problem does this solve?
+        - Who is affected, and why does it matter now?
+  - Requirements
+      Description: Numbered requirement statements, e.g. [REQ-001] ...
+      Guidance:
+        - What must the system do?
+        - Is each one a testable [REQ-NNN] statement?
+
+Recommended Sections:
+  - Success Metrics
+      Description: How success will be measured
+      Guidance:
+        - How will you know this succeeded?
+        - What measurable target indicates success?
+  - Risks
+      Description: Potential implementation, delivery, or adoption risks
+      Guidance:
+        - What could prevent successful delivery?
+        - What dependencies or unknowns exist?
+  - Assumptions
+      Description: Assumptions this artifact depends on
+      Guidance:
+        - What are you assuming to be true?
+        - What would change the approach if it turned out false?
+
+Optional Sections:
+  - Related Decisions
+      Description: Decision artifacts this artifact references
+  - Related Roadmaps
+      Description: Roadmap artifacts this artifact references
+  - Related Prompts
+      Description: Prompt artifacts this artifact references
+  - Related Designs
+      Description: Design artifacts this artifact references
