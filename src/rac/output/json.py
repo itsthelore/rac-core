@@ -19,6 +19,7 @@ from rac.services.init import InitResult
 from rac.services.ingest import IngestResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.relationships import RelationshipReport, RelationshipValidation
+from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
 from rac.services.stats import PortfolioStats
 from rac.services.validate import DirectoryValidation
@@ -279,4 +280,17 @@ def render_new_json(created: CreatedArtifact) -> str:
 
 def render_init_json(result: InitResult) -> str:
     """JSON `rac init` output (stable contract, ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)
+
+
+# --- resolve / find (v0.7.12) -------------------------------------------------
+
+
+def render_resolve_json(result: ResolutionResult) -> str:
+    """JSON `rac resolve` output (stable contract, ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)
+
+
+def render_find_json(result: SearchResult) -> str:
+    """JSON `rac find` output (stable contract, ADR-007)."""
     return json.dumps(result.to_dict(), indent=2)

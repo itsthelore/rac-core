@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from rac.core.artifacts import spec_for
 from rac.core.classification import classify
 from rac.core.fs import find_markdown_files
-from rac.core.identity import artifact_identifier
+from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.markdown import parse_file
 
 
@@ -38,6 +38,9 @@ class IndexEntry:
     type: str
     title: str | None
     path: str
+    # Every identifier the artifact answers to, canonical first (v0.7.12,
+    # additive): legacy aliases keep resolving during identity migration.
+    aliases: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -45,6 +48,7 @@ class IndexEntry:
             "type": self.type,
             "title": self.title,
             "path": self.path,
+            "aliases": self.aliases,
         }
 
 
@@ -90,6 +94,7 @@ def build_repository_index(
                 type=artifact_type,
                 title=product.title,
                 path=str(path),
+                aliases=artifact_identifiers(product, spec, str(path)),
             )
         )
     return RepositoryIndex(

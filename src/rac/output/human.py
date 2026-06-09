@@ -26,6 +26,7 @@ from rac.services.relationships import (
     RelationshipReport,
     RelationshipValidation,
 )
+from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import (
     PRIORITY_BROKEN_RELATIONSHIP,
     PRIORITY_INVALID_ARTIFACT,
@@ -536,11 +537,15 @@ def render_relationships_human(report: RelationshipReport) -> str:
         )
 
     # Per-artifact detail (REQ-005), only for artifacts that declare relationships.
+    # References that resolve uniquely show their human-friendly label
+    # (v0.7.12): the stored reference stays first — it is the source of truth.
     for artifact in report.artifacts:
         lines += ["", artifact.path]
         for section, refs in artifact.relationships.items():
             lines.append(f"  {_relationship_label(section)}:")
-            lines.extend(f"  - {ref}" for ref in refs)
+            for ref in refs:
+                resolved = report.labels.get(ref.casefold())
+                lines.append(f"  - {ref} — {resolved}" if resolved else f"  - {ref}")
 
     return "\n".join(lines)
 
@@ -791,3 +796,33 @@ def render_init_human(result: InitResult) -> str:
         f"{verb} repository key {result.repository_key}\n"
         f"Config: {result.config_path}"
     )
+
+
+# --- resolve / find (v0.7.12) -------------------------------------------------
+
+
+def render_resolve_human(result: ResolutionResult) -> str:
+    """Human `rac resolve` output for a resolved artifact."""
+    artifact = result.artifact
+    return (
+        f"{_bold(artifact.id)}\n"
+        f"\n"
+        f"Type: {artifact.type}\n"
+        f"Title: {artifact.title or '—'}\n"
+        f"Path: {artifact.path}"
+    )
+
+
+def render_find_human(result: SearchResult) -> str:
+    """Human `rac find` output: aligned match rows, or a valid empty result."""
+    if not result.matches:
+        return f"No artifacts match {result.query!r}."
+    id_w = max(len(m.id) for m in result.matches)
+    type_w = max(len(m.type) for m in result.matches)
+    lines = [
+        f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}"
+        for m in result.matches
+    ]
+    lines.append("")
+    lines.append(f"{result.match_count} match(es) for {result.query!r}.")
+    return "\n".join(lines)

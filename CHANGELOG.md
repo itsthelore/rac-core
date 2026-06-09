@@ -8,6 +8,17 @@ details, release history over commit history.
 
 ### Added
 
+- `rac resolve <ID>` — resolve any artifact ID (canonical or legacy alias) to
+  its type, title, and path; duplicates are reported with every path, never
+  silently resolved (v0.7.12).
+- `rac find <query>` — deterministic artifact search by ID, title, filename,
+  or path, with `--type` filtering and JSON output (v0.7.12).
+- `rac relationships` human output resolves references to human-friendly
+  labels — `Title (type · ID)` — while JSON keeps stored references unchanged
+  (v0.7.12).
+- `rac index` entries gain an additive `aliases` field: every identifier an
+  artifact answers to, canonical first (v0.7.12).
+
 - `rac init` — establish the repository identity namespace
   (`.rac/config.yaml` with a `repository_key`); idempotent, and an
   established key is never silently changed (v0.7.11).

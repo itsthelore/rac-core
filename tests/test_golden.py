@@ -43,6 +43,12 @@ CASES = [
     ("review_json", ["review", "tests/fixtures/portfolio", "--json"], 1),
     ("templates_human", ["templates"], 0),
     ("templates_json", ["templates", "--json"], 0),
+    ("resolve_human", ["resolve", "RAC-01JY4M8X2QZ7", "tests/fixtures/resolve"], 0),
+    ("resolve_json", ["resolve", "RAC-01JY4M8X2QZ7", "tests/fixtures/resolve", "--json"], 0),
+    ("resolve_not_found_json", ["resolve", "RAC-ZZZZZZZZZZZZ", "tests/fixtures/resolve", "--json"], 1),
+    ("find_human", ["find", "markdown", "tests/fixtures/resolve"], 0),
+    ("find_json", ["find", "markdown", "tests/fixtures/resolve", "--json"], 0),
+    ("relationships_resolved_human", ["relationships", "tests/fixtures/resolve"], 0),
 ]
 
 
