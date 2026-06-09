@@ -1,4 +1,4 @@
-# ADR-XXX Hybrid Artifact Metadata
+# ADR-025: Hybrid Artifact Metadata
 
 ## Status
 
