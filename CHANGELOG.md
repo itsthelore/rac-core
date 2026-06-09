@@ -8,6 +8,23 @@ details, release history over commit history.
 
 ### Added
 
+- `rac init` — establish the repository identity namespace
+  (`.rac/config.yaml` with a `repository_key`); idempotent, and an
+  established key is never silently changed (v0.7.11).
+- Hybrid artifact metadata: a leading YAML frontmatter block
+  (`schema_version`, `id`, `type`, `relationships`) is parsed, strictly
+  schema-validated, and exposed as canonical machine-operational metadata;
+  artifacts without frontmatter remain fully supported (v0.7.11).
+- System-assigned opaque artifact IDs (e.g. `RAC-01JY4M8X2QZ7`): branch-safe,
+  offline, stable across renames, moves, and type changes; `rac new` assigns
+  one automatically and `rac index` reports it (v0.7.11).
+- Identity validation: conflicting frontmatter/legacy identity and duplicate
+  canonical IDs are deterministic errors — RAC never silently picks one
+  (v0.7.11).
+- Relationship references resolve against legacy identity aliases (`## ID`
+  values, filename prefixes, stems), so adopting canonical IDs does not break
+  existing human-readable references; RAC's own corpus now carries canonical
+  frontmatter identity (v0.7.11).
 - `rac new <type> <output-path>` — create a valid artifact from its canonical
   bundled template; deterministic, AI-free, and never overwrites an existing
   file (v0.7.10).

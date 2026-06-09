@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DR3G4YG
+type: decision
+---
 # ADR-018: RAC Directory as the Canonical Knowledge Root
 
 ## Status

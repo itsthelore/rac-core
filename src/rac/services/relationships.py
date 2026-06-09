@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
 from rac.core.fs import find_markdown_files
-from rac.core.identity import artifact_identifier
+from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.models import Product
 from rac.core.markdown import parse_file
 
@@ -327,11 +327,32 @@ _IdentIndex = dict[str, list[tuple[str, str]]]
 def _build_identifier_index(
     items: list[tuple[str, Product, ArtifactSpec | None]],
 ) -> _IdentIndex:
-    """Identifier index over *all* files (Unknown included — they can be targets)."""
+    """Canonical-identifier index over *all* files (Unknown included).
+
+    One entry per file — duplicate-identity detection runs over this index,
+    so only the canonical identifier can collide (ADR-026).
+    """
     index: _IdentIndex = {}
     for path, product, spec in items:
         ident = artifact_identifier(product, spec, path)
         index.setdefault(ident.casefold(), []).append((path, ident))
+    return index
+
+
+def _build_resolution_index(
+    items: list[tuple[str, Product, ArtifactSpec | None]],
+) -> _IdentIndex:
+    """Reference-resolution index: canonical identifiers plus legacy aliases.
+
+    Migration support (v0.7.11, Initiative 7): an artifact that adopts a
+    canonical frontmatter ID keeps answering to its legacy identifiers
+    (``## ID`` value, filename prefix, stem), so existing human-readable
+    references like ``ADR-015`` continue to resolve.
+    """
+    index: _IdentIndex = {}
+    for path, product, spec in items:
+        for ident in artifact_identifiers(product, spec, path):
+            index.setdefault(ident.casefold(), []).append((path, ident))
     return index
 
 
@@ -397,7 +418,9 @@ def _validate(
             )
         )
 
-    checked, ref_issues, _ = _resolve_references(items, index)
+    checked, ref_issues, _ = _resolve_references(
+        items, _build_resolution_index(items)
+    )
     issues.extend(ref_issues)
 
     return RelationshipValidation(
@@ -469,7 +492,7 @@ def summarize_relationships(
             total=0, valid=0, broken=0, orphaned=0, coverage=1.0
         )
 
-    index = _build_identifier_index(items)
+    index = _build_resolution_index(items)
     checked, ref_issues, resolved_targets = _resolve_references(items, index)
 
     broken = len(ref_issues)

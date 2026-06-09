@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DRJZPYN
+type: decision
+---
 # ADR-022 Documentation Boundaries
 
 ## Status

@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQKFZTV
+type: decision
+---
 # ADR-015: Consumers before Interfaces
 
 ## Status

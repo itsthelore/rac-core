@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQ09HKD
+type: decision
+---
 # ADR-009: AI-Assisted Development
 
 ## Context

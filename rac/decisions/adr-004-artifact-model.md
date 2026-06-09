@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPWHA4B
+type: decision
+---
 # ADR-004 Artifact Model
 
 ## Status

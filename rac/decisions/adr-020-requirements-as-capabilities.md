@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DRA31YC
+type: decision
+---
 # ADR-020: Requirements as Long-Lived Product Capabilities
 
 ## Status

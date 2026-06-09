@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DRWTN1T
+type: decision
+---
 # ADR-024: RAC Is Not a Content Store
 
 ## Status

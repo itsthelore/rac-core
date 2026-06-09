@@ -9,7 +9,10 @@ the raw text.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:  # imported for type hints only; avoids a core import cycle
+    from .metadata import ArtifactMetadata
 
 Severity = Literal["error", "warning"]
 
@@ -64,6 +67,12 @@ class Product:
     has_metrics_section: bool = False
     has_risks_section: bool = False
     source_path: str = ""
+    # Canonical machine-operational metadata from YAML frontmatter (ADR-025);
+    # None for artifacts without a frontmatter block (the legacy form).
+    metadata: ArtifactMetadata | None = None
+    # Frontmatter parse/schema findings, surfaced by validation. Kept separate
+    # from body analysis: the envelope and the artifact are distinct concerns.
+    metadata_issues: list[Issue] = field(default_factory=list)
 
 
 @dataclass

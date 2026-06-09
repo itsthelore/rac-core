@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSSTZPB
+type: design
+---
 # Explorer Import Workflow
 
 ## Context

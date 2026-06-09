@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSYHX7K
+type: design
+---
 # RAC Explorer Mascot Interaction
 
 ## Context

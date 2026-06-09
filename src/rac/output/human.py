@@ -15,6 +15,7 @@ from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
+from rac.services.init import InitResult
 from rac.services.index import RepositoryIndex
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.relationships import (
@@ -774,9 +775,19 @@ def render_templates_human(names: list[str]) -> str:
 
 
 def render_new_human(created: CreatedArtifact) -> str:
-    """Human `rac new` output: what was created and where."""
+    """Human `rac new` output: what was created, its identity, and where."""
     return (
         f"Created {created.artifact_type} artifact: {created.path}\n"
+        f"ID: {created.id}\n"
         f"\n"
         f"Edit the TODO placeholders, then check it with: rac validate {created.path}"
+    )
+
+
+def render_init_human(result: InitResult) -> str:
+    """Human `rac init` output: the established identity namespace."""
+    verb = "Initialized" if result.created else "Already initialized:"
+    return (
+        f"{verb} repository key {result.repository_key}\n"
+        f"Config: {result.config_path}"
     )

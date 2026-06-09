@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSC8SZW
+type: decision
+---
 # ADR-027: CI Test Topology — Merge-Gated, Per-Service Batteries
 
 ## Status

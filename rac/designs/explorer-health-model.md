@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSQDX6Z
+type: design
+---
 # Explorer Health Model
 
 ## Context

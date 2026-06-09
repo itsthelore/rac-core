@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DS2GP98
+type: decision
+---
 # ADR-025: Hybrid Artifact Metadata
 
 ## Status

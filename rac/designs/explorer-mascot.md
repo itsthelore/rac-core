@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DT15G7R
+type: design
+---
 # RAC Explorer Mascot
 
 ## Context

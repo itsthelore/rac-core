@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQ2AEJZ
+type: decision
+---
 # ADR-010: Documents Are Not Artifacts
 
 ## Status

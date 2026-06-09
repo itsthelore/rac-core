@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPT6008
+type: decision
+---
 # ADR-002 AI Optional
 
 ## Status

@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQ3A5FQ
+type: decision
+---
 # ADR-011: File-First Pipelines
 
 ## Status

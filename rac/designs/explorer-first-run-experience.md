@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSN8C50
+type: design
+---
 # Explorer First Run Experience
 
 ## Context

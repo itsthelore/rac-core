@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPVVB37
+type: decision
+---
 # ADR-003 Structured Outputs First
 
 ## Status

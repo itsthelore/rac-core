@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPYKJF4
+type: decision
+---
 # ADR-007 JSON Contract Stability
 
 ## Status

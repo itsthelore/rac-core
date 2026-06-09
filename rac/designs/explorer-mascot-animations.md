@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSW7R7B
+type: design
+---
 # RAC Explorer Mascot Animations
 
 ## Context

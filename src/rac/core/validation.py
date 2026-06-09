@@ -12,6 +12,7 @@ from collections import Counter
 
 from .artifacts import spec_for
 from .classification import classify
+from .identity import identity_conflict
 from .models import Issue, Product
 
 # A file with more requirements than this earns a (non-failing) warning.
@@ -38,16 +39,42 @@ def validate(product: Product) -> list[Issue]:
     original Requirement rules), *not* the long-term model — new artifact types
     must be routed explicitly above it.
     """
+    issues = _validate_metadata(product)
     artifact_type = classify(product).type
     if artifact_type == "decision":
-        return _validate_decision(product)
+        return issues + _validate_decision(product)
     if artifact_type == "roadmap":
-        return _validate_roadmap(product)
+        return issues + _validate_roadmap(product)
     if artifact_type == "prompt":
-        return _validate_prompt(product)
+        return issues + _validate_prompt(product)
     if artifact_type == "design":
-        return _validate_design(product)
-    return _validate_requirement(product)
+        return issues + _validate_design(product)
+    return issues + _validate_requirement(product)
+
+
+def _validate_metadata(product: Product) -> list[Issue]:
+    """Frontmatter envelope findings (ADR-025/026, v0.7.11).
+
+    Parse and schema issues come from the parser; the identity conflict check
+    (frontmatter ``id`` vs a differing legacy ``## ID`` / ``spec.id_field``
+    declaration) is detected here because it needs the classified spec. RAC
+    never silently picks one identity (Initiative 7).
+    """
+    issues = list(product.metadata_issues)
+    spec = spec_for(classify(product).type)
+    conflict = identity_conflict(product, spec)
+    if conflict is not None:
+        frontmatter_id, legacy_id = conflict
+        issues.append(
+            Issue(
+                "error",
+                "conflicting-identity",
+                f"frontmatter id {frontmatter_id!r} conflicts with declared "
+                f"legacy identity {legacy_id!r}; align them — RAC will not "
+                "choose one",
+            )
+        )
+    return issues
 
 
 def _first_value(body: str) -> str:

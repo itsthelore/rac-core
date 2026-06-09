@@ -15,6 +15,7 @@ from rac.core.schema import SchemaReference
 from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
+from rac.services.init import InitResult
 from rac.services.ingest import IngestResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.relationships import RelationshipReport, RelationshipValidation
@@ -274,3 +275,8 @@ def render_templates_json(names: list[str]) -> str:
 def render_new_json(created: CreatedArtifact) -> str:
     """JSON `rac new` output (stable contract, ADR-007)."""
     return json.dumps(created.to_dict(), indent=2)
+
+
+def render_init_json(result: InitResult) -> str:
+    """JSON `rac init` output (stable contract, ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)

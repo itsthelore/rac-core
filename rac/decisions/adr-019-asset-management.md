@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DR66AMP
+type: decision
+---
 # ADR-019: Asset References
 
 ## Status

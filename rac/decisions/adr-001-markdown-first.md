@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPSMF19
+type: decision
+---
 # ADR-001 Markdown First
 
 ## Status

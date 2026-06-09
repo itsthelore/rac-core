@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPY3ABD
+type: decision
+---
 # ADR-006 Ingestion Over Rewrite
 
 ## Status

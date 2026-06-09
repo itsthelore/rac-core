@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQZ2VSV
+type: decision
+---
 # ADR-017 — RAC Manages Knowledge, Not Work
 
 ## Status

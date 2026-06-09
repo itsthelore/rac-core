@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DT43E1Y
+type: design
+---
 # Explorer Visual System
 
 ## Context

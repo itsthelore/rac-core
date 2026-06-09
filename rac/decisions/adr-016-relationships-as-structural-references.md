@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQVM5GK
+type: decision
+---
 # ADR-016: Relationships as Explicit Structural References
 
 ## Status

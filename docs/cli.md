@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with thirteen subcommands. This page documents each
+RAC ships a single command, `rac`, with fourteen subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -338,21 +338,25 @@ rac index rac/ --json
 
 ## new
 
-Create a new artifact from its canonical bundled template. The generated file
-uses the same structure the validators expect: edit the `TODO` placeholders and
-it passes `rac validate`.
+Create a new artifact from its canonical bundled template, with a
+system-assigned opaque ID written as YAML frontmatter. The generated file uses
+the same structure the validators expect: edit the `TODO` placeholders and it
+passes `rac validate`.
 
 - **Input:** `rac new <type> <output-path>` — type is `requirement`,
   `decision`, `roadmap`, `prompt`, or `design`; the output path is taken
   literally (no filename derivation, no extension magic).
 - **Options:** `--json`
-- **Exit codes:** `0` created · `1` packaged template missing (broken
-  installation) · `2` unsupported type, output file already exists, or output
-  directory missing
+- **Exit codes:** `0` created · `1` packaged template missing or malformed
+  repository config · `2` unsupported type, output file already exists, output
+  directory missing, or repository not initialized (run `rac init` first)
 
-`rac new` never overwrites an existing file and never creates directories.
+`rac new` never overwrites an existing file and never creates directories. The
+repository key comes from the nearest `.rac/config.yaml` (see [`init`](#init));
+the assigned ID is permanent — it survives renames, moves, and type changes.
 
 ```bash
+rac init
 rac new requirement rac/requirements/user-authentication.md
 rac new decision rac/decisions/adr-029-example.md --json
 ```
@@ -362,8 +366,21 @@ rac new decision rac/decisions/adr-029-example.md --json
   "schema_version": "1",
   "created": true,
   "type": "decision",
-  "path": "rac/decisions/adr-029-example.md"
+  "path": "rac/decisions/adr-029-example.md",
+  "id": "RAC-01JY4M8X2QZ7"
 }
+```
+
+A generated artifact begins with the canonical metadata envelope:
+
+```markdown
+---
+schema_version: 1
+id: RAC-01JY4M8X2QZ7
+type: decision
+---
+# Title
+...
 ```
 
 ---
@@ -387,5 +404,36 @@ rac templates --json
 {
   "schema_version": "1",
   "templates": ["requirement", "decision", "roadmap", "prompt", "design"]
+}
+```
+
+
+---
+
+## init
+
+Establish the repository identity namespace: a `.rac/config.yaml` holding the
+`repository_key` that prefixes every ID assigned by `rac new`. The key is
+configuration, not artifact meaning — it never dictates folder structure.
+
+- **Input:** `rac init [directory]` — defaults to the current directory.
+- **Options:** `--key KEY` (default `RAC`; 2–10 uppercase alphanumeric
+  characters starting with a letter) · `--json`
+- **Exit codes:** `0` initialized, or already initialized with the same key
+  (idempotent) · `1` a different key is already established (never silently
+  rewritten) · `2` invalid key or not a directory
+
+```bash
+rac init
+rac init --key PROJ
+rac init docs/ --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "repository_key": "PROJ",
+  "config_path": ".rac/config.yaml",
+  "created": true
 }
 ```

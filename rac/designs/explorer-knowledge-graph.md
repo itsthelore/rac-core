@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSTD50A
+type: design
+---
 # Explorer Knowledge Graph
 
 ## Context

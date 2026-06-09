@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DRET9QV
+type: decision
+---
 # ADR-021: Templates as Artifact Creation Contracts
 
 ## Status

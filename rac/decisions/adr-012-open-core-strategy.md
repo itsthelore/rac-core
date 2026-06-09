@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQ7QZJ7
+type: decision
+---
 # ADR-012: Open Core and Knowledge Infrastructure Strategy
 
 ## Status

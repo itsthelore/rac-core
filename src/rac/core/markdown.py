@@ -15,7 +15,8 @@ import re
 
 from markdown_it import MarkdownIt
 
-from .models import MalformedRequirement, Product, Requirement
+from .frontmatter import parse_frontmatter, split_frontmatter
+from .models import Issue, MalformedRequirement, Product, Requirement
 
 # A requirement line: a leading ``[...]`` ID token followed by description text.
 # We capture anything inside the brackets so we can distinguish a *malformed* ID
@@ -69,8 +70,31 @@ def _classify_requirement_line(text: str, line: int):
 
 
 def parse(text: str, source_path: str = "") -> Product:
-    """Parse Markdown ``text`` into a :class:`Product`."""
-    tokens = MarkdownIt("commonmark").parse(text)
+    """Parse Markdown ``text`` into a :class:`Product`.
+
+    A leading YAML frontmatter block (ADR-025) is split off and parsed into
+    ``product.metadata`` before the Markdown body is tokenized; every line
+    number reported downstream is offset back to the original file so
+    diagnostics stay file-accurate. Documents without frontmatter are parsed
+    exactly as before.
+    """
+    split = split_frontmatter(text)
+    offset = split.line_offset
+    metadata = None
+    metadata_issues: list[Issue] = []
+    if split.raw is not None:
+        metadata, metadata_issues = parse_frontmatter(split.raw)
+    elif split.unterminated:
+        metadata_issues.append(
+            Issue(
+                "error",
+                "malformed-frontmatter",
+                "frontmatter block opened with --- on line 1 but never closed",
+                1,
+            )
+        )
+
+    tokens = MarkdownIt("commonmark").parse(split.body)
 
     title: str | None = None
     extra_title_lines: list[int] = []
@@ -98,7 +122,9 @@ def parse(text: str, source_path: str = "") -> Product:
                 if title is None:
                     title = heading_text.strip()
                 else:
-                    extra_title_lines.append((tok.map[0] + 1) if tok.map else 0)
+                    extra_title_lines.append(
+                        (tok.map[0] + 1 + offset) if tok.map else 0
+                    )
                 section = None  # content directly under the title is ignored
                 current_h2 = None
             elif tok.tag == "h2":
@@ -132,7 +158,7 @@ def parse(text: str, source_path: str = "") -> Product:
         if section is None or section == "other":
             continue
 
-        start_line = tok.map[0] if tok.map else 0
+        start_line = (tok.map[0] + offset) if tok.map else 0
         lines = _content_lines(tok.content, start_line)
 
         if section == "problem":
@@ -172,6 +198,8 @@ def parse(text: str, source_path: str = "") -> Product:
         has_metrics_section=has["success_metrics"],
         has_risks_section=has["risks"],
         source_path=source_path,
+        metadata=metadata,
+        metadata_issues=metadata_issues,
     )
 
 

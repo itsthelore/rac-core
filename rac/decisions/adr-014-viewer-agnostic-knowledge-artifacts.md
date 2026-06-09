@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQEZ441
+type: decision
+---
 # ADR-014: Viewer-Agnostic Knowledge Artifacts
 
 ## Status

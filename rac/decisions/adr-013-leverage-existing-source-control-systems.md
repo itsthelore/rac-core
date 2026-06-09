@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DQBRDT1
+type: decision
+---
 # ADR-013: Leverage Existing Source Control Systems
 
 ## Status

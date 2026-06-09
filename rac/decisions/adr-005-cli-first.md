@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPX18Q7
+type: decision
+---
 # ADR-005 CLI First
 
 ## Status

@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSJCAZ5
+type: design
+---
 # Explorer Command Surface
 
 ## Context

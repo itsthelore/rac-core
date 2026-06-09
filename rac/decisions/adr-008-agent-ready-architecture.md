@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DPZ42BG
+type: decision
+---
 # ADR-008 Agent Ready Architecture
 
 ## Status

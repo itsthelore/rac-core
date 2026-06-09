@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DSEK9YG
+type: decision
+---
 # ADR-016 Explorer Delivery Surface
 
 ## Status

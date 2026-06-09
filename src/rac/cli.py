@@ -14,6 +14,7 @@ Commands:
     rac index [directory] [--json] [--top-level]
     rac new <artifact-type> <output-path> [--json]
     rac templates [--json]
+    rac init [directory] [--key KEY] [--json]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown; relationships found or
@@ -23,9 +24,11 @@ Exit codes:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
        or broken relationships found (priority 1-2 issues); new: packaged
-       template missing (broken installation)
+       template missing (broken installation) or malformed repository config;
+       init: established key conflicts with the requested one
     2  usage / IO error (file not found, not a directory, unsupported type,
-       refuse-to-overwrite, missing output directory)
+       refuse-to-overwrite, missing output directory, repository not
+       initialized, invalid repository key)
 """
 
 from __future__ import annotations
@@ -46,11 +49,20 @@ from rac.core.templates import (
     available_templates,
 )
 from rac.services.create import (
+    IdGenerationExhausted,
+    MissingRepositoryConfig,
     OutputDirectoryMissing,
     OutputPathExists,
     create_artifact,
 )
 from rac.services.diff import diff as diff_asts
+from rac.services.init import (
+    DEFAULT_KEY,
+    InvalidRepositoryKey,
+    MalformedRepositoryConfig,
+    RepositoryKeyConflict,
+    init_repository,
+)
 from rac.services.improve import improve_product
 from rac.services.index import build_repository_index
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
@@ -369,16 +381,43 @@ def cmd_new(args: argparse.Namespace) -> int:
     except TemplateNotFound as exc:  # unsupported type → usage error
         print(f"rac: {exc}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
-    except (OutputPathExists, OutputDirectoryMissing) as exc:
+    except (
+        OutputPathExists,
+        OutputDirectoryMissing,
+        MissingRepositoryConfig,
+    ) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
-    except TemplateResourceMissing as exc:  # broken installation → operational
+    except (
+        TemplateResourceMissing,  # broken installation
+        MalformedRepositoryConfig,  # unreadable .rac/config.yaml
+        IdGenerationExhausted,  # broken entropy source
+    ) as exc:  # operational errors
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
     if args.json:
         print(outputs.render_new_json(created))
     else:
         print(outputs.render_new_human(created))
+    return EXIT_OK
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    try:
+        result = init_repository(args.directory, key=args.key)
+    except InvalidRepositoryKey as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    except (RepositoryKeyConflict, MalformedRepositoryConfig) as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if args.json:
+        print(outputs.render_init_json(result))
+    else:
+        print(outputs.render_init_human(result))
     return EXIT_OK
 
 
@@ -677,6 +716,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_templates.set_defaults(func=cmd_templates)
+
+    p_init = sub.add_parser(
+        "init",
+        help="Establish the repository identity namespace (.rac/config.yaml).",
+        parents=[version_parent],
+    )
+    p_init.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Repository root to initialize (default: current directory).",
+    )
+    p_init.add_argument(
+        "--key",
+        default=DEFAULT_KEY,
+        help="Repository key used as the artifact ID prefix (default: RAC; "
+        "2-10 uppercase alphanumeric characters starting with a letter).",
+    )
+    p_init.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_init.set_defaults(func=cmd_init)
 
     return parser
 

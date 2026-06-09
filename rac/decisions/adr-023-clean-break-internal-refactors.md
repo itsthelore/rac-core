@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DRPK57V
+type: decision
+---
 # ADR-023: Clean-Break Internal Refactors
 
 ## Status

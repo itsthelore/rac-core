@@ -1,3 +1,8 @@
+---
+schema_version: 1
+id: RAC-KTQ63DS8JPZY
+type: decision
+---
 # ADR-026: Opaque System-Assigned Artifact Identity
 
 ## Status
