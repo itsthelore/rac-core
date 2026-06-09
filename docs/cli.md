@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with sixteen subcommands. This page documents each
+RAC ships a single command, `rac`, with seventeen subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -502,6 +502,57 @@ rac find "canonical format" rac/ --json
       "type": "decision",
       "title": "Markdown Is the Canonical Source Format",
       "path": "rac/decisions/markdown-first.md"
+    }
+  ]
+}
+```
+
+
+---
+
+## migrate
+
+Bring existing artifacts onto canonical frontmatter identity. Every
+recognized artifact without a frontmatter block gains the canonical envelope
+(`schema_version`, a system-assigned ID, its classified `type`); the Markdown
+body is preserved byte-for-byte. Idempotent — re-running changes nothing, and
+a document repaired to classify is picked up by the next run.
+
+- **Input:** `rac migrate metadata <directory>` — requires an initialized
+  repository (`rac init`).
+- **Options:** `--dry-run` (report without writing) · `--json` ·
+  `--top-level` · `--recursive`
+- **Exit codes:** `0` completed, including nothing to migrate · `1`
+  malformed repository config or ID generation failure · `2` not a
+  directory, or repository not initialized
+
+Artifacts that already carry frontmatter — valid or broken — are never
+touched; documents that do not classify are listed, never guessed at.
+
+```bash
+rac migrate metadata rac/ --dry-run   # preview
+rac migrate metadata rac/             # migrate
+rac migrate metadata rac/ --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "directory": "rac/",
+  "recursive": true,
+  "dry_run": false,
+  "summary": {
+    "total_files": 95,
+    "migrated": 28,
+    "already_canonical": 67,
+    "skipped_unknown": 0
+  },
+  "files": [
+    {
+      "path": "rac/decisions/adr-001-markdown-first.md",
+      "status": "migrated",
+      "id": "RAC-01JY4M8X2QZ7",
+      "type": "decision"
     }
   ]
 }
