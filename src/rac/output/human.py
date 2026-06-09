@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 
-from rac.core.artifacts import ARTIFACT_SPECS
+from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import CONFIDENCE_THRESHOLD, TypeScore
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
@@ -25,6 +25,7 @@ from rac.services.relationships import (
     RelationshipValidation,
 )
 from rac.services.stats import PortfolioStats
+from rac.services.validate import STATUS_INVALID, DirectoryValidation
 
 from ._shared import _UNKNOWN_MESSAGE, _unsupported_message
 
@@ -85,6 +86,41 @@ def render_validation_human(product: Product, issues: list[Issue]) -> str:
     lines.append("")
     lines.append(
         f"{len(errors)} error(s), {len(warnings)} warning(s)."
+    )
+    return "\n".join(lines)
+
+
+def render_validate_dir_human(result: DirectoryValidation) -> str:
+    """Human-readable directory `rac validate` output (v0.7.9).
+
+    Lists each invalid artifact with its errors; valid and skipped files are
+    only counted, keeping the output a usable CI gate. Warnings stay in the
+    JSON contract and in single-file validation.
+    """
+    lines: list[str] = []
+    for f in result.files:
+        if f.status != STATUS_INVALID:
+            continue
+        spec = spec_for(f.artifact_type)
+        display = spec.display if spec else f.artifact_type
+        lines.append(_red(_bold(f"FAIL  {f.path}")) + f"  ({display})")
+        for issue in f.issues:
+            if issue.severity != "error":
+                continue
+            lines.append(
+                f"  {_red('error')}   [{issue.code}] {_loc(f.path, issue.line)}"
+            )
+            lines.append(f"          {issue.message}")
+        lines.append("")
+
+    skipped = (
+        f", {result.skipped} skipped (unknown type)" if result.skipped else ""
+    )
+    verdict = _green("PASS") if result.ok else _red("FAIL")
+    lines.append(
+        f"{verdict}  {result.directory} — "
+        f"{result.checked} artifact(s) checked: "
+        f"{result.valid} valid, {result.invalid} invalid{skipped}."
     )
     return "\n".join(lines)
 
