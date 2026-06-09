@@ -240,12 +240,12 @@ The onboarding flow shall:
 
 ---
 
-## Related Requirements
+## Related Roadmaps
 
-- v0.9.1 Workspace Experience
+- v0.9.1-explorer-experience
 
 ---
 
 ## Related Decisions
 
-- ADR-015 Explorer as Core Consumer
+- ADR-015

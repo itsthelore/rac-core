@@ -116,12 +116,12 @@ Superseded
 
 ---
 
-## Related Requirements
+## Related Roadmaps
 
-- v0.9.3 Intelligence Views
+- v0.9.3-intelligence-views
 
 ---
 
 ## Related Decisions
 
-- ADR-015 Explorer as Core Consumer
+- ADR-015

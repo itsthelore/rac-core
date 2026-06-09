@@ -133,13 +133,13 @@ Red
 
 ---
 
-## Related Requirements
+## Related Roadmaps
 
-- v0.9.0 Explorer Foundation
-- v0.9.2 Knowledge Operations
+- v0.9.0-explorer-foundation
+- v0.9.2-knowledge-operations
 
 ---
 
 ## Related Decisions
 
-- ADR-015 Explorer as Core Consumer
+- ADR-015

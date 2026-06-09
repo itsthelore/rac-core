@@ -98,12 +98,12 @@ Import status shall use text labels as well as visual indicators.
 
 ---
 
-## Related Requirements
+## Related Roadmaps
 
-- v0.9.2 Knowledge Operations
+- v0.9.2-knowledge-operations
 
 ---
 
 ## Related Decisions
 
-- ADR-015 Explorer as Core Consumer
+- ADR-015

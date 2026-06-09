@@ -164,14 +164,14 @@ Users must understand RAC state without seeing the mascot.
 
 ---
 
-## Related Requirements
+## Related Roadmaps
 
-- Explorer Foundation
-- Explorer Experience Layer
+- v0.9.0-explorer-foundation
+- v0.9.1-explorer-experience
 
 ---
 
 ## Related Decisions
 
-- ADR-015 Explorer as Consumer
-- ADR-017 Asset References
+- ADR-015
+- ADR-019
