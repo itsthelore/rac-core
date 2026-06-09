@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with ten subcommands. This page documents each
+RAC ships a single command, `rac`, with eleven subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -18,8 +18,9 @@ These apply across every command.
   for tools, IDEs, CI, and agents.
 - **Standard input** — `validate`, `inspect`, and `improve` accept `-` in place of a
   file to read Markdown from stdin (e.g. `cat file.md | rac validate -`).
-- **Recursion** — directory commands (`stats`, `inspect`, `relationships`,
-  `portfolio`, `index`) recurse into subdirectories by default. Pass `--top-level`
+- **Recursion** — directory commands (`validate`, `stats`, `inspect`,
+  `relationships`, `review`, `portfolio`, `index`) recurse into subdirectories
+  by default. Pass `--top-level`
   to scan only the immediate directory. `--recursive` is accepted explicitly for
   clarity but is already the default.
 - **Exit codes** — every command follows the same convention:
@@ -34,11 +35,12 @@ These apply across every command.
 
 ## validate
 
-Validate a single requirement file for structural and content issues.
+Validate an artifact — or every artifact in a directory — for structural and
+content issues.
 
-- **Input:** `rac validate <file>` — a Markdown file, or `-` for stdin.
-- **Options:** `--json`
-- **Exit codes:** `0` no errors · `1` validation errors · `2` file not found / unreadable
+- **Input:** `rac validate <path>` — a Markdown file, a directory, or `-` for stdin.
+- **Options:** `--json` · `--top-level` · `--recursive` (directory mode)
+- **Exit codes:** `0` no errors · `1` validation errors · `2` path not found / unreadable
 
 ```bash
 rac validate login-flow.md
@@ -55,7 +57,22 @@ PASS  login-flow.md
 Warnings do not fail the run; only errors return exit `1`. Use `--json` for the
 structured form (`valid`, `errors[]`, `warnings[]` with stable `code` fields).
 
-> `validate` checks **one file**. For a whole tree, use [`stats`](#stats).
+Given a directory, `validate` classifies every `*.md` file and validates each
+against its own artifact schema:
+
+```bash
+rac validate rac/
+```
+
+```text
+PASS  rac/ — 66 artifact(s) checked: 66 valid, 24 skipped (unknown type).
+```
+
+Files that match no known schema are **skipped**, not failed — being a plain
+document is a valid outcome (see [ADR-010](artifacts.md#documents-vs-artifacts)).
+Only validation *errors* in recognized artifacts fail the run. The `--json` form
+reports `summary` counts plus a per-file `files[]` list with `status`
+(`valid` / `invalid` / `skipped`) and issues.
 
 ---
 
@@ -212,6 +229,61 @@ rac relationships rac/ --validate   # check that every reference resolves
 
 Finding no relationships is **not** an error. See [relationships.md](relationships.md)
 for the issue codes `--validate` reports.
+
+---
+
+## review
+
+Review an entire repository in one command: validate every artifact, check
+every relationship, and report what needs attention — worst problems first.
+
+- **Input:** `rac review <directory>` — scanned recursively for `*.md`.
+- **Options:** `--json` · `--top-level` · `--recursive`
+- **Exit codes:** `0` no blocking issues · `1` invalid artifacts or broken
+  relationships found · `2` not a directory
+
+```bash
+rac review rac/
+```
+
+```text
+Repository Review
+=================
+
+Directory:  rac/
+Artifacts:  90
+
+  Requirement    19
+  Decision       27
+  Roadmap        11
+  Design         9
+  Unknown        24
+
+Validation
+----------
+
+  Valid:    66
+  Invalid:  0
+...
+```
+
+Findings are grouped by priority, highest impact first:
+
+| Priority | Finding | Blocks (exit `1`) |
+| --- | --- | --- |
+| 1 | Invalid artifacts (validation errors) | yes |
+| 2 | Broken relationships (unresolvable references) | yes |
+| 3 | Unrecognized artifacts (no schema matched) | no — advisory |
+| 4 | Missing recommended information | no — advisory |
+
+Every finding carries a concrete suggested action (`rac validate <file>`,
+`rac relationships <dir> --validate`, `rac improve <file> --template`, …), and
+the report ends with the same health score `portfolio` computes. The `--json`
+form is a stable contract (`schema_version: "1"`) with `ok`, `artifacts`,
+`validation`, `relationships`, `health`, `issues[]`, and `actions[]`.
+
+`review` composes the same analysis `portfolio` runs; use `portfolio` for a
+one-screen summary and `review` when you want the prioritized worklist.
 
 ---
 

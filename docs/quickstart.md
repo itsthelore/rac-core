@@ -61,7 +61,7 @@ first-class authentication flow, so access control is inconsistent across the ap
 
 ## 3. Validate it
 
-`validate` checks one file for structural problems:
+`validate` checks a file (or a whole directory) for structural problems:
 
 ```bash
 rac validate login-flow.md

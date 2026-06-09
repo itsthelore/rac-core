@@ -48,8 +48,10 @@ See [artifacts.md](artifacts.md) for the sections each type expects.
 Run these from the repository root:
 
 ```bash
+rac validate rac/                 # validate every recognized artifact in the tree
 rac stats rac/                    # counts, quality signals, per-type breakdown
 rac relationships rac/ --validate # check that cross-artifact references resolve
+rac review rac/                   # all of the above as one prioritized worklist
 rac portfolio rac/                # one-screen health summary + attention list
 rac index rac/ --json             # flat inventory for tools, CI, and agents
 ```
@@ -61,13 +63,12 @@ rac validate rac/requirements/login-flow.md
 rac inspect  rac/requirements/login-flow.md
 ```
 
-> `rac validate` operates on **one file**. For tree-wide health, use `rac stats rac/`
-> — pointing `validate` at a directory is a usage error.
-
 ## In review and CI
 
 Because everything is Markdown in Git, documentation and artifacts move through the
-same pull-request workflow as code. A natural pre-merge check is to run `rac stats`
-and `rac relationships --validate` over `rac/` so reviewers can see whether new or
-edited artifacts are complete and their links still resolve. See
-[testing.md](testing.md) for the contributor verification workflow.
+same pull-request workflow as code. A natural pre-merge check is `rac review rac/`
+— it validates every artifact, resolves every reference, and exits `1` if anything
+blocking is found, so reviewers see whether new or edited artifacts are complete
+and their links still resolve. RAC runs exactly this gate over its own `rac/`
+corpus in CI. See [testing.md](testing.md) for the contributor verification
+workflow.
