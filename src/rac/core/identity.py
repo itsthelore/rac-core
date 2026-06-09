@@ -84,6 +84,37 @@ def artifact_identifier(
     return prefix.group(0) if prefix else stem
 
 
+def artifact_identifiers(
+    product: Product, spec: ArtifactSpec | None, path: str
+) -> list[str]:
+    """Every identifier this artifact answers to, canonical first (v0.7.11).
+
+    The canonical identifier leads (same value :func:`artifact_identifier`
+    returns); legacy identifiers — a declared ``## ID`` / ``spec.id_field``
+    value, the filename prefix, and the filename stem — follow as migration
+    aliases. Reference resolution indexes all of them so existing
+    human-readable references (e.g. ``ADR-015``) keep resolving after an
+    artifact adopts canonical frontmatter identity (Initiative 7: legacy
+    compatibility). Duplicate-identity detection uses only the canonical
+    identifier; aliases never create duplicates on their own.
+    """
+    ids: list[str] = []
+
+    def _add(value: str) -> None:
+        if value and value.casefold() not in {i.casefold() for i in ids}:
+            ids.append(value)
+
+    if product.metadata is not None and product.metadata.id:
+        _add(product.metadata.id)
+    _add(_legacy_identifier(product, spec))
+    stem = Path(path).stem
+    prefix = _ID_PREFIX_RE.match(stem)
+    if prefix:
+        _add(prefix.group(0))
+    _add(stem)
+    return ids
+
+
 def identity_conflict(
     product: Product, spec: ArtifactSpec | None
 ) -> tuple[str, str] | None:
