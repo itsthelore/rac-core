@@ -119,6 +119,16 @@ class CommandScreen(ModalScreen[None]):
 
             self.app.pop_screen()
             self.app.push_screen(RecommendationsScreen(self.adapter, recommendations))
+        elif invocation.command == "preferences":
+            self._set_options(
+                [Option(line, disabled=True) for line in self.adapter.preferences_lines()]
+            )
+        elif invocation.command == "resume":
+            path = self.adapter.resume_path()
+            if path is None:
+                self._set_options([Option("No previous artifact to resume", disabled=True)])
+                return
+            self._open_path(path)
         elif invocation.command == "relationships":
             lookup = self.adapter.open_ref(invocation.args)
             if len(lookup.rows) != 1 or lookup.message is not None:
