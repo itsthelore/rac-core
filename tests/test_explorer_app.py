@@ -7,11 +7,12 @@ keeping the thread-worker tests deterministic.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
 
-from rac.explorer import firstrun
+from rac.explorer import firstrun, mascot
 from rac.explorer.app import ExplorerApp
 from rac.explorer.widgets import RepositoryPanel
 
@@ -23,6 +24,8 @@ def onboarded_state(tmp_path_factory, monkeypatch):
     """Run every app test as a returning user; onboarding tests reset this."""
     state = tmp_path_factory.mktemp("xdg-state")
     monkeypatch.setenv("XDG_STATE_HOME", str(state))
+    # Isolate preferences too (v0.8.6): never read or write the real user config.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
     firstrun.mark_onboarded()
     return state
 
@@ -186,7 +189,7 @@ async def test_slash_help_lists_registry_and_esc_closes():
         await pilot.pause()
         assert isinstance(app.screen, CommandScreen)
         results = app.screen.query_one(OptionList)
-        assert results.option_count == 10  # the whole registry, nothing more
+        assert results.option_count == 12  # the whole registry, nothing more
         await pilot.press("escape")
         assert isinstance(app.screen, RepositoryScreen)
 
@@ -539,6 +542,98 @@ async def test_slash_relationships_opens_for_resolved_ref():
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, RelationshipScreen)
+
+
+@pytest.mark.asyncio
+async def test_resume_reopens_last_artifact():
+    from rac.explorer.screens.context import ContextScreen
+    from rac.explorer.screens.repository import RepositoryScreen
+
+    directory = str(FIXTURES / "valid_clean")
+    # First session: open an artifact (records it), then quit.
+    app = ExplorerApp(directory)
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # browser
+        await pilot.press("enter")  # context — records the artifact
+        assert isinstance(app.screen, ContextScreen)
+        recorded = app.screen.context.path
+        await pilot.press("q")
+
+    # Second session on the same repository: resume via `.`.
+    app2 = ExplorerApp(directory)
+    async with app2.run_test() as pilot:
+        await _settled_panel_text(app2, pilot)
+        assert isinstance(app2.screen, RepositoryScreen)
+        await pilot.press("full_stop")
+        await pilot.pause()
+        assert isinstance(app2.screen, ContextScreen)
+        assert app2.screen.context.path == recorded
+
+
+@pytest.mark.asyncio
+async def test_slash_preferences_shows_values_and_path():
+    from textual.widgets import OptionList
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"preferences")
+        await pilot.press("enter")
+        await pilot.pause()
+        results = app.screen.query_one(OptionList)
+        rendered = " ".join(str(opt.prompt) for opt in results._options)
+        assert "mascot" in rendered and "explorer.json" in rendered
+
+
+@pytest.mark.asyncio
+async def test_first_run_welcome_shows_mascot_when_enabled(fresh_first_run):
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert mascot.label(mascot.DISCOVERY) in text  # mascot present by default
+
+
+@pytest.mark.asyncio
+async def test_mascot_can_be_disabled(fresh_first_run, tmp_path, monkeypatch):
+    from rac.explorer.preferences import Preferences, save_preferences
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    save_preferences(Preferences(mascot=False))
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert mascot.label(mascot.DISCOVERY) not in text  # disabling loses the art
+        assert "Repository found" in text  # but no information is lost
+
+
+@pytest.mark.asyncio
+async def test_remains_responsive_at_repository_scale(tmp_path):
+    # Initiative 5: re-validate the 1000+ artifact target at the Explorer level.
+    root = tmp_path / "large"
+    root.mkdir()
+    for i in range(600):
+        (root / f"adr-{i:04d}.md").write_text(
+            f"# ADR-{i:04d} D{i}\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n"
+            "## Decision\n\nd\n\n## Consequences\n\nq\n",
+            encoding="utf-8",
+        )
+    for i in range(600):
+        (root / f"req-{i:04d}.md").write_text(
+            f"# Feature {i}\n\n## Problem\n\np\n\n## Requirements\n\n"
+            f"[REQ-{i:04d}] shall work.\n\n## Related Decisions\n\n- ADR-{i % 600:04d}\n",
+            encoding="utf-8",
+        )
+
+    started = time.monotonic()
+    app = ExplorerApp(str(root))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert "Artifacts   1200" in text
+        await pilot.press("enter")  # browser renders the full list
+        await pilot.pause()
+    assert time.monotonic() - started < 60  # generous ceiling; catch regressions
 
 
 @pytest.mark.asyncio

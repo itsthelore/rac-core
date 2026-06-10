@@ -62,6 +62,9 @@ def test_adapter_state_and_launch_never_import_textual():
         SRC / "explorer" / "commands.py",
         SRC / "explorer" / "firstrun.py",
         SRC / "explorer" / "editor.py",
+        SRC / "explorer" / "preferences.py",
+        SRC / "explorer" / "workspace.py",
+        SRC / "explorer" / "mascot.py",
     ]
     files = [f for f in files if f.exists()]
     assert (SRC / "explorer" / "adapter.py") in files
