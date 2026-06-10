@@ -22,12 +22,16 @@ from rac.services.resolve import (
 
 from .state import (
     ArtifactRow,
+    AttentionRow,
     BrowserState,
     ContextState,
+    HealthAreaState,
+    HealthState,
     LoadErrorState,
     LoadProgressState,
     LookupState,
     RepositorySummaryState,
+    health_label,
 )
 
 # Presentation labels for the analysis phases that follow the scan.
@@ -54,6 +58,13 @@ def _plural(count: int, noun: str) -> str:
 
 def _status_label(status: str) -> str:
     return _STATUS_LABELS.get(status, status)
+
+
+def _area_label(has_findings: bool, *, error: bool = False) -> str:
+    """A health area's status from a Core fact (no Explorer thresholds)."""
+    if not has_findings:
+        return "✓ Healthy"
+    return "✗ Error" if error else "! Needs Attention"
 
 
 def _row(artifact: Artifact) -> ArtifactRow:
@@ -209,6 +220,63 @@ class ExplorerAdapter:
         if not rows:
             return LookupState(rows=(), message=f"No matches for '{args.strip()}'")
         return LookupState(rows=rows)
+
+    def health_state(self) -> HealthState | None:
+        """The repository health screen, or None before a load (v0.8.2).
+
+        Every value is read from the loaded portfolio summary; Explorer adds
+        no scoring (ADR-015). Area status derives from Core facts, not from
+        Explorer-invented thresholds.
+        """
+        repository = self.repository
+        if repository is None:
+            return None
+        portfolio = repository.portfolio
+        rel = portfolio.relationships
+
+        completeness_pct = round(portfolio.completeness * 100)
+        coverage_pct = round(rel.coverage * 100)
+        areas = (
+            HealthAreaState(
+                name="Completeness",
+                status_label=_area_label(portfolio.filled_slots < portfolio.recommended_slots),
+                detail=(
+                    f"{completeness_pct}% "
+                    f"({portfolio.filled_slots}/{portfolio.recommended_slots} recommended sections)"
+                ),
+            ),
+            HealthAreaState(
+                name="Relationships",
+                status_label=_area_label(rel.broken > 0),
+                detail=f"{rel.valid} resolved, {rel.broken} broken of {rel.total}",
+            ),
+            HealthAreaState(
+                name="Validation",
+                status_label=_area_label(portfolio.invalid_artifacts > 0, error=True),
+                detail=f"{portfolio.valid_artifacts} valid, {portfolio.invalid_artifacts} invalid",
+            ),
+            HealthAreaState(
+                name="Coverage",
+                status_label=_area_label(rel.orphaned > 0),
+                detail=f"{coverage_pct}% of artifacts linked, {rel.orphaned} orphaned",
+            ),
+        )
+        attention = tuple(
+            AttentionRow(
+                path=item.path,
+                identifier=item.identifier,
+                severity_label="✗ error" if item.severity == "error" else "! warning",
+                message=item.message,
+            )
+            for item in portfolio.attention
+        )
+        return HealthState(
+            directory=repository.directory,
+            score=portfolio.health_score,
+            score_label=health_label(portfolio.health_score),
+            areas=areas,
+            attention=attention,
+        )
 
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""

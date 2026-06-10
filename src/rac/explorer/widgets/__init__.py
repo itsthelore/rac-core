@@ -8,16 +8,16 @@ from __future__ import annotations
 
 from textual.widgets import Static
 
-from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
+from rac.explorer.state import (
+    LoadErrorState,
+    LoadProgressState,
+    RepositorySummaryState,
+    health_label,
+)
 
-
-def _health_label(score: int) -> str:
-    # Labels alongside the number — never colour-only meaning (ADR-028).
-    if score >= 80:
-        return "✓ Healthy"
-    if score >= 50:
-        return "! Needs attention"
-    return "✗ Unhealthy"
+# Re-exported under the historical name used by home rendering and tests; the
+# single definition lives in rac.explorer.state so the health screen agrees.
+_health_label = health_label
 
 
 class RepositoryPanel(Static):

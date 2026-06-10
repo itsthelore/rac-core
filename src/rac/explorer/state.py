@@ -10,6 +10,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+def health_label(score: int) -> str:
+    """The overall health band label for ``score`` (text beside the symbol).
+
+    Shared by the home summary and the health screen so they never disagree
+    (ADR-028: meaning never depends on colour alone).
+    """
+    if score >= 80:
+        return "✓ Healthy"
+    if score >= 50:
+        return "! Needs Attention"
+    return "✗ Unhealthy"
+
+
 @dataclass(frozen=True)
 class LoadProgressState:
     """One progress update while the repository loads."""
@@ -83,6 +96,36 @@ class ContextState:
     outgoing: tuple[str, ...]  # rendered relationship lines declared here
     incoming: tuple[str, ...]  # rendered lines for references resolving here
     diagnostics: tuple[str, ...]  # rendered finding lines
+
+
+@dataclass(frozen=True)
+class HealthAreaState:
+    """One health area (Completeness, Relationships, Validation, Coverage)."""
+
+    name: str
+    status_label: str  # "✓ Healthy" | "! Needs Attention" | "✗ Error"
+    detail: str  # Core facts, e.g. "92% (110/120 recommended sections)"
+
+
+@dataclass(frozen=True)
+class AttentionRow:
+    """One prioritized attention item, linked to the artifact it concerns."""
+
+    path: str  # navigation key (opens the context view)
+    identifier: str
+    severity_label: str  # "✗ error" | "! warning"
+    message: str
+
+
+@dataclass(frozen=True)
+class HealthState:
+    """The repository health screen, rendered entirely from Core results."""
+
+    directory: str
+    score: int
+    score_label: str
+    areas: tuple[HealthAreaState, ...]
+    attention: tuple[AttentionRow, ...]
 
 
 @dataclass(frozen=True)

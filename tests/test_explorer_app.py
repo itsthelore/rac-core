@@ -56,7 +56,7 @@ def test_summary_states_meaning_in_text_not_colour_alone():
     from rac.explorer.widgets import _health_label
 
     assert _health_label(90) == "✓ Healthy"
-    assert _health_label(60) == "! Needs attention"
+    assert _health_label(60) == "! Needs Attention"
     assert _health_label(10) == "✗ Unhealthy"
 
 

@@ -203,6 +203,80 @@ def test_browser_state_type_filter():
     assert browser.total == 1
 
 
+def test_health_state_requires_a_load():
+    assert ExplorerAdapter(str(FIXTURES / "valid_clean")).health_state() is None
+
+
+def test_health_state_mirrors_portfolio_score():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    health = adapter.health_state()
+    assert health is not None
+    assert adapter.repository is not None
+    assert health.score == adapter.repository.portfolio.health_score
+    assert health.score_label  # text label beside the number
+
+
+def test_health_state_lists_the_four_areas():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    health = adapter.health_state()
+    assert health is not None
+    assert [a.name for a in health.areas] == [
+        "Completeness",
+        "Relationships",
+        "Validation",
+        "Coverage",
+    ]
+    assert all(a.status_label and a.detail for a in health.areas)
+
+
+def test_clean_repository_areas_are_healthy():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    health = adapter.health_state()
+    assert health is not None
+    by_name = {a.name: a for a in health.areas}
+    assert by_name["Relationships"].status_label == "✓ Healthy"
+    assert by_name["Validation"].status_label == "✓ Healthy"
+    assert health.attention == ()
+
+
+def test_broken_relationships_mark_the_relationships_area():
+    adapter = ExplorerAdapter(str(FIXTURES / "broken_rels"))
+    adapter.load()
+    health = adapter.health_state()
+    assert health is not None
+    by_name = {a.name: a for a in health.areas}
+    assert by_name["Relationships"].status_label == "! Needs Attention"
+    assert "1 broken" in by_name["Relationships"].detail
+
+
+def test_invalid_artifacts_mark_validation_as_error():
+    adapter = ExplorerAdapter(str(FIXTURES / "invalid_known"))
+    adapter.load()
+    health = adapter.health_state()
+    assert health is not None
+    by_name = {a.name: a for a in health.areas}
+    assert by_name["Validation"].status_label == "✗ Error"
+
+
+def test_attention_items_link_to_artifacts_and_keep_priority():
+    adapter = ExplorerAdapter(str(FIXTURES / "broken_rels"))
+    adapter.load()
+    health = adapter.health_state()
+    assert health is not None
+    assert adapter.repository is not None
+    assert health.attention
+    # Every attention row points at a real artifact (navigable to its context).
+    paths = {a.path for a in adapter.repository.artifacts}
+    assert all(row.path in paths for row in health.attention)
+    # Order matches the portfolio's prioritized attention list verbatim.
+    assert [row.message for row in health.attention] == [
+        item.message for item in adapter.repository.portfolio.attention
+    ]
+
+
 def test_cancelled_load_returns_none_not_an_error():
     token = CancellationToken()
     adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
