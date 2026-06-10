@@ -165,8 +165,11 @@ The README shall include a short trust-oriented section explaining that RAC is t
 * Golden output tests catch accidental output drift.
 * RAC’s repository presentation matches its product promise.
 
+## Related Decisions
+
+- ADR-001
+
 ## Related Artifacts
 
-* ADRs defining RAC as Markdown-first infrastructure.
 * Roadmap items for repository structure, CI, fixtures, and test coverage.
 * Requirements covering validation, diffing, stats, and schema behavior.

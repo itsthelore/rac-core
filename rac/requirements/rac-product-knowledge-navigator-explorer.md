@@ -219,35 +219,53 @@ This requirement defines the purpose, capabilities, and intended outcomes of Exp
 
 Interaction models, onboarding experiences, visual systems, navigation workflows, recommendation presentation, action workflows, editor integration, and mascot behaviour are delegated to associated design artifacts.
 
-## Related Architecture Decisions
+## Related Decisions
 
-- ADR-015 Explorer as a Consumer
+- ADR-015
 
-- ADR-028 Explorer Delivery Surface
+- ADR-028
 
-## Related Design Artifacts
+## Related Designs
 
-- DESIGN-first-run-experience
+- explorer-first-run-experience
 
-- DESIGN-command-surface
+- explorer-command-surface
 
-- DESIGN-health-model
+- explorer-health-model
 
-- DESIGN-knowledge-graph
+- explorer-knowledge-graph
 
-- DESIGN-recommendations
+- explorer-recommendations
 
-- DESIGN-action-workflows
+- explorer-action-workflows
 
-- DESIGN-editor-integration
+- explorer-editor-integrations
 
-- DESIGN-visual-system
+- explorer-import-workflow
 
-- DESIGN-mascot
+- explorer-visual-system
 
-- DESIGN-mascot-interaction
+- explorer-mascot
 
-- DESIGN-mascot-animations
+- explorer-mascot-interaction
+
+- explorer-mascot-animations
+
+## Related Roadmaps
+
+- v0.8.0-explorer-foundation
+
+- v0.8.1-explorer-navigation
+
+- v0.8.2-explorer-health
+
+- v0.8.3-explorer-recommendations
+
+- v0.8.4-explorer-action-workflow
+
+- v0.8.5-explorer-relationship-navigation
+
+- v0.8.6-explorer-maturity
 
 ## Non-Goals
 
@@ -313,19 +331,9 @@ Explorer succeeds when:
 
 - Relationship Navigation
 
-### Implemented By
-
-- v0.8.x Explorer roadmap series (v0.8.0 – v0.8.6)
-
 ### Related
 
 - Product Intent CI (Watchkeeper)
-
-### Architecture
-
-- ADR-015 Explorer as a Consumer
-
-- ADR-028 Explorer Delivery Surface
 
 ## Future Considerations
 

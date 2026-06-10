@@ -224,11 +224,11 @@ They do not implement review logic.
 - Existing commands remain available independently.
 - Future integrations consume the same review results.
 
-## Related Artifacts
+## Related Decisions
 
-- ADR: Markdown First
-- ADR: Repository Intelligence as the Value Layer
-- ADR: Explorer as a Consumer
+- ADR-001
+- ADR-012
+- ADR-015
 
 ## Future Considerations
 

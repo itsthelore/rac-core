@@ -510,12 +510,15 @@ Watchkeeper succeeds when:
 - RAC becomes part of normal engineering workflows
 - product artifacts receive the same review discipline as code
 
+## Related Decisions
+
+- ADR-001
+- ADR-012
+- ADR-015
+
 ## Related Artifacts
 
 - Requirement: Repository Review Mode
-- ADR: Markdown First
-- ADR: Repository Intelligence as the Value Layer
-- ADR: Explorer as a Consumer
 
 ## Future Considerations
 
