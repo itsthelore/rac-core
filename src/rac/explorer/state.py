@@ -129,6 +129,28 @@ class HealthState:
 
 
 @dataclass(frozen=True)
+class RecommendationRow:
+    """One recommendation: a finding with impact, action, and a target."""
+
+    path: str  # navigation key (opens the affected artifact's context view)
+    identifier: str
+    category: str  # Validation | Relationships | Repository Health | Quality
+    severity_label: str  # "✗ Critical" | "! Warning" | "· Suggestion"
+    finding: str
+    impact: str
+    action: str
+
+
+@dataclass(frozen=True)
+class RecommendationsState:
+    """Recommendations grouped by category, rendered from Core review findings."""
+
+    directory: str
+    groups: tuple[tuple[str, tuple[RecommendationRow, ...]], ...]  # (category, rows)
+    total: int
+
+
+@dataclass(frozen=True)
 class LoadErrorState:
     """A recoverable failure: the shell shows it and offers retry."""
 

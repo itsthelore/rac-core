@@ -277,6 +277,66 @@ def test_attention_items_link_to_artifacts_and_keep_priority():
     ]
 
 
+def test_recommendations_state_requires_a_load():
+    assert ExplorerAdapter(str(FIXTURES / "broken_rels")).recommendations_state() is None
+
+
+def test_recommendations_mirror_core_review_findings():
+    from rac.services.review import build_review
+
+    adapter = ExplorerAdapter(str(FIXTURES / "broken_rels"))
+    adapter.load()
+    recs = adapter.recommendations_state()
+    assert recs is not None
+    report = build_review(str(FIXTURES / "broken_rels"))
+    # One recommendation per Core review finding — Explorer invents none.
+    assert recs.total == len(report.issues)
+
+
+def test_recommendations_grouped_by_category_in_fixed_order():
+    adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
+    adapter.load()
+    recs = adapter.recommendations_state()
+    assert recs is not None
+    categories = [category for category, _ in recs.groups]
+    order = ["Validation", "Relationships", "Repository Health", "Quality"]
+    # Present categories appear in the fixed canonical order.
+    assert categories == [c for c in order if c in categories]
+    assert all(rows for _, rows in recs.groups)
+
+
+def test_recommendations_explain_before_suggesting():
+    adapter = ExplorerAdapter(str(FIXTURES / "broken_rels"))
+    adapter.load()
+    recs = adapter.recommendations_state()
+    assert recs is not None
+    rows = [r for _, group in recs.groups for r in group]
+    rel = next(r for r in rows if r.category == "Relationships")
+    assert rel.severity_label == "! Warning"
+    assert rel.finding and rel.impact and rel.action
+    assert "traceability" in rel.impact.lower()
+    assert rel.path  # navigable to the affected artifact
+
+
+def test_invalid_artifact_is_critical():
+    adapter = ExplorerAdapter(str(FIXTURES / "invalid_known"))
+    adapter.load()
+    recs = adapter.recommendations_state()
+    assert recs is not None
+    rows = [r for _, group in recs.groups for r in group]
+    validation = next(r for r in rows if r.category == "Validation")
+    assert validation.severity_label == "✗ Critical"
+
+
+def test_clean_repository_has_no_recommendations():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    recs = adapter.recommendations_state()
+    assert recs is not None
+    assert recs.total == 0
+    assert recs.groups == ()
+
+
 def test_cancelled_load_returns_none_not_an_error():
     token = CancellationToken()
     adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
