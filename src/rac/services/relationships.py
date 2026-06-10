@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
-from rac.core.fs import find_markdown_files
+from rac.core.corpus import walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.markdown import parse_file
 from rac.core.models import Product
@@ -228,9 +228,12 @@ def _resolution_labels(
     return labels
 
 
-def _build_report(directory: str, paths: list, recursive: bool) -> RelationshipReport:
-    """Assemble a :class:`RelationshipReport` from ``paths`` (already ordered)."""
-    items = _parsed_items(paths)
+def _build_report(
+    directory: str,
+    items: list[tuple[str, Product, ArtifactSpec | None]],
+    recursive: bool,
+) -> RelationshipReport:
+    """Assemble a :class:`RelationshipReport` from ``items`` (already ordered)."""
     artifacts: list[ArtifactRelationships] = []
     for path, product, spec in items:
         relationships = extract_relationships_full(product, spec) if spec else {}
@@ -245,7 +248,7 @@ def _build_report(directory: str, paths: list, recursive: bool) -> RelationshipR
     return RelationshipReport(
         directory=directory,
         recursive=recursive,
-        total_files=len(paths),
+        total_files=len(items),
         artifacts=artifacts,
         labels=_resolution_labels(artifacts, items),
     )
@@ -253,8 +256,7 @@ def _build_report(directory: str, paths: list, recursive: bool) -> RelationshipR
 
 def build_relationship_report(directory: str, recursive: bool = True) -> RelationshipReport:
     """Inspect explicit relationships across a directory of Markdown files."""
-    paths = find_markdown_files(directory, recursive=recursive)
-    return _build_report(directory, paths, recursive)
+    return _build_report(directory, _corpus_items(directory, recursive), recursive)
 
 
 def build_relationship_report_file(path: str) -> RelationshipReport:
@@ -262,7 +264,7 @@ def build_relationship_report_file(path: str) -> RelationshipReport:
 
     Same model as a directory report, with one file and ``recursive=False``.
     """
-    return _build_report(path, [path], recursive=False)
+    return _build_report(path, _parsed_items([path]), recursive=False)
 
 
 # --- Relationship validation (v0.7.2) ----------------------------------------
@@ -341,6 +343,16 @@ def _parsed_items(paths: list) -> list[tuple[str, Product, ArtifactSpec | None]]
         spec = spec_for(classify(product).type)
         items.append((str(path), product, spec))
     return items
+
+
+def _corpus_items(
+    directory: str, recursive: bool
+) -> list[tuple[str, Product, ArtifactSpec | None]]:
+    """Every document under ``directory`` as ``(path, product, spec)`` (one walk)."""
+    return [
+        (str(entry.path), entry.product, spec_for(entry.artifact_type))
+        for entry in walk_corpus(directory, recursive=recursive)
+    ]
 
 
 # Identifier index: {casefold(ident) -> [(path, display_ident), ...]}
@@ -450,7 +462,7 @@ def _validate(
 
 def validate_relationships(directory: str, recursive: bool = True) -> RelationshipValidation:
     """Validate explicit relationship references across a directory."""
-    items = _parsed_items(find_markdown_files(directory, recursive=recursive))
+    items = _corpus_items(directory, recursive)
     return _validate(directory, items, recursive)
 
 
@@ -497,8 +509,7 @@ class RelationshipSummary:
 
 def summarize_relationships(directory: str, recursive: bool = True) -> RelationshipSummary:
     """Aggregate relationship health across a directory (v0.7.3)."""
-    paths = find_markdown_files(directory, recursive=recursive)
-    items = _parsed_items(paths)
+    items = _corpus_items(directory, recursive)
 
     if not items:
         return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
