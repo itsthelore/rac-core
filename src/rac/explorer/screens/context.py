@@ -71,6 +71,10 @@ class ContextScreen(Screen[None]):
         yield Static("", id="context-status")
         yield Footer()
 
+    def on_mount(self) -> None:
+        # Workspace continuity (v0.8.6): this is now the last artifact opened.
+        self.adapter.record_artifact(self.context.path)
+
     def action_open_in_editor(self) -> None:
         # ADR-024: Explorer hands the file to an external editor; it never edits.
         outcome = self.adapter.open_in_editor(self.context.path)
