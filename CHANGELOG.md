@@ -8,6 +8,11 @@ details, release history over commit history.
 
 ### Added
 
+- Explorer health view (v0.8.2): `h` or `/health` opens a repository health
+  screen — Core's score with a text label, the four health areas
+  (Completeness, Relationships, Validation, Coverage), and a prioritized
+  attention list whose items open the affected artifact's context view.
+  Explorer adds no scoring; every value comes from existing Core results.
 - Explorer navigation (v0.8.1): browse every artifact grouped by type, open
   any artifact's context view (identity, validation state, completeness,
   relationships, diagnostics), and reach anything through the `/` command
