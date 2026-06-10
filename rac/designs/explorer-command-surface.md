@@ -53,7 +53,9 @@ The primary command entry point is:
 /
 ```
 
-Typing `/` opens the command surface.
+Typing `/` focuses the command bar — a persistent panel at the bottom of the
+workspace frame, never hidden and never modal. Results and ambiguous lookups
+render in the context region, so the layout never jumps.
 
 Example:
 
@@ -167,18 +169,23 @@ Explorer does not implement operation logic.
 Primary:
 
 ```text
-/      Command
+/      Focus the command bar (from anywhere)
 
 ↑ ↓    Navigate
 
 Enter  Select
 
-Esc    Back
+Tab    Cycle panels
+
+Esc    Back (bar → previous region; context → view history)
 
 q      Quit
 ```
 
 Additional shortcuts may exist only for high-frequency actions.
+
+Single-letter shortcuts are suspended while the command bar has focus, so
+typed text is never mistaken for a binding.
 
 ---
 
@@ -266,6 +273,7 @@ Red item
 
 - v0.8.1-explorer-navigation
 - v0.8.4-explorer-action-workflow
+- v0.8.7-explorer-visual-overhaul
 
 ---
 
