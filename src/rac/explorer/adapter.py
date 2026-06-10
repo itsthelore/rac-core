@@ -19,6 +19,14 @@ from rac.services.resolve import (
     resolve_in_index,
     search_index,
 )
+from rac.services.review import (
+    ATTENTION_BROKEN_RELATIONSHIP,
+    ATTENTION_INVALID,
+    ATTENTION_MISSING_RECOMMENDED,
+    REVIEW_UNKNOWN_ARTIFACT,
+    ReviewIssue,
+    review_from_portfolio,
+)
 
 from .state import (
     ArtifactRow,
@@ -30,6 +38,8 @@ from .state import (
     LoadErrorState,
     LoadProgressState,
     LookupState,
+    RecommendationRow,
+    RecommendationsState,
     RepositorySummaryState,
     health_label,
 )
@@ -65,6 +75,50 @@ def _area_label(has_findings: bool, *, error: bool = False) -> str:
     if not has_findings:
         return "✓ Healthy"
     return "✗ Error" if error else "! Needs Attention"
+
+
+# The four recommendation categories (DESIGN-recommendations), fixed order.
+_CATEGORY_ORDER = ("Validation", "Relationships", "Repository Health", "Quality")
+
+# Core review finding code → presentation category.
+_CODE_CATEGORY = {
+    ATTENTION_INVALID: "Validation",
+    REVIEW_UNKNOWN_ARTIFACT: "Validation",
+    ATTENTION_BROKEN_RELATIONSHIP: "Relationships",
+    ATTENTION_MISSING_RECOMMENDED: "Quality",
+}
+
+# Core severity → the three presentation tiers (definitions stay in Core).
+_SEVERITY_LABEL = {
+    "error": "✗ Critical",
+    "warning": "! Warning",
+    "info": "· Suggestion",
+}
+
+# "Why it matters" — fixed presentation copy keyed by the Core finding code
+# (display text, like the status and phase labels; not analysis).
+_IMPACT = {
+    ATTENTION_INVALID: "The artifact fails its schema, so tooling and validation cannot trust it.",
+    ATTENTION_BROKEN_RELATIONSHIP: (
+        "A declared reference does not resolve, leaving traceability incomplete."
+    ),
+    ATTENTION_MISSING_RECOMMENDED: (
+        "Recommended sections are empty, weakening the artifact's completeness."
+    ),
+    REVIEW_UNKNOWN_ARTIFACT: "No schema matched, so required structure cannot be checked.",
+}
+
+
+def _recommendation(issue: ReviewIssue) -> RecommendationRow:
+    return RecommendationRow(
+        path=issue.path,
+        identifier=issue.identifier,
+        category=_CODE_CATEGORY.get(issue.code, "Quality"),
+        severity_label=_SEVERITY_LABEL.get(issue.severity, issue.severity),
+        finding=issue.message,
+        impact=_IMPACT.get(issue.code, "This finding affects repository quality."),
+        action=issue.action,
+    )
 
 
 def _row(artifact: Artifact) -> ArtifactRow:
@@ -276,6 +330,30 @@ class ExplorerAdapter:
             score_label=health_label(portfolio.health_score),
             areas=areas,
             attention=attention,
+        )
+
+    def recommendations_state(self) -> RecommendationsState | None:
+        """Recommendations grouped by category, or None before a load (v0.8.3).
+
+        Built from Core's review findings over the loaded portfolio — Explorer
+        adds explanation and grouping, never new findings (ADR-015).
+        """
+        repository = self.repository
+        if repository is None:
+            return None
+        report = review_from_portfolio(
+            repository.directory, repository.portfolio, recursive=repository.recursive
+        )
+        rows = [_recommendation(issue) for issue in report.issues]
+        groups = tuple(
+            (category, tuple(r for r in rows if r.category == category))
+            for category in _CATEGORY_ORDER
+            if any(r.category == category for r in rows)
+        )
+        return RecommendationsState(
+            directory=repository.directory,
+            groups=groups,
+            total=len(rows),
         )
 
     def context_state(self, path: str) -> ContextState | None:
