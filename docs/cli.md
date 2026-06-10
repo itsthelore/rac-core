@@ -355,11 +355,17 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
 - **Keys:** `/` commands and search · `↑ ↓` navigate · `Enter` select ·
   `Esc` back · `h` health (home) · `r` reload (home) · `q` quit
 - **Commands (`/`):** `open <ref>` · `find <query> [type]` · `browse [type]` ·
-  `health` · `home` · `help` · `quit` — anything else is a search. Lookup resolves
-  canonical IDs and legacy aliases with `rac resolve` / `rac find` semantics.
+  `health` · `recommendations` · `home` · `help` · `quit` — anything else is a
+  search. Lookup resolves canonical IDs and legacy aliases with `rac resolve` /
+  `rac find` semantics.
 - **Health:** `h` or `/health` opens the health view — Core's score with a text
   label, the Completeness / Relationships / Validation / Coverage areas, and a
   prioritized attention list whose items open the affected artifact.
+- **Recommendations:** `/recommendations` (or `r` from the health view) presents
+  Core's review findings grouped by category (Validation, Relationships,
+  Repository Health, Quality), each with its impact, a suggested `rac` command,
+  and navigation to the affected artifact. Advisory only — Explorer applies
+  nothing.
 - **First run:** onboarding derives from repository content (existing, empty, or
   invalid repository) and is skipped for returning users; the completion marker
   under `$XDG_STATE_HOME/rac/` is the only state Explorer persists.
