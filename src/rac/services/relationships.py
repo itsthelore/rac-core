@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
-from rac.core.corpus import walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.markdown import parse_file
 from rac.core.models import Product
@@ -259,6 +259,17 @@ def build_relationship_report(directory: str, recursive: bool = True) -> Relatio
     return _build_report(directory, _corpus_items(directory, recursive), recursive)
 
 
+def report_from_corpus(
+    directory: str, entries: list[CorpusEntry], recursive: bool = True
+) -> RelationshipReport:
+    """Inspect relationships in an already-walked corpus snapshot (v0.8.0).
+
+    Same result as :func:`build_relationship_report`; the snapshot lets one
+    walk feed several analyses (repository model, future incremental refresh).
+    """
+    return _build_report(directory, _entry_items(entries), recursive)
+
+
 def build_relationship_report_file(path: str) -> RelationshipReport:
     """Inspect relationships in a single file (REQ-009).
 
@@ -349,10 +360,14 @@ def _corpus_items(
     directory: str, recursive: bool
 ) -> list[tuple[str, Product, ArtifactSpec | None]]:
     """Every document under ``directory`` as ``(path, product, spec)`` (one walk)."""
-    return [
-        (str(entry.path), entry.product, spec_for(entry.artifact_type))
-        for entry in walk_corpus(directory, recursive=recursive)
-    ]
+    return _entry_items(list(walk_corpus(directory, recursive=recursive)))
+
+
+def _entry_items(
+    entries: list[CorpusEntry],
+) -> list[tuple[str, Product, ArtifactSpec | None]]:
+    """An already-walked corpus snapshot as ``(path, product, spec)`` items."""
+    return [(str(entry.path), entry.product, spec_for(entry.artifact_type)) for entry in entries]
 
 
 # Identifier index: {casefold(ident) -> [(path, display_ident), ...]}
@@ -466,6 +481,17 @@ def validate_relationships(directory: str, recursive: bool = True) -> Relationsh
     return _validate(directory, items, recursive)
 
 
+def validation_from_corpus(
+    directory: str, entries: list[CorpusEntry], recursive: bool = True
+) -> RelationshipValidation:
+    """Validate relationships in an already-walked corpus snapshot (v0.8.0).
+
+    Same result as :func:`validate_relationships`; the snapshot lets one walk
+    feed several analyses (repository model, future incremental refresh).
+    """
+    return _validate(directory, _entry_items(entries), recursive)
+
+
 def validate_relationships_file(path: str) -> RelationshipValidation:
     """Validate a single file (REQ-009).
 
@@ -509,8 +535,19 @@ class RelationshipSummary:
 
 def summarize_relationships(directory: str, recursive: bool = True) -> RelationshipSummary:
     """Aggregate relationship health across a directory (v0.7.3)."""
-    items = _corpus_items(directory, recursive)
+    return _summarize(_corpus_items(directory, recursive))
 
+
+def summary_from_corpus(entries: list[CorpusEntry]) -> RelationshipSummary:
+    """Aggregate relationship health for an already-walked snapshot (v0.8.0).
+
+    Same result as :func:`summarize_relationships`; the snapshot lets one walk
+    feed several analyses (repository model, future incremental refresh).
+    """
+    return _summarize(_entry_items(entries))
+
+
+def _summarize(items: list[tuple[str, Product, ArtifactSpec | None]]) -> RelationshipSummary:
     if not items:
         return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
 
@@ -541,3 +578,67 @@ def summarize_relationships(directory: str, recursive: bool = True) -> Relations
         coverage=round(coverage, 4),
         issues=ref_issues,
     )
+
+
+# --- Relationship objects for the repository model (v0.8.0) -------------------
+#
+# The repository model (rac.services.repository) needs every declared reference
+# as one navigable object: where it points from, what it says, and where it
+# resolves to. The raw reference text remains the source of truth (ADR-016);
+# resolution reuses the same alias index as `--validate`, so a reference is
+# resolved here exactly when validation reports no issue for it.
+
+
+@dataclass(frozen=True)
+class Relationship:
+    """One declared cross-artifact reference, with its resolution outcome.
+
+    ``resolved_path`` is set only when the reference resolves uniquely to
+    another artifact; otherwise ``issue`` carries the stable validation code
+    (:data:`ISSUE_TARGET_NOT_FOUND`, :data:`ISSUE_TARGET_AMBIGUOUS`, or
+    :data:`ISSUE_SELF_REFERENCE`).
+    """
+
+    source_path: str
+    relationship: str  # snake_case section name ("related_decisions", ...)
+    target: str  # raw reference text (source of truth, ADR-016)
+    resolved_path: str | None
+    issue: str | None
+
+
+def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
+    """Every declared reference in a corpus snapshot as :class:`Relationship`.
+
+    Ordering is deterministic: source artifacts in snapshot (sorted path)
+    order, sections in each artifact's own schema order, references in
+    declaration order — matching ``_resolve_references``.
+    """
+    items = _entry_items(entries)
+    index = _build_resolution_index(items)
+    relationships: list[Relationship] = []
+    for path, product, spec in items:
+        if spec is None:
+            continue
+        for section, refs in extract_relationships_full(product, spec).items():
+            for ref in refs:
+                targets = [p for p, _ in index.get(ref.casefold(), [])]
+                resolved: str | None = None
+                issue: str | None = None
+                if not targets:
+                    issue = ISSUE_TARGET_NOT_FOUND
+                elif len(targets) > 1:
+                    issue = ISSUE_TARGET_AMBIGUOUS
+                elif targets == [path]:
+                    issue = ISSUE_SELF_REFERENCE
+                else:
+                    resolved = targets[0]
+                relationships.append(
+                    Relationship(
+                        source_path=path,
+                        relationship=section,
+                        target=ref,
+                        resolved_path=resolved,
+                        issue=issue,
+                    )
+                )
+    return relationships

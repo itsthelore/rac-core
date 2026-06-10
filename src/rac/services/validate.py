@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from rac.core.artifacts import spec_for
-from rac.core.corpus import walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.models import Issue
 from rac.core.validation import has_errors, validate
 
@@ -98,8 +98,20 @@ def validate_directory(directory: str, recursive: bool = True) -> DirectoryValid
     Files are processed in sorted path order (``walk_corpus``), so the
     result — and everything rendered from it — is deterministic.
     """
+    entries = list(walk_corpus(directory, recursive=recursive))
+    return validate_corpus(directory, entries, recursive=recursive)
+
+
+def validate_corpus(
+    directory: str, entries: list[CorpusEntry], recursive: bool = True
+) -> DirectoryValidation:
+    """Validate an already-walked corpus snapshot (v0.8.0).
+
+    Same result as :func:`validate_directory`; the snapshot lets one walk
+    feed several analyses (repository model, future incremental refresh).
+    """
     files: list[FileValidation] = []
-    for entry in walk_corpus(directory, recursive=recursive):
+    for entry in entries:
         path, product = entry.path, entry.product
         artifact_type = entry.artifact_type
         if spec_for(artifact_type) is None:
