@@ -766,6 +766,12 @@ async def test_recommendations_export_previews_then_writes(tmp_path, monkeypatch
         assert isinstance(app.screen, ConfirmWriteScreen)
         assert not (tmp_path / "recommendations.md").exists()  # preview only
 
+        # The modal speaks the frame's language: a titled panel and key chips.
+        dialog = app.screen.query_one("#confirm-dialog")
+        assert "recommendations.md" in str(dialog.border_title)
+        chips = str(app.screen.query_one("#confirm-chips", Static).content)
+        assert "Confirm" in chips and "Cancel" in chips
+
         await pilot.press("y")
         await pilot.pause()
         written = (tmp_path / "recommendations.md").read_text(encoding="utf-8")

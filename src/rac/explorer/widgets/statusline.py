@@ -55,6 +55,21 @@ _HINTS: dict[str, tuple[tuple[str, str], ...]] = {
 }
 
 
+def key_chips(pairs: tuple[tuple[str, str], ...]) -> Text:
+    """Render (key, label) pairs as inverse-video chips with text labels.
+
+    Shared with the confirm-write modal so every surface speaks the same
+    hint language (DESIGN-visual-system).
+    """
+    text = Text()
+    for key, label in pairs:
+        if text:
+            text.append("  ")
+        text.append(f" {key} ", style="reverse")
+        text.append(f" {label}")
+    return text
+
+
 class StatusLine(Horizontal):
     """Key chips left, health chip and link count right."""
 
@@ -66,14 +81,8 @@ class StatusLine(Horizontal):
         yield Static(id="status-right")
 
     def show_hints(self, region: str) -> None:
-        chips = _HINTS.get(region, _HINTS["home"])
-        text = Text()
-        for key, label in chips:
-            if text:
-                text.append("  ")
-            text.append(f" {key} ", style="reverse")
-            text.append(f" {label}")
-        self.query_one("#status-hints", Static).update(text)
+        pairs = _HINTS.get(region, _HINTS["home"])
+        self.query_one("#status-hints", Static).update(key_chips(pairs))
 
     def show_summary(self, summary: RepositorySummaryState) -> None:
         text = Text()

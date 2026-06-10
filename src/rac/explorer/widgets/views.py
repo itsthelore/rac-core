@@ -149,13 +149,15 @@ def render_recommendation(row: RecommendationRow) -> str:
 
 
 def render_preview(preview: ImportPreview) -> str:
-    """A converted document, its target, and the confirm hint."""
+    """A converted document and its target, awaiting confirmation.
+
+    Carries no key hints of its own: the status line covers the import view
+    and the confirm modal renders its own chips (DESIGN-visual-system).
+    """
     body = preview.markdown.splitlines()
     shown = body[:_PREVIEW_LINES]
     more = len(body) - len(shown)
     lines = [
-        "Import Knowledge",
-        "",
         f"Source     {preview.source}",
         f"Converter  {preview.converter}",
         f"Target     {preview.target}",
@@ -166,7 +168,7 @@ def render_preview(preview: ImportPreview) -> str:
     ]
     if more > 0:
         lines.append(f"… {more} more line(s)")
-    lines.extend(["─" * 40, "", "Press y to write this file · Esc to cancel"])
+    lines.append("─" * 40)
     return "\n".join(lines)
 
 

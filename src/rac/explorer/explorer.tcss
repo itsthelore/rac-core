@@ -86,6 +86,30 @@ CommandBar:focus {
     border: round $accent;
 }
 
+/* Confirm-write modal — the sole screen-stack surface (ADR-024): a titled
+   rounded panel over the dimmed frame, key chips like the status line. */
+ConfirmWriteScreen {
+    align: center middle;
+}
+
+#confirm-dialog {
+    width: 80%;
+    height: 80%;
+    border: round $accent;
+    border-title-color: $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#confirm-scroll {
+    height: 1fr;
+}
+
+#confirm-chips {
+    height: 1;
+    margin-top: 1;
+}
+
 /* Status line — key chips left, health right. No stock Footer. */
 StatusLine {
     height: 1;
