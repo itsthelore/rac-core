@@ -1,10 +1,15 @@
+---
+schema_version: 1
+id: RAC-KTR62H8T7SRR
+type: requirement
+---
 # Requirement: Product Knowledge Navigator (Explorer)
 
 ## Status
 
 Proposed
 
-## Context
+## Problem
 
 As repositories grow, product knowledge becomes increasingly difficult to understand.
 
@@ -54,13 +59,11 @@ Common questions include:
 
 A dedicated navigation and maintenance experience is required.
 
-## Requirement
+## Requirements
 
-RAC shall provide an interactive product knowledge navigation environment called:
+- [REQ-001] RAC shall provide an interactive product knowledge navigation environment called RAC Explorer.
 
-**RAC Explorer**
-
-Explorer shall help users discover, understand, assess, and act upon product knowledge stored within RAC repositories.
+- [REQ-002] Explorer shall help users discover, understand, assess, and act upon product knowledge stored within RAC repositories.
 
 ## Product Goal
 

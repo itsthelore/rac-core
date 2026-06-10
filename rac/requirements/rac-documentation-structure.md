@@ -1,10 +1,15 @@
+---
+schema_version: 1
+id: RAC-KTR62H8G6YJJ
+type: requirement
+---
 # REQ-Documentation-Structure
 
 ## Status
 
 Proposed
 
-## Context
+## Problem
 
 RAC requires a clear separation between:
 
@@ -31,13 +36,12 @@ RAC should model its own philosophy:
 
 The documentation system should make RAC understandable within one minute while allowing deeper exploration through focused documents.
 
-## Requirement
+## Requirements
 
-RAC shall organize project knowledge into three distinct documentation layers:
-
-1. README.md as the project entry point.
-2. docs/ as the user-facing documentation layer.
-3. rac/ as the dogfooded requirements-as-code knowledge corpus.
+- [REQ-001] RAC shall organize project knowledge into three distinct documentation layers.
+- [REQ-002] README.md shall serve as the project entry point.
+- [REQ-003] docs/ shall serve as the user-facing documentation layer.
+- [REQ-004] rac/ shall serve as the dogfooded requirements-as-code knowledge corpus.
 
 ## Goals
 
@@ -300,4 +304,4 @@ Documentation should remain version controlled and reviewed through normal pull 
 
 ## Related Decisions
 
-- ADR-018: RAC Directory as Dogfooded Knowledge Corpus
+- ADR-018

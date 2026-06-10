@@ -1,10 +1,15 @@
+---
+schema_version: 1
+id: RAC-KTR62H8P3P1S
+type: requirement
+---
 # Requirement: Product Intent CI (Watchkeeper)
 
 ## Status
 
 Proposed
 
-## Context
+## Problem
 
 Software engineering workflows protect code changes through automated review systems:
 
@@ -40,17 +45,13 @@ The next step is surfacing that intelligence where teams already review change:
 
 Pull Requests.
 
-## Requirement
+## Requirements
 
-RAC shall provide a Git-native product knowledge review layer called:
+- [REQ-001] RAC shall provide a Git-native product knowledge review layer called RAC Watchkeeper.
 
-**RAC Watchkeeper**
+- [REQ-002] Watchkeeper shall observe product artifact changes and surface RAC intelligence during pull request workflows.
 
-Watchkeeper shall observe product artifact changes and surface RAC intelligence during pull request workflows.
-
-It shall help reviewers answer:
-
-> What changed, and does this product intent need attention?
+- [REQ-003] Watchkeeper shall help reviewers answer: what changed, and does this product intent need attention?
 
 ## Product Goal
 

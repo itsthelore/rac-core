@@ -1,10 +1,15 @@
+---
+schema_version: 1
+id: RAC-KTR62H8XA5D4
+type: requirement
+---
 # Requirement: Repository Review Mode
 
 ## Status
 
 Proposed
 
-## Context
+## Problem
 
 RAC provides deterministic analysis of product knowledge stored as Markdown artifacts.
 
@@ -26,11 +31,11 @@ As RAC evolves into infrastructure for product knowledge, users and automation s
 
 > What needs attention in this repository?
 
-## Requirement
+## Requirements
 
-RAC shall provide a repository-level review workflow that aggregates product knowledge analysis into a single actionable report.
+- [REQ-001] RAC shall provide a repository-level review workflow that aggregates product knowledge analysis into a single actionable report.
 
-Review Mode shall become the primary interface for understanding the state of a RAC repository.
+- [REQ-002] Review Mode shall become the primary interface for understanding the state of a RAC repository.
 
 ## Product Goal
 
