@@ -321,19 +321,19 @@ Explorer succeeds when:
 
 - teams maintain product knowledge more effectively
 
+## Related Requirements
+
+- rac-repository-review-mode
+
+- rac-product-intent-ci-watchkeeper
+
 ## Related Artifacts
 
 ### Depends On
 
-- Repository Review Mode
-
 - Portfolio Intelligence
 
 - Relationship Navigation
-
-### Related
-
-- Product Intent CI (Watchkeeper)
 
 ## Future Considerations
 

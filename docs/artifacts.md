@@ -58,7 +58,7 @@ What the system must do.
 
 - **Required:** Problem · Requirements
 - **Recommended:** Success Metrics · Risks · Assumptions
-- **Optional:** Related Decisions · Related Roadmaps · Related Prompts · Related Designs
+- **Optional:** Related Decisions · Related Roadmaps · Related Prompts · Related Designs · Related Requirements
 - **Naming:** a descriptive slug, e.g. `login-flow.md`. Write requirements as
   testable `[REQ-001]` statements.
 

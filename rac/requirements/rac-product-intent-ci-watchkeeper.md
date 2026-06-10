@@ -516,9 +516,9 @@ Watchkeeper succeeds when:
 - ADR-012
 - ADR-015
 
-## Related Artifacts
+## Related Requirements
 
-- Requirement: Repository Review Mode
+- rac-repository-review-mode
 
 ## Future Considerations
 

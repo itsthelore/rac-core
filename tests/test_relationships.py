@@ -155,15 +155,15 @@ def test_empty_relationship_section_is_omitted():
 
 
 def test_undeclared_relationship_section_is_ignored():
-    # Requirement does not declare "Related Requirements" as optional, so it is
+    # Decision does not declare "Related Prompts" as optional, so it is
     # not extracted even though it is a relationship-vocabulary section (REQ-002).
     text = (
-        "# Checkout\n\n## Problem\n\np\n\n## Requirements\n\n"
-        "- [REQ-001] User can finish checkout.\n\n## Related Requirements\n\n- REQ-002\n"
+        "# Use Stripe\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\n"
+        "q\n\n## Related Prompts\n\n- PROMPT-002\n"
     )
     result = inspect_text(text)
-    assert result.type == "requirement"
-    assert "related_requirements" not in result.relationships
+    assert result.type == "decision"
+    assert "related_prompts" not in result.relationships
 
 
 def test_present_sections_unchanged_by_relationships():

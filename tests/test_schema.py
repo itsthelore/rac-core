@@ -107,6 +107,7 @@ def test_schema_json_requirement_shape(capsys):
         "related_roadmaps",
         "related_prompts",
         "related_designs",
+        "related_requirements",
     ]
     assert "success_metrics" in payload["descriptions"]
     assert "success_metrics" in payload["guidance"]
