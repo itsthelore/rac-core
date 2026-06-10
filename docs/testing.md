@@ -46,6 +46,13 @@ Every `tests/test_*.py` must belong to exactly one CI battery in
 file is orphaned, duplicated, or stale, so add new test files to the matrix as you
 create them.
 
+The `explorer` battery tests the terminal Explorer without a terminal: screens run
+headlessly through Textual's `App.run_test()` pilot (`pytest-asyncio`, awaiting
+`app.workers.wait_for_complete()` before asserting), the adapter is tested as a
+plain service boundary, and `tests/test_explorer_isolation.py` enforces the layer
+rules with AST checks — `rac.core`/`rac.services` never import Textual or the
+Explorer, and widgets never import Core internals (ADR-015).
+
 ## Lint, format, and types
 
 CI gates on ruff and mypy (configured in `pyproject.toml`); run them locally
@@ -74,7 +81,7 @@ src/rac/
   core/        domain primitives: parsing, classification, identity, schemas
   services/    repository capabilities: inspect, stats, relationships, ingest
   output/      human, JSON, and template rendering
-  explorer/    consumer boundary
+  explorer/    terminal Explorer TUI (consumer of services, ADR-015)
 ```
 
 ## Verify before a pull request

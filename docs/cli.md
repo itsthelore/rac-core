@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with seventeen subcommands. This page documents each
+RAC ships a single command, `rac`, with eighteen subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -19,8 +19,8 @@ These apply across every command.
 - **Standard input** — `validate`, `inspect`, and `improve` accept `-` in place of a
   file to read Markdown from stdin (e.g. `cat file.md | rac validate -`).
 - **Recursion** — directory commands (`validate`, `stats`, `inspect`,
-  `relationships`, `review`, `portfolio`, `index`) recurse into subdirectories
-  by default. Pass `--top-level`
+  `relationships`, `review`, `portfolio`, `index`, `explorer`) recurse into
+  subdirectories by default. Pass `--top-level`
   to scan only the immediate directory. `--recursive` is accepted explicitly for
   clarity but is already the default.
 - **Exit codes** — every command follows the same convention:
@@ -333,6 +333,35 @@ rac index rac/ --json
   ]
 }
 ```
+
+---
+
+## explorer
+
+Launch the interactive terminal Explorer (v0.8.0) — an application shell that
+loads a repository without blocking, shows a summary (artifact counts,
+relationships, diagnostics, health score), and recovers from failures in place.
+Navigation, health detail, and recommendations arrive in later v0.8.x releases.
+
+Explorer is a presentation layer over the same services the CLI uses: everything
+it shows is also available through `rac portfolio`, `rac index`, and friends
+(ADR-015).
+
+- **Input:** `rac explorer [directory]` — defaults to the current directory; scanned
+  recursively for `*.md`.
+- **Options:** `--top-level` · `--recursive` (no `--json`: the surface is interactive)
+- **Keys:** `q` quit · `r` reload
+- **Exit codes:** `0` session quit · `2` not a directory, or the `explorer` extra is
+  not installed
+
+The TUI dependency ships as an optional extra, so the core install stays light:
+
+```bash
+pip install 'requirements-as-code[explorer]'
+rac explorer rac/
+```
+
+Without the extra, `rac explorer` prints the install hint above and exits `2`.
 
 ---
 

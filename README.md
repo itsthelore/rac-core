@@ -89,7 +89,14 @@ same standard it applies to your repository:
 ## Project Status
 
 RAC is early and evolving quickly. A terminal Explorer for browsing your knowledge
-base is planned. Contributions, ideas, and experiments are welcome — see
+base is under construction — the application shell ships today:
+
+```bash
+pip install 'requirements-as-code[explorer]'
+rac explorer rac/
+```
+
+Contributions, ideas, and experiments are welcome — see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
