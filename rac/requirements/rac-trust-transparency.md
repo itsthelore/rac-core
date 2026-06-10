@@ -1,10 +1,15 @@
+---
+schema_version: 1
+id: RAC-KTR62H90ND2A
+type: requirement
+---
 # REQ-Trust-Transparency (Optics)
 
 ## Status
 
 Proposed
 
-## Context
+## Problem
 
 RAC is a requirements validator.
 
@@ -12,19 +17,11 @@ For RAC, determinism is not a supporting feature. Determinism is the product.
 
 A tool that validates requirements must itself appear boring, reliable, testable, and automation-friendly. If the repository does not visibly demonstrate tests, fixtures, CI, and deterministic outputs, users may experience cognitive dissonance: the product claims to enforce trust, but the repository does not immediately prove trustworthiness.
 
-## Requirement
+## Requirements
 
-RAC shall make its reliability and determinism obvious from the repository structure, documentation, and automation setup.
+- [REQ-001] RAC shall make its reliability and determinism obvious from the repository structure, documentation, and automation setup.
 
-The repository shall clearly expose:
-
-* tests
-* fixtures
-* documentation
-* CI workflow
-* deterministic output examples
-* golden output tests
-* project planning artifacts
+- [REQ-002] The repository shall clearly expose tests, fixtures, documentation, CI workflow, deterministic output examples, golden output tests, and project planning artifacts.
 
 ## Goals
 
@@ -168,8 +165,11 @@ The README shall include a short trust-oriented section explaining that RAC is t
 * Golden output tests catch accidental output drift.
 * RAC’s repository presentation matches its product promise.
 
+## Related Decisions
+
+- ADR-001
+
 ## Related Artifacts
 
-* ADRs defining RAC as Markdown-first infrastructure.
 * Roadmap items for repository structure, CI, fixtures, and test coverage.
 * Requirements covering validation, diffing, stats, and schema behavior.

@@ -171,8 +171,7 @@ Users must understand RAC state without seeing the mascot.
 
 ## Related Roadmaps
 
-- v0.9.0-explorer-foundation
-- v0.9.1-explorer-experience
+- v0.8.6-explorer-maturity
 
 ---
 

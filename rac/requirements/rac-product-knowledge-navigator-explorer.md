@@ -1,10 +1,15 @@
+---
+schema_version: 1
+id: RAC-KTR62H8T7SRR
+type: requirement
+---
 # Requirement: Product Knowledge Navigator (Explorer)
 
 ## Status
 
 Proposed
 
-## Context
+## Problem
 
 As repositories grow, product knowledge becomes increasingly difficult to understand.
 
@@ -54,13 +59,11 @@ Common questions include:
 
 A dedicated navigation and maintenance experience is required.
 
-## Requirement
+## Requirements
 
-RAC shall provide an interactive product knowledge navigation environment called:
+- [REQ-001] RAC shall provide an interactive product knowledge navigation environment called RAC Explorer.
 
-**RAC Explorer**
-
-Explorer shall help users discover, understand, assess, and act upon product knowledge stored within RAC repositories.
+- [REQ-002] Explorer shall help users discover, understand, assess, and act upon product knowledge stored within RAC repositories.
 
 ## Product Goal
 
@@ -216,37 +219,53 @@ This requirement defines the purpose, capabilities, and intended outcomes of Exp
 
 Interaction models, onboarding experiences, visual systems, navigation workflows, recommendation presentation, action workflows, editor integration, and mascot behaviour are delegated to associated design artifacts.
 
-## Related Architecture Decisions
+## Related Decisions
 
-- ADR-015 Explorer as a Consumer
+- ADR-015
 
-- ADR-016 Explorer Delivery Surface
+- ADR-028
 
-## Related Design Artifacts
+## Related Designs
 
-- DESIGN-first-run-experience
+- explorer-first-run-experience
 
-- DESIGN-command-surface
+- explorer-command-surface
 
-- DESIGN-navigation-model
+- explorer-health-model
 
-- DESIGN-health-model
+- explorer-knowledge-graph
 
-- DESIGN-knowledge-graph
+- explorer-recommendations
 
-- DESIGN-recommendations
+- explorer-action-workflows
 
-- DESIGN-action-workflows
+- explorer-editor-integrations
 
-- DESIGN-editor-integration
+- explorer-import-workflow
 
-- DESIGN-visual-system
+- explorer-visual-system
 
-- DESIGN-mascot
+- explorer-mascot
 
-- DESIGN-mascot-interaction
+- explorer-mascot-interaction
 
-- DESIGN-mascot-animations
+- explorer-mascot-animations
+
+## Related Roadmaps
+
+- v0.8.0-explorer-foundation
+
+- v0.8.1-explorer-navigation
+
+- v0.8.2-explorer-health
+
+- v0.8.3-explorer-recommendations
+
+- v0.8.4-explorer-action-workflow
+
+- v0.8.5-explorer-relationship-navigation
+
+- v0.8.6-explorer-maturity
 
 ## Non-Goals
 
@@ -302,25 +321,19 @@ Explorer succeeds when:
 
 - teams maintain product knowledge more effectively
 
+## Related Requirements
+
+- rac-repository-review-mode
+
+- rac-product-intent-ci-watchkeeper
+
 ## Related Artifacts
 
 ### Depends On
 
-- Repository Review Mode
-
 - Portfolio Intelligence
 
 - Relationship Navigation
-
-### Related
-
-- Product Intent CI (Watchkeeper)
-
-### Architecture
-
-- ADR-015 Explorer as a Consumer
-
-- ADR-016 Explorer Delivery Surface
 
 ## Future Considerations
 

@@ -247,7 +247,7 @@ The onboarding flow shall:
 
 ## Related Roadmaps
 
-- v0.9.1-explorer-experience
+- v0.8.1-explorer-navigation
 
 ---
 

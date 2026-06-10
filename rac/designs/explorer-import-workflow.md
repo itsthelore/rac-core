@@ -105,7 +105,7 @@ Import status shall use text labels as well as visual indicators.
 
 ## Related Roadmaps
 
-- v0.9.2-knowledge-operations
+- v0.8.4-explorer-action-workflow
 
 ---
 

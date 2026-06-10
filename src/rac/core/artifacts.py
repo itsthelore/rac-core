@@ -105,12 +105,15 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         required=("problem", "requirements"),
         recommended=("success metrics", "risks", "assumptions"),
         # Relationship sections (v0.7.0): metadata only — extracted and counted,
-        # never scored or templated (REQ-003).
+        # never scored or templated (REQ-003). ``related requirements`` lets a
+        # requirement reference the requirements it depends on; appended last
+        # because section order is append-only (ADR-007).
         optional=(
             "related decisions",
             "related roadmaps",
             "related prompts",
             "related designs",
+            "related requirements",
         ),
         descriptions={
             "problem": "The user or business problem this addresses",
@@ -123,6 +126,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "related roadmaps",
                 "related prompts",
                 "related designs",
+                "related requirements",
             ),
         },
         guidance={

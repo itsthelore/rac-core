@@ -38,3 +38,5 @@ Optional Sections:
       Description: Prompt artifacts this artifact references
   - Related Designs
       Description: Design artifacts this artifact references
+  - Related Requirements
+      Description: Requirement artifacts this artifact references

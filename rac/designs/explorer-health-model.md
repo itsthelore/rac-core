@@ -140,8 +140,7 @@ Red
 
 ## Related Roadmaps
 
-- v0.9.0-explorer-foundation
-- v0.9.2-knowledge-operations
+- v0.8.2-explorer-health
 
 ---
 

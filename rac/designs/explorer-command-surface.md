@@ -264,8 +264,8 @@ Red item
 
 ## Related Roadmaps
 
-- v0.9.0-explorer-foundation
-- v0.9.2-knowledge-operations
+- v0.8.1-explorer-navigation
+- v0.8.4-explorer-action-workflow
 
 ---
 

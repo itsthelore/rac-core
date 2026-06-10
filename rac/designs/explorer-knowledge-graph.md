@@ -123,7 +123,7 @@ Superseded
 
 ## Related Roadmaps
 
-- v0.9.3-intelligence-views
+- v0.8.5-explorer-relationship-navigation
 
 ---
 
