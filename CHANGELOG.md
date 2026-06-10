@@ -8,6 +8,17 @@ details, release history over commit history.
 
 ### Added
 
+- Explorer navigation (v0.8.1): browse every artifact grouped by type, open
+  any artifact's context view (identity, validation state, completeness,
+  relationships, diagnostics), and reach anything through the `/` command
+  surface — `open`, `find`, `browse`, `home`, `help`, `quit`, with bare text
+  treated as a search using `rac resolve` / `rac find` semantics.
+- Explorer first-run onboarding (v0.8.1): launch states derive from
+  repository content (existing, empty, or invalid repository); returning
+  users skip onboarding via a marker under the XDG state directory — the
+  only state Explorer persists.
+- `rac explorer` now defaults to the `rac/` root when present (ADR-018),
+  falling back to the current directory (v0.8.1).
 - `rac explorer [directory]` — interactive terminal Explorer application
   shell (Textual): loads a repository without blocking the interface, shows
   live progress and a repository summary (artifact counts, relationships,
