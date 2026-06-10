@@ -79,6 +79,8 @@ jobs:
             paths: "tests/test_migrate.py"
           - name: portfolio
             paths: "tests/test_portfolio.py"
+          - name: repository
+            paths: "tests/test_repository.py"
           - name: relationships
             paths: "tests/test_relationships.py tests/test_relationships_cmd.py tests/test_relationship_validation.py"
           - name: resolve
