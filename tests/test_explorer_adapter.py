@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from rac.core.operations import CancellationToken, OperationCancelled
+from rac.core.operations import CancellationToken
 from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
 from rac.services.portfolio import build_portfolio_summary
@@ -76,13 +74,12 @@ def test_empty_directory_is_a_summary_not_an_error(tmp_path):
     assert result.artifact_total == 0
 
 
-def test_cancellation_propagates_not_an_error():
+def test_cancelled_load_returns_none_not_an_error():
     token = CancellationToken()
     adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
 
     def cancel_immediately(state: LoadProgressState) -> None:
         token.cancel()
 
-    with pytest.raises(OperationCancelled):
-        adapter.load(on_progress=cancel_immediately, cancel=token)
+    assert adapter.load(on_progress=cancel_immediately, cancel=token) is None
     assert adapter.repository is None

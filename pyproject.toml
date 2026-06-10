@@ -40,13 +40,19 @@ ingest = ["markitdown[docx]"]                        # DOCX (+ HTML, Markdown)
 ingest-pdf = ["markitdown[pdf]"]                     # + PDF
 ingest-office = ["markitdown[pptx,xlsx,xls]"]        # + PPTX / XLSX / XLS
 ingest-all = ["markitdown[docx,pdf,pptx,xlsx,xls]"]  # every supported format
-# dev also pulls the libraries used to *generate* fixture files in the tests.
+# Interactive Explorer TUI (rac explorer, v0.8.0). Optional so the core
+# install stays light; without it `rac explorer` prints an install hint.
+explorer = ["textual>=1.0"]
+# dev also pulls the libraries used to *generate* fixture files in the tests,
+# plus the explorer extra so its batteries run headlessly in CI.
 dev = [
     "pytest>=7.0",
     "pytest-cov",
+    "pytest-asyncio",
     "ruff",
     "mypy",
     "types-PyYAML",
+    "textual>=1.0",
     "markitdown[docx,pdf,pptx,xlsx,xls]",
     "python-docx",
     "python-pptx",
