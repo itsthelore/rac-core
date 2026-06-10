@@ -339,10 +339,11 @@ rac index rac/ --json
 ## explorer
 
 Launch the interactive terminal Explorer — browse every artifact, inspect any
-of them in context, and reach anything through the `/` command surface, without
-memorizing RAC commands. The home view shows the repository summary, health
-score, and attention items; health detail and recommendations arrive in later
-v0.8.x releases.
+of them in context, assess repository health, and reach anything through the `/`
+command surface, without memorizing RAC commands. The home view shows the
+repository summary and attention items; the health view (`h` or `/health`)
+breaks health into four areas and links each attention item to the artifact it
+concerns. Recommendations arrive in later v0.8.x releases.
 
 Explorer is a presentation layer over the same services the CLI uses: everything
 it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
@@ -352,10 +353,13 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   (ADR-018), else the current directory; scanned recursively for `*.md`.
 - **Options:** `--top-level` · `--recursive` (no `--json`: the surface is interactive)
 - **Keys:** `/` commands and search · `↑ ↓` navigate · `Enter` select ·
-  `Esc` back · `r` reload (home) · `q` quit
+  `Esc` back · `h` health (home) · `r` reload (home) · `q` quit
 - **Commands (`/`):** `open <ref>` · `find <query> [type]` · `browse [type]` ·
-  `home` · `help` · `quit` — anything else is a search. Lookup resolves
+  `health` · `home` · `help` · `quit` — anything else is a search. Lookup resolves
   canonical IDs and legacy aliases with `rac resolve` / `rac find` semantics.
+- **Health:** `h` or `/health` opens the health view — Core's score with a text
+  label, the Completeness / Relationships / Validation / Coverage areas, and a
+  prioritized attention list whose items open the affected artifact.
 - **First run:** onboarding derives from repository content (existing, empty, or
   invalid repository) and is skipped for returning users; the completion marker
   under `$XDG_STATE_HOME/rac/` is the only state Explorer persists.
