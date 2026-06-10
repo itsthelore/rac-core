@@ -12,3 +12,8 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+
+# Coverage data (pytest --cov; reported in CI, never committed)
+.coverage
+.coverage.*
+htmlcov/
