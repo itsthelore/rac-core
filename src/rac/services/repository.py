@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from rac.core.artifacts import spec_for
+from rac.core.classification import missing_sections
 from rac.core.corpus import collect_corpus
 from rac.core.operations import CancelToken, Progress, ProgressCallback, checkpoint
 
@@ -52,6 +54,10 @@ class Artifact:
     A join of the index inventory (identity, type, title, path, aliases) and
     directory validation (``status``: ``valid`` / ``invalid`` / ``skipped``),
     covering every supported type plus ``unknown``.
+
+    ``missing_recommended`` (v0.8.1) lists the schema-recommended sections the
+    artifact does not fill — the same completeness rules ``rac inspect`` and
+    ``rac portfolio`` report; always empty for unknown artifacts.
     """
 
     id: str
@@ -60,6 +66,7 @@ class Artifact:
     path: str
     aliases: tuple[str, ...]
     status: str
+    missing_recommended: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -185,6 +192,14 @@ def load_repository(
     portfolio = portfolio_from_corpus(directory, entries, recursive=recursive)
     phase_done("portfolio")
 
+    missing_by_path: dict[str, tuple[str, ...]] = {}
+    for corpus_entry in entries:
+        spec = spec_for(corpus_entry.artifact_type)
+        if spec is None:
+            continue
+        _, missing_recommended = missing_sections(corpus_entry.product, spec)
+        missing_by_path[str(corpus_entry.path)] = tuple(missing_recommended)
+
     artifacts = [
         Artifact(
             id=entry.id,
@@ -193,6 +208,7 @@ def load_repository(
             path=entry.path,
             aliases=tuple(entry.aliases),
             status=status_by_path[entry.path],
+            missing_recommended=missing_by_path.get(entry.path, ()),
         )
         for entry in index.artifacts
     ]
