@@ -119,6 +119,17 @@ class CommandScreen(ModalScreen[None]):
 
             self.app.pop_screen()
             self.app.push_screen(RecommendationsScreen(self.adapter, recommendations))
+        elif invocation.command == "import":
+            parts = invocation.args.split()
+            if not parts:
+                self._set_options([Option("Usage: /import <source> [target]", disabled=True)])
+                return
+            source = parts[0]
+            target = parts[1] if len(parts) > 1 else None
+            from .import_ import ImportScreen
+
+            self.app.pop_screen()
+            self.app.push_screen(ImportScreen(self.adapter, source, target))
         elif invocation.command == "browse":
             artifact_type = invocation.args.casefold() or None
             browser = self.adapter.browser_state(artifact_type)

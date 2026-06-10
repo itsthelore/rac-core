@@ -151,6 +151,16 @@ class RecommendationsState:
 
 
 @dataclass(frozen=True)
+class ImportPreview:
+    """A converted document awaiting confirmation before it is written."""
+
+    source: str
+    converter: str
+    target: str
+    markdown: str
+
+
+@dataclass(frozen=True)
 class LoadErrorState:
     """A recoverable failure: the shell shows it and offers retry."""
 

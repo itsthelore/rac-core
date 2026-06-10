@@ -337,6 +337,62 @@ def test_clean_repository_has_no_recommendations():
     assert recs.groups == ()
 
 
+def test_import_preview_converts_markdown_without_writing(tmp_path):
+    source = tmp_path / "notes.md"
+    source.write_text("# Imported Notes\n\nbody\n", encoding="utf-8")
+    target = tmp_path / "out.md"
+    adapter = ExplorerAdapter(str(tmp_path))
+    preview = adapter.import_preview(str(source), str(target))
+    from rac.explorer.state import ImportPreview
+
+    assert isinstance(preview, ImportPreview)
+    assert preview.converter == "markdown"
+    assert "# Imported Notes" in preview.markdown
+    assert not target.exists()  # preview never writes (Initiative 4)
+
+
+def test_import_preview_matches_rac_ingest(tmp_path):
+    from rac.services.ingest import ingest
+
+    source = tmp_path / "doc.md"
+    source.write_text("# Same As Ingest\n", encoding="utf-8")
+    preview = ExplorerAdapter(str(tmp_path)).import_preview(str(source))
+    from rac.explorer.state import ImportPreview
+
+    assert isinstance(preview, ImportPreview)
+    assert preview.markdown == ingest(str(source)).markdown
+
+
+def test_import_preview_reports_unsupported_type(tmp_path):
+    source = tmp_path / "thing.xyz"
+    source.write_text("data", encoding="utf-8")
+    result = ExplorerAdapter(str(tmp_path)).import_preview(str(source))
+    assert isinstance(result, str)
+    assert "unsupported" in result.lower()
+
+
+def test_import_preview_reports_missing_source(tmp_path):
+    result = ExplorerAdapter(str(tmp_path)).import_preview(str(tmp_path / "nope.md"))
+    assert isinstance(result, str)
+    assert "could not read" in result.lower() or "no such" in result.lower()
+
+
+def test_write_import_writes_and_refuses_overwrite(tmp_path):
+    from rac.explorer.state import ImportPreview
+
+    target = tmp_path / "written.md"
+    preview = ImportPreview(
+        source="src.md", converter="markdown", target=str(target), markdown="# Hi\n"
+    )
+    adapter = ExplorerAdapter(str(tmp_path))
+    message = adapter.write_import(preview)
+    assert "Imported" in message
+    assert target.read_text(encoding="utf-8") == "# Hi\n"
+
+    again = adapter.write_import(preview)
+    assert "Refusing to overwrite" in again
+
+
 def test_cancelled_load_returns_none_not_an_error():
     token = CancellationToken()
     adapter = ExplorerAdapter(str(FIXTURES / "all_types"))

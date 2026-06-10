@@ -10,8 +10,10 @@ testable without a terminal.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from rac.core.operations import CancelToken, OperationCancelled, Progress
+from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.repository import Artifact, Repository, load_repository
 from rac.services.resolve import (
     OUTCOME_DUPLICATE,
@@ -37,6 +39,7 @@ from .state import (
     ContextState,
     HealthAreaState,
     HealthState,
+    ImportPreview,
     LoadErrorState,
     LoadProgressState,
     LookupState,
@@ -361,6 +364,43 @@ class ExplorerAdapter:
     def open_in_editor(self, path: str) -> EditorOutcome:
         """Open ``path`` in the user's configured editor (v0.8.4, ADR-024)."""
         return editor_mod.open_in_editor(path)
+
+    def import_preview(self, source: str, target: str | None = None) -> ImportPreview | str:
+        """Convert ``source`` via Core ingest for review (v0.8.4).
+
+        Returns an :class:`ImportPreview` to confirm, or an error message
+        string — conversion never raises into the UI (Initiative 5/6). The
+        default target is the source stem as ``.md`` in the current directory;
+        nothing is written here (Initiative 4).
+        """
+        try:
+            result = ingest(source)
+        except UnsupportedDocument as exc:
+            return str(exc)
+        except ConversionError as exc:
+            return f"Could not convert {source}: {exc}"
+        except OSError as exc:
+            return f"Could not read {source}: {exc}"
+        resolved_target = target or f"{Path(source).stem}.md"
+        return ImportPreview(
+            source=source,
+            converter=result.converter,
+            target=resolved_target,
+            markdown=result.markdown,
+        )
+
+    def write_import(self, preview: ImportPreview) -> str:
+        """Write a confirmed import; never overwrites (Initiative 4)."""
+        path = Path(preview.target)
+        if path.exists():
+            return f"Refusing to overwrite existing file: {preview.target}"
+        try:
+            if path.parent != Path():
+                path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(preview.markdown, encoding="utf-8")
+        except OSError as exc:
+            return f"Could not write {preview.target}: {exc}"
+        return f"Imported {preview.source} → {preview.target}"
 
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""

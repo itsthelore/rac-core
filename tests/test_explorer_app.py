@@ -186,7 +186,7 @@ async def test_slash_help_lists_registry_and_esc_closes():
         await pilot.pause()
         assert isinstance(app.screen, CommandScreen)
         results = app.screen.query_one(OptionList)
-        assert results.option_count == 8  # the whole registry, nothing more
+        assert results.option_count == 9  # the whole registry, nothing more
         await pilot.press("escape")
         assert isinstance(app.screen, RepositoryScreen)
 
@@ -403,6 +403,76 @@ async def test_context_e_without_editor_shows_guidance(monkeypatch):
         await pilot.pause()
         status = str(app.screen.query_one("#context-status", Static).content)
         assert "No editor configured" in status
+
+
+@pytest.mark.asyncio
+async def test_slash_import_previews_then_confirms_write(tmp_path):
+    from textual.widgets import Static
+
+    from rac.explorer.screens.import_ import ImportScreen
+
+    source = tmp_path / "incoming.md"
+    source.write_text("# Imported Doc\n\nhello\n", encoding="utf-8")
+    target = tmp_path / "result.md"
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*f"import {source} {target}")
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert isinstance(app.screen, ImportScreen)
+        panel = str(app.screen.query_one("#import-panel", Static).content)
+        assert "Preview" in panel and "Imported Doc" in panel
+        assert not target.exists()  # not written until confirmed
+
+        await pilot.press("y")
+        await pilot.pause()
+        assert target.read_text(encoding="utf-8") == "# Imported Doc\n\nhello\n"
+        assert "Imported" in str(app.screen.query_one("#import-panel", Static).content)
+
+
+@pytest.mark.asyncio
+async def test_slash_import_cancel_writes_nothing(tmp_path):
+    from rac.explorer.screens.import_ import ImportScreen
+
+    source = tmp_path / "incoming.md"
+    source.write_text("# Doc\n", encoding="utf-8")
+    target = tmp_path / "result.md"
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*f"import {source} {target}")
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert isinstance(app.screen, ImportScreen)
+        await pilot.press("escape")  # cancel before confirming
+        await pilot.pause()
+        assert not target.exists()
+
+
+@pytest.mark.asyncio
+async def test_slash_import_reports_unsupported(tmp_path):
+    from textual.widgets import Static
+
+    source = tmp_path / "thing.xyz"
+    source.write_text("x", encoding="utf-8")
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*f"import {source}")
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        panel = str(app.screen.query_one("#import-panel", Static).content)
+        assert "Import failed" in panel
 
 
 @pytest.mark.asyncio
