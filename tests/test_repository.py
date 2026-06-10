@@ -58,6 +58,23 @@ def test_unknown_artifacts_are_included_and_skipped():
     assert unknown.status == "skipped"
 
 
+def test_complete_artifacts_have_no_missing_recommended():
+    repo = load("valid_clean")
+    assert all(a.missing_recommended == () for a in repo.artifacts)
+
+
+def test_unknown_artifacts_carry_no_completeness():
+    repo = load("all_types")
+    [unknown] = repo.artifacts_of_type("unknown")
+    assert unknown.missing_recommended == ()
+
+
+def test_missing_recommended_matches_portfolio_completeness():
+    repo = load("all_types")
+    total_missing = sum(len(a.missing_recommended) for a in repo.artifacts)
+    assert total_missing == repo.portfolio.recommended_slots - repo.portfolio.filled_slots
+
+
 # ---------------------------------------------------------------------------
 # Lookup surface for v0.8.1 navigation
 # ---------------------------------------------------------------------------
