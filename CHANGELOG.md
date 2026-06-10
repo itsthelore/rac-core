@@ -8,6 +8,21 @@ details, release history over commit history.
 
 ### Added
 
+- `rac explorer [directory]` — interactive terminal Explorer application
+  shell (Textual): loads a repository without blocking the interface, shows
+  live progress and a repository summary (artifact counts, relationships,
+  diagnostics, health score), and recovers from failures in place with
+  reload. Ships as the optional `explorer` extra
+  (`pip install 'requirements-as-code[explorer]'`); without it the command
+  prints an install hint (v0.8.0).
+- First-class repository model in the service layer: `load_repository`
+  composes index, validation, relationships, and portfolio over a single
+  corpus walk into one navigable object (artifacts, relationships with
+  resolution outcomes, unified diagnostics) for Explorer and future
+  consumers; no CLI or JSON output changes (v0.8.0).
+- Operation primitives for long-lived consumers: progress reporting and
+  cooperative cancellation across repository loading, validated against
+  1000+ artifact corpora (v0.8.0).
 - CI battery integrity (v0.7.14): eight test files (~1,300 lines, including
   all coverage for `rac new` and `rac migrate`) were missing from the CI
   battery matrix and never ran; they are restored, and a new guard test
