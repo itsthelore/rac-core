@@ -35,11 +35,11 @@ class Invocation:
     args: str
 
 
-# The v0.8.1 registry. /health arrives with v0.8.2 (its roadmap owns it).
 REGISTRY: tuple[CommandSpec, ...] = (
     CommandSpec("open", "open <ref>", "Open an artifact by ID or alias"),
     CommandSpec("find", "find <query> [type]", "Search artifacts by ID, title, or path"),
     CommandSpec("browse", "browse [type]", "Browse all artifacts"),
+    CommandSpec("health", "health", "Show repository health and attention items"),
     CommandSpec("home", "home", "Return to the repository home"),
     CommandSpec("help", "help", "List available commands"),
     CommandSpec("quit", "quit", "Quit the Explorer"),

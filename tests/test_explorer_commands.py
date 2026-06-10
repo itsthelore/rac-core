@@ -10,13 +10,23 @@ from __future__ import annotations
 from rac.explorer.commands import EXAMPLES, REGISTRY, SEARCH, parse, suggestions
 
 
-def test_registry_is_the_v081_contract():
-    assert [spec.name for spec in REGISTRY] == ["open", "find", "browse", "home", "help", "quit"]
+def test_registry_is_the_v082_contract():
+    assert [spec.name for spec in REGISTRY] == [
+        "open",
+        "find",
+        "browse",
+        "health",
+        "home",
+        "help",
+        "quit",
+    ]
     assert all(spec.usage and spec.summary for spec in REGISTRY)
 
 
-def test_health_is_not_discoverable_until_v082():
-    assert "health" not in {spec.name for spec in REGISTRY}
+def test_health_is_discoverable():
+    assert "health" in {spec.name for spec in REGISTRY}
+    assert parse("health").command == "health"
+    assert parse("/health").command == "health"
 
 
 def test_registered_command_routes_with_args():
@@ -49,7 +59,8 @@ def test_empty_input_is_an_empty_search():
 
 def test_suggestions_prefix_match_on_first_word():
     assert [s.name for s in suggestions("o")] == ["open"]
-    assert [s.name for s in suggestions("h")] == ["home", "help"]
+    assert [s.name for s in suggestions("h")] == ["health", "home", "help"]
+    assert [s.name for s in suggestions("he")] == ["health", "help"]
     assert suggestions("zzz") == ()
     assert [s.name for s in suggestions("")] == [s.name for s in REGISTRY]
 

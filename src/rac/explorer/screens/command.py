@@ -101,6 +101,15 @@ class CommandScreen(ModalScreen[None]):
             self._show_help()
         elif invocation.command == "home":
             self._pop_to_home()
+        elif invocation.command == "health":
+            health = self.adapter.health_state()
+            if health is None:
+                self._set_options([Option("Repository not loaded yet", disabled=True)])
+                return
+            from .health import HealthScreen
+
+            self.app.pop_screen()
+            self.app.push_screen(HealthScreen(self.adapter, health))
         elif invocation.command == "browse":
             artifact_type = invocation.args.casefold() or None
             browser = self.adapter.browser_state(artifact_type)
