@@ -8,6 +8,21 @@ details, release history over commit history.
 
 ### Added
 
+- Explorer visual overhaul (v0.8.7): one persistent workspace frame replaces
+  the screen-per-view shell — a navigation sidebar of type-tagged artifacts
+  (`REQ` `ADR` `RMP` `PRM` `DSG`, grouped with counts or flat by preference),
+  a context panel whose views swap in place with `Esc` unwinding history, an
+  always-visible `/` command bar, and a status line of key chips with the
+  health score. Opening an artifact now shows the document itself: a tabbed
+  context view with the rendered Markdown first (read-only), then Inspection,
+  Links (the relationship traversal moved in here), and Findings. Ships the
+  rac-lantern theme — lantern amber on near-black, from the Explorer mascot's
+  palette — as the default; the `theme` preference selects any Textual theme,
+  and every state keeps its text label under any palette. Key meanings are
+  unchanged (`/`, `Enter`, `Esc`, `h`, `r`, `.`, `g`, `e`, `x`, `y`, `q`),
+  and the sidebar hides below 80 columns so narrow terminals keep reading
+  room.
+
 - Explorer maturity (v0.8.6): workspace continuity — Explorer remembers recently
   opened repositories and the last artifact per repository, and `.` / `/resume`
   reopens it; optional file-based preferences (`theme`, `mascot`, `animations`,
@@ -76,6 +91,12 @@ details, release history over commit history.
   (v0.7.14).
 
 ### Changed
+
+- Explorer command results, lookups, help, and preferences now render inside
+  the context panel instead of a modal overlay, so the layout never jumps
+  (v0.8.7). The default Explorer theme preference is `rac-lantern` (was
+  `textual-dark`); set `theme` in `$XDG_CONFIG_HOME/rac/explorer.json` to
+  keep a different one.
 
 - Repository corpus traversal is defined once in core (`walk_corpus`) and
   consumed by every repository command — behavior and output unchanged
