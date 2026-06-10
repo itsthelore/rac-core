@@ -53,13 +53,19 @@ class RepositoryPanel(Static):
         lines.extend(["", "Press / for anything · Enter to browse"])
         self.update("\n".join(lines))
 
-    def show_onboarding(self, summary: RepositorySummaryState) -> None:
+    def show_onboarding(self, summary: RepositorySummaryState, header: str = "") -> None:
         """The first-run state (v0.8.1): existing, empty, or invalid repository.
 
         Derived from repository content; Enter always continues into the
         normal summary (no forced setup, DESIGN-first-run-experience).
+
+        ``header`` carries the v0.8.6 welcome additions (mascot, recent
+        repositories, a resume hint) the screen composes from preferences and
+        the workspace; it is empty when those are disabled or absent.
         """
         lines = ["Welcome to RAC Explorer", "Your product knowledge workspace.", ""]
+        if header:
+            lines.extend([header, ""])
         if summary.artifact_total == 0:
             lines.extend(
                 [

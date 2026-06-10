@@ -45,6 +45,8 @@ REGISTRY: tuple[CommandSpec, ...] = (
     ),
     CommandSpec("import", "import <source> [target]", "Convert a document into Markdown"),
     CommandSpec("relationships", "relationships <ref>", "Traverse an artifact's relationships"),
+    CommandSpec("resume", "resume", "Reopen the last artifact in this repository"),
+    CommandSpec("preferences", "preferences", "Show preferences and where to change them"),
     CommandSpec("home", "home", "Return to the repository home"),
     CommandSpec("help", "help", "List available commands"),
     CommandSpec("quit", "quit", "Quit the Explorer"),
