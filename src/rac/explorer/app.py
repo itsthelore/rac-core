@@ -15,7 +15,7 @@ from textual.binding import Binding
 from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.screens.main import MainScreen
 from rac.explorer.theme import RAC_LANTERN, THEME_NAME
-from rac.explorer.widgets.commandbar import CommandBar
+from rac.explorer.widgets.palette import CommandPalette
 
 
 class ExplorerApp(App[None]):
@@ -26,7 +26,7 @@ class ExplorerApp(App[None]):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         # Not a priority binding: a typed `/` must keep working inside the
-        # command bar's input rather than re-triggering this action.
+        # palette's input rather than re-triggering this action.
         Binding("slash", "command_surface", "Commands"),
     ]
 
@@ -47,8 +47,8 @@ class ExplorerApp(App[None]):
         self.push_screen(MainScreen(self.adapter))
 
     def action_command_surface(self) -> None:
-        # `/` focuses the persistent bar from anywhere on the main screen;
-        # there is no bar on the confirm-write modal.
-        bars = self.screen.query(CommandBar)
-        if bars:
-            bars.first().focus()
+        # `/` summons the palette from anywhere on the main screen; there is
+        # no palette on the confirm-write modal.
+        palettes = self.screen.query(CommandPalette)
+        if palettes:
+            palettes.first().show()

@@ -17,7 +17,7 @@ from textual.containers import Horizontal, Vertical
 from textual.events import DescendantFocus, Resize
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import ContentSwitcher, Input, Tree
+from textual.widgets import ContentSwitcher, Tree
 from textual.widgets.option_list import Option
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -25,7 +25,7 @@ from rac.explorer import commands
 from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
 from rac.explorer.widgets.appbar import AppBar
-from rac.explorer.widgets.commandbar import CommandBar
+from rac.explorer.widgets.palette import CommandPalette
 from rac.explorer.widgets.sidebar import NavigationSidebar
 from rac.explorer.widgets.statusline import StatusLine
 from rac.explorer.widgets.views import (
@@ -94,8 +94,9 @@ class MainScreen(Screen[None]):
                 yield RecommendationsView(self.adapter)
                 yield ImportView(self.adapter)
                 yield ResultsView()
-        yield CommandBar()
         yield StatusLine()
+        # Floats over the context region on its own layer; hidden when idle.
+        yield CommandPalette(self.adapter)
 
     def on_mount(self) -> None:
         self._set_region_title("view-home")
@@ -160,7 +161,7 @@ class MainScreen(Screen[None]):
     def _region_of(self, widget: Widget) -> str:
         node: Widget | None = widget
         while node is not None and node is not self:
-            if isinstance(node, CommandBar):
+            if isinstance(node, CommandPalette):
                 return "command"
             if isinstance(node, NavigationSidebar):
                 return "sidebar"
@@ -174,18 +175,8 @@ class MainScreen(Screen[None]):
         region = self._region_of(event.widget)
         self.query_one(StatusLine).show_hints(region)
         if region != "command":
-            # Remembered so Esc in the bar can hand focus straight back.
+            # Remembered so Esc in the palette can hand focus straight back.
             self._last_focus = event.widget
-
-    def focus_command_bar(self) -> None:
-        self.query_one(CommandBar).focus()
-
-    def on_command_bar_dismissed(self, event: CommandBar.Dismissed) -> None:
-        event.stop()
-        if self._last_focus is not None and self._last_focus.is_attached:
-            self._last_focus.focus()
-        else:
-            self._focus_view(self.current_view)
 
     def action_back(self) -> None:
         if not self._history:
@@ -316,7 +307,7 @@ class MainScreen(Screen[None]):
         if path is not None:
             self.open_artifact(path)
 
-    # --- command routing (the persistent `/` surface) -----------------------------
+    # --- command routing (the summoned `/` palette) --------------------------------
 
     def _show_results(self, options: list[Option | None], *, focus: bool = False) -> None:
         self.query_one(ResultsView).show_options(options, focus_first=focus)
@@ -340,10 +331,25 @@ class MainScreen(Screen[None]):
         )
         self._show_results(options, focus=bool(lookup.rows))
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        event.stop()
-        text = event.value
-        self.query_one(CommandBar).value = ""
+    def summon_palette(self) -> None:
+        self.query_one(CommandPalette).show()
+
+    def on_command_palette_dismissed(self, message: CommandPalette.Dismissed) -> None:
+        message.stop()
+        if self._last_focus is not None and self._last_focus.is_attached:
+            self._last_focus.focus()
+        else:
+            self._focus_view(self.current_view)
+
+    def on_command_palette_artifact_chosen(self, message: CommandPalette.ArtifactChosen) -> None:
+        message.stop()
+        self.open_artifact(message.path)
+
+    def on_command_palette_routed(self, message: CommandPalette.Routed) -> None:
+        message.stop()
+        self.route_command(message.text)
+
+    def route_command(self, text: str) -> None:
         invocation = commands.parse(text)
         if not invocation.args and invocation.command == commands.SEARCH:
             self._show_examples()

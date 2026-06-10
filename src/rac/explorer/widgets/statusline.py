@@ -51,7 +51,7 @@ _HINTS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "import": (("y", "Confirm"), ("Esc", "Back")),
     "results": (("⏎", "Open"), ("Esc", "Back"), ("/", "Commands")),
-    "command": (("⏎", "Run"), ("Esc", "Back")),
+    "command": (("⏎", "Run"), ("↑↓", "Choose"), ("Esc", "Close")),
 }
 
 

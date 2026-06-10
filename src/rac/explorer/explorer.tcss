@@ -7,6 +7,9 @@
 MainScreen {
     layout: vertical;
     background: $background;
+    /* The palette floats over the frame on its own layer, centred. */
+    layers: base palette;
+    align-horizontal: center;
 }
 
 /* App bar — one plain line, no stock Header. */
@@ -75,15 +78,38 @@ ContextView TabbedContent {
     height: 1fr;
 }
 
-/* Command bar — always visible, never modal (DESIGN-command-surface). */
-CommandBar {
-    border: round $panel;
+/* Command palette — summoned by `/`, hidden when idle
+   (DESIGN-command-surface). Input on top, live menu below. */
+CommandPalette {
+    layer: palette;
+    width: 80;
+    max-width: 90%;
+    height: auto;
+    max-height: 20;
+    margin-top: 3;
+    border: round $accent;
     border-title-color: $accent;
+    background: $surface;
+    padding: 0 1;
+}
+
+CommandPalette > Input {
+    border: none;
+    height: 1;
+    padding: 0 1;
     background: $surface;
 }
 
-CommandBar:focus {
-    border: round $accent;
+CommandPalette > Input:focus {
+    border: none;
+    background: $surface;
+}
+
+#palette-menu {
+    height: auto;
+    max-height: 14;
+    margin-top: 1;
+    background: $surface;
 }
 
 /* Confirm-write modal — the sole screen-stack surface (ADR-024): a titled
