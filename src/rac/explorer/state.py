@@ -22,7 +22,7 @@ class LoadProgressState:
 
 @dataclass(frozen=True)
 class RepositorySummaryState:
-    """The repository summary the v0.8.0 shell renders."""
+    """The repository summary the home screen renders."""
 
     directory: str
     artifact_total: int
@@ -32,6 +32,45 @@ class RepositorySummaryState:
     error_count: int
     warning_count: int
     health_score: int
+    # Attention lines (v0.8.1): aggregated counts such as "2 broken
+    # relationships"; empty when the repository needs none.
+    attention: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ArtifactRow:
+    """One artifact line in the browser or in search results."""
+
+    path: str  # navigation key (opens the context view)
+    id: str
+    type: str
+    title: str | None
+    status_label: str  # e.g. "✓ valid" — text alongside any symbol
+
+
+@dataclass(frozen=True)
+class BrowserState:
+    """The artifact browser: artifacts grouped by type, walk order."""
+
+    directory: str
+    groups: tuple[tuple[str, tuple[ArtifactRow, ...]], ...]  # (type, rows)
+    total: int
+
+
+@dataclass(frozen=True)
+class ContextState:
+    """Everything the context view shows for one artifact."""
+
+    id: str
+    type: str
+    title: str | None
+    path: str
+    aliases: tuple[str, ...]
+    status_label: str
+    missing_recommended: tuple[str, ...]
+    outgoing: tuple[str, ...]  # rendered relationship lines declared here
+    incoming: tuple[str, ...]  # rendered lines for references resolving here
+    diagnostics: tuple[str, ...]  # rendered finding lines
 
 
 @dataclass(frozen=True)

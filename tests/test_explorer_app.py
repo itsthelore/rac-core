@@ -80,6 +80,44 @@ async def test_reload_binding_recovers_after_repair(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_browse_open_context_and_esc_stack():
+    from rac.explorer.screens.browser import BrowserScreen
+    from rac.explorer.screens.context import ContextScreen
+    from rac.explorer.screens.repository import RepositoryScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+
+        await pilot.press("enter")  # home → browser
+        assert isinstance(app.screen, BrowserScreen)
+
+        await pilot.press("enter")  # first artifact → context view
+        assert isinstance(app.screen, ContextScreen)
+        from textual.widgets import Static
+
+        text = str(app.screen.query_one("#context-panel", Static).content)
+        assert "ID " in text and "Status " in text
+        assert "Completeness  ✓ all recommended sections present" in text
+        assert "Relationships" in text and "Diagnostics" in text
+
+        await pilot.press("escape")  # context → browser
+        assert isinstance(app.screen, BrowserScreen)
+        await pilot.press("escape")  # browser → home
+        assert isinstance(app.screen, RepositoryScreen)
+
+
+@pytest.mark.asyncio
+async def test_home_shows_attention_and_hint():
+    app = ExplorerApp(str(FIXTURES / "broken_rels"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert "Attention" in text
+        assert "! 1 broken relationship" in text
+        assert "Press / for anything" in text
+
+
+@pytest.mark.asyncio
 async def test_quit_binding_exits_cleanly():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:

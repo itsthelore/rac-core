@@ -20,6 +20,8 @@ from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
 from rac.explorer.widgets import RepositoryPanel
 
+from .browser import BrowserScreen
+
 
 class _WorkerCancelToken:
     """Bridges Textual's worker cancellation into the Core CancelToken protocol."""
@@ -33,9 +35,12 @@ class _WorkerCancelToken:
 
 
 class RepositoryScreen(Screen[None]):
-    """Loads the repository off the UI thread and renders its summary."""
+    """The home screen: loads off the UI thread, renders summary + attention."""
 
-    BINDINGS = [Binding("r", "reload", "Reload")]
+    BINDINGS = [
+        Binding("r", "reload", "Reload"),
+        Binding("enter", "browse", "Browse"),
+    ]
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
         super().__init__()
@@ -54,6 +59,11 @@ class RepositoryScreen(Screen[None]):
             LoadProgressState(phase="scan", completed=0, total=None, label="Scanning artifacts")
         )
         self._load_repository()
+
+    def action_browse(self) -> None:
+        browser = self.adapter.browser_state()
+        if browser is not None:
+            self.app.push_screen(BrowserScreen(self.adapter, browser))
 
     @work(thread=True, exclusive=True, group="repository-load")
     def _load_repository(self) -> RepositorySummaryState | LoadErrorState | None:

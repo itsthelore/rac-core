@@ -47,6 +47,10 @@ class RepositoryPanel(Static):
                 f"Health         {health}",
             ]
         )
+        if summary.attention:
+            lines.extend(["", "Attention"])
+            lines.extend(f"  ! {line}" for line in summary.attention)
+        lines.extend(["", "Press / for anything · Enter to browse"])
         self.update("\n".join(lines))
 
     def show_error(self, error: LoadErrorState) -> None:
