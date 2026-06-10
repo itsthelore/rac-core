@@ -8,6 +8,13 @@ details, release history over commit history.
 
 ### Added
 
+- Explorer maturity (v0.8.6): workspace continuity — Explorer remembers recently
+  opened repositories and the last artifact per repository, and `.` / `/resume`
+  reopens it; optional file-based preferences (`theme`, `mascot`, `animations`,
+  `artifact_grouping`) under XDG config with `/preferences` to view them; and a
+  lantern-carrying mascot in the welcome and empty states. Disabling the mascot
+  or animations loses no information (every state carries text), and nothing
+  requires login, cloud, or sync.
 - Explorer relationship navigation (v0.8.5): `g` from a context view (or
   `/relationships <ref>`) opens a knowledge-graph view — the artifact's
   outgoing relationships, its impact ("what depends on this?"), and its lineage
