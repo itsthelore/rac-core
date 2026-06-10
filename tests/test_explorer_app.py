@@ -12,13 +12,13 @@ import time
 from pathlib import Path
 
 import pytest
-from textual.widgets import Markdown, OptionList, Static, TabbedContent
+from textual.widgets import Input, Markdown, OptionList, Static, TabbedContent
 
 from rac.explorer import firstrun, mascot
 from rac.explorer.app import ExplorerApp
 from rac.explorer.screens.main import MainScreen
 from rac.explorer.widgets import RepositoryPanel
-from rac.explorer.widgets.commandbar import CommandBar
+from rac.explorer.widgets.palette import CommandPalette
 from rac.explorer.widgets.sidebar import NavigationSidebar
 from rac.explorer.widgets.views import ContextView
 
@@ -137,7 +137,7 @@ async def test_frame_persists_across_navigation():
         screen = app.screen
         assert isinstance(screen, MainScreen)
         sidebar = screen.query_one(NavigationSidebar)
-        bar = screen.query_one(CommandBar)
+        palette = screen.query_one(CommandPalette)
 
         await pilot.press("h")  # → health view
         await pilot.pause()
@@ -149,7 +149,7 @@ async def test_frame_persists_across_navigation():
         # Same screen, same widget instances — one stable frame.
         assert app.screen is screen
         assert screen.query_one(NavigationSidebar) is sidebar
-        assert screen.query_one(CommandBar) is bar
+        assert screen.query_one(CommandPalette) is palette
 
 
 @pytest.mark.asyncio
@@ -188,37 +188,108 @@ def test_stylesheet_ships_as_package_data():
     assert files("rac.explorer").joinpath("explorer.tcss").is_file()
 
 
-# --- focus routing --------------------------------------------------------------
+# --- focus routing and the palette ------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_slash_focuses_bar_and_esc_returns_focus():
+async def test_slash_summons_palette_and_esc_restores_focus():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
+        palette = app.screen.query_one(CommandPalette)
+        assert not palette.display  # the idle frame carries no input chrome
+
         await pilot.press("enter")  # home → sidebar
         sidebar = app.screen.query_one(NavigationSidebar)
         assert app.focused is sidebar
 
         await pilot.press("/")
-        assert isinstance(app.focused, CommandBar)
+        assert palette.display
+        assert isinstance(app.focused, Input)
+        # Empty input teaches: the whole registry, first row highlighted.
+        menu = palette.query_one("#palette-menu", OptionList)
+        assert menu.option_count == 12
+        assert menu.highlighted == 0
+
         await pilot.press("escape")
         await pilot.pause()
+        assert not palette.display
         assert app.focused is sidebar  # back to where the user was
 
 
 @pytest.mark.asyncio
-async def test_typing_q_in_the_bar_inserts_text_and_does_not_quit():
+async def test_typing_q_in_the_palette_inserts_text_and_does_not_quit():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
         await pilot.press("/")
         await pilot.press("q")
         assert app.is_running
-        assert app.screen.query_one(CommandBar).value == "q"
+        field = app.screen.query_one("#command-input", Input)
+        assert field.value == "q"
         # A typed `/` must also land in the input, not re-trigger the binding.
         await pilot.press("slash")
-        assert app.screen.query_one(CommandBar).value == "q/"
+        assert field.value == "q/"
+
+
+@pytest.mark.asyncio
+async def test_palette_filters_commands_and_enter_completes_them():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"op")  # a strict prefix of /open
+        await pilot.pause()
+        palette = app.screen.query_one(CommandPalette)
+        menu = palette.query_one("#palette-menu", OptionList)
+        assert menu.option_count == 1
+
+        await pilot.press("enter")  # completes the arg-taking command
+        await pilot.pause()
+        field = app.screen.query_one("#command-input", Input)
+        assert field.value == "open "
+        assert palette.display  # still open, waiting for the argument
+
+        await pilot.press(*"req-001")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.screen.current_view == "view-context"
+
+
+@pytest.mark.asyncio
+async def test_palette_arrows_drive_menu_while_typing_continues():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        palette = app.screen.query_one(CommandPalette)
+        menu = palette.query_one("#palette-menu", OptionList)
+        assert menu.highlighted == 0
+        await pilot.press("down")
+        assert menu.highlighted == 1
+        assert isinstance(app.focused, Input)  # focus never left the input
+        await pilot.press("up")
+        assert menu.highlighted == 0
+
+
+@pytest.mark.asyncio
+async def test_palette_quick_opens_a_matching_artifact():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"elasticsearch")  # not a command — live matches
+        await pilot.pause()
+        palette = app.screen.query_one(CommandPalette)
+        menu = palette.query_one("#palette-menu", OptionList)
+        first = menu.get_option_at_index(0)
+        assert (first.id or "").startswith("path:")
+
+        await pilot.press("enter")  # quick-open the highlighted match
+        await pilot.pause()
+        assert app.screen.current_view == "view-context"
+        title = str(app.screen.query_one("#context-region").border_title)
+        assert "adr-001" in title
 
 
 @pytest.mark.asyncio
@@ -433,7 +504,7 @@ async def test_slash_open_navigates_to_context():
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
         await pilot.press("/")
-        assert isinstance(app.focused, CommandBar)
+        assert isinstance(app.focused, Input)
         await pilot.press(*"open adr-001")
         await pilot.press("enter")
         await pilot.pause()
@@ -443,13 +514,17 @@ async def test_slash_open_navigates_to_context():
 
 
 @pytest.mark.asyncio
-async def test_slash_bare_text_searches_in_context_region_and_enter_opens():
+async def test_search_all_renders_results_in_context_region():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
         screen = app.screen
         await pilot.press("/")
         await pilot.press(*"search feature")
+        await pilot.pause()
+        # The last menu row hands the text to full search routing.
+        menu = screen.query_one("#palette-menu", OptionList)
+        menu.highlighted = menu.option_count - 1
         await pilot.press("enter")
         await pilot.pause()
         # Results render inside the context region; the frame never jumps.
