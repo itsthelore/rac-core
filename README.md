@@ -89,11 +89,12 @@ same standard it applies to your repository:
 ## Project Status
 
 RAC is early and evolving quickly. A terminal Explorer for browsing your knowledge
-base is under construction — the application shell ships today:
+base is under construction — browse artifacts, open them in context, and search
+or run commands from `/`:
 
 ```bash
 pip install 'requirements-as-code[explorer]'
-rac explorer rac/
+rac explorer
 ```
 
 Contributions, ideas, and experiments are welcome — see

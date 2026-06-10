@@ -338,19 +338,27 @@ rac index rac/ --json
 
 ## explorer
 
-Launch the interactive terminal Explorer (v0.8.0) — an application shell that
-loads a repository without blocking, shows a summary (artifact counts,
-relationships, diagnostics, health score), and recovers from failures in place.
-Navigation, health detail, and recommendations arrive in later v0.8.x releases.
+Launch the interactive terminal Explorer — browse every artifact, inspect any
+of them in context, and reach anything through the `/` command surface, without
+memorizing RAC commands. The home view shows the repository summary, health
+score, and attention items; health detail and recommendations arrive in later
+v0.8.x releases.
 
 Explorer is a presentation layer over the same services the CLI uses: everything
-it shows is also available through `rac portfolio`, `rac index`, and friends
-(ADR-015).
+it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
+`rac find`, and friends (ADR-015). It never edits artifacts (ADR-024).
 
-- **Input:** `rac explorer [directory]` — defaults to the current directory; scanned
-  recursively for `*.md`.
+- **Input:** `rac explorer [directory]` — defaults to `rac/` when present
+  (ADR-018), else the current directory; scanned recursively for `*.md`.
 - **Options:** `--top-level` · `--recursive` (no `--json`: the surface is interactive)
-- **Keys:** `q` quit · `r` reload
+- **Keys:** `/` commands and search · `↑ ↓` navigate · `Enter` select ·
+  `Esc` back · `r` reload (home) · `q` quit
+- **Commands (`/`):** `open <ref>` · `find <query> [type]` · `browse [type]` ·
+  `home` · `help` · `quit` — anything else is a search. Lookup resolves
+  canonical IDs and legacy aliases with `rac resolve` / `rac find` semantics.
+- **First run:** onboarding derives from repository content (existing, empty, or
+  invalid repository) and is skipped for returning users; the completion marker
+  under `$XDG_STATE_HOME/rac/` is the only state Explorer persists.
 - **Exit codes:** `0` session quit · `2` not a directory, or the `explorer` extra is
   not installed
 
