@@ -22,6 +22,7 @@ from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySumm
 from rac.explorer.widgets import RepositoryPanel
 
 from .browser import BrowserScreen
+from .health import HealthScreen
 
 
 class _WorkerCancelToken:
@@ -41,6 +42,7 @@ class RepositoryScreen(Screen[None]):
     BINDINGS = [
         Binding("r", "reload", "Reload"),
         Binding("enter", "browse", "Browse"),
+        Binding("h", "health", "Health"),
     ]
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
@@ -73,6 +75,13 @@ class RepositoryScreen(Screen[None]):
         browser = self.adapter.browser_state()
         if browser is not None:
             self.app.push_screen(BrowserScreen(self.adapter, browser))
+
+    def action_health(self) -> None:
+        if self._onboarding_summary is not None:
+            return  # finish onboarding (Enter) before opening sub-screens
+        health = self.adapter.health_state()
+        if health is not None:
+            self.app.push_screen(HealthScreen(self.adapter, health))
 
     @work(thread=True, exclusive=True, group="repository-load")
     def _load_repository(self) -> RepositorySummaryState | LoadErrorState | None:

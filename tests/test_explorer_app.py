@@ -186,7 +186,7 @@ async def test_slash_help_lists_registry_and_esc_closes():
         await pilot.pause()
         assert isinstance(app.screen, CommandScreen)
         results = app.screen.query_one(OptionList)
-        assert results.option_count == 6  # the whole registry, nothing more
+        assert results.option_count == 7  # the whole registry, nothing more
         await pilot.press("escape")
         assert isinstance(app.screen, RepositoryScreen)
 
@@ -279,6 +279,54 @@ async def test_first_run_invalid_repository_opens_anyway(fresh_first_run):
         await pilot.pause()
         text = str(app.screen.query_one(RepositoryPanel).content)
         assert "Health" in text
+
+
+@pytest.mark.asyncio
+async def test_h_binding_opens_health_screen():
+    from textual.widgets import Static
+
+    from rac.explorer.screens.health import HealthScreen
+    from rac.explorer.screens.repository import RepositoryScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("h")
+        assert isinstance(app.screen, HealthScreen)
+        overview = str(app.screen.query_one("#health-overview", Static).content)
+        assert "Score" in overview
+        assert "Completeness" in overview and "Coverage" in overview
+        assert "✓ Healthy" in overview
+        await pilot.press("escape")
+        assert isinstance(app.screen, RepositoryScreen)
+
+
+@pytest.mark.asyncio
+async def test_slash_health_opens_health_screen():
+    from rac.explorer.screens.health import HealthScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"health")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, HealthScreen)
+
+
+@pytest.mark.asyncio
+async def test_health_attention_item_opens_context():
+    from rac.explorer.screens.context import ContextScreen
+
+    app = ExplorerApp(str(FIXTURES / "broken_rels"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("h")
+        await pilot.pause()
+        await pilot.press("enter")  # first attention item (focused)
+        await pilot.pause()
+        assert isinstance(app.screen, ContextScreen)
 
 
 @pytest.mark.asyncio
