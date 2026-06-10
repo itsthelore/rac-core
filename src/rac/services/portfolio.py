@@ -27,10 +27,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
-from rac.core.classification import classify, missing_sections
-from rac.core.fs import find_markdown_files
+from rac.core.classification import missing_sections
+from rac.core.corpus import walk_corpus
 from rac.core.identity import artifact_identifier
-from rac.core.markdown import parse_file
 from rac.core.validation import has_errors, validate
 
 from .relationships import (
@@ -152,7 +151,6 @@ class PortfolioSummary:
 
 def build_portfolio_summary(directory: str, recursive: bool = True) -> PortfolioSummary:
     """Walk ``directory`` and compute a full repository intelligence summary."""
-    paths = find_markdown_files(directory, recursive=recursive)
 
     # --- per-artifact pass ---------------------------------------------------
     by_type: dict[str, int] = {spec.name: 0 for spec in ARTIFACT_SPECS}
@@ -169,9 +167,9 @@ def build_portfolio_summary(directory: str, recursive: bool = True) -> Portfolio
     # second identifier pass.
     path_to_identifier: dict[str, str] = {}
 
-    for path in paths:
-        product = parse_file(str(path))
-        artifact_type = classify(product).type
+    for entry in walk_corpus(directory, recursive=recursive):
+        path, product = entry.path, entry.product
+        artifact_type = entry.artifact_type
         by_type[artifact_type] = by_type.get(artifact_type, 0) + 1
 
         spec = spec_for(artifact_type)
