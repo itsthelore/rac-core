@@ -355,9 +355,10 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
 - **Keys:** `/` commands and search · `↑ ↓` navigate · `Enter` select ·
   `Esc` back · `h` health (home) · `r` reload (home) · `q` quit
 - **Commands (`/`):** `open <ref>` · `find <query> [type]` · `browse [type]` ·
-  `health` · `recommendations` · `import <source> [target]` · `home` · `help` ·
-  `quit` — anything else is a search. Lookup resolves canonical IDs and legacy
-  aliases with `rac resolve` / `rac find` semantics.
+  `health` · `recommendations` · `import <source> [target]` ·
+  `relationships <ref>` · `home` · `help` · `quit` — anything else is a search.
+  Lookup resolves canonical IDs and legacy aliases with `rac resolve` /
+  `rac find` semantics.
 - **Health:** `h` or `/health` opens the health view — Core's score with a text
   label, the Completeness / Relationships / Validation / Coverage areas, and a
   prioritized attention list whose items open the affected artifact.
@@ -366,6 +367,10 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   Repository Health, Quality), each with its impact, a suggested `rac` command,
   and navigation to the affected artifact. Advisory only — Explorer applies
   nothing. `x` exports them to a Markdown file (preview, then confirm).
+- **Relationships:** `g` from a context view (or `/relationships <ref>`) opens
+  the knowledge-graph view — the artifact's outgoing relationships, its impact
+  ("what depends on this?"), and its lineage. Connected artifacts are
+  selectable, so you can traverse the graph one hop at a time; `Esc` unwinds.
 - **Actions:** from an artifact's context view, `e` opens it in your editor
   (`$VISUAL` / `$EDITOR`; guidance shown if neither is set — Explorer never
   edits, ADR-024). `/import <source> [target]` converts a document via the
