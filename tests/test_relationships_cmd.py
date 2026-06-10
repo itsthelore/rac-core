@@ -14,14 +14,13 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import fixture_path
 
 from rac.cli import main
 from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
 )
-
-from conftest import fixture_path
 
 # Reference counts (individual edges) over fixtures/relationships/, canonical order.
 EXPECTED_COUNTS = {
@@ -187,7 +186,7 @@ def test_unknown_artifact_counted_but_not_extracted(tmp_path):
     f = tmp_path / "notes.md"
     f.write_text("# Notes\n\n## Random Musings\n\nstuff\n\n## Related Decisions\n\n- ADR-004\n")
     report = build_relationship_report(str(tmp_path))
-    assert report.total_files == 1            # counted
+    assert report.total_files == 1  # counted
     assert report.artifacts_with_relationships == 0  # spec-driven: nothing extracted
     assert report.relationship_count == 0
     assert report.artifacts == []

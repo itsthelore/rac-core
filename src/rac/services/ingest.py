@@ -53,7 +53,7 @@ class MarkdownConverter:
     """Pass-through for files already in Markdown — needs no extra dependency."""
 
     name = "markdown"
-    extensions = (".md", ".markdown")
+    extensions: tuple[str, ...] = (".md", ".markdown")
 
     def convert(self, path: Path) -> str:
         return path.read_text(encoding="utf-8")
@@ -69,7 +69,7 @@ class MarkItDownConverter:
     name = "markitdown"
     # HTML needs no extra (built into MarkItDown); the others come from the
     # corresponding markitdown extras, exposed as our granular ingest extras.
-    extensions = (".docx", ".pdf", ".html", ".htm", ".pptx", ".xls", ".xlsx")
+    extensions: tuple[str, ...] = (".docx", ".pdf", ".html", ".htm", ".pptx", ".xls", ".xlsx")
 
     def convert(self, path: Path) -> str:
         try:

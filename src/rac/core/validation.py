@@ -20,9 +20,7 @@ MAX_REQUIREMENTS = 50
 
 # Vague verbs that tend to hide unspecified behavior.
 AMBIGUOUS_VERBS = ("support", "handle", "allow", "enable")
-_AMBIGUOUS_RE = re.compile(
-    r"\b(" + "|".join(AMBIGUOUS_VERBS) + r")\b", re.IGNORECASE
-)
+_AMBIGUOUS_RE = re.compile(r"\b(" + "|".join(AMBIGUOUS_VERBS) + r")\b", re.IGNORECASE)
 
 
 def has_errors(issues: list[Issue]) -> bool:
@@ -130,8 +128,7 @@ def _validate_decision(product: Product) -> list[Issue]:
                 Issue(
                     "error",
                     f"invalid-decision-{field_name}",
-                    f"## {field_name.title()} value {value!r} is not one of: "
-                    f"{', '.join(allowed)}.",
+                    f"## {field_name.title()} value {value!r} is not one of: {', '.join(allowed)}.",
                 )
             )
 
@@ -274,9 +271,7 @@ def _validate_requirement(product: Product) -> list[Issue]:
         )
 
     if not product.has_problem_section:
-        issues.append(
-            Issue("error", "missing-problem", "File is missing a ## Problem section.")
-        )
+        issues.append(Issue("error", "missing-problem", "File is missing a ## Problem section."))
 
     if not product.has_requirements_section:
         issues.append(
@@ -352,9 +347,7 @@ def _validate_requirement(product: Product) -> list[Issue]:
 
     # --- Warnings: empty problem --------------------------------------------
     if product.has_problem_section and not (product.problem or "").strip():
-        issues.append(
-            Issue("warning", "empty-problem", "## Problem section is empty.")
-        )
+        issues.append(Issue("warning", "empty-problem", "## Problem section is empty."))
 
     # --- Warnings: too many requirements ------------------------------------
     if len(product.requirements) > MAX_REQUIREMENTS:

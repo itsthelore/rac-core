@@ -15,16 +15,14 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import fixture_path
 
 from rac.cli import main
-from rac.services.inspect import inspect_file, inspect_text
 from rac.core.markdown import parse
-from rac.services.relationships import parse_references
-from rac.core.schema import schema_reference
-from rac.services.stats import collect_stats
 from rac.core.validation import has_errors, validate
-
-from conftest import fixture_path
+from rac.services.inspect import inspect_file, inspect_text
+from rac.services.relationships import parse_references
+from rac.services.stats import collect_stats
 
 # Each fixture and the relationship keys (snake_case) it should expose via inspect.
 # Note: keys are spec-driven — only relationship sections declared optional for

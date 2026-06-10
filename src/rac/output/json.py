@@ -15,16 +15,16 @@ from rac.core.schema import SchemaReference
 from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
-from rac.services.init import InitResult
 from rac.services.ingest import IngestResult
+from rac.services.init import InitResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.migrate import MigrationReport
+from rac.services.portfolio import PortfolioSummary
 from rac.services.relationships import RelationshipReport, RelationshipValidation
 from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
 from rac.services.stats import PortfolioStats
 from rac.services.validate import DirectoryValidation
-
 
 # --- validate ---------------------------------------------------------------
 
@@ -96,8 +96,7 @@ def render_stats_json(s: PortfolioStats) -> str:
             else None
         ),
         "requirements_by_feature": [
-            {"name": f.name, "requirements": f.requirements}
-            for f in s.requirements_by_feature
+            {"name": f.name, "requirements": f.requirements} for f in s.requirements_by_feature
         ],
         "invalid": [{"file": f.path, "errors": f.error_codes} for f in s.invalid],
     }
@@ -115,9 +114,7 @@ def render_stats_json(s: PortfolioStats) -> str:
         payload["roadmaps"] = {
             "count": s.roadmap_count,
             "valid": s.valid_roadmaps,
-            "invalid": [
-                {"file": r.path, "errors": r.error_codes} for r in s.invalid_roadmaps
-            ],
+            "invalid": [{"file": r.path, "errors": r.error_codes} for r in s.invalid_roadmaps],
         }
     # Additive: only present when the portfolio contains prompts. Lightweight by
     # design — count and validity only (no prompt quality metrics).
@@ -125,9 +122,7 @@ def render_stats_json(s: PortfolioStats) -> str:
         payload["prompts"] = {
             "count": s.prompt_count,
             "valid": s.valid_prompts,
-            "invalid": [
-                {"file": p.path, "errors": p.error_codes} for p in s.invalid_prompts
-            ],
+            "invalid": [{"file": p.path, "errors": p.error_codes} for p in s.invalid_prompts],
         }
     # Additive: only present when the portfolio contains designs. Lightweight by
     # design — count and validity only (no design quality or rendering metrics).
@@ -135,9 +130,7 @@ def render_stats_json(s: PortfolioStats) -> str:
         payload["designs"] = {
             "count": s.design_count,
             "valid": s.valid_designs,
-            "invalid": [
-                {"file": d.path, "errors": d.error_codes} for d in s.invalid_designs
-            ],
+            "invalid": [{"file": d.path, "errors": d.error_codes} for d in s.invalid_designs],
         }
     # Additive: only present when the portfolio contains documents that matched
     # no known artifact schema (ADR-010). Surfaced, not errors; ``confidence`` is
@@ -154,8 +147,7 @@ def render_stats_json(s: PortfolioStats) -> str:
     # Declared-presence counts (REQ-011), snake_case keys — not resolution.
     if s.relationship_counts:
         payload["relationships"] = {
-            section.replace(" ", "_"): count
-            for section, count in s.relationship_counts.items()
+            section.replace(" ", "_"): count for section, count in s.relationship_counts.items()
         }
     return json.dumps(payload, indent=2)
 
@@ -177,10 +169,7 @@ def render_dir_inspect_json(d: DirectoryInspection) -> str:
             "counts": d.counts,
             "unknown": d.unknown_count,
         },
-        "files": [
-            {"path": f.path, "type": f.type, "confidence": f.confidence}
-            for f in d.files
-        ],
+        "files": [{"path": f.path, "type": f.type, "confidence": f.confidence} for f in d.files],
     }
     return json.dumps(payload, indent=2)
 
@@ -253,7 +242,7 @@ def render_ingest_json(result: IngestResult, output_path: str | None) -> str:
 # --- portfolio ---------------------------------------------------------------
 
 
-def render_portfolio_json(s) -> str:
+def render_portfolio_json(s: PortfolioSummary) -> str:
     """JSON `rac portfolio` output (stable contract, ADR-007)."""
     return json.dumps(s.to_dict(), indent=2)
 

@@ -21,8 +21,8 @@ from dataclasses import dataclass, field
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify, missing_sections
-from rac.core.models import Product
 from rac.core.markdown import parse, parse_file
+from rac.core.models import Product
 
 
 def supports_improve(spec: ArtifactSpec) -> bool:

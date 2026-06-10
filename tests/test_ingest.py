@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import fixture_path
 
 from rac.cli import main
 from rac.services.ingest import (
@@ -16,9 +17,6 @@ from rac.services.ingest import (
     ingest,
     supported_extensions,
 )
-
-from conftest import fixture_path
-
 
 # --- service layer ----------------------------------------------------------
 
@@ -79,9 +77,7 @@ def test_cli_write_and_overwrite_guard(tmp_path, capsys):
         main(["ingest", fixture_path("ingest", "sample.md"), "-o", str(out)])
     assert exc.value.code == 2
     # --force overwrites.
-    assert main(
-        ["ingest", fixture_path("ingest", "sample.md"), "-o", str(out), "--force"]
-    ) == 0
+    assert main(["ingest", fixture_path("ingest", "sample.md"), "-o", str(out), "--force"]) == 0
 
 
 def test_cli_unsupported_exits_two(tmp_path):

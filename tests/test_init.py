@@ -11,6 +11,7 @@ import json
 
 import pytest
 
+from rac.cli import main
 from rac.services.init import (
     InvalidRepositoryKey,
     MalformedRepositoryConfig,
@@ -18,8 +19,6 @@ from rac.services.init import (
     init_repository,
     load_repository_config,
 )
-from rac.cli import main
-
 
 # --- service -----------------------------------------------------------------
 
@@ -47,9 +46,7 @@ def test_reinit_different_key_conflicts(tmp_path):
     assert load_repository_config(str(tmp_path)).repository_key == "RAC"
 
 
-@pytest.mark.parametrize(
-    "key", ["", "R", "lowercase", "1LEADING", "TOOLONGKEY1", "BAD-CHARS"]
-)
+@pytest.mark.parametrize("key", ["", "R", "lowercase", "1LEADING", "TOOLONGKEY1", "BAD-CHARS"])
 def test_invalid_keys_rejected(tmp_path, key):
     with pytest.raises(InvalidRepositoryKey):
         init_repository(str(tmp_path), key=key)

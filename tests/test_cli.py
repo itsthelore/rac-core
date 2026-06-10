@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import fixture_path
 
 from rac import __version__
 from rac.cli import main
-
-from conftest import fixture_path
 
 
 @pytest.mark.parametrize(

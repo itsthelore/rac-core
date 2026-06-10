@@ -32,7 +32,10 @@ def test_identifier_spec_id_field():
 def test_identifier_recognized_prefix_from_stem():
     # Step 3: leading <letters>-<digits> prefix of the filename stem.
     product = parse("# Parser Strategy\n\n## Context\n\nc\n")
-    assert artifact_identifier(product, spec_for("decision"), "/x/adr-004-parser-strategy.md") == "adr-004"
+    assert (
+        artifact_identifier(product, spec_for("decision"), "/x/adr-004-parser-strategy.md")
+        == "adr-004"
+    )
 
 
 def test_identifier_falls_back_to_full_stem():

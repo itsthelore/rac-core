@@ -29,10 +29,7 @@ def test_corpus_artifacts_validate_clean():
 
 def test_corpus_relationships_resolve():
     report = validate_relationships(CORPUS)
-    issues = [
-        f"{i.code}: {i.target or i.identifier} ({i.source_path})"
-        for i in report.issues
-    ]
+    issues = [f"{i.code}: {i.target or i.identifier} ({i.source_path})" for i in report.issues]
     assert report.ok, f"corpus relationship issues: {issues}"
 
 

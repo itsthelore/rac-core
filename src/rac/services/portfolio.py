@@ -60,7 +60,7 @@ class AttentionItem:
 
     path: str
     identifier: str  # artifact identifier or filename stem
-    severity: str    # "error" | "warning"
+    severity: str  # "error" | "warning"
     code: str
     message: str
 
@@ -84,7 +84,7 @@ class PortfolioSummary:
 
     directory: str
     recursive: bool
-    by_type: dict[str, int]                           # {type: count} incl. unknown
+    by_type: dict[str, int]  # {type: count} incl. unknown
     valid_artifacts: int
     invalid_artifacts: int
     recommended_slots: int
@@ -112,9 +112,7 @@ class PortfolioSummary:
         validity = self.valid_artifacts / total if total else 1.0
         completeness = self.completeness
         checked = self.relationships.total
-        rel_integrity = (
-            (checked - self.relationships.broken) / checked if checked else 1.0
-        )
+        rel_integrity = (checked - self.relationships.broken) / checked if checked else 1.0
         raw = 0.5 * validity + 0.25 * completeness + 0.25 * rel_integrity
         return round(100 * raw)
 
@@ -152,9 +150,7 @@ class PortfolioSummary:
         }
 
 
-def build_portfolio_summary(
-    directory: str, recursive: bool = True
-) -> PortfolioSummary:
+def build_portfolio_summary(directory: str, recursive: bool = True) -> PortfolioSummary:
     """Walk ``directory`` and compute a full repository intelligence summary."""
     paths = find_markdown_files(directory, recursive=recursive)
 

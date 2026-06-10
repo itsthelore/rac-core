@@ -26,9 +26,9 @@ Failure contract:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from rac.core.idgen import generate_id
 from rac.core.templates import load_template
@@ -73,9 +73,7 @@ class IdGenerationExhausted(Exception):
 
     def __init__(self, attempts: int):
         self.attempts = attempts
-        super().__init__(
-            f"could not generate a unique artifact ID in {attempts} attempts"
-        )
+        super().__init__(f"could not generate a unique artifact ID in {attempts} attempts")
 
 
 @dataclass
@@ -99,13 +97,7 @@ class CreatedArtifact:
 
 def render_frontmatter(artifact_id: str, artifact_type: str) -> str:
     """Canonical generated frontmatter, stable key order (v0.7.11 contract)."""
-    return (
-        "---\n"
-        "schema_version: 1\n"
-        f"id: {artifact_id}\n"
-        f"type: {artifact_type}\n"
-        "---\n"
-    )
+    return f"---\nschema_version: 1\nid: {artifact_id}\ntype: {artifact_type}\n---\n"
 
 
 def render_artifact(artifact_type: str, frontmatter: str | None = None) -> str:
@@ -122,10 +114,7 @@ def _assign_id(
     id_generator: Callable[[str], str],
 ) -> str:
     """One repository-unique ID: generate, check the index, retry bounded."""
-    existing = {
-        entry.id.upper()
-        for entry in build_repository_index(repository_root).artifacts
-    }
+    existing = {entry.id.upper() for entry in build_repository_index(repository_root).artifacts}
     for _ in range(_MAX_ID_ATTEMPTS):
         candidate = id_generator(repository_key)
         if candidate.upper() not in existing:

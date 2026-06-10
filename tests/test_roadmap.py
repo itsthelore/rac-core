@@ -12,20 +12,18 @@ from __future__ import annotations
 import io
 import json
 
-import pytest
+from conftest import fixture_path
 
 import rac.services.improve as improve_mod
-from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.cli import main
+from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import classify
-from rac.services.improve import improve_file, improve_text, supports_improve
-from rac.services.inspect import inspect_file
 from rac.core.markdown import parse, parse_file
 from rac.core.schema import available_schemas, schema_reference
-from rac.services.stats import collect_stats
 from rac.core.validation import has_errors, validate
-
-from conftest import fixture_path
+from rac.services.improve import improve_file, improve_text, supports_improve
+from rac.services.inspect import inspect_file
+from rac.services.stats import collect_stats
 
 
 def _stdin(monkeypatch, text: str) -> None:
@@ -233,9 +231,7 @@ def test_improve_separates_missing_required_from_recommended():
 def test_improve_template_orders_required_before_recommended(monkeypatch, capsys):
     # Only Outcomes present -> Initiatives (required) must precede the recommended
     # sections in the emitted template (REQ-005).
-    text = (
-        "# R\n\n## Outcomes\n\n- o\n\n## Assumptions\n\n- a\n\n## Risks\n\n- r\n"
-    )
+    text = "# R\n\n## Outcomes\n\n- o\n\n## Assumptions\n\n- a\n\n## Risks\n\n- r\n"
     _stdin(monkeypatch, text)
     rc = main(["improve", "-", "--template"])
     assert rc == 0
@@ -361,9 +357,7 @@ def test_improve_support_is_artifact_spec_driven():
     # No artifact-specific improve engine exists: the public surface is generic.
     public = {name for name in vars(improve_mod) if not name.startswith("_")}
     artifact_specific = {
-        name
-        for name in public
-        if any(t in name for t in ("roadmap", "requirement", "decision"))
+        name for name in public if any(t in name for t in ("roadmap", "requirement", "decision"))
     }
     assert artifact_specific == set()
 
@@ -383,8 +377,6 @@ def test_roadmap_guidance_has_no_work_management_fields():
     ]
     spec = spec_for("roadmap")
     assert spec is not None
-    blob = " ".join(
-        line for lines in spec.guidance.values() for line in lines
-    ).casefold()
+    blob = " ".join(line for lines in spec.guidance.values() for line in lines).casefold()
     for field in forbidden_fields:
         assert field not in blob

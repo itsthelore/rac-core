@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import fixture_path
 
 from rac.cli import main
 from rac.core.classification import classify
@@ -25,8 +26,6 @@ from rac.services.relationships import (
     validate_relationships,
     validate_relationships_file,
 )
-
-from conftest import fixture_path
 
 
 def _scenario(name: str) -> str:

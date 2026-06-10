@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import fixture_path
 
 from rac.cli import main
 from rac.services.stats import collect_stats
-
-from conftest import fixture_path
 
 
 def test_collect_counts():
@@ -111,9 +110,7 @@ def test_cli_stats_exits_one_when_no_valid_features(tmp_path, capsys):
 
 
 def test_cli_stats_exits_zero_with_one_valid_feature(tmp_path):
-    (tmp_path / "ok.md").write_text(
-        "# Ok\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n"
-    )
+    (tmp_path / "ok.md").write_text("# Ok\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n")
     (tmp_path / "broken.md").write_text("## Problem\n\nno title\n")
     # One valid feature present -> exit 0 even though a broken file exists.
     assert main(["stats", str(tmp_path)]) == 0

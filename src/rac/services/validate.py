@@ -33,7 +33,7 @@ class FileValidation:
 
     path: str
     artifact_type: str  # canonical artifact name, or "unknown"
-    status: str         # STATUS_VALID | STATUS_INVALID | STATUS_SKIPPED
+    status: str  # STATUS_VALID | STATUS_INVALID | STATUS_SKIPPED
     issues: list[Issue]
 
     def to_dict(self) -> dict:

@@ -11,6 +11,7 @@ import json
 
 import pytest
 
+from rac.cli import main
 from rac.core.markdown import parse_file
 from rac.core.validation import has_errors, validate
 from rac.services.create import MissingRepositoryConfig, create_artifact
@@ -22,7 +23,6 @@ from rac.services.migrate import (
     migrate_metadata,
 )
 from rac.services.resolve import OUTCOME_RESOLVED, resolve_artifact
-from rac.cli import main
 
 LEGACY_DECISION = """# A Legacy Decision
 
@@ -158,9 +158,7 @@ def test_report_json_contract(repo):
         STATUS_MIGRATED,
         STATUS_SKIPPED_UNKNOWN,
     }
-    unknown = next(
-        f for f in payload["files"] if f["status"] == STATUS_SKIPPED_UNKNOWN
-    )
+    unknown = next(f for f in payload["files"] if f["status"] == STATUS_SKIPPED_UNKNOWN)
     assert unknown["id"] is None and unknown["type"] is None
 
 

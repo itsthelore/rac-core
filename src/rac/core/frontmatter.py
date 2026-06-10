@@ -40,7 +40,7 @@ class _StrictLoader(yaml.SafeLoader):
     """SafeLoader that rejects duplicate mapping keys (ADR-025)."""
 
 
-def _no_duplicates(loader: _StrictLoader, node: yaml.MappingNode):
+def _no_duplicates(loader: _StrictLoader, node: yaml.MappingNode) -> dict:
     seen: set = set()
     for key_node, _ in node.value:
         key = loader.construct_object(key_node, deep=True)
@@ -53,9 +53,7 @@ def _no_duplicates(loader: _StrictLoader, node: yaml.MappingNode):
     return loader.construct_mapping(node, deep=True)
 
 
-_StrictLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicates
-)
+_StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicates)
 
 
 @dataclass
@@ -109,9 +107,7 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
             _issue("malformed-frontmatter", f"frontmatter is not valid YAML: {exc.problem}")
         ]
     except yaml.YAMLError as exc:
-        return None, [
-            _issue("malformed-frontmatter", f"frontmatter is not valid YAML: {exc}")
-        ]
+        return None, [_issue("malformed-frontmatter", f"frontmatter is not valid YAML: {exc}")]
 
     if not isinstance(data, dict):
         return None, [
@@ -212,8 +208,7 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
             )
         else:
             parsed_relationships = {
-                kind: [normalize_id(t) for t in targets]
-                for kind, targets in relationships.items()
+                kind: [normalize_id(t) for t in targets] for kind, targets in relationships.items()
             }
 
     metadata = ArtifactMetadata(

@@ -47,9 +47,7 @@ def diff(old: Product, new: Product) -> Diff:
             result.added_requirements.append(new_req)
         elif old_req.text != new_req.text:
             result.modified_requirements.append(
-                RequirementChange(
-                    id=req_id, old_text=old_req.text, new_text=new_req.text
-                )
+                RequirementChange(id=req_id, old_text=old_req.text, new_text=new_req.text)
             )
 
     # Removed: in old but not new (preserves old-file order).
@@ -57,12 +55,8 @@ def diff(old: Product, new: Product) -> Diff:
         if req_id not in new_reqs:
             result.removed_requirements.append(old_req)
 
-    result.added_metrics = _ordered_difference(
-        new.success_metrics, old.success_metrics
-    )
-    result.removed_metrics = _ordered_difference(
-        old.success_metrics, new.success_metrics
-    )
+    result.added_metrics = _ordered_difference(new.success_metrics, old.success_metrics)
+    result.removed_metrics = _ordered_difference(old.success_metrics, new.success_metrics)
     result.added_risks = _ordered_difference(new.risks, old.risks)
     result.removed_risks = _ordered_difference(old.risks, new.risks)
 

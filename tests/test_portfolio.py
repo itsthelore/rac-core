@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
 
+from rac.cli import main
 from rac.services.portfolio import (
     ATTENTION_BROKEN_RELATIONSHIP,
     ATTENTION_INVALID,
-    ATTENTION_MISSING_RECOMMENDED,
     build_portfolio_summary,
 )
-from rac.cli import main
 
 FIXTURES = Path(__file__).parent / "fixtures" / "portfolio_summary"
 

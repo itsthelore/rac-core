@@ -58,5 +58,5 @@ def load_template(artifact_type: str) -> str:
     resource = resources.files("rac.templates").joinpath(f"{artifact_type}.md")
     try:
         return resource.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise TemplateResourceMissing(artifact_type)
+    except FileNotFoundError as exc:
+        raise TemplateResourceMissing(artifact_type) from exc

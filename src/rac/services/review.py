@@ -52,13 +52,13 @@ _ATTENTION_PRIORITY = {
 class ReviewIssue:
     """One prioritized finding with its deterministic next step."""
 
-    priority: int    # 1 (highest impact) – 4
-    severity: str    # "error" | "warning" | "info"
+    priority: int  # 1 (highest impact) – 4
+    severity: str  # "error" | "warning" | "info"
     path: str
     identifier: str  # artifact identifier or filename stem
     code: str
     message: str
-    action: str      # a runnable command or concrete edit
+    action: str  # a runnable command or concrete edit
 
     def to_dict(self) -> dict:
         return {
@@ -93,9 +93,7 @@ class ReviewReport:
         Priority 1–2 findings (invalid artifacts, broken relationships) fail
         the review; priority 3–4 findings are advisory.
         """
-        return not any(
-            i.priority <= PRIORITY_BROKEN_RELATIONSHIP for i in self.issues
-        )
+        return not any(i.priority <= PRIORITY_BROKEN_RELATIONSHIP for i in self.issues)
 
     @property
     def actions(self) -> list[str]:

@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import json
 
-from rac.cli import main
-from rac.services.inspect import inspect_file
-from rac.core.markdown import parse_file
-from rac.services.stats import collect_stats
-from rac.core.validation import has_errors, validate
-
 from conftest import fixture_path
+
+from rac.cli import main
+from rac.core.markdown import parse_file
+from rac.core.validation import has_errors, validate
+from rac.services.inspect import inspect_file
+from rac.services.stats import collect_stats
 
 
 def codes(issues):

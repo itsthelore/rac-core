@@ -12,22 +12,19 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import fixture_path
 
+from rac.cli import main
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import classify
-from rac.cli import main
-from rac.services.improve import improve_file, improve_text, supports_improve
-from rac.core.markdown import parse, parse_file
-from rac.services.stats import collect_stats
+from rac.core.markdown import parse_file
 from rac.core.validation import validate
-
-from conftest import fixture_path
+from rac.services.improve import improve_file, improve_text, supports_improve
+from rac.services.stats import collect_stats
 
 # A requirement missing a *required* section (Requirements) but still classifying
 # as a requirement — it keeps enough recommended sections to clear the threshold.
-NO_REQUIREMENTS = (
-    "# Feature\n\n## Problem\n\np\n\n## Success Metrics\n\n- m\n\n## Risks\n\n- r\n"
-)
+NO_REQUIREMENTS = "# Feature\n\n## Problem\n\np\n\n## Success Metrics\n\n- m\n\n## Risks\n\n- r\n"
 
 
 # --- service layer ----------------------------------------------------------

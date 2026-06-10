@@ -32,16 +32,11 @@ class SchemaReference:
             "recommended": [_snake(s) for s in self.recommended],
             "optional": [_snake(s) for s in self.optional],
             "descriptions": {
-                _snake(section): description
-                for section, description in self.descriptions.items()
+                _snake(section): description for section, description in self.descriptions.items()
             },
-            "guidance": {
-                _snake(section): list(lines)
-                for section, lines in self.guidance.items()
-            },
+            "guidance": {_snake(section): list(lines) for section, lines in self.guidance.items()},
             "metadata": {
-                _snake(section): list(values)
-                for section, values in self.metadata.items()
+                _snake(section): list(values) for section, values in self.metadata.items()
             },
         }
 
@@ -86,14 +81,8 @@ def _reference_from_spec(spec: ArtifactSpec) -> SchemaReference:
         recommended=list(spec.recommended),
         optional=list(spec.optional),
         descriptions=dict(spec.descriptions),
-        guidance={
-            section: list(lines)
-            for section, lines in spec.guidance.items()
-        },
-        metadata={
-            section: list(values)
-            for section, values in spec.metadata.items()
-        },
+        guidance={section: list(lines) for section, lines in spec.guidance.items()},
+        metadata={section: list(values) for section, values in spec.metadata.items()},
     )
 
 
@@ -107,9 +96,7 @@ def _template_section(ref: SchemaReference, section: str) -> TemplateSection:
     )
 
 
-def _starter_body(
-    ref: SchemaReference, section: str, metadata_values: list[str]
-) -> str:
+def _starter_body(ref: SchemaReference, section: str, metadata_values: list[str]) -> str:
     """Validation-safe starter body for one section."""
     if metadata_values:
         return _metadata_default(section, metadata_values)
@@ -132,34 +119,25 @@ def _free_text_todo(section: str) -> str:
     messages = {
         "problem": "TODO: describe the problem being solved and who experiences it.",
         "success metrics": "TODO: describe how success will be measured.",
-        "risks": (
-            "TODO: describe implementation, delivery, operational, "
-            "or adoption risks."
-        ),
+        "risks": ("TODO: describe implementation, delivery, operational, or adoption risks."),
         "assumptions": "TODO: describe conditions assumed to be true.",
         "outcomes": "TODO: describe the outcomes this roadmap is intended to achieve.",
         "initiatives": "TODO: describe the major initiatives that support the outcomes.",
         "success measures": "TODO: describe how progress or success will be measured.",
         "objective": "TODO: describe what this prompt is intended to achieve.",
         "input": (
-            "TODO: describe the information, context, or source material the "
-            "prompt expects."
+            "TODO: describe the information, context, or source material the prompt expects."
         ),
-        "instructions": (
-            "TODO: describe the steps, rules, or approach the model should follow."
-        ),
+        "instructions": ("TODO: describe the steps, rules, or approach the model should follow."),
         "output": "TODO: describe the expected response format or result.",
         "constraints": "TODO: describe any boundaries or restrictions.",
         "examples": "TODO: provide example inputs and outputs if useful.",
         "evaluation": "TODO: describe how the output should be judged.",
         "context": "TODO: describe the situation, constraints, and background.",
         "decision": "TODO: describe the decision that has been made.",
-        "consequences": (
-            "TODO: describe the expected positive and negative consequences."
-        ),
+        "consequences": ("TODO: describe the expected positive and negative consequences."),
         "alternatives considered": (
-            "TODO: describe the options that were considered and why they "
-            "were not chosen."
+            "TODO: describe the options that were considered and why they were not chosen."
         ),
     }
     return messages.get(section, f"TODO: describe {section}.")
@@ -168,12 +146,9 @@ def _free_text_todo(section: str) -> str:
 def _design_free_text_todo(section: str) -> str:
     messages = {
         "context": "TODO: describe the design context and why this design exists.",
-        "user need": (
-            "TODO: describe who this design is for and what they need to accomplish."
-        ),
+        "user need": ("TODO: describe who this design is for and what they need to accomplish."),
         "design": (
-            "TODO: describe the proposed experience, interaction, layout, flow, "
-            "or system behavior."
+            "TODO: describe the proposed experience, interaction, layout, flow, or system behavior."
         ),
         "constraints": (
             "TODO: describe technical, product, accessibility, platform, or "
@@ -182,9 +157,7 @@ def _design_free_text_todo(section: str) -> str:
         "rationale": "TODO: explain why this design approach was chosen.",
         "alternatives": "TODO: describe alternatives that were considered.",
         "accessibility": "TODO: describe accessibility considerations.",
-        "style guidance": (
-            "TODO: describe visual, tone, layout, or interaction style guidance."
-        ),
+        "style guidance": ("TODO: describe visual, tone, layout, or interaction style guidance."),
         "open questions": "TODO: list unresolved design questions.",
     }
     return messages.get(section, _free_text_todo(section))

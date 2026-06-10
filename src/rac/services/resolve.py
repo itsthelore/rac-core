@@ -62,6 +62,7 @@ class ResolutionResult:
 
     def to_dict(self) -> dict:
         if self.outcome == OUTCOME_RESOLVED:
+            assert self.artifact is not None  # resolved outcome implies an artifact
             return {"schema_version": "1", **self.artifact.to_dict()}
         payload: dict = {
             "schema_version": "1",
@@ -95,9 +96,7 @@ class SearchResult:
         }
 
 
-def resolve_artifact(
-    directory: str, artifact_id: str, recursive: bool = True
-) -> ResolutionResult:
+def resolve_artifact(directory: str, artifact_id: str, recursive: bool = True) -> ResolutionResult:
     """Resolve ``artifact_id`` to exactly one artifact under ``directory``.
 
     Matching is case-insensitive against every identifier an artifact answers

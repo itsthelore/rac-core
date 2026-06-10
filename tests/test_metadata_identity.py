@@ -48,10 +48,7 @@ def test_frontmatter_id_wins_precedence():
 def test_identity_independent_of_filename_and_path():
     product = parse(FRONTMATTER + DECISION_BODY)
     for path in ("a.md", "moved/elsewhere/renamed.md", "adr-001-x.md"):
-        assert (
-            artifact_identifier(product, _spec(product), path)
-            == "RAC-01JY4M8X2QZ7"
-        )
+        assert artifact_identifier(product, _spec(product), path) == "RAC-01JY4M8X2QZ7"
 
 
 def test_legacy_id_section_still_works_without_frontmatter():
@@ -61,10 +58,7 @@ def test_legacy_id_section_still_works_without_frontmatter():
 
 def test_filename_fallback_unchanged_for_legacy_artifacts():
     product = parse(DECISION_BODY)
-    assert (
-        artifact_identifier(product, _spec(product), "adr-004-parser-strategy.md")
-        == "adr-004"
-    )
+    assert artifact_identifier(product, _spec(product), "adr-004-parser-strategy.md") == "adr-004"
 
 
 def test_matching_frontmatter_and_legacy_identity_accepted():
@@ -93,9 +87,7 @@ def test_index_exposes_frontmatter_ids(tmp_path):
 def test_legacy_references_resolve_after_frontmatter_adoption(tmp_path):
     # Migration alias (Initiative 7): adopting a canonical ID must not break
     # existing human-readable references to the legacy identity.
-    (tmp_path / "adr-015-explorer.md").write_text(
-        FRONTMATTER + DECISION_BODY, encoding="utf-8"
-    )
+    (tmp_path / "adr-015-explorer.md").write_text(FRONTMATTER + DECISION_BODY, encoding="utf-8")
     (tmp_path / "consumer.md").write_text(
         DECISION_BODY + "\n## Related Decisions\n\n- ADR-015: Explorer\n",
         encoding="utf-8",
@@ -105,9 +97,7 @@ def test_legacy_references_resolve_after_frontmatter_adoption(tmp_path):
 
 
 def test_canonical_id_references_resolve(tmp_path):
-    (tmp_path / "target.md").write_text(
-        FRONTMATTER + DECISION_BODY, encoding="utf-8"
-    )
+    (tmp_path / "target.md").write_text(FRONTMATTER + DECISION_BODY, encoding="utf-8")
     (tmp_path / "consumer.md").write_text(
         DECISION_BODY + "\n## Related Decisions\n\n- RAC-01JY4M8X2QZ7\n",
         encoding="utf-8",
@@ -119,9 +109,7 @@ def test_canonical_id_references_resolve(tmp_path):
 def test_alias_never_creates_duplicate_identity(tmp_path):
     # Same file answering to several aliases is not a duplicate; duplicates
     # require two files sharing a *canonical* identifier.
-    (tmp_path / "adr-015-explorer.md").write_text(
-        FRONTMATTER + DECISION_BODY, encoding="utf-8"
-    )
+    (tmp_path / "adr-015-explorer.md").write_text(FRONTMATTER + DECISION_BODY, encoding="utf-8")
     report = validate_relationships(str(tmp_path))
     assert report.ok
 

@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from rac.services.index import build_repository_index
 from rac.cli import main
+from rac.services.index import build_repository_index
 
 # Reuse the portfolio fixture that already holds all five types + an unknown.
 ALL_TYPES = Path(__file__).parent / "fixtures" / "portfolio_summary" / "all_types"
@@ -196,10 +196,7 @@ def test_cli_index_json_output(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "1"
     assert payload["artifact_count"] == 6
-    assert all(
-        set(e) == {"id", "type", "title", "path", "aliases"}
-        for e in payload["artifacts"]
-    )
+    assert all(set(e) == {"id", "type", "title", "path", "aliases"} for e in payload["artifacts"])
 
 
 def test_cli_index_not_a_directory(tmp_path):

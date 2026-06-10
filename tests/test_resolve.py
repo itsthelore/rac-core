@@ -13,6 +13,7 @@ import json
 
 import pytest
 
+from rac.cli import main
 from rac.services.resolve import (
     OUTCOME_DUPLICATE,
     OUTCOME_NOT_FOUND,
@@ -20,7 +21,6 @@ from rac.services.resolve import (
     find_artifacts,
     resolve_artifact,
 )
-from rac.cli import main
 
 CANONICAL_ID = "RAC-01JY4M8X2QZ7"
 
@@ -63,12 +63,8 @@ q
 @pytest.fixture
 def repo(tmp_path):
     (tmp_path / "decisions").mkdir()
-    (tmp_path / "decisions" / "markdown-first.md").write_text(
-        DECISION, encoding="utf-8"
-    )
-    (tmp_path / "decisions" / "adr-002-legacy.md").write_text(
-        LEGACY_DECISION, encoding="utf-8"
-    )
+    (tmp_path / "decisions" / "markdown-first.md").write_text(DECISION, encoding="utf-8")
+    (tmp_path / "decisions" / "adr-002-legacy.md").write_text(LEGACY_DECISION, encoding="utf-8")
     return tmp_path
 
 
@@ -127,9 +123,7 @@ def test_duplicate_id_never_resolved_by_path_order(repo):
 
 
 def test_empty_repository_not_found(tmp_path):
-    assert resolve_artifact(str(tmp_path), "RAC-01JY4M8X2QZ7").outcome == (
-        OUTCOME_NOT_FOUND
-    )
+    assert resolve_artifact(str(tmp_path), "RAC-01JY4M8X2QZ7").outcome == (OUTCOME_NOT_FOUND)
 
 
 # --- search --------------------------------------------------------------------
@@ -305,9 +299,7 @@ def test_relationship_json_keeps_stored_references_unchanged(repo, capsys):
     rc = main(["relationships", str(repo), "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    consumer = next(
-        a for a in payload["artifacts"] if a["path"].endswith("consumer.md")
-    )
+    consumer = next(a for a in payload["artifacts"] if a["path"].endswith("consumer.md"))
     # Stored references only — no resolved labels in the JSON contract.
     assert consumer["relationships"]["related_decisions"] == [CANONICAL_ID]
     assert "labels" not in payload

@@ -11,18 +11,18 @@ from __future__ import annotations
 import io
 import json
 
+from conftest import fixture_path
+
 import rac.services.improve as improve_mod
-from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.cli import main
+from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import classify
-from rac.services.improve import improve_file, improve_text, supports_improve
-from rac.services.inspect import inspect_file
 from rac.core.markdown import parse, parse_file
 from rac.core.schema import available_schemas, schema_reference
-from rac.services.stats import collect_stats
 from rac.core.validation import has_errors, validate
-
-from conftest import fixture_path
+from rac.services.improve import improve_file, improve_text, supports_improve
+from rac.services.inspect import inspect_file
+from rac.services.stats import collect_stats
 
 
 def _stdin(monkeypatch, text: str) -> None:
@@ -104,11 +104,7 @@ def test_design_missing_required_section_fails():
 
 def test_design_missing_required_error_codes_are_hyphenated():
     missing_user_need = (
-        "# D\n\n"
-        "## Context\n\nc\n\n"
-        "## Design\n\nd\n\n"
-        "## Constraints\n\nx\n\n"
-        "## Rationale\n\nr\n"
+        "# D\n\n## Context\n\nc\n\n## Design\n\nd\n\n## Constraints\n\nx\n\n## Rationale\n\nr\n"
     )
     product = parse(missing_user_need)
     assert classify(product).type == "design"
@@ -116,12 +112,7 @@ def test_design_missing_required_error_codes_are_hyphenated():
 
 
 def test_design_missing_title_fails():
-    text = (
-        "## Context\n\nc\n\n"
-        "## User Need\n\nu\n\n"
-        "## Design\n\nd\n\n"
-        "## Constraints\n\nx\n"
-    )
+    text = "## Context\n\nc\n\n## User Need\n\nu\n\n## Design\n\nd\n\n## Constraints\n\nx\n"
     assert "missing-title" in {i.code for i in validate(parse(text))}
 
 
@@ -237,11 +228,7 @@ def test_minimal_design_reports_missing_recommended():
 
 def test_incomplete_design_reports_missing_required_and_recommended():
     result = improve_text(
-        "# D\n\n"
-        "## Context\n\nc\n\n"
-        "## User Need\n\nu\n\n"
-        "## Design\n\nd\n\n"
-        "## Rationale\n\nr\n"
+        "# D\n\n## Context\n\nc\n\n## User Need\n\nu\n\n## Design\n\nd\n\n## Rationale\n\nr\n"
     )
     assert result.type == "design"
     assert result.missing_required == ["constraints"]
@@ -278,8 +265,7 @@ def test_improve_human_lists_missing_with_guidance(capsys):
 def test_improve_does_not_modify_the_design(tmp_path):
     f = tmp_path / "design.md"
     content = (
-        "# D\n\n## Context\n\nc\n\n## User Need\n\nu\n\n"
-        "## Design\n\nd\n\n## Constraints\n\nx\n"
+        "# D\n\n## Context\n\nc\n\n## User Need\n\nu\n\n## Design\n\nd\n\n## Constraints\n\nx\n"
     )
     f.write_text(content)
     before = f.stat().st_mtime_ns
@@ -309,9 +295,7 @@ def test_design_guidance_has_no_work_management_fields():
     ]
     spec = spec_for("design")
     assert spec is not None
-    blob = " ".join(
-        line for lines in spec.guidance.values() for line in lines
-    ).casefold()
+    blob = " ".join(line for lines in spec.guidance.values() for line in lines).casefold()
     for field in forbidden_fields:
         assert field not in blob
 

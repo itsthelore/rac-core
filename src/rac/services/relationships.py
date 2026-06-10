@@ -23,8 +23,8 @@ from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
 from rac.core.fs import find_markdown_files
 from rac.core.identity import artifact_identifier, artifact_identifiers
-from rac.core.models import Product
 from rac.core.markdown import parse_file
+from rac.core.models import Product
 
 # The cross-artifact "Related X" sections. These populate the ``relationships``
 # dict in ``rac inspect`` output. ``related designs`` is included so every peer
@@ -102,9 +102,7 @@ def extract_relationships(product: Product, spec: ArtifactSpec) -> dict[str, lis
     return _collect(product, spec, RELATED_SECTIONS)
 
 
-def extract_relationships_full(
-    product: Product, spec: ArtifactSpec
-) -> dict[str, list[str]]:
+def extract_relationships_full(product: Product, spec: ArtifactSpec) -> dict[str, list[str]]:
     """Cross-artifact references for ``rac relationships`` — *including* Supersedes.
 
     The repository-level relationship command treats Supersedes as a first-class
@@ -200,7 +198,7 @@ class RelationshipReport:
 
 def _resolution_labels(
     artifacts: list[ArtifactRelationships],
-    items: list[tuple[str, "Product", "ArtifactSpec | None"]],
+    items: list[tuple[str, Product, ArtifactSpec | None]],
 ) -> dict[str, str]:
     """Human-friendly labels for every uniquely-resolved reference (v0.7.12).
 
@@ -226,15 +224,11 @@ def _resolution_labels(
                     continue
                 canonical, spec, title = info[next(iter(paths))]
                 type_name = spec.name if spec else "unknown"
-                labels[key] = (
-                    f"{title or canonical} ({type_name} · {canonical})"
-                )
+                labels[key] = f"{title or canonical} ({type_name} · {canonical})"
     return labels
 
 
-def _build_report(
-    directory: str, paths: list, recursive: bool
-) -> RelationshipReport:
+def _build_report(directory: str, paths: list, recursive: bool) -> RelationshipReport:
     """Assemble a :class:`RelationshipReport` from ``paths`` (already ordered)."""
     items = _parsed_items(paths)
     artifacts: list[ArtifactRelationships] = []
@@ -257,9 +251,7 @@ def _build_report(
     )
 
 
-def build_relationship_report(
-    directory: str, recursive: bool = True
-) -> RelationshipReport:
+def build_relationship_report(directory: str, recursive: bool = True) -> RelationshipReport:
     """Inspect explicit relationships across a directory of Markdown files."""
     paths = find_markdown_files(directory, recursive=recursive)
     return _build_report(directory, paths, recursive)
@@ -419,9 +411,7 @@ def _resolve_references(
                     resolved_targets.add(targets[0])
                     continue  # resolved uniquely to another artifact
                 issues.append(
-                    RelationshipIssue(
-                        code=code, source_path=path, relationship=section, target=ref
-                    )
+                    RelationshipIssue(code=code, source_path=path, relationship=section, target=ref)
                 )
 
     return checked, issues, resolved_targets
@@ -444,14 +434,10 @@ def _validate(
             duplicates.append((display, sorted(p for p, _ in entries)))
     for display, dup_paths in sorted(duplicates, key=lambda d: d[0].casefold()):
         issues.append(
-            RelationshipIssue(
-                code=ISSUE_DUPLICATE_IDENTIFIER, identifier=display, paths=dup_paths
-            )
+            RelationshipIssue(code=ISSUE_DUPLICATE_IDENTIFIER, identifier=display, paths=dup_paths)
         )
 
-    checked, ref_issues, _ = _resolve_references(
-        items, _build_resolution_index(items)
-    )
+    checked, ref_issues, _ = _resolve_references(items, _build_resolution_index(items))
     issues.extend(ref_issues)
 
     return RelationshipValidation(
@@ -462,9 +448,7 @@ def _validate(
     )
 
 
-def validate_relationships(
-    directory: str, recursive: bool = True
-) -> RelationshipValidation:
+def validate_relationships(directory: str, recursive: bool = True) -> RelationshipValidation:
     """Validate explicit relationship references across a directory."""
     items = _parsed_items(find_markdown_files(directory, recursive=recursive))
     return _validate(directory, items, recursive)
@@ -511,17 +495,13 @@ class RelationshipSummary:
     issues: list[RelationshipIssue] = field(default_factory=list)
 
 
-def summarize_relationships(
-    directory: str, recursive: bool = True
-) -> RelationshipSummary:
+def summarize_relationships(directory: str, recursive: bool = True) -> RelationshipSummary:
     """Aggregate relationship health across a directory (v0.7.3)."""
     paths = find_markdown_files(directory, recursive=recursive)
     items = _parsed_items(paths)
 
     if not items:
-        return RelationshipSummary(
-            total=0, valid=0, broken=0, orphaned=0, coverage=1.0
-        )
+        return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
 
     index = _build_resolution_index(items)
     checked, ref_issues, resolved_targets = _resolve_references(items, index)

@@ -12,20 +12,18 @@ from __future__ import annotations
 import io
 import json
 
-import pytest
+from conftest import fixture_path
 
 import rac.services.improve as improve_mod
-from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.cli import main
+from rac.core.artifacts import spec_for
 from rac.core.classification import classify
-from rac.services.improve import improve_file, improve_text, supports_improve
-from rac.services.inspect import inspect_file
 from rac.core.markdown import parse, parse_file
 from rac.core.schema import available_schemas, schema_reference
-from rac.services.stats import collect_stats
 from rac.core.validation import has_errors, validate
-
-from conftest import fixture_path
+from rac.services.improve import improve_file, supports_improve
+from rac.services.inspect import inspect_file
+from rac.services.stats import collect_stats
 
 
 def _stdin(monkeypatch, text: str) -> None:
@@ -262,8 +260,7 @@ def test_improve_human_lists_missing_with_guidance(capsys):
 def test_improve_does_not_modify_the_prompt(tmp_path):
     f = tmp_path / "prompt.md"
     content = (
-        "# P\n\n## Objective\n\no\n\n## Input\n\ni\n\n## Instructions\n\nx\n\n"
-        "## Output\n\ny\n"
+        "# P\n\n## Objective\n\no\n\n## Input\n\ni\n\n## Instructions\n\nx\n\n## Output\n\ny\n"
     )
     f.write_text(content)
     before = f.stat().st_mtime_ns
@@ -286,9 +283,7 @@ def test_prompt_guidance_has_no_work_management_fields():
     ]
     spec = spec_for("prompt")
     assert spec is not None
-    blob = " ".join(
-        line for lines in spec.guidance.values() for line in lines
-    ).casefold()
+    blob = " ".join(line for lines in spec.guidance.values() for line in lines).casefold()
     for field in forbidden_fields:
         assert field not in blob
 

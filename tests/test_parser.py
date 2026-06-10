@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from rac.core.markdown import parse, parse_file
-
 from conftest import fixture_path
+
+from rac.core.markdown import parse, parse_file
 
 
 def test_parses_basic_structure():
@@ -45,12 +45,7 @@ def test_bullet_and_plain_requirements_both_parse():
 
 
 def test_malformed_lines_are_captured_not_dropped():
-    text = (
-        "# T\n\n## Problem\n\nx\n\n## Requirements\n\n"
-        "[REQ-1A] bad id\n"
-        "no id at all\n"
-        "[REQ-002]\n"
-    )
+    text = "# T\n\n## Problem\n\nx\n\n## Requirements\n\n[REQ-1A] bad id\nno id at all\n[REQ-002]\n"
     p = parse(text)
     assert p.requirements == []
     kinds = {(m.bad_id, m.empty_text) for m in p.malformed_requirements}

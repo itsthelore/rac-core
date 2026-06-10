@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import secrets
 import time
-from typing import Callable
+from collections.abc import Callable
 
 # Crockford base32: no I, L, O, U (visually ambiguous).
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"

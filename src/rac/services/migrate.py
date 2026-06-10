@@ -121,10 +121,7 @@ def migrate_metadata(
         raise MissingRepositoryConfig(directory)
 
     repository_root = str(Path(config.config_path).parent.parent)
-    issued = {
-        entry.id.upper()
-        for entry in build_repository_index(repository_root).artifacts
-    }
+    issued = {entry.id.upper() for entry in build_repository_index(repository_root).artifacts}
 
     def _next_id() -> str:
         for _ in range(_MAX_ID_ATTEMPTS):
@@ -142,15 +139,11 @@ def migrate_metadata(
             # Any frontmatter presence — valid, malformed, or unterminated —
             # means migration keeps its hands off (Initiative 4: never modify
             # an existing envelope). Validation owns reporting broken ones.
-            files.append(
-                FileMigration(path=str(path), status=STATUS_ALREADY_CANONICAL)
-            )
+            files.append(FileMigration(path=str(path), status=STATUS_ALREADY_CANONICAL))
             continue
         artifact_type = classify(product).type
         if spec_for(artifact_type) is None:
-            files.append(
-                FileMigration(path=str(path), status=STATUS_SKIPPED_UNKNOWN)
-            )
+            files.append(FileMigration(path=str(path), status=STATUS_SKIPPED_UNKNOWN))
             continue
         artifact_id = _next_id()
         if not dry_run:
@@ -166,6 +159,4 @@ def migrate_metadata(
                 type=artifact_type,
             )
         )
-    return MigrationReport(
-        directory=directory, recursive=recursive, dry_run=dry_run, files=files
-    )
+    return MigrationReport(directory=directory, recursive=recursive, dry_run=dry_run, files=files)

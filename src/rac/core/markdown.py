@@ -52,7 +52,7 @@ def _content_lines(content: str, start_line: int) -> list[tuple[str, int]]:
     return pairs
 
 
-def _classify_requirement_line(text: str, line: int):
+def _classify_requirement_line(text: str, line: int) -> Requirement | MalformedRequirement:
     """Return either a :class:`Requirement` or :class:`MalformedRequirement`."""
     m = _BRACKET_RE.match(text)
     if not m:
@@ -63,9 +63,7 @@ def _classify_requirement_line(text: str, line: int):
     if not _CANONICAL_ID_RE.match(req_id):
         return MalformedRequirement(raw=text, line=line, bad_id=req_id)
     if not desc:
-        return MalformedRequirement(
-            raw=text, line=line, bad_id=req_id, empty_text=True
-        )
+        return MalformedRequirement(raw=text, line=line, bad_id=req_id, empty_text=True)
     return Requirement(id=req_id, text=desc, line=line)
 
 
@@ -122,9 +120,7 @@ def parse(text: str, source_path: str = "") -> Product:
                 if title is None:
                     title = heading_text.strip()
                 else:
-                    extra_title_lines.append(
-                        (tok.map[0] + 1 + offset) if tok.map else 0
-                    )
+                    extra_title_lines.append((tok.map[0] + 1 + offset) if tok.map else 0)
                 section = None  # content directly under the title is ignored
                 current_h2 = None
             elif tok.tag == "h2":

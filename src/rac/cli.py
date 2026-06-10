@@ -43,17 +43,17 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__
 from rac import output as outputs
 from rac.core.classification import score_artifacts
 from rac.core.markdown import parse, parse_file
+from rac.core.models import Product
 from rac.core.schema import available_schemas, schema_reference
-from rac.core.validation import has_errors, validate
 from rac.core.templates import (
     TemplateNotFound,
     TemplateResourceMissing,
     available_templates,
 )
+from rac.core.validation import has_errors, validate
 from rac.services.create import (
     IdGenerationExhausted,
     MissingRepositoryConfig,
@@ -62,6 +62,9 @@ from rac.services.create import (
     create_artifact,
 )
 from rac.services.diff import diff as diff_asts
+from rac.services.improve import improve_product
+from rac.services.index import build_repository_index
+from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.init import (
     DEFAULT_KEY,
     InvalidRepositoryKey,
@@ -69,46 +72,45 @@ from rac.services.init import (
     RepositoryKeyConflict,
     init_repository,
 )
-from rac.services.improve import improve_product
-from rac.services.index import build_repository_index
-from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.inspect import build_inspection, inspect_directory
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.review import build_review
 from rac.services.migrate import migrate_metadata
-from rac.services.resolve import (
-    OUTCOME_DUPLICATE,
-    OUTCOME_RESOLVED,
-    find_artifacts,
-    resolve_artifact,
-)
+from rac.services.portfolio import build_portfolio_summary
 from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
     validate_relationships,
     validate_relationships_file,
 )
+from rac.services.resolve import (
+    OUTCOME_DUPLICATE,
+    OUTCOME_RESOLVED,
+    find_artifacts,
+    resolve_artifact,
+)
+from rac.services.review import build_review
 from rac.services.stats import collect_stats
 from rac.services.validate import validate_directory
+
+from . import __version__
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
 EXIT_USAGE = 2
 
 
-def _read(path: str):
+def _read(path: str) -> Product:
     """Parse a file, or print an error and exit with EXIT_USAGE."""
     try:
         return parse_file(path)
     except FileNotFoundError:
         print(f"rac: file not found: {path}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
     except OSError as exc:
         print(f"rac: cannot read {path}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
 
-def _read_validate_input(target: str):
+def _read_validate_input(target: str) -> Product:
     """Parse validation input from a Markdown file or stdin."""
     if target == "-":
         return parse(sys.stdin.read(), source_path="-")
@@ -180,7 +182,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         result = ingest(args.file)
     except UnsupportedDocument as exc:  # unhandled type / missing extra
         print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
     except ConversionError as exc:  # recognized file, failed to convert
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
@@ -220,8 +222,7 @@ def _read_markdown_input(target: str, command: str) -> str:
         raise SystemExit(EXIT_USAGE)
     if path.suffix.lower() not in (".md", ".markdown"):
         print(
-            f"rac: {command} expects a Markdown file; "
-            f"convert it first with: rac ingest {target}",
+            f"rac: {command} expects a Markdown file; convert it first with: rac ingest {target}",
             file=sys.stderr,
         )
         raise SystemExit(EXIT_USAGE)
@@ -229,7 +230,7 @@ def _read_markdown_input(target: str, command: str) -> str:
         return path.read_text(encoding="utf-8")
     except OSError as exc:
         print(f"rac: cannot read {target}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
@@ -246,13 +247,13 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     # Single file (or stdin).
     text = _read_markdown_input(args.file, "inspect")
     product = parse(text)
-    result = build_inspection(product)
+    inspection = build_inspection(product)
     if args.verbose and not args.json:
-        print(outputs.render_inspect_verbose(result, score_artifacts(product)))
+        print(outputs.render_inspect_verbose(inspection, score_artifacts(product)))
     elif args.json:
-        print(outputs.render_inspect_json(result))
+        print(outputs.render_inspect_json(inspection))
     else:
-        print(outputs.render_inspect_human(result))
+        print(outputs.render_inspect_human(inspection))
     # A completed inspection always succeeds — Unknown is a valid outcome.
     return EXIT_OK
 
@@ -336,13 +337,13 @@ def cmd_relationships(args: argparse.Namespace) -> int:
         return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
 
     if is_dir:
-        report = build_relationship_report(args.path, recursive=not args.top_level)
+        rel_report = build_relationship_report(args.path, recursive=not args.top_level)
     else:
-        report = build_relationship_report_file(args.path)
+        rel_report = build_relationship_report_file(args.path)
     if args.json:
-        print(outputs.render_relationships_json(report))
+        print(outputs.render_relationships_json(rel_report))
     else:
-        print(outputs.render_relationships_human(report))
+        print(outputs.render_relationships_human(rel_report))
     # A completed inspection always succeeds — finding no relationships is a valid
     # outcome, not an error (REQ-010).
     return EXIT_OK
@@ -393,14 +394,14 @@ def cmd_new(args: argparse.Namespace) -> int:
         created = create_artifact(args.type, args.output_path)
     except TemplateNotFound as exc:  # unsupported type → usage error
         print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
     except (
         OutputPathExists,
         OutputDirectoryMissing,
         MissingRepositoryConfig,
     ) as exc:
         print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
     except (
         TemplateResourceMissing,  # broken installation
         MalformedRepositoryConfig,  # unreadable .rac/config.yaml
@@ -419,9 +420,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
-    result = resolve_artifact(
-        args.directory, args.id, recursive=not args.top_level
-    )
+    result = resolve_artifact(args.directory, args.id, recursive=not args.top_level)
     if args.json:
         print(outputs.render_resolve_json(result))
     else:
@@ -470,7 +469,7 @@ def cmd_migrate(args: argparse.Namespace) -> int:
         )
     except MissingRepositoryConfig as exc:
         print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
     except (MalformedRepositoryConfig, IdGenerationExhausted) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
@@ -491,7 +490,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         result = init_repository(args.directory, key=args.key)
     except InvalidRepositoryKey as exc:
         print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
     except (RepositoryKeyConflict, MalformedRepositoryConfig) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
@@ -517,9 +516,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Shared parent so `--version` works on the root parser *and* every
     # subcommand (e.g. `rac ingest foo.docx --version`).
     version_parent = argparse.ArgumentParser(add_help=False)
-    version_parent.add_argument(
-        "--version", action="version", version=version_str
-    )
+    version_parent.add_argument("--version", action="version", version=version_str)
 
     parser = argparse.ArgumentParser(
         prog="rac",
@@ -582,9 +579,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_ingest.add_argument("file", help="Path to the source document.")
     ingest_dest = p_ingest.add_mutually_exclusive_group()
-    ingest_dest.add_argument(
-        "-o", "--output", help="Write Markdown here instead of printing it."
-    )
+    ingest_dest.add_argument("-o", "--output", help="Write Markdown here instead of printing it.")
     ingest_dest.add_argument(
         "--stdout",
         action="store_true",
@@ -678,9 +673,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inspect explicit relationships across a directory (or single file).",
         parents=[version_parent],
     )
-    p_relationships.add_argument(
-        "path", help="A directory to scan, or a single Markdown file."
-    )
+    p_relationships.add_argument("path", help="A directory to scan, or a single Markdown file.")
     p_relationships.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )

@@ -14,8 +14,7 @@ if TYPE_CHECKING:
 # Shown when guidance cannot be produced. Ordering everywhere is required-first,
 # then recommended (schema declaration order within each).
 _UNKNOWN_MESSAGE = (
-    "Unable to generate improvement guidance.\n"
-    "Artifact type could not be determined."
+    "Unable to generate improvement guidance.\nArtifact type could not be determined."
 )
 
 

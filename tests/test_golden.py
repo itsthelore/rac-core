@@ -35,8 +35,16 @@ CASES = [
     ("validate_dir_json", ["validate", "tests/fixtures/portfolio", "--json"], 1),
     ("stats_human", ["stats", "tests/fixtures/valid"], 0),
     ("stats_json", ["stats", "tests/fixtures/valid", "--json"], 0),
-    ("diff_human", ["diff", "examples/example_dashboard_v1.md", "examples/example_dashboard_v2.md"], 0),
-    ("diff_json", ["diff", "examples/example_dashboard_v1.md", "examples/example_dashboard_v2.md", "--json"], 0),
+    (
+        "diff_human",
+        ["diff", "examples/example_dashboard_v1.md", "examples/example_dashboard_v2.md"],
+        0,
+    ),
+    (
+        "diff_json",
+        ["diff", "examples/example_dashboard_v1.md", "examples/example_dashboard_v2.md", "--json"],
+        0,
+    ),
     ("schema_requirement_human", ["schema", "requirement"], 0),
     ("schema_requirement_template", ["schema", "requirement", "--template"], 0),
     ("review_human", ["review", "tests/fixtures/portfolio"], 1),
@@ -45,12 +53,20 @@ CASES = [
     ("templates_json", ["templates", "--json"], 0),
     ("resolve_human", ["resolve", "RAC-01JY4M8X2QZ7", "tests/fixtures/resolve"], 0),
     ("resolve_json", ["resolve", "RAC-01JY4M8X2QZ7", "tests/fixtures/resolve", "--json"], 0),
-    ("resolve_not_found_json", ["resolve", "RAC-ZZZZZZZZZZZZ", "tests/fixtures/resolve", "--json"], 1),
+    (
+        "resolve_not_found_json",
+        ["resolve", "RAC-ZZZZZZZZZZZZ", "tests/fixtures/resolve", "--json"],
+        1,
+    ),
     ("find_human", ["find", "markdown", "tests/fixtures/resolve"], 0),
     ("find_json", ["find", "markdown", "tests/fixtures/resolve", "--json"], 0),
     ("relationships_resolved_human", ["relationships", "tests/fixtures/resolve"], 0),
     ("migrate_dry_run_human", ["migrate", "metadata", "tests/fixtures/migrate", "--dry-run"], 0),
-    ("migrate_dry_run_json", ["migrate", "metadata", "tests/fixtures/migrate", "--dry-run", "--json"], 0),
+    (
+        "migrate_dry_run_json",
+        ["migrate", "metadata", "tests/fixtures/migrate", "--dry-run", "--json"],
+        0,
+    ),
 ]
 
 

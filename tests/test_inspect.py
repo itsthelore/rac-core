@@ -7,18 +7,17 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import fixture_path
 
+from rac.cli import main
 from rac.core.artifacts import ARTIFACT_SPECS
 from rac.core.classification import CONFIDENCE_THRESHOLD, score_artifacts
-from rac.cli import main
+from rac.core.markdown import parse
 from rac.services.inspect import (
     inspect_directory,
     inspect_file,
     inspect_text,
 )
-from rac.core.markdown import parse
-
-from conftest import fixture_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -181,12 +180,16 @@ def test_dogfood_directory_targets():
     # roadmap formats may remain Unknown until their schemas are formalized.
     roadmap = inspect_directory(str(REPO_ROOT / "rac/roadmaps"))
     paths_by_type = {f.path: f.type for f in roadmap.files}
-    assert paths_by_type[
-        str(REPO_ROOT / "rac/roadmaps/v0.5.x-awareness/v0.5.2-schema.md")
-    ] == "requirement"
-    assert paths_by_type[
-        str(REPO_ROOT / "rac/roadmaps/v0.6.x-relationships/v0.6.0-roadmap-artifacts.md")
-    ] == "requirement"
+    assert (
+        paths_by_type[str(REPO_ROOT / "rac/roadmaps/v0.5.x-awareness/v0.5.2-schema.md")]
+        == "requirement"
+    )
+    assert (
+        paths_by_type[
+            str(REPO_ROOT / "rac/roadmaps/v0.6.x-relationships/v0.6.0-roadmap-artifacts.md")
+        ]
+        == "requirement"
+    )
     # The well-formed ADRs classify as Decision.
     adr = REPO_ROOT / "rac/decisions/adr-010-documents-are-not-artifacts.md"
     assert inspect_file(str(adr)).type == "decision"

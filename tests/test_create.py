@@ -13,6 +13,7 @@ import json
 
 import pytest
 
+from rac.cli import main
 from rac.core.artifacts import ARTIFACT_SPECS
 from rac.core.classification import classify
 from rac.core.markdown import parse
@@ -28,7 +29,6 @@ from rac.services.create import (
     render_frontmatter,
 )
 from rac.services.init import init_repository
-from rac.cli import main
 
 SPEC_NAMES = [spec.name for spec in ARTIFACT_SPECS]
 
@@ -80,10 +80,11 @@ def test_create_is_deterministic_apart_from_id(repo):
     init_repository(str(repo))  # already initialized; just being explicit
     # Second create with the same injected generator collides with a's ID in
     # the index, so use a different fixed ID and compare bodies.
-    create_artifact(
-        "requirement", str(b), id_generator=lambda key: f"{key}-01JY4M8X2QZ8"
-    )
-    strip = lambda text: text.split("---\n", 2)[2]
+    create_artifact("requirement", str(b), id_generator=lambda key: f"{key}-01JY4M8X2QZ8")
+
+    def strip(text: str) -> str:
+        return text.split("---\n", 2)[2]
+
     assert strip(a.read_text(encoding="utf-8")) == strip(b.read_text(encoding="utf-8"))
 
 
@@ -91,9 +92,7 @@ def test_create_regenerates_on_id_collision(repo):
     existing = repo / "existing.md"
     create_artifact("decision", str(existing), id_generator=fixed_generator)
     ids = iter([f"RAC-{FIXED_SUFFIX}", "RAC-01JY4M8X2QZ9"])
-    created = create_artifact(
-        "decision", str(repo / "next.md"), id_generator=lambda key: next(ids)
-    )
+    created = create_artifact("decision", str(repo / "next.md"), id_generator=lambda key: next(ids))
     assert created.id == "RAC-01JY4M8X2QZ9"
 
 
@@ -105,18 +104,14 @@ def test_create_exhausts_bounded_retries_on_persistent_collision(repo):
 
 def test_create_uses_repository_key_from_config(tmp_path):
     init_repository(str(tmp_path), key="PROJ")
-    created = create_artifact(
-        "decision", str(tmp_path / "d.md"), id_generator=fixed_generator
-    )
+    created = create_artifact("decision", str(tmp_path / "d.md"), id_generator=fixed_generator)
     assert created.id == f"PROJ-{FIXED_SUFFIX}"
 
 
 def test_create_discovers_config_upward(repo):
     nested = repo / "docs" / "decisions"
     nested.mkdir(parents=True)
-    created = create_artifact(
-        "decision", str(nested / "d.md"), id_generator=fixed_generator
-    )
+    created = create_artifact("decision", str(nested / "d.md"), id_generator=fixed_generator)
     assert created.id == f"RAC-{FIXED_SUFFIX}"
 
 
@@ -148,18 +143,12 @@ def test_render_artifact_prepends_frontmatter_when_given():
 
 def test_render_frontmatter_stable_key_order():
     assert render_frontmatter("RAC-01JY4M8X2QZ7", "decision") == (
-        "---\n"
-        "schema_version: 1\n"
-        "id: RAC-01JY4M8X2QZ7\n"
-        "type: decision\n"
-        "---\n"
+        "---\nschema_version: 1\nid: RAC-01JY4M8X2QZ7\ntype: decision\n---\n"
     )
 
 
 def test_created_artifact_json_contract(repo):
-    created = create_artifact(
-        "roadmap", str(repo / "r.md"), id_generator=fixed_generator
-    )
+    created = create_artifact("roadmap", str(repo / "r.md"), id_generator=fixed_generator)
     assert created.to_dict() == {
         "schema_version": "1",
         "created": True,
@@ -260,7 +249,8 @@ def test_cli_new_and_service_write_identical_bodies(repo, capsys):
     svc_out = repo / "svc.md"
     main(["new", "prompt", str(cli_out)])
     create_artifact("prompt", str(svc_out), id_generator=fixed_generator)
-    strip = lambda text: text.split("---\n", 2)[2]
-    assert strip(cli_out.read_text(encoding="utf-8")) == strip(
-        svc_out.read_text(encoding="utf-8")
-    )
+
+    def strip(text: str) -> str:
+        return text.split("---\n", 2)[2]
+
+    assert strip(cli_out.read_text(encoding="utf-8")) == strip(svc_out.read_text(encoding="utf-8"))

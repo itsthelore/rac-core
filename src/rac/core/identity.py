@@ -53,9 +53,7 @@ def _legacy_identifier(product: Product, spec: ArtifactSpec | None) -> str:
     return ""
 
 
-def artifact_identifier(
-    product: Product, spec: ArtifactSpec | None, path: str
-) -> str:
+def artifact_identifier(product: Product, spec: ArtifactSpec | None, path: str) -> str:
     """The deterministic identifier for the artifact at ``path``.
 
     Precedence (first match wins):
@@ -84,9 +82,7 @@ def artifact_identifier(
     return prefix.group(0) if prefix else stem
 
 
-def artifact_identifiers(
-    product: Product, spec: ArtifactSpec | None, path: str
-) -> list[str]:
+def artifact_identifiers(product: Product, spec: ArtifactSpec | None, path: str) -> list[str]:
     """Every identifier this artifact answers to, canonical first (v0.7.11).
 
     The canonical identifier leads (same value :func:`artifact_identifier`
@@ -115,9 +111,7 @@ def artifact_identifiers(
     return ids
 
 
-def identity_conflict(
-    product: Product, spec: ArtifactSpec | None
-) -> tuple[str, str] | None:
+def identity_conflict(product: Product, spec: ArtifactSpec | None) -> tuple[str, str] | None:
     """Detect conflicting frontmatter and legacy declared identity (v0.7.11).
 
     Returns ``(frontmatter_id, legacy_id)`` when both are declared and differ

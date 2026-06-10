@@ -98,16 +98,14 @@ def _read_config(config_path: Path) -> RepositoryConfig:
     try:
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}")
+        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
     if not isinstance(data, dict) or not isinstance(data.get("repository_key"), str):
         raise MalformedRepositoryConfig(
             str(config_path), "missing required string field 'repository_key'"
         )
     key = data["repository_key"]
     if not KEY_RE.match(key):
-        raise MalformedRepositoryConfig(
-            str(config_path), f"invalid repository_key: {key!r}"
-        )
+        raise MalformedRepositoryConfig(str(config_path), f"invalid repository_key: {key!r}")
     return RepositoryConfig(repository_key=key, config_path=str(config_path))
 
 
@@ -135,12 +133,8 @@ def init_repository(directory: str, key: str = DEFAULT_KEY) -> InitResult:
     if config_path.is_file():
         existing = _read_config(config_path)
         if existing.repository_key != key:
-            raise RepositoryKeyConflict(
-                existing.repository_key, key, str(config_path)
-            )
-        return InitResult(
-            repository_key=key, config_path=str(config_path), created=False
-        )
+            raise RepositoryKeyConflict(existing.repository_key, key, str(config_path))
+        return InitResult(repository_key=key, config_path=str(config_path), created=False)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(f"repository_key: {key}\n", encoding="utf-8")
     return InitResult(repository_key=key, config_path=str(config_path), created=True)

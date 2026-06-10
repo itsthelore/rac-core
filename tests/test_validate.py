@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
-from rac.core.markdown import parse, parse_file
-from rac.core.validation import has_errors, validate
+import json
 
 from conftest import fixture_path
+
+from rac.cli import main
+from rac.core.markdown import parse, parse_file
+from rac.core.validation import has_errors, validate
+from rac.services.validate import (
+    STATUS_INVALID,
+    STATUS_SKIPPED,
+    STATUS_VALID,
+    validate_directory,
+)
 
 
 def codes(issues):
@@ -54,9 +63,7 @@ def test_missing_problem():
 
 
 def test_missing_requirements():
-    assert "missing-requirements" in codes(
-        validate_fixture("invalid", "missing_requirements.md")
-    )
+    assert "missing-requirements" in codes(validate_fixture("invalid", "missing_requirements.md"))
 
 
 def test_malformed_id():
@@ -102,16 +109,6 @@ def test_too_many_requirements_warning():
 # ---------------------------------------------------------------------------
 # Directory validation (v0.7.9) — `rac validate <directory>`
 # ---------------------------------------------------------------------------
-
-import json
-
-from rac.cli import main
-from rac.services.validate import (
-    STATUS_INVALID,
-    STATUS_SKIPPED,
-    STATUS_VALID,
-    validate_directory,
-)
 
 
 def test_directory_counts_valid_and_invalid():

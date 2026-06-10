@@ -190,12 +190,8 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "What becomes easier or harder as a result?",
                 "What trade-offs are you accepting?",
             ),
-            "status": (
-                "Is this Proposed, Accepted, Superseded, or Deprecated?",
-            ),
-            "category": (
-                "Which area: Architecture, Product, Process, Technical, or Other?",
-            ),
+            "status": ("Is this Proposed, Accepted, Superseded, or Deprecated?",),
+            "category": ("Which area: Architecture, Product, Process, Technical, or Other?",),
             "alternatives considered": (
                 "What other options were weighed?",
                 "Why were they not chosen?",
@@ -247,12 +243,8 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "How will the team know the roadmap is succeeding?",
                 "What observable signals would show progress?",
             ),
-            "assumptions": (
-                "What must be true for this roadmap to remain valid?",
-            ),
-            "risks": (
-                "What could prevent these outcomes from being achieved?",
-            ),
+            "assumptions": ("What must be true for this roadmap to remain valid?",),
+            "risks": ("What could prevent these outcomes from being achieved?",),
         },
         # Artifact-scoped: this only normalizes "success metrics" when scoring a
         # document against the Roadmap spec (see rac.core.classification._mapped), so it
@@ -312,9 +304,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "What should the model avoid?",
                 "Are there tone, format, safety, or scope constraints?",
             ),
-            "examples": (
-                "What examples would make the desired behavior clearer?",
-            ),
+            "examples": ("What examples would make the desired behavior clearer?",),
             "evaluation": (
                 "What makes a good response?",
                 "How can the user tell whether the prompt worked?",
@@ -354,7 +344,8 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "context": "The product area, situation, or experience this design addresses",
             "user need": "The user, audience, task, pain point, or goal this design supports",
             "design": "The proposed experience, interaction, layout, flow, or behavior",
-            "constraints": "Technical, product, accessibility, platform, or implementation constraints",
+            "constraints": "Technical, product, accessibility, platform, or implementation"
+            " constraints",
             "rationale": "Why this design approach was chosen",
             "alternatives": "Other approaches considered and why they were not chosen",
             "accessibility": "Accessibility needs and expectations for the design",

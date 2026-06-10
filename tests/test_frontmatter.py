@@ -73,9 +73,7 @@ def test_split_mid_document_rule_is_not_frontmatter():
 
 
 def test_parse_valid_frontmatter():
-    metadata, issues = parse_frontmatter(
-        "schema_version: 1\nid: RAC-01JY4M8X2QZ7\ntype: decision"
-    )
+    metadata, issues = parse_frontmatter("schema_version: 1\nid: RAC-01JY4M8X2QZ7\ntype: decision")
     assert issues == []
     assert metadata.schema_version == 1
     assert metadata.id == "RAC-01JY4M8X2QZ7"
@@ -84,9 +82,7 @@ def test_parse_valid_frontmatter():
 
 
 def test_parse_normalizes_id_case():
-    metadata, issues = parse_frontmatter(
-        "schema_version: 1\nid: rac-01jy4m8x2qz7"
-    )
+    metadata, issues = parse_frontmatter("schema_version: 1\nid: rac-01jy4m8x2qz7")
     assert issues == []
     assert metadata.id == "RAC-01JY4M8X2QZ7"
 
@@ -188,15 +184,16 @@ def test_body_line_numbers_stay_file_accurate():
 def test_requirement_line_numbers_stay_file_accurate():
     # 3 frontmatter lines; "[REQ-1A] bad" is body line 9 → file line 12.
     text = (
-        "---\nschema_version: 1\n---\n"
-        "# F\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-1A] bad\n"
+        "---\nschema_version: 1\n---\n# F\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-1A] bad\n"
     )
     product = parse(text)
     assert product.malformed_requirements[0].line == 12
 
 
 def test_validation_surfaces_frontmatter_issues():
-    text = "---\nschema_version: 99\n---\n# T\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n"
+    text = (
+        "---\nschema_version: 99\n---\n# T\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n"
+    )
     issues = validate(parse(text))
     assert has_errors(issues)
     assert "unsupported-schema-version" in [i.code for i in issues]

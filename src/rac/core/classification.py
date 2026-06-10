@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .artifacts import ARTIFACT_SPECS
+from .artifacts import ARTIFACT_SPECS, ArtifactSpec
 from .models import Product
 
 # Below this best-fit score, the document is reported as Unknown rather than
@@ -47,7 +47,7 @@ class Classification:
     missing_sections: list[str]
 
 
-def _mapped(product: Product, spec) -> set[str]:
+def _mapped(product: Product, spec: ArtifactSpec) -> set[str]:
     """The document's ``##`` headings, with this spec's synonyms applied.
 
     The single source of synonym-aware section matching, shared by scoring
@@ -56,7 +56,7 @@ def _mapped(product: Product, spec) -> set[str]:
     return {spec.synonyms.get(h, h) for h in product.sections}
 
 
-def missing_sections(product: Product, spec) -> tuple[list[str], list[str]]:
+def missing_sections(product: Product, spec: ArtifactSpec) -> tuple[list[str], list[str]]:
     """Return ``(missing_required, missing_recommended)`` for ``spec``.
 
     Synonym-aware and in schema declaration order. Independent of confidence

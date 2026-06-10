@@ -39,7 +39,9 @@ def test_deterministic_under_injected_clock_and_entropy():
 
 
 def test_distinct_entropy_distinct_ids_same_millisecond():
-    clock = lambda: 1750000000.0
+    def clock() -> float:
+        return 1750000000.0
+
     a = generate_id("RAC", clock=clock, entropy=lambda bits: 1)
     b = generate_id("RAC", clock=clock, entropy=lambda bits: 2)
     assert a != b

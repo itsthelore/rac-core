@@ -79,9 +79,7 @@ class RepositoryIndex:
         }
 
 
-def build_repository_index(
-    directory: str, recursive: bool = True
-) -> RepositoryIndex:
+def build_repository_index(directory: str, recursive: bool = True) -> RepositoryIndex:
     """Walk ``directory`` and inventory every Markdown artifact (one parse each)."""
     artifacts: list[IndexEntry] = []
     for path in find_markdown_files(directory, recursive=recursive):
@@ -97,6 +95,4 @@ def build_repository_index(
                 aliases=artifact_identifiers(product, spec, str(path)),
             )
         )
-    return RepositoryIndex(
-        directory=directory, recursive=recursive, artifacts=artifacts
-    )
+    return RepositoryIndex(directory=directory, recursive=recursive, artifacts=artifacts)

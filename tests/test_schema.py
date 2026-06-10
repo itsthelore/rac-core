@@ -6,12 +6,11 @@ import io
 import json
 
 import pytest
-
-from rac.core.artifacts import spec_for
-from rac.cli import main
-from rac.core.schema import available_schemas, schema_reference
-
 from conftest import fixture_path
+
+from rac.cli import main
+from rac.core.artifacts import spec_for
+from rac.core.schema import available_schemas, schema_reference
 
 
 def test_available_schemas_are_registered_artifacts():
@@ -39,12 +38,7 @@ def test_schema_list_human(capsys):
     rc = main(["schema", "--list"])
     assert rc == 0
     assert capsys.readouterr().out == (
-        "Available Schemas:\n"
-        "- requirement\n"
-        "- decision\n"
-        "- roadmap\n"
-        "- prompt\n"
-        "- design\n"
+        "Available Schemas:\n- requirement\n- decision\n- roadmap\n- prompt\n- design\n"
     )
 
 
@@ -52,9 +46,7 @@ def test_schema_list_json(capsys):
     rc = main(["schema", "--list", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload == {
-        "schemas": ["requirement", "decision", "roadmap", "prompt", "design"]
-    }
+    assert payload == {"schemas": ["requirement", "decision", "roadmap", "prompt", "design"]}
 
 
 def test_schema_human_requirement(capsys):

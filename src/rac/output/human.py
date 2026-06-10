@@ -15,14 +15,15 @@ from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
-from rac.services.init import InitResult
 from rac.services.index import RepositoryIndex
+from rac.services.init import InitResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.migrate import (
     STATUS_MIGRATED,
     STATUS_SKIPPED_UNKNOWN,
     MigrationReport,
 )
+from rac.services.portfolio import PortfolioSummary
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_SELF_REFERENCE,
@@ -93,15 +94,11 @@ def render_validation_human(product: Product, issues: list[Issue]) -> str:
         lines.append(f"  {_red('error')}   [{issue.code}] {_loc(file, issue.line)}")
         lines.append(f"          {issue.message}")
     for issue in warnings:
-        lines.append(
-            f"  {_yellow('warning')} [{issue.code}] {_loc(file, issue.line)}"
-        )
+        lines.append(f"  {_yellow('warning')} [{issue.code}] {_loc(file, issue.line)}")
         lines.append(f"          {issue.message}")
 
     lines.append("")
-    lines.append(
-        f"{len(errors)} error(s), {len(warnings)} warning(s)."
-    )
+    lines.append(f"{len(errors)} error(s), {len(warnings)} warning(s).")
     return "\n".join(lines)
 
 
@@ -122,15 +119,11 @@ def render_validate_dir_human(result: DirectoryValidation) -> str:
         for issue in f.issues:
             if issue.severity != "error":
                 continue
-            lines.append(
-                f"  {_red('error')}   [{issue.code}] {_loc(f.path, issue.line)}"
-            )
+            lines.append(f"  {_red('error')}   [{issue.code}] {_loc(f.path, issue.line)}")
             lines.append(f"          {issue.message}")
         lines.append("")
 
-    skipped = (
-        f", {result.skipped} skipped (unknown type)" if result.skipped else ""
-    )
+    skipped = f", {result.skipped} skipped (unknown type)" if result.skipped else ""
     verdict = _green("PASS") if result.ok else _red("FAIL")
     lines.append(
         f"{verdict}  {result.directory} — "
@@ -217,15 +210,11 @@ def render_stats_human(s: PortfolioStats) -> str:
 
     missing_block("Features Missing Metrics", s.missing_metrics)
     missing_block("Features Missing Risks", s.missing_risks)
-    lines.append(
-        f"Average Requirements Per Feature: {s.average_requirements:.1f}"
-    )
+    lines.append(f"Average Requirements Per Feature: {s.average_requirements:.1f}")
 
     largest = s.largest_feature
     if largest is not None:
-        lines.append(
-            f"Largest Feature: {largest.name} ({largest.requirements} requirements)"
-        )
+        lines.append(f"Largest Feature: {largest.name} ({largest.requirements} requirements)")
     else:
         lines.append("Largest Feature: (none)")
 
@@ -326,8 +315,7 @@ def render_stats_human(s: PortfolioStats) -> str:
             _bold("Unrecognized"),
             "============",
             "",
-            f"{count} {noun} matched no known artifact schema "
-            "(not errors — see ADR-010):",
+            f"{count} {noun} matched no known artifact schema (not errors — see ADR-010):",
         ]
         for u in s.unrecognized:
             lines.append(f"  {u.path}")
@@ -388,9 +376,7 @@ def _append_decision_metadata(lines: list[str], result: InspectionResult) -> Non
         lines.extend(f"  {label}: {value}" for label, value in shown)
 
 
-def render_inspect_verbose(
-    result: InspectionResult, scores: list[TypeScore]
-) -> str:
+def render_inspect_verbose(result: InspectionResult, scores: list[TypeScore]) -> str:
     """Explainable single-file output: matches, misses, and the score math."""
     chosen = next((s for s in scores if s.name == result.type), None)
     if chosen is None:  # Unknown — explain via the closest candidate
@@ -537,8 +523,7 @@ def render_relationships_human(report: RelationshipReport) -> str:
     if counts:
         lines += ["", _bold("By Type:")]
         lines.extend(
-            f"- {_relationship_label(section)}: {count}"
-            for section, count in counts.items()
+            f"- {_relationship_label(section)}: {count}" for section, count in counts.items()
         )
 
     # Per-artifact detail (REQ-005), only for artifacts that declare relationships.
@@ -604,7 +589,7 @@ def render_relationship_validation_human(report: RelationshipValidation) -> str:
 # --- portfolio ---------------------------------------------------------------
 
 
-def render_portfolio_human(s) -> str:
+def render_portfolio_human(s: PortfolioSummary) -> str:
     """Human-readable `rac portfolio` output."""
     lines = [
         _bold("Repository Summary"),
@@ -632,7 +617,8 @@ def render_portfolio_human(s) -> str:
         _bold("Completeness"),
         "------------",
         "",
-        f"  {s.completeness:.0%} ({s.filled_slots} / {s.recommended_slots} recommended slots filled)",
+        f"  {s.completeness:.0%} "
+        f"({s.filled_slots} / {s.recommended_slots} recommended slots filled)",
         "",
         _bold("Relationships"),
         "-------------",
@@ -723,7 +709,9 @@ def render_review_human(r: ReviewReport) -> str:
                 icon = (
                     _red("✗")
                     if issue.severity == "error"
-                    else _yellow("!") if issue.severity == "warning" else "·"
+                    else _yellow("!")
+                    if issue.severity == "warning"
+                    else "·"
                 )
                 lines.append(f"    {icon} {issue.identifier}")
                 lines.append(f"        {issue.message}")
@@ -768,9 +756,7 @@ def render_index_human(index: RepositoryIndex) -> str:
     title_w = max(len(e.title or "—") for e in index.artifacts)
     for e in index.artifacts:
         title = e.title or "—"
-        lines.append(
-            f"  {e.id:<{id_w}}  {e.type:<{type_w}}  {title:<{title_w}}  {e.path}"
-        )
+        lines.append(f"  {e.id:<{id_w}}  {e.type:<{type_w}}  {title:<{title_w}}  {e.path}")
     return "\n".join(lines)
 
 
@@ -797,10 +783,7 @@ def render_new_human(created: CreatedArtifact) -> str:
 def render_init_human(result: InitResult) -> str:
     """Human `rac init` output: the established identity namespace."""
     verb = "Initialized" if result.created else "Already initialized:"
-    return (
-        f"{verb} repository key {result.repository_key}\n"
-        f"Config: {result.config_path}"
-    )
+    return f"{verb} repository key {result.repository_key}\nConfig: {result.config_path}"
 
 
 # --- resolve / find (v0.7.12) -------------------------------------------------
@@ -809,6 +792,7 @@ def render_init_human(result: InitResult) -> str:
 def render_resolve_human(result: ResolutionResult) -> str:
     """Human `rac resolve` output for a resolved artifact."""
     artifact = result.artifact
+    assert artifact is not None  # resolved outcome implies an artifact
     return (
         f"{_bold(artifact.id)}\n"
         f"\n"
@@ -824,10 +808,7 @@ def render_find_human(result: SearchResult) -> str:
         return f"No artifacts match {result.query!r}."
     id_w = max(len(m.id) for m in result.matches)
     type_w = max(len(m.type) for m in result.matches)
-    lines = [
-        f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}"
-        for m in result.matches
-    ]
+    lines = [f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}" for m in result.matches]
     lines.append("")
     lines.append(f"{result.match_count} match(es) for {result.query!r}.")
     return "\n".join(lines)

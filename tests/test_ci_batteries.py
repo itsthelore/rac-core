@@ -33,9 +33,7 @@ def test_every_test_file_belongs_to_exactly_one_battery():
     duplicates = sorted({p for p in listed if listed.count(p) > 1})
     assert duplicates == [], f"test files in more than one battery: {duplicates}"
 
-    actual = sorted(
-        str(p.relative_to(REPO_ROOT)) for p in TESTS_DIR.glob("test_*.py")
-    )
+    actual = sorted(str(p.relative_to(REPO_ROOT)) for p in TESTS_DIR.glob("test_*.py"))
     orphans = sorted(set(actual) - set(listed))
     assert orphans == [], f"test files missing from the CI battery matrix: {orphans}"
 

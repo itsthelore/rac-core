@@ -373,8 +373,6 @@ def collect_stats(directory: str) -> PortfolioStats:
         )
     # Order the relationship counts by the canonical vocabulary for stable output.
     stats.relationship_counts = {
-        section: rel_counts[section]
-        for section in RELATIONSHIP_SECTIONS
-        if section in rel_counts
+        section: rel_counts[section] for section in RELATIONSHIP_SECTIONS if section in rel_counts
     }
     return stats
