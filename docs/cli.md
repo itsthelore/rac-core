@@ -355,9 +355,9 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
 - **Keys:** `/` commands and search · `↑ ↓` navigate · `Enter` select ·
   `Esc` back · `h` health (home) · `r` reload (home) · `q` quit
 - **Commands (`/`):** `open <ref>` · `find <query> [type]` · `browse [type]` ·
-  `health` · `recommendations` · `home` · `help` · `quit` — anything else is a
-  search. Lookup resolves canonical IDs and legacy aliases with `rac resolve` /
-  `rac find` semantics.
+  `health` · `recommendations` · `import <source> [target]` · `home` · `help` ·
+  `quit` — anything else is a search. Lookup resolves canonical IDs and legacy
+  aliases with `rac resolve` / `rac find` semantics.
 - **Health:** `h` or `/health` opens the health view — Core's score with a text
   label, the Completeness / Relationships / Validation / Coverage areas, and a
   prioritized attention list whose items open the affected artifact.
@@ -365,7 +365,12 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   Core's review findings grouped by category (Validation, Relationships,
   Repository Health, Quality), each with its impact, a suggested `rac` command,
   and navigation to the affected artifact. Advisory only — Explorer applies
-  nothing.
+  nothing. `x` exports them to a Markdown file (preview, then confirm).
+- **Actions:** from an artifact's context view, `e` opens it in your editor
+  (`$VISUAL` / `$EDITOR`; guidance shown if neither is set — Explorer never
+  edits, ADR-024). `/import <source> [target]` converts a document via the
+  ingest service, previews the Markdown, and writes it only after you confirm
+  with `y` (never overwriting). Long conversions report progress.
 - **First run:** onboarding derives from repository content (existing, empty, or
   invalid repository) and is skipped for returning users; the completion marker
   under `$XDG_STATE_HOME/rac/` is the only state Explorer persists.
