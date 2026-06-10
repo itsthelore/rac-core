@@ -58,6 +58,18 @@ class BrowserState:
 
 
 @dataclass(frozen=True)
+class LookupState:
+    """The outcome of an /open or /find: rows to pick from, or a message.
+
+    One row means an unambiguous answer (open it directly); several rows let
+    the user choose; a message explains an empty or ambiguous outcome.
+    """
+
+    rows: tuple[ArtifactRow, ...]
+    message: str | None = None
+
+
+@dataclass(frozen=True)
 class ContextState:
     """Everything the context view shows for one artifact."""
 
