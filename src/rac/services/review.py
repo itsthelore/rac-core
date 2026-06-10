@@ -140,7 +140,18 @@ class ReviewReport:
 def build_review(directory: str, recursive: bool = True) -> ReviewReport:
     """Review ``directory`` and return the prioritized repository report."""
     portfolio = build_portfolio_summary(directory, recursive=recursive)
+    return review_from_portfolio(directory, portfolio, recursive=recursive)
 
+
+def review_from_portfolio(
+    directory: str, portfolio: PortfolioSummary, recursive: bool = True
+) -> ReviewReport:
+    """Build the review from an already-computed portfolio (v0.8.3).
+
+    Same result as :func:`build_review`; the seam lets a consumer holding a
+    loaded repository model (Explorer) reuse Core's review logic without a
+    second walk (ADR-015: the recommendation logic stays here, not in Explorer).
+    """
     issues: list[ReviewIssue] = []
 
     # Findings the portfolio already computed, re-ranked by review priority

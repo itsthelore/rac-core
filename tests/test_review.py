@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from rac.cli import main
+from rac.services.portfolio import build_portfolio_summary
 from rac.services.review import (
     PRIORITY_BROKEN_RELATIONSHIP,
     PRIORITY_INVALID_ARTIFACT,
@@ -15,6 +16,7 @@ from rac.services.review import (
     PRIORITY_UNKNOWN_ARTIFACT,
     REVIEW_UNKNOWN_ARTIFACT,
     build_review,
+    review_from_portfolio,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "portfolio_summary"
@@ -22,6 +24,16 @@ FIXTURES = Path(__file__).parent / "fixtures" / "portfolio_summary"
 
 def review(subdir: str, **kwargs):
     return build_review(str(FIXTURES / subdir), **kwargs)
+
+
+def test_review_from_portfolio_matches_build_review():
+    # v0.8.3 seam: the same review, built from an already-computed portfolio.
+    for subdir in ("invalid_known", "broken_rels", "valid_clean", "all_types"):
+        directory = str(FIXTURES / subdir)
+        portfolio = build_portfolio_summary(directory)
+        assert review_from_portfolio(directory, portfolio).to_dict() == (
+            build_review(directory).to_dict()
+        )
 
 
 # ---------------------------------------------------------------------------
