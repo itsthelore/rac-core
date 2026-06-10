@@ -59,7 +59,16 @@ def test_adapter_state_and_launch_never_import_textual():
         SRC / "explorer" / "state.py",
         SRC / "explorer" / "adapter.py",
         SRC / "explorer" / "launch.py",
+        SRC / "explorer" / "commands.py",
+        SRC / "explorer" / "firstrun.py",
     ]
     files = [f for f in files if f.exists()]
     assert (SRC / "explorer" / "adapter.py") in files
     assert _violations(files, ("textual",)) == []
+
+
+def test_command_routing_owns_no_intelligence():
+    # DESIGN-command-surface: routing may live in Explorer, answers may not —
+    # the registry module reaches neither Core nor the services.
+    commands = SRC / "explorer" / "commands.py"
+    assert _violations([commands], ("rac.core", "rac.services")) == []

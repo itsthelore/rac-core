@@ -13,6 +13,12 @@ from collections.abc import Callable
 
 from rac.core.operations import CancelToken, OperationCancelled, Progress
 from rac.services.repository import Artifact, Repository, load_repository
+from rac.services.resolve import (
+    OUTCOME_DUPLICATE,
+    OUTCOME_RESOLVED,
+    resolve_in_index,
+    search_index,
+)
 
 from .state import (
     ArtifactRow,
@@ -20,6 +26,7 @@ from .state import (
     ContextState,
     LoadErrorState,
     LoadProgressState,
+    LookupState,
     RepositorySummaryState,
 )
 
@@ -145,21 +152,63 @@ class ExplorerAdapter:
 
     # --- navigation state (v0.8.1) — requires a loaded repository -----------
 
-    def browser_state(self) -> BrowserState | None:
-        """Artifacts grouped by type for the browser, or None before a load."""
+    def browser_state(self, artifact_type: str | None = None) -> BrowserState | None:
+        """Artifacts grouped by type for the browser, or None before a load.
+
+        ``artifact_type`` narrows the browser to one group (`/browse decision`).
+        """
         if self.repository is None:
             return None
         repository = self.repository
         groups = tuple(
-            (artifact_type, tuple(_row(a) for a in repository.artifacts_of_type(artifact_type)))
-            for artifact_type, count in repository.portfolio.by_type.items()
-            if count
+            (group_type, tuple(_row(a) for a in repository.artifacts_of_type(group_type)))
+            for group_type, count in repository.portfolio.by_type.items()
+            if count and (artifact_type is None or group_type == artifact_type)
         )
         return BrowserState(
-            directory=self.repository.directory,
+            directory=repository.directory,
             groups=groups,
-            total=self.repository.portfolio.total_artifacts,
+            total=sum(len(rows) for _, rows in groups),
         )
+
+    def open_ref(self, ref: str) -> LookupState:
+        """Exact lookup for `/open`, with `rac resolve` semantics (ADR-026).
+
+        One row resolves unambiguously; duplicates list every file so the
+        user chooses; not-found explains and suggests search.
+        """
+        repository = self.repository
+        if repository is None:
+            return LookupState(rows=(), message="Repository not loaded yet")
+        result = resolve_in_index(repository.artifacts, ref)
+        if result.outcome == OUTCOME_RESOLVED and result.artifact is not None:
+            artifact = next(a for a in repository.artifacts if a.path == result.artifact.path)
+            return LookupState(rows=(_row(artifact),))
+        if result.outcome == OUTCOME_DUPLICATE:
+            rows = tuple(_row(a) for a in repository.artifacts if a.path in result.duplicate_paths)
+            return LookupState(rows=rows, message=f"Duplicate identifier: {ref} — choose a file")
+        return LookupState(rows=(), message=f"Not found: {ref} — try a search")
+
+    def search_rows(self, args: str) -> LookupState:
+        """Search for `/find` and bare input, with `rac find` semantics.
+
+        A trailing word naming an artifact type filters to it
+        (``find payments decision``).
+        """
+        repository = self.repository
+        if repository is None:
+            return LookupState(rows=(), message="Repository not loaded yet")
+        query, artifact_type = args.strip(), None
+        tokens = query.split()
+        if len(tokens) > 1 and tokens[-1].casefold() in repository.portfolio.by_type:
+            artifact_type = tokens[-1].casefold()
+            query = " ".join(tokens[:-1])
+        result = search_index(repository.artifacts, query, artifact_type=artifact_type)
+        by_path = {a.path: a for a in repository.artifacts}
+        rows = tuple(_row(by_path[m.path]) for m in result.matches)
+        if not rows:
+            return LookupState(rows=(), message=f"No matches for '{args.strip()}'")
+        return LookupState(rows=rows)
 
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""

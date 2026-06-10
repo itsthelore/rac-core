@@ -149,6 +149,60 @@ def test_context_state_unknown_path_returns_none():
     assert adapter.context_state("nope.md") is None
 
 
+def test_open_ref_resolves_like_rac_resolve():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    lookup = adapter.open_ref("adr-001")
+    assert lookup.message is None
+    [row] = lookup.rows
+    assert row.type == "decision"
+
+    missing = adapter.open_ref("nope-999")
+    assert missing.rows == ()
+    assert missing.message is not None and "Not found" in missing.message
+
+
+def test_open_ref_duplicates_offer_a_choice(tmp_path):
+    doc = (
+        "---\nschema_version: 1\nid: RAC-01JY4M8X2QZ7\ntype: decision\n---\n"
+        "# A Decision\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n"
+    )
+    (tmp_path / "a.md").write_text(doc, encoding="utf-8")
+    (tmp_path / "b.md").write_text(doc, encoding="utf-8")
+    adapter = ExplorerAdapter(str(tmp_path))
+    adapter.load()
+    lookup = adapter.open_ref("RAC-01JY4M8X2QZ7")
+    assert len(lookup.rows) == 2
+    assert lookup.message is not None and "Duplicate" in lookup.message
+
+
+def test_search_rows_rank_like_rac_find():
+    adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
+    adapter.load()
+    lookup = adapter.search_rows("md")
+    assert lookup.rows  # path substring matches at minimum
+    empty = adapter.search_rows("zzz-no-such-thing")
+    assert empty.rows == ()
+    assert empty.message is not None and "No matches" in empty.message
+
+
+def test_search_rows_trailing_type_token_filters():
+    adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
+    adapter.load()
+    filtered = adapter.search_rows(". decision")
+    assert filtered.rows
+    assert all(row.type == "decision" for row in filtered.rows)
+
+
+def test_browser_state_type_filter():
+    adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
+    adapter.load()
+    browser = adapter.browser_state("decision")
+    assert browser is not None
+    assert [group for group, _ in browser.groups] == ["decision"]
+    assert browser.total == 1
+
+
 def test_cancelled_load_returns_none_not_an_error():
     token = CancellationToken()
     adapter = ExplorerAdapter(str(FIXTURES / "all_types"))

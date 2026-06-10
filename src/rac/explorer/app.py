@@ -13,17 +13,35 @@ from textual.app import App
 from textual.binding import Binding
 
 from rac.explorer.adapter import ExplorerAdapter
+from rac.explorer.screens.command import CommandScreen
 from rac.explorer.screens.repository import RepositoryScreen
 
 
 class ExplorerApp(App[None]):
-    """Application shell over one repository (navigation arrives in v0.8.1)."""
+    """Application shell over one repository: home, browser, context, `/`."""
 
     TITLE = "RAC Explorer"
-    BINDINGS = [Binding("q", "quit", "Quit")]
+    BINDINGS = [
+        Binding("q", "quit", "Quit"),
+        Binding("slash", "command_surface", "Commands"),
+    ]
     CSS = """
     RepositoryPanel {
         padding: 1 2;
+    }
+    #context-panel {
+        padding: 1 2;
+    }
+    CommandScreen {
+        align: center top;
+    }
+    #command-surface {
+        width: 80%;
+        max-height: 70%;
+        margin: 2 4;
+        padding: 1 2;
+        background: $surface;
+        border: solid $accent;
     }
     """
 
@@ -34,3 +52,8 @@ class ExplorerApp(App[None]):
 
     def on_mount(self) -> None:
         self.push_screen(RepositoryScreen(self.adapter))
+
+    def action_command_surface(self) -> None:
+        if isinstance(self.screen, CommandScreen):
+            return
+        self.push_screen(CommandScreen(self.adapter))

@@ -118,6 +118,99 @@ async def test_home_shows_attention_and_hint():
 
 
 @pytest.mark.asyncio
+async def test_slash_open_navigates_to_context():
+    from rac.explorer.screens.command import CommandScreen
+    from rac.explorer.screens.context import ContextScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        assert isinstance(app.screen, CommandScreen)
+        await pilot.press(*"open adr-001")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ContextScreen)
+        from textual.widgets import Static
+
+        text = str(app.screen.query_one("#context-panel", Static).content)
+        assert "decision" in text
+
+
+@pytest.mark.asyncio
+async def test_slash_bare_text_searches_and_enter_opens():
+    from rac.explorer.screens.command import CommandScreen
+    from rac.explorer.screens.context import ContextScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"search feature")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, CommandScreen)  # results listed, surface open
+        await pilot.press("enter")  # open the first (focused) result
+        await pilot.pause()
+        assert isinstance(app.screen, ContextScreen)
+
+
+@pytest.mark.asyncio
+async def test_slash_help_lists_registry_and_esc_closes():
+    from textual.widgets import OptionList
+
+    from rac.explorer.screens.command import CommandScreen
+    from rac.explorer.screens.repository import RepositoryScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"help")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, CommandScreen)
+        results = app.screen.query_one(OptionList)
+        assert results.option_count == 6  # the whole registry, nothing more
+        await pilot.press("escape")
+        assert isinstance(app.screen, RepositoryScreen)
+
+
+@pytest.mark.asyncio
+async def test_slash_home_pops_navigation_stack():
+    from rac.explorer.screens.repository import RepositoryScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # browser
+        await pilot.press("enter")  # context
+        await pilot.press("/")
+        await pilot.press(*"home")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, RepositoryScreen)
+
+
+@pytest.mark.asyncio
+async def test_slash_browse_with_type_filter():
+    from textual.widgets import OptionList
+
+    from rac.explorer.screens.browser import BrowserScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"browse decision")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, BrowserScreen)
+        artifact_list = app.screen.query_one(OptionList)
+        assert artifact_list.option_count == 2  # the type header + one decision
+
+
+@pytest.mark.asyncio
 async def test_quit_binding_exits_cleanly():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
