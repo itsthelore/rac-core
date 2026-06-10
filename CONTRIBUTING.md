@@ -17,10 +17,14 @@ pip install -e '.[dev]'
 
 ## Verify a change
 
-Three commands; all must pass before you open a pull request:
+These commands must all pass before you open a pull request:
 
 ```bash
 pytest
+
+ruff check src/ tests/
+ruff format --check src/ tests/
+mypy src/
 
 rac validate rac/
 

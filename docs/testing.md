@@ -41,6 +41,28 @@ Tests are organized per capability — `test_validate.py`, `test_inspect.py`,
 including negative cases (an invalid file, or a neighboring artifact type that must
 *not* classify as the new one).
 
+Every `tests/test_*.py` must belong to exactly one CI battery in
+`.github/workflows/tests.yml` — `tests/test_ci_batteries.py` fails the suite if a
+file is orphaned, duplicated, or stale, so add new test files to the matrix as you
+create them.
+
+## Lint, format, and types
+
+CI gates on ruff and mypy (configured in `pyproject.toml`); run them locally
+before pushing:
+
+```bash
+.venv/bin/python -m ruff check src/ tests/
+.venv/bin/python -m ruff format --check src/ tests/   # or without --check to apply
+.venv/bin/python -m mypy src/
+```
+
+Coverage is reported (not gated) in CI; the same view locally:
+
+```bash
+.venv/bin/python -m pytest -q --cov=src/rac --cov-report=term-missing
+```
+
 ## Source layout
 
 The package uses a `src/` layout. The import package `rac` is organized into layers
@@ -57,10 +79,13 @@ src/rac/
 
 ## Verify before a pull request
 
-1. **Run the suite** — it must pass:
+1. **Run the suite and the static gates** — all must pass:
 
    ```bash
    .venv/bin/python -m pytest
+   .venv/bin/python -m ruff check src/ tests/
+   .venv/bin/python -m ruff format --check src/ tests/
+   .venv/bin/python -m mypy src/
    ```
 
 2. **Review your artifact changes** with RAC's own tooling:
