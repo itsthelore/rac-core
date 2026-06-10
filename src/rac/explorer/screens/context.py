@@ -57,6 +57,7 @@ class ContextScreen(Screen[None]):
     BINDINGS = [
         Binding("escape", "back", "Back"),
         Binding("e", "open_in_editor", "Open in editor"),
+        Binding("g", "relationships", "Relationships"),
     ]
 
     def __init__(self, adapter: ExplorerAdapter, context: ContextState) -> None:
@@ -74,6 +75,13 @@ class ContextScreen(Screen[None]):
         # ADR-024: Explorer hands the file to an external editor; it never edits.
         outcome = self.adapter.open_in_editor(self.context.path)
         self.query_one("#context-status", Static).update(outcome.message)
+
+    def action_relationships(self) -> None:
+        view = self.adapter.relationships_view(self.context.path)
+        if view is not None:
+            from .relationships import RelationshipScreen
+
+            self.app.push_screen(RelationshipScreen(self.adapter, view))
 
     def action_back(self) -> None:
         self.app.pop_screen()

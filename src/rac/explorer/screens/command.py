@@ -119,6 +119,19 @@ class CommandScreen(ModalScreen[None]):
 
             self.app.pop_screen()
             self.app.push_screen(RecommendationsScreen(self.adapter, recommendations))
+        elif invocation.command == "relationships":
+            lookup = self.adapter.open_ref(invocation.args)
+            if len(lookup.rows) != 1 or lookup.message is not None:
+                self._show_lookup(lookup)
+                return
+            view = self.adapter.relationships_view(lookup.rows[0].path)
+            if view is None:
+                self._set_options([Option("Repository not loaded yet", disabled=True)])
+                return
+            from .relationships import RelationshipScreen
+
+            self.app.pop_screen()
+            self.app.push_screen(RelationshipScreen(self.adapter, view))
         elif invocation.command == "import":
             parts = invocation.args.split()
             if not parts:

@@ -411,6 +411,64 @@ def test_export_recommendations_empty_when_clean():
     assert adapter.export_recommendations() == "No recommendations to export"
 
 
+def test_relationships_view_outgoing_resolves_targets():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    assert adapter.repository is not None
+    [req] = adapter.repository.artifacts_of_type("requirement")
+    [adr] = adapter.repository.artifacts_of_type("decision")
+    view = adapter.relationships_view(req.path)
+    assert view is not None
+    [link] = view.outgoing
+    assert link.kind == "Related Decisions"
+    assert link.navigable and link.target_path == adr.path
+
+
+def test_relationships_view_impact_is_what_depends_on_this():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    assert adapter.repository is not None
+    [req] = adapter.repository.artifacts_of_type("requirement")
+    [adr] = adapter.repository.artifacts_of_type("decision")
+    view = adapter.relationships_view(adr.path)
+    assert view is not None
+    assert view.outgoing == ()  # the ADR declares no outgoing references
+    [dependent] = view.impact
+    assert dependent.target_path == req.path
+    assert dependent.navigable
+
+
+def test_relationships_view_marks_unresolved_targets():
+    adapter = ExplorerAdapter(str(FIXTURES / "broken_rels"))
+    adapter.load()
+    assert adapter.repository is not None
+    [artifact] = adapter.repository.artifacts
+    view = adapter.relationships_view(artifact.path)
+    assert view is not None
+    [link] = view.outgoing
+    assert not link.navigable
+    assert "✗" in link.label
+
+
+def test_relationships_view_impact_matches_model():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    assert adapter.repository is not None
+    for artifact in adapter.repository.artifacts:
+        view = adapter.relationships_view(artifact.path)
+        assert view is not None
+        expected = {
+            rel.source_path
+            for rel in adapter.repository.relationships
+            if rel.resolved_path == artifact.path
+        }
+        assert {link.target_path for link in view.impact} == expected
+
+
+def test_relationships_view_requires_a_load():
+    assert ExplorerAdapter(str(FIXTURES / "valid_clean")).relationships_view("x.md") is None
+
+
 def test_cancelled_load_returns_none_not_an_error():
     token = CancellationToken()
     adapter = ExplorerAdapter(str(FIXTURES / "all_types"))

@@ -186,7 +186,7 @@ async def test_slash_help_lists_registry_and_esc_closes():
         await pilot.pause()
         assert isinstance(app.screen, CommandScreen)
         results = app.screen.query_one(OptionList)
-        assert results.option_count == 9  # the whole registry, nothing more
+        assert results.option_count == 10  # the whole registry, nothing more
         await pilot.press("escape")
         assert isinstance(app.screen, RepositoryScreen)
 
@@ -499,6 +499,46 @@ async def test_recommendations_export_previews_then_writes(tmp_path, monkeypatch
         written = (tmp_path / "recommendations.md").read_text(encoding="utf-8")
         assert "# Recommendations" in written
         assert "Imported" in str(app.screen.query_one("#confirm-panel", Static).content)
+
+
+@pytest.mark.asyncio
+async def test_context_g_opens_relationships_and_traverses():
+    from textual.widgets import Static
+
+    from rac.explorer.screens.context import ContextScreen
+    from rac.explorer.screens.relationships import RelationshipScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # home → browser
+        await pilot.press("enter")  # first artifact → context
+        assert isinstance(app.screen, ContextScreen)
+        await pilot.press("g")
+        await pilot.pause()
+        assert isinstance(app.screen, RelationshipScreen)
+        panel = str(app.screen.query_one("#relationship-panel", Static).content)
+        assert "Relationships" in panel and "Impact" in panel and "Lineage" in panel
+        # Traverse to a connected artifact, then back out.
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ContextScreen)
+        await pilot.press("escape")
+        assert isinstance(app.screen, RelationshipScreen)
+
+
+@pytest.mark.asyncio
+async def test_slash_relationships_opens_for_resolved_ref():
+    from rac.explorer.screens.relationships import RelationshipScreen
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"relationships adr-001")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, RelationshipScreen)
 
 
 @pytest.mark.asyncio

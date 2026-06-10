@@ -45,6 +45,8 @@ from .state import (
     LookupState,
     RecommendationRow,
     RecommendationsState,
+    RelationshipLink,
+    RelationshipsView,
     RepositorySummaryState,
     health_label,
 )
@@ -427,6 +429,75 @@ class ExplorerAdapter:
         except OSError as exc:
             return f"Could not write {preview.target}: {exc}"
         return f"Imported {preview.source} → {preview.target}"
+
+    def relationships_view(self, path: str) -> RelationshipsView | None:
+        """The knowledge-graph view for the artifact at ``path`` (v0.8.5).
+
+        Renders the loaded model's relationships — outgoing edges, impact
+        (artifacts that depend on this one), and lineage (Supersedes /
+        Superseded By). Explorer traverses; it infers nothing (ADR-016).
+        """
+        repository = self.repository
+        if repository is None:
+            return None
+        artifact = next((a for a in repository.artifacts if a.path == path), None)
+        if artifact is None:
+            return None
+        titles = {a.path: (a.title or a.id) for a in repository.artifacts}
+
+        def label(kind: str) -> str:
+            return kind.replace("_", " ").title()
+
+        outgoing: list[RelationshipLink] = []
+        lineage: list[str] = []
+        for rel in repository.relationships:
+            if rel.source_path != path:
+                continue
+            if rel.resolved_path is not None:
+                outgoing.append(
+                    RelationshipLink(
+                        kind=label(rel.relationship),
+                        label=titles[rel.resolved_path],
+                        target_path=rel.resolved_path,
+                        navigable=True,
+                    )
+                )
+                if rel.relationship == "supersedes":
+                    lineage.append(f"Supersedes → {titles[rel.resolved_path]}")
+            else:
+                phrase = (rel.issue or "unresolved").replace("-", " ").replace("_", " ")
+                outgoing.append(
+                    RelationshipLink(
+                        kind=label(rel.relationship),
+                        label=f"{rel.target} (✗ {phrase})",
+                        target_path="",
+                        navigable=False,
+                    )
+                )
+
+        impact: list[RelationshipLink] = []
+        for rel in repository.relationships:
+            if rel.resolved_path != path:
+                continue
+            impact.append(
+                RelationshipLink(
+                    kind=label(rel.relationship),
+                    label=titles.get(rel.source_path, rel.source_path),
+                    target_path=rel.source_path,
+                    navigable=True,
+                )
+            )
+            if rel.relationship == "supersedes":
+                lineage.append(f"Superseded By ← {titles.get(rel.source_path, rel.source_path)}")
+
+        return RelationshipsView(
+            id=artifact.id,
+            title=artifact.title,
+            path=artifact.path,
+            outgoing=tuple(outgoing),
+            impact=tuple(impact),
+            lineage=tuple(lineage),
+        )
 
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""

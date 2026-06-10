@@ -151,6 +151,28 @@ class RecommendationsState:
 
 
 @dataclass(frozen=True)
+class RelationshipLink:
+    """One edge in the knowledge graph, rendered for the terminal."""
+
+    kind: str  # e.g. "Related Decisions", "Supersedes"
+    label: str  # the connected artifact's title/id, or the raw reference text
+    target_path: str  # the artifact to navigate to ("" when unresolved)
+    navigable: bool
+
+
+@dataclass(frozen=True)
+class RelationshipsView:
+    """An artifact's relationships: outgoing edges, impact, and lineage."""
+
+    id: str
+    title: str | None
+    path: str
+    outgoing: tuple[RelationshipLink, ...]
+    impact: tuple[RelationshipLink, ...]  # what depends on this artifact
+    lineage: tuple[str, ...]  # Supersedes / Superseded By lines
+
+
+@dataclass(frozen=True)
 class ImportPreview:
     """A converted document awaiting confirmation before it is written."""
 
