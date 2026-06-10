@@ -20,10 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from rac.core.artifacts import spec_for
-from rac.core.classification import classify
-from rac.core.fs import find_markdown_files
+from rac.core.corpus import walk_corpus
 from rac.core.idgen import generate_id
-from rac.core.markdown import parse_file
 from rac.services.create import (
     IdGenerationExhausted,
     MissingRepositoryConfig,
@@ -132,16 +130,15 @@ def migrate_metadata(
         raise IdGenerationExhausted(_MAX_ID_ATTEMPTS)
 
     files: list[FileMigration] = []
-    for path in find_markdown_files(directory, recursive=recursive):
-        path = Path(path)
-        product = parse_file(str(path))
+    for entry in walk_corpus(directory, recursive=recursive):
+        path, product = entry.path, entry.product
         if product.metadata is not None or product.metadata_issues:
             # Any frontmatter presence — valid, malformed, or unterminated —
             # means migration keeps its hands off (Initiative 4: never modify
             # an existing envelope). Validation owns reporting broken ones.
             files.append(FileMigration(path=str(path), status=STATUS_ALREADY_CANONICAL))
             continue
-        artifact_type = classify(product).type
+        artifact_type = entry.artifact_type
         if spec_for(artifact_type) is None:
             files.append(FileMigration(path=str(path), status=STATUS_SKIPPED_UNKNOWN))
             continue
