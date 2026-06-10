@@ -51,6 +51,13 @@ class ExplorerApp(App[None]):
         self.sub_title = directory
 
     def on_mount(self) -> None:
+        # Preferences (v0.8.6): apply the theme if Textual recognizes it;
+        # an unknown theme name must never break startup.
+        try:
+            self.theme = self.adapter.preferences.theme
+        except Exception:  # noqa: BLE001 - unknown theme: keep the default
+            pass
+        self.adapter.record_open()  # workspace continuity (Initiative 1)
         self.push_screen(RepositoryScreen(self.adapter))
 
     def action_command_surface(self) -> None:

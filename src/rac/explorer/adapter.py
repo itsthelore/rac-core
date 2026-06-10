@@ -32,6 +32,7 @@ from rac.services.review import (
 
 from . import editor as editor_mod
 from .editor import EditorOutcome
+from .preferences import GROUPING_FLAT, Preferences, load_preferences
 from .state import (
     ArtifactRow,
     AttentionRow,
@@ -50,6 +51,7 @@ from .state import (
     RepositorySummaryState,
     health_label,
 )
+from .workspace import Workspace, load_workspace, save_workspace
 
 # Presentation labels for the analysis phases that follow the scan.
 _PHASE_LABELS = {
@@ -165,6 +167,45 @@ class ExplorerAdapter:
         self.directory = directory
         self.recursive = recursive
         self.repository: Repository | None = None
+        # Local config and continuity (v0.8.6) — read-only at construction;
+        # writes happen on explicit launch/navigation events.
+        self.preferences: Preferences = load_preferences()
+        self.workspace: Workspace = load_workspace()
+
+    # --- workspace continuity (v0.8.6) -------------------------------------
+
+    def record_open(self) -> None:
+        """Remember this repository as recently opened (Initiative 1)."""
+        self.workspace.record_open(self.directory)
+        save_workspace(self.workspace)
+
+    def record_artifact(self, path: str) -> None:
+        """Remember the last artifact opened in this repository."""
+        self.workspace.record_artifact(self.directory, path)
+        save_workspace(self.workspace)
+
+    def resume_path(self) -> str | None:
+        """The last artifact opened here, if it still exists in the load."""
+        path = self.workspace.resume_artifact(self.directory)
+        if path is None or self.repository is None:
+            return None
+        return path if any(a.path == path for a in self.repository.artifacts) else None
+
+    def preferences_lines(self) -> tuple[str, ...]:
+        """Current preferences and the file that controls them (read-only)."""
+        from .preferences import preferences_path
+
+        prefs = self.preferences
+        return (
+            "Preferences",
+            "",
+            f"  theme              {prefs.theme}",
+            f"  mascot             {'on' if prefs.mascot else 'off'}",
+            f"  animations         {'on' if prefs.animations else 'off'}",
+            f"  artifact_grouping  {prefs.artifact_grouping}",
+            "",
+            f"Edit {preferences_path()} to change these.",
+        )
 
     def load(
         self,
@@ -232,6 +273,14 @@ class ExplorerAdapter:
         if self.repository is None:
             return None
         repository = self.repository
+        if artifact_type is None and self.preferences.artifact_grouping == GROUPING_FLAT:
+            # Flat grouping (preference): one list, no type headers.
+            rows = tuple(_row(a) for a in repository.artifacts)
+            return BrowserState(
+                directory=repository.directory,
+                groups=(("all", rows),),
+                total=len(rows),
+            )
         groups = tuple(
             (group_type, tuple(_row(a) for a in repository.artifacts_of_type(group_type)))
             for group_type, count in repository.portfolio.by_type.items()
