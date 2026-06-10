@@ -20,6 +20,8 @@ from rac.services.resolve import (
     OUTCOME_RESOLVED,
     find_artifacts,
     resolve_artifact,
+    resolve_in_index,
+    search_index,
 )
 
 CANONICAL_ID = "RAC-01JY4M8X2QZ7"
@@ -164,6 +166,38 @@ def test_search_empty_repository_valid_no_match(tmp_path):
     result = find_artifacts(str(tmp_path), "anything")
     assert result.match_count == 0
     assert result.matches == []
+
+
+# --- index seams (v0.8.1): same semantics without a directory walk --------------
+
+
+def test_resolve_in_index_matches_directory_resolution(repo):
+    from rac.services.index import build_repository_index
+
+    entries = build_repository_index(str(repo)).artifacts
+    for ref in (CANONICAL_ID, "adr-002", "nope"):
+        assert (
+            resolve_in_index(entries, ref).to_dict() == resolve_artifact(str(repo), ref).to_dict()
+        )
+
+
+def test_search_index_matches_directory_search(repo):
+    from rac.services.index import build_repository_index
+
+    entries = build_repository_index(str(repo)).artifacts
+    for query, artifact_type in (("decision", None), ("legacy", "decision"), ("zzz", None)):
+        assert search_index(entries, query, artifact_type=artifact_type).to_dict() == (
+            find_artifacts(str(repo), query, artifact_type=artifact_type).to_dict()
+        )
+
+
+def test_seams_accept_repository_model_artifacts(repo):
+    from rac.services.repository import load_repository
+
+    artifacts = load_repository(str(repo)).artifacts
+    resolved = resolve_in_index(artifacts, CANONICAL_ID)
+    assert resolved.outcome == OUTCOME_RESOLVED
+    assert search_index(artifacts, "legacy").match_count == 1
 
 
 # --- CLI: rac resolve ------------------------------------------------------------
