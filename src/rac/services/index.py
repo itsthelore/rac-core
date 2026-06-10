@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rac.core.artifacts import spec_for
-from rac.core.corpus import walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
 
 
@@ -79,8 +79,20 @@ class RepositoryIndex:
 
 def build_repository_index(directory: str, recursive: bool = True) -> RepositoryIndex:
     """Walk ``directory`` and inventory every Markdown artifact (one parse each)."""
+    entries = list(walk_corpus(directory, recursive=recursive))
+    return index_from_corpus(directory, entries, recursive=recursive)
+
+
+def index_from_corpus(
+    directory: str, entries: list[CorpusEntry], recursive: bool = True
+) -> RepositoryIndex:
+    """Inventory an already-walked corpus snapshot (v0.8.0).
+
+    Same result as :func:`build_repository_index`; the snapshot lets one walk
+    feed several analyses (repository model, future incremental refresh).
+    """
     artifacts: list[IndexEntry] = []
-    for entry in walk_corpus(directory, recursive=recursive):
+    for entry in entries:
         path, product = entry.path, entry.product
         spec = spec_for(entry.artifact_type)  # None for Unknown
         artifacts.append(

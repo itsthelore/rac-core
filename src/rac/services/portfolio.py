@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import missing_sections
-from rac.core.corpus import walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier
 from rac.core.validation import has_errors, validate
 
@@ -37,7 +37,7 @@ from .relationships import (
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
     RelationshipSummary,
-    summarize_relationships,
+    summary_from_corpus,
 )
 
 # Stable attention codes (part of the JSON contract, ADR-007).
@@ -151,6 +151,18 @@ class PortfolioSummary:
 
 def build_portfolio_summary(directory: str, recursive: bool = True) -> PortfolioSummary:
     """Walk ``directory`` and compute a full repository intelligence summary."""
+    entries = list(walk_corpus(directory, recursive=recursive))
+    return portfolio_from_corpus(directory, entries, recursive=recursive)
+
+
+def portfolio_from_corpus(
+    directory: str, entries: list[CorpusEntry], recursive: bool = True
+) -> PortfolioSummary:
+    """Summarize an already-walked corpus snapshot (v0.8.0).
+
+    Same result as :func:`build_portfolio_summary`. The snapshot also feeds
+    the relationship summary, so a portfolio costs one walk instead of two.
+    """
 
     # --- per-artifact pass ---------------------------------------------------
     by_type: dict[str, int] = {spec.name: 0 for spec in ARTIFACT_SPECS}
@@ -167,7 +179,7 @@ def build_portfolio_summary(directory: str, recursive: bool = True) -> Portfolio
     # second identifier pass.
     path_to_identifier: dict[str, str] = {}
 
-    for entry in walk_corpus(directory, recursive=recursive):
+    for entry in entries:
         path, product = entry.path, entry.product
         artifact_type = entry.artifact_type
         by_type[artifact_type] = by_type.get(artifact_type, 0) + 1
@@ -219,9 +231,9 @@ def build_portfolio_summary(directory: str, recursive: bool = True) -> Portfolio
             )
 
     # --- relationship summary ------------------------------------------------
-    # One relationship walk; its per-reference issues become attention items so
-    # broken references are surfaced, not just counted (roadmap Initiative 3).
-    rel_summary = summarize_relationships(directory, recursive=recursive)
+    # Reuses the snapshot (no second walk); per-reference issues become
+    # attention items so broken references are surfaced, not just counted.
+    rel_summary = summary_from_corpus(entries)
     for issue in rel_summary.issues:
         source = issue.source_path or ""
         label = (issue.relationship or "").replace("_", " ").title()
