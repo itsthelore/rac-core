@@ -66,4 +66,5 @@ jobs:
           tests/test_identity.py tests/test_frontmatter.py
           tests/test_metadata_identity.py tests/test_idgen.py
           tests/test_ci_batteries.py tests/test_corpus.py
+          tests/test_operations.py
           tests/test_golden.py tests/test_dogfood.py

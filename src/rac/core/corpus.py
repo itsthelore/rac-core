@@ -23,6 +23,7 @@ from .classification import Classification, classify
 from .fs import find_markdown_files
 from .markdown import parse_file
 from .models import Product
+from .operations import CancelToken, Progress, ProgressCallback, checkpoint
 
 
 @dataclass(frozen=True)
@@ -48,3 +49,29 @@ def walk_corpus(directory: str, *, recursive: bool = True) -> Iterator[CorpusEnt
     for path in find_markdown_files(directory, recursive=recursive):
         product = parse_file(str(path))
         yield CorpusEntry(path=path, product=product, classification=classify(product))
+
+
+def collect_corpus(
+    directory: str,
+    *,
+    recursive: bool = True,
+    on_progress: ProgressCallback | None = None,
+    cancel: CancelToken | None = None,
+) -> list[CorpusEntry]:
+    """Materialize the corpus walk as a reusable snapshot (v0.8.0).
+
+    The snapshot lets one walk feed every analysis a consumer needs — index,
+    validation, relationships, portfolio — instead of each re-walking the
+    tree. Long-lived consumers get per-file progress (the file count is known
+    up front) and a cancellation checkpoint before each parse.
+    """
+    paths = find_markdown_files(directory, recursive=recursive)
+    total = len(paths)
+    entries: list[CorpusEntry] = []
+    for completed, path in enumerate(paths, start=1):
+        checkpoint(cancel)
+        product = parse_file(str(path))
+        entries.append(CorpusEntry(path=path, product=product, classification=classify(product)))
+        if on_progress is not None:
+            on_progress(Progress(phase="scan", completed=completed, total=total))
+    return entries
