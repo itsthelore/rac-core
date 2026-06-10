@@ -35,6 +35,20 @@ The mascot provides a consistent interaction language.
 
 Animations are implemented as explicit states.
 
+### Frame Sequences
+
+Each state is a sequence of one or more frames (v0.8.8):
+
+- a frame is a multi-line block of terminal art
+- every frame in a state's sequence is padded to the same width and height,
+  so cycling never shifts the layout
+- frames cycle on a slow timer (≈0.6s) only while the mascot is visible and
+  animations are enabled; with animations off, the first frame shows
+- the searching sequence plays while the repository loads
+
+Artwork is data: replacing a state's frame strings changes the animation
+without touching behaviour.
+
 ---
 
 ## Idle
@@ -206,6 +220,7 @@ Reduced-motion users receive equivalent text feedback.
 ## Related Roadmaps
 
 - v0.8.6-explorer-maturity
+- v0.8.8-explorer-command-palette
 
 ---
 

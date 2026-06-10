@@ -42,15 +42,25 @@ Opening an artifact should require minimal user effort.
 
 ## Configuration
 
-Explorer shall support a configured default editor.
+Explorer shall support a configured default editor (v0.8.8): the `editor`
+preference in `$XDG_CONFIG_HOME/rac/explorer.json`, set from the `/settings`
+view or by editing the file.
 
-Example:
+Resolution order:
 
-```yaml
-explorer:
-  editor:
-    command: cursor
-```
+1. the `editor` preference
+2. `$VISUAL`
+3. `$EDITOR`
+
+## Terminal Editors
+
+GUI editors (Cursor, VS Code, …) launch fire-and-forget and Explorer keeps
+running.
+
+Terminal editors (vi, vim, nvim, emacs, nano, helix, micro) need the
+terminal: Explorer suspends itself, runs the editor in the foreground, and
+resumes when the editor exits. Where the runtime cannot suspend, Explorer
+reports guidance instead of failing.
 
 ## First Run Experience
 

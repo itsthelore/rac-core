@@ -25,6 +25,11 @@ service grows or another consumer needs impact.
 
 ## 2. Editor preference persistence and terminal-editor support
 
+**Landing in v0.8.8** (explorer-command-palette): the `editor` preference in
+`/settings` with preference → `$VISUAL` → `$EDITOR` resolution, and a
+suspend/resume path for terminal editors. The first-run editor prompt
+remains deferred.
+
 Deferred from v0.8.4 (action workflows) and v0.8.6 (preferences).
 
 `rac explorer` resolves the editor from `$VISUAL` / `$EDITOR` and launches it
