@@ -45,9 +45,8 @@ class ExplorerAdapter:
     """Loads a repository through Core services and yields UI state.
 
     Failures surface as :class:`LoadErrorState` (Initiative 6 — recoverable,
-    never a crash); cancellation propagates as
-    :class:`~rac.core.operations.OperationCancelled` so workers can treat an
-    interrupted load as cancelled rather than failed. The last successful
+    never a crash); a cancelled load returns ``None`` so workers can discard
+    it without handling Core exception types. The last successful
     :class:`Repository` is kept for navigation milestones (v0.8.1+).
     """
 
@@ -61,7 +60,7 @@ class ExplorerAdapter:
         *,
         on_progress: ProgressHandler | None = None,
         cancel: CancelToken | None = None,
-    ) -> RepositorySummaryState | LoadErrorState:
+    ) -> RepositorySummaryState | LoadErrorState | None:
         def relay(progress: Progress) -> None:
             if on_progress is not None:
                 on_progress(_progress_state(progress))
@@ -74,7 +73,7 @@ class ExplorerAdapter:
                 cancel=cancel,
             )
         except OperationCancelled:
-            raise
+            return None  # discarded by the caller; not an error
         except Exception as exc:  # noqa: BLE001 — the recoverable boundary (Initiative 6)
             return LoadErrorState(
                 title="Could not load repository",
