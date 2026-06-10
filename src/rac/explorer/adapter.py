@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from rac.core.frontmatter import split_frontmatter
 from rac.core.operations import CancelToken, OperationCancelled, Progress
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.repository import Artifact, Repository, load_repository
@@ -549,11 +550,14 @@ class ExplorerAdapter:
         )
 
     def artifact_markdown(self, path: str) -> str | None:
-        """The artifact's Markdown text for the Content tab (v0.8.7).
+        """The artifact's Markdown body for the Content tab (v0.8.7).
 
         Read-only presentation of the document itself (ADR-024); only paths
-        in the loaded repository resolve. A read failure returns a message
-        rather than raising into the UI (Initiative 6).
+        in the loaded repository resolve. The leading YAML frontmatter is
+        stripped (Core's split, ADR-025): identity metadata already lives in
+        the panel title, the sidebar type tag, and the Inspection tab. A read
+        failure returns a message rather than raising into the UI
+        (Initiative 6).
         """
         repository = self.repository
         if repository is None:
@@ -561,9 +565,10 @@ class ExplorerAdapter:
         if not any(a.path == path for a in repository.artifacts):
             return None
         try:
-            return Path(path).read_text(encoding="utf-8")
+            text = Path(path).read_text(encoding="utf-8")
         except OSError as exc:
             return f"Could not read {path}: {exc}"
+        return split_frontmatter(text).body.lstrip("\n")
 
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""

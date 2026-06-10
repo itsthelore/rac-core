@@ -149,6 +149,30 @@ def test_context_state_unknown_path_returns_none():
     assert adapter.context_state("nope.md") is None
 
 
+def test_artifact_markdown_returns_the_document_body(tmp_path):
+    # The Content tab presents the knowledge itself: the Markdown body, with
+    # the frontmatter stripped — identity already lives in the frame.
+    body = "# ADR-001 Choose\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n"
+    (tmp_path / "adr-001.md").write_text(f"---\nschema_version: 1\n---\n\n{body}", encoding="utf-8")
+    adapter = ExplorerAdapter(str(tmp_path))
+    adapter.load()
+    assert adapter.artifact_markdown(str(tmp_path / "adr-001.md")) == body
+
+
+def test_artifact_markdown_without_frontmatter_is_unchanged():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    path = str(FIXTURES / "valid_clean" / "req-001.md")
+    assert adapter.artifact_markdown(path) == Path(path).read_text(encoding="utf-8")
+
+
+def test_artifact_markdown_unknown_path_returns_none():
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    adapter.load()
+    assert adapter.artifact_markdown("nope.md") is None
+    assert ExplorerAdapter(str(FIXTURES / "valid_clean")).artifact_markdown("x.md") is None
+
+
 def test_open_ref_resolves_like_rac_resolve():
     adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
     adapter.load()
