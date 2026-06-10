@@ -20,8 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rac.core.artifacts import spec_for
-from rac.core.fs import find_markdown_files
-from rac.core.markdown import parse_file
+from rac.core.corpus import walk_corpus
 from rac.core.validation import validate
 
 from .inspect import build_inspection
@@ -289,8 +288,8 @@ def collect_stats(directory: str) -> PortfolioStats:
     """
     stats = PortfolioStats(directory=directory)
     rel_counts: dict[str, int] = {}
-    for path in find_markdown_files(directory):
-        product = parse_file(str(path))
+    for entry in walk_corpus(directory):
+        path, product = entry.path, entry.product
         name = product.title or path.stem
         result = build_inspection(product)
         # Declared relationship-presence counts span every artifact type, so they
