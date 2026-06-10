@@ -15,13 +15,36 @@ with sorted path as the tiebreak.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Protocol
 
-from rac.services.index import IndexEntry, build_repository_index
+from rac.services.index import build_repository_index
 
 OUTCOME_RESOLVED = "resolved"
 OUTCOME_NOT_FOUND = "not-found"
 OUTCOME_DUPLICATE = "duplicate"
+
+
+class SearchableArtifact(Protocol):
+    """Anything resolvable/searchable: index entries, repository artifacts.
+
+    Structural (v0.8.1) so consumers holding an already-loaded repository
+    model can reuse the exact `rac resolve` / `rac find` semantics without
+    re-walking the directory (ADR-026).
+    """
+
+    @property
+    def id(self) -> str: ...
+    @property
+    def type(self) -> str: ...
+    @property
+    def title(self) -> str | None: ...
+    @property
+    def path(self) -> str: ...
+    @property
+    def aliases(self) -> Sequence[str]: ...
+
 
 # Match-field priority for search ordering (lower ranks first).
 _RANK_ID = 0
@@ -47,7 +70,7 @@ class ResolvedArtifact:
         }
 
     @classmethod
-    def from_entry(cls, entry: IndexEntry) -> ResolvedArtifact:
+    def from_entry(cls, entry: SearchableArtifact) -> ResolvedArtifact:
         return cls(id=entry.id, type=entry.type, title=entry.title, path=entry.path)
 
 
@@ -104,9 +127,19 @@ def resolve_artifact(directory: str, artifact_id: str, recursive: bool = True) -
     relationship resolution uses. Multiple *distinct files* matching is a
     duplicate, reported with every path and never resolved by order.
     """
+    entries = build_repository_index(directory, recursive=recursive).artifacts
+    return resolve_in_index(entries, artifact_id)
+
+
+def resolve_in_index(entries: Sequence[SearchableArtifact], artifact_id: str) -> ResolutionResult:
+    """Resolve ``artifact_id`` against already-discovered entries (v0.8.1).
+
+    Same outcomes and semantics as :func:`resolve_artifact`; the seam lets a
+    loaded repository model answer lookups without another directory walk.
+    """
     wanted = artifact_id.strip().casefold()
-    matches: list[IndexEntry] = []
-    for entry in build_repository_index(directory, recursive=recursive).artifacts:
+    matches: list[SearchableArtifact] = []
+    for entry in entries:
         if any(alias.casefold() == wanted for alias in entry.aliases):
             matches.append(entry)
     if not matches:
@@ -124,7 +157,7 @@ def resolve_artifact(directory: str, artifact_id: str, recursive: bool = True) -
     )
 
 
-def _match_rank(entry: IndexEntry, needle: str) -> int | None:
+def _match_rank(entry: SearchableArtifact, needle: str) -> int | None:
     """Best match-field rank for ``needle`` in ``entry``, or None for no match."""
     if any(needle in alias.casefold() for alias in entry.aliases):
         return _RANK_ID
@@ -147,9 +180,23 @@ def find_artifacts(
     substring match, results ordered by match-field priority then sorted
     path. An empty result is a valid outcome, not an error.
     """
+    entries = build_repository_index(directory, recursive=recursive).artifacts
+    return search_index(entries, query, artifact_type=artifact_type)
+
+
+def search_index(
+    entries: Sequence[SearchableArtifact],
+    query: str,
+    artifact_type: str | None = None,
+) -> SearchResult:
+    """Search already-discovered entries with `rac find` semantics (v0.8.1).
+
+    Identical matching and ordering to :func:`find_artifacts`; the seam lets
+    a loaded repository model serve searches without another directory walk.
+    """
     needle = query.strip().casefold()
-    ranked: list[tuple[int, str, IndexEntry]] = []
-    for entry in build_repository_index(directory, recursive=recursive).artifacts:
+    ranked: list[tuple[int, str, SearchableArtifact]] = []
+    for entry in entries:
         if artifact_type is not None and entry.type != artifact_type:
             continue
         rank = _match_rank(entry, needle)
