@@ -16,6 +16,34 @@ permissions:
   contents: read
 
 jobs:
+  # Static quality gates (v0.7.14): lint, format, and types fail the suite
+  # just like a battery. One Python version is enough — the rules target 3.11.
+  lint:
+    name: lint (ruff + mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package with dev extras
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: ruff check
+        run: python -m ruff check src/ tests/
+
+      - name: ruff format --check
+        run: python -m ruff format --check src/ tests/
+
+      - name: mypy
+        run: python -m mypy src/
+
   pytest:
     name: ${{ matrix.battery.name }} (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
