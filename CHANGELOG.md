@@ -8,6 +8,23 @@ details, release history over commit history.
 
 ### Added
 
+- CI battery integrity (v0.7.14): eight test files (~1,300 lines, including
+  all coverage for `rac new` and `rac migrate`) were missing from the CI
+  battery matrix and never ran; they are restored, and a new guard test
+  fails the suite if any test file is ever orphaned again.
+- Static quality gates (v0.7.14): ruff (lint + format) and mypy now gate CI;
+  pull requests run the gates plus a fast smoke battery (ADR-027 amended),
+  while the full battery grid stays merge-gated on `main`. CLI output is
+  unchanged — all golden files are byte-identical.
+- Test coverage is reported on every CI run (report-only, currently 97%)
+  (v0.7.14).
+
+### Changed
+
+- Repository corpus traversal is defined once in core (`walk_corpus`) and
+  consumed by every repository command — behavior and output unchanged
+  (v0.7.14).
+
 - `rac migrate metadata <directory>` — migrate existing recognized artifacts
   onto canonical frontmatter identity: idempotent, byte-preserving, with
   `--dry-run` preview; unrecognized documents are reported, never guessed at
