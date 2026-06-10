@@ -392,6 +392,10 @@ def cmd_index(args: argparse.Namespace) -> int:
 
 
 def cmd_explorer(args: argparse.Namespace) -> int:
+    if args.directory is None:
+        # ADR-018: rac/ is the conventional knowledge root — open it when it
+        # exists; otherwise the current directory (v0.8.1).
+        args.directory = "rac" if Path("rac").is_dir() else "."
     if not Path(args.directory).is_dir():
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
@@ -788,8 +792,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_explorer.add_argument(
         "directory",
         nargs="?",
-        default=".",
-        help="Repository to explore (default: current directory).",
+        default=None,
+        help="Repository to explore (default: rac/ when present, else the current directory).",
     )
     p_explorer.add_argument(
         "--top-level",

@@ -38,12 +38,32 @@ def test_explorer_launches_app_over_directory(tmp_path, monkeypatch):
     assert app.ran
 
 
-def test_explorer_defaults_to_current_directory(tmp_path, monkeypatch):
+def test_explorer_defaults_to_rac_root_when_present(tmp_path, monkeypatch):
+    # ADR-018: rac/ is the conventional knowledge root.
+    monkeypatch.setattr(launch, "_import_app", lambda: _AppSpy)
+    (tmp_path / "rac").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert main(["explorer"]) == 0
+    [app] = _AppSpy.instances
+    assert app.directory == "rac"
+
+
+def test_explorer_defaults_to_current_directory_without_rac_root(tmp_path, monkeypatch):
     monkeypatch.setattr(launch, "_import_app", lambda: _AppSpy)
     monkeypatch.chdir(tmp_path)
     assert main(["explorer"]) == 0
     [app] = _AppSpy.instances
     assert app.directory == "."
+
+
+def test_explorer_explicit_path_wins_over_rac_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(launch, "_import_app", lambda: _AppSpy)
+    (tmp_path / "rac").mkdir()
+    (tmp_path / "docs").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert main(["explorer", "docs"]) == 0
+    [app] = _AppSpy.instances
+    assert app.directory == "docs"
 
 
 def test_explorer_top_level_disables_recursion(tmp_path, monkeypatch):
