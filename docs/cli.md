@@ -356,9 +356,9 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   `Esc` back · `h` health (home) · `r` reload (home) · `q` quit
 - **Commands (`/`):** `open <ref>` · `find <query> [type]` · `browse [type]` ·
   `health` · `recommendations` · `import <source> [target]` ·
-  `relationships <ref>` · `home` · `help` · `quit` — anything else is a search.
-  Lookup resolves canonical IDs and legacy aliases with `rac resolve` /
-  `rac find` semantics.
+  `relationships <ref>` · `resume` · `preferences` · `home` · `help` · `quit` —
+  anything else is a search. Lookup resolves canonical IDs and legacy aliases
+  with `rac resolve` / `rac find` semantics.
 - **Health:** `h` or `/health` opens the health view — Core's score with a text
   label, the Completeness / Relationships / Validation / Coverage areas, and a
   prioritized attention list whose items open the affected artifact.
@@ -377,8 +377,13 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   ingest service, previews the Markdown, and writes it only after you confirm
   with `y` (never overwriting). Long conversions report progress.
 - **First run:** onboarding derives from repository content (existing, empty, or
-  invalid repository) and is skipped for returning users; the completion marker
-  under `$XDG_STATE_HOME/rac/` is the only state Explorer persists.
+  invalid repository) and is skipped for returning users; a lantern-carrying
+  mascot greets the welcome and empty states (disable with `mascot = false`).
+- **Continuity & preferences:** Explorer remembers recently opened repositories
+  and the last artifact per repository (under `$XDG_STATE_HOME/rac/`); `.` or
+  `/resume` reopens it. Optional preferences — `theme`, `mascot`, `animations`,
+  `artifact_grouping` — live in `$XDG_CONFIG_HOME/rac/explorer.json` (no login,
+  cloud, or sync); `/preferences` shows the current values and the file path.
 - **Exit codes:** `0` session quit · `2` not a directory, or the `explorer` extra is
   not installed
 
