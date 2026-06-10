@@ -23,7 +23,7 @@ _GROUPINGS = (GROUPING_TYPE, GROUPING_FLAT)
 class Preferences:
     """User preferences with safe defaults; unknown values fall back."""
 
-    theme: str = "textual-dark"
+    theme: str = "rac-lantern"
     mascot: bool = True
     animations: bool = True
     artifact_grouping: str = GROUPING_TYPE

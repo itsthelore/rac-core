@@ -1,0 +1,102 @@
+/* Explorer stylesheet — the visual system (v0.8.7, DESIGN-visual-system).
+
+   Three depth levels: Surface 0 is the application background, Surface 1 is
+   a titled rounded panel on $surface, Surface 2 is the focused panel whose
+   border switches to the accent. Colour communicates focus, not meaning. */
+
+MainScreen {
+    layout: vertical;
+    background: $background;
+}
+
+/* App bar — one plain line, no stock Header. */
+AppBar {
+    height: 1;
+    padding: 0 1;
+}
+
+#appbar-title {
+    width: auto;
+    color: $accent;
+    text-style: bold;
+}
+
+#appbar-path {
+    width: 1fr;
+    text-align: right;
+    color: $text-muted;
+}
+
+#workspace {
+    height: 1fr;
+}
+
+/* Navigation sidebar — Surface 1, fixed width, hidden under 80 columns. */
+NavigationSidebar {
+    width: 28;
+    border: round $panel;
+    border-title-color: $text;
+    background: $surface;
+    padding: 0 1;
+}
+
+NavigationSidebar:focus-within {
+    border: round $accent;
+    border-title-color: $accent;
+}
+
+NavigationSidebar > .tree--cursor {
+    background: $accent 30%;
+}
+
+/* Context panel — Surface 1, hosts exactly one view at a time. */
+#context-region {
+    width: 1fr;
+    border: round $panel;
+    border-title-color: $text;
+    background: $surface;
+    padding: 1 2;
+}
+
+#context-region:focus-within {
+    border: round $accent;
+    border-title-color: $accent;
+}
+
+#context-region ContentSwitcher {
+    height: 1fr;
+}
+
+ContextView TabbedContent {
+    height: 1fr;
+}
+
+#content-scroll {
+    height: 1fr;
+}
+
+/* Command bar — always visible, never modal (DESIGN-command-surface). */
+CommandBar {
+    border: round $panel;
+    border-title-color: $accent;
+    background: $surface;
+}
+
+CommandBar:focus {
+    border: round $accent;
+}
+
+/* Status line — key chips left, health right. No stock Footer. */
+StatusLine {
+    height: 1;
+    padding: 0 1;
+}
+
+#status-hints {
+    width: 1fr;
+}
+
+#status-right {
+    width: auto;
+    color: $text-muted;
+}

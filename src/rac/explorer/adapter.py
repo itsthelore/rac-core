@@ -548,6 +548,23 @@ class ExplorerAdapter:
             lineage=tuple(lineage),
         )
 
+    def artifact_markdown(self, path: str) -> str | None:
+        """The artifact's Markdown text for the Content tab (v0.8.7).
+
+        Read-only presentation of the document itself (ADR-024); only paths
+        in the loaded repository resolve. A read failure returns a message
+        rather than raising into the UI (Initiative 6).
+        """
+        repository = self.repository
+        if repository is None:
+            return None
+        if not any(a.path == path for a in repository.artifacts):
+            return None
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except OSError as exc:
+            return f"Could not read {path}: {exc}"
+
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""
         repository = self.repository

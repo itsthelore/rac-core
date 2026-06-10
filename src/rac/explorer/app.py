@@ -1,10 +1,10 @@
-"""The Explorer Textual application (v0.8.0, ADR-028).
+"""The Explorer Textual application (v0.8.0, restyled v0.8.7, ADR-028).
 
-Keyboard-first and terminal-native: the footer surfaces the bindings, and the
-shell stays responsive because every Core operation runs through workers
-(see :mod:`rac.explorer.screens.repository`). This is the first module on the
-import path that requires Textual; :mod:`rac.explorer.launch` imports it
-lazily so the base install works without the ``explorer`` extra.
+Keyboard-first and terminal-native: one persistent workspace frame
+(:mod:`rac.explorer.screens.main`) with the rac-lantern theme as the curated
+default. This is the first module on the import path that requires Textual;
+:mod:`rac.explorer.launch` imports it lazily so the base install works
+without the ``explorer`` extra.
 """
 
 from __future__ import annotations
@@ -13,37 +13,22 @@ from textual.app import App
 from textual.binding import Binding
 
 from rac.explorer.adapter import ExplorerAdapter
-from rac.explorer.screens.command import CommandScreen
-from rac.explorer.screens.repository import RepositoryScreen
+from rac.explorer.screens.main import MainScreen
+from rac.explorer.theme import RAC_LANTERN, THEME_NAME
+from rac.explorer.widgets.commandbar import CommandBar
 
 
 class ExplorerApp(App[None]):
-    """Application shell over one repository: home, browser, context, `/`."""
+    """Application shell over one repository: one frame, swappable views, `/`."""
 
     TITLE = "RAC Explorer"
+    CSS_PATH = "explorer.tcss"
     BINDINGS = [
         Binding("q", "quit", "Quit"),
+        # Not a priority binding: a typed `/` must keep working inside the
+        # command bar's input rather than re-triggering this action.
         Binding("slash", "command_surface", "Commands"),
     ]
-    CSS = """
-    RepositoryPanel {
-        padding: 1 2;
-    }
-    #context-panel {
-        padding: 1 2;
-    }
-    CommandScreen {
-        align: center top;
-    }
-    #command-surface {
-        width: 80%;
-        max-height: 70%;
-        margin: 2 4;
-        padding: 1 2;
-        background: $surface;
-        border: solid $accent;
-    }
-    """
 
     def __init__(self, directory: str, recursive: bool = True) -> None:
         super().__init__()
@@ -51,16 +36,19 @@ class ExplorerApp(App[None]):
         self.sub_title = directory
 
     def on_mount(self) -> None:
-        # Preferences (v0.8.6): apply the theme if Textual recognizes it;
-        # an unknown theme name must never break startup.
+        # The curated default (v0.8.7); the `theme` preference overrides it
+        # with any Textual theme, and an unknown name never breaks startup.
+        self.register_theme(RAC_LANTERN)
         try:
             self.theme = self.adapter.preferences.theme
         except Exception:  # noqa: BLE001 - unknown theme: keep the default
-            pass
+            self.theme = THEME_NAME
         self.adapter.record_open()  # workspace continuity (Initiative 1)
-        self.push_screen(RepositoryScreen(self.adapter))
+        self.push_screen(MainScreen(self.adapter))
 
     def action_command_surface(self) -> None:
-        if isinstance(self.screen, CommandScreen):
-            return
-        self.push_screen(CommandScreen(self.adapter))
+        # `/` focuses the persistent bar from anywhere on the main screen;
+        # there is no bar on the confirm-write modal.
+        bars = self.screen.query(CommandBar)
+        if bars:
+            bars.first().focus()

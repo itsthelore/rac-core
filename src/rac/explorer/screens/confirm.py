@@ -10,11 +10,11 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Static
 
 from rac.explorer.adapter import ExplorerAdapter
-from rac.explorer.screens.import_ import ImportScreen
 from rac.explorer.state import ImportPreview
+from rac.explorer.widgets.views import render_preview
 
 
 class ConfirmWriteScreen(Screen[None]):
@@ -32,9 +32,7 @@ class ConfirmWriteScreen(Screen[None]):
         self._done = False
 
     def compose(self) -> ComposeResult:
-        yield Header()
-        yield Static(ImportScreen._render_preview(self.preview), id="confirm-panel")
-        yield Footer()
+        yield Static(render_preview(self.preview), id="confirm-panel")
 
     def action_confirm(self) -> None:
         if self._done:

@@ -1,1 +1,1 @@
-"""Explorer screens — Textual screens composing the application views."""
+"""Explorer screens — the main workspace frame and the confirm-write modal."""
