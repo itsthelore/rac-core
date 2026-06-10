@@ -338,12 +338,13 @@ rac index rac/ --json
 
 ## explorer
 
-Launch the interactive terminal Explorer — browse every artifact, inspect any
-of them in context, assess repository health, and reach anything through the `/`
-command surface, without memorizing RAC commands. The home view shows the
-repository summary and attention items; the health view (`h` or `/health`)
-breaks health into four areas and links each attention item to the artifact it
-concerns. Recommendations arrive in later v0.8.x releases.
+Launch the interactive terminal Explorer — browse every artifact, read it in
+full, assess repository health, and reach anything through the `/` command
+bar, without memorizing RAC commands. One persistent workspace frame
+(v0.8.7): a navigation sidebar of type-tagged artifacts on the left, a
+context panel that swaps views on the right, the always-visible `/` bar, and
+a status line of key hints with the health chip — under the rac-lantern
+theme by default.
 
 Explorer is a presentation layer over the same services the CLI uses: everything
 it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
@@ -352,13 +353,27 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
 - **Input:** `rac explorer [directory]` — defaults to `rac/` when present
   (ADR-018), else the current directory; scanned recursively for `*.md`.
 - **Options:** `--top-level` · `--recursive` (no `--json`: the surface is interactive)
-- **Keys:** `/` commands and search · `↑ ↓` navigate · `Enter` select ·
-  `Esc` back · `h` health (home) · `r` reload (home) · `q` quit
+- **Keys:** `/` focuses the command bar from anywhere · `↑ ↓` navigate ·
+  `Enter` select · `Tab` cycle panels · `Esc` back (bar → previous panel;
+  context → view history) · `h` health · `r` reload · `q` quit. Single-letter
+  shortcuts are suspended while you type in the bar.
+- **Sidebar:** every artifact under "Artifacts", grouped by type with counts
+  (or flat, per the `artifact_grouping` preference); rows carry a
+  colour-coded type tag (`REQ` `ADR` `RMP` `PRM` `DSG`) beside the id and
+  title, and the selected artifact's status chip shows in the panel border.
+  The sidebar hides below 80 columns.
+- **Artifact context:** opening an artifact shows four tabs — **Content**
+  (the document's rendered Markdown, read-only — the default), **Inspection**
+  (status, completeness, diagnostics), **Links** (relationships, impact,
+  lineage; connected artifacts open on Enter, so the graph traverses one hop
+  at a time and `Esc` unwinds), and **Findings** (the artifact's
+  recommendations). `g` jumps to Links.
 - **Commands (`/`):** `open <ref>` · `find <query> [type]` · `browse [type]` ·
   `health` · `recommendations` · `import <source> [target]` ·
   `relationships <ref>` · `resume` · `preferences` · `home` · `help` · `quit` —
   anything else is a search. Lookup resolves canonical IDs and legacy aliases
-  with `rac resolve` / `rac find` semantics.
+  with `rac resolve` / `rac find` semantics. Results render in the context
+  panel; the layout never jumps.
 - **Health:** `h` or `/health` opens the health view — Core's score with a text
   label, the Completeness / Relationships / Validation / Coverage areas, and a
   prioritized attention list whose items open the affected artifact.
@@ -367,10 +382,6 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   Repository Health, Quality), each with its impact, a suggested `rac` command,
   and navigation to the affected artifact. Advisory only — Explorer applies
   nothing. `x` exports them to a Markdown file (preview, then confirm).
-- **Relationships:** `g` from a context view (or `/relationships <ref>`) opens
-  the knowledge-graph view — the artifact's outgoing relationships, its impact
-  ("what depends on this?"), and its lineage. Connected artifacts are
-  selectable, so you can traverse the graph one hop at a time; `Esc` unwinds.
 - **Actions:** from an artifact's context view, `e` opens it in your editor
   (`$VISUAL` / `$EDITOR`; guidance shown if neither is set — Explorer never
   edits, ADR-024). `/import <source> [target]` converts a document via the
@@ -381,7 +392,8 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   mascot greets the welcome and empty states (disable with `mascot = false`).
 - **Continuity & preferences:** Explorer remembers recently opened repositories
   and the last artifact per repository (under `$XDG_STATE_HOME/rac/`); `.` or
-  `/resume` reopens it. Optional preferences — `theme`, `mascot`, `animations`,
+  `/resume` reopens it. Optional preferences — `theme` (default
+  `rac-lantern`; any Textual theme name works), `mascot`, `animations`,
   `artifact_grouping` — live in `$XDG_CONFIG_HOME/rac/explorer.json` (no login,
   cloud, or sync); `/preferences` shows the current values and the file path.
 - **Exit codes:** `0` session quit · `2` not a directory, or the `explorer` extra is
