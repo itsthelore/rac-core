@@ -16,7 +16,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header
 from textual.worker import Worker, WorkerState, get_current_worker
 
-from rac.explorer import firstrun
+from rac.explorer import firstrun, mascot
 from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
 from rac.explorer.widgets import RepositoryPanel
@@ -43,6 +43,7 @@ class RepositoryScreen(Screen[None]):
         Binding("r", "reload", "Reload"),
         Binding("enter", "browse", "Browse"),
         Binding("h", "health", "Health"),
+        Binding("full_stop", "resume", "Resume last"),
     ]
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
@@ -83,6 +84,35 @@ class RepositoryScreen(Screen[None]):
         if health is not None:
             self.app.push_screen(HealthScreen(self.adapter, health))
 
+    def action_resume(self) -> None:
+        # Workspace continuity (v0.8.6): reopen the last artifact, on request.
+        if self._onboarding_summary is not None:
+            return
+        path = self.adapter.resume_path()
+        if path is None:
+            return
+        context = self.adapter.context_state(path)
+        if context is not None:
+            from .context import ContextScreen
+
+            self.app.push_screen(ContextScreen(self.adapter, context))
+
+    def _welcome_header(self, summary: RepositorySummaryState) -> str:
+        """Mascot, recent repositories, and a resume hint for the welcome state."""
+        lines: list[str] = []
+        prefs = self.adapter.preferences
+        if prefs.mascot:
+            state = mascot.EMPTY if summary.artifact_total == 0 else mascot.DISCOVERY
+            lines.append(mascot.figure(state, animations=prefs.animations))
+            lines.append("")
+        resume = self.adapter.resume_path()
+        if resume is not None:
+            lines.append(f"Resume last artifact: press .  ({resume})")
+        recent = [d for d in self.adapter.workspace.recent if d != self.adapter.directory]
+        if recent:
+            lines.append("Recent repositories: " + ", ".join(recent[:3]))
+        return "\n".join(lines)
+
     @work(thread=True, exclusive=True, group="repository-load")
     def _load_repository(self) -> RepositorySummaryState | LoadErrorState | None:
         worker = get_current_worker()
@@ -103,7 +133,7 @@ class RepositoryScreen(Screen[None]):
             if isinstance(result, RepositorySummaryState):
                 if firstrun.is_first_run():
                     self._onboarding_summary = result
-                    panel.show_onboarding(result)
+                    panel.show_onboarding(result, header=self._welcome_header(result))
                 else:
                     panel.show_summary(result)
             elif isinstance(result, LoadErrorState):
