@@ -52,7 +52,7 @@ class BrowserScreen(Screen[None]):
             return
         context = self.adapter.context_state(event.option_id)
         if context is not None:
-            self.app.push_screen(ContextScreen(context))
+            self.app.push_screen(ContextScreen(self.adapter, context))
 
     def action_back(self) -> None:
         self.app.pop_screen()

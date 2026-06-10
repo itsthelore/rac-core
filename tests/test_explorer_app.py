@@ -366,6 +366,46 @@ async def test_health_r_opens_recommendations_and_item_opens_context():
 
 
 @pytest.mark.asyncio
+async def test_context_e_opens_external_editor(monkeypatch):
+    from textual.widgets import Static
+
+    import rac.explorer.editor as editor_mod
+
+    launched: list[list[str]] = []
+    monkeypatch.setattr(editor_mod, "_RUNNER", lambda cmd: launched.append(list(cmd)))
+    monkeypatch.setenv("EDITOR", "code")
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # browser
+        await pilot.press("enter")  # context
+        await pilot.press("e")
+        await pilot.pause()
+        status = str(app.screen.query_one("#context-status", Static).content)
+        assert "Opened" in status and "code" in status
+        assert launched and launched[0][0] == "code"
+
+
+@pytest.mark.asyncio
+async def test_context_e_without_editor_shows_guidance(monkeypatch):
+    from textual.widgets import Static
+
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.delenv("EDITOR", raising=False)
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")
+        await pilot.press("enter")
+        await pilot.press("e")
+        await pilot.pause()
+        status = str(app.screen.query_one("#context-status", Static).content)
+        assert "No editor configured" in status
+
+
+@pytest.mark.asyncio
 async def test_quit_binding_exits_cleanly():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:

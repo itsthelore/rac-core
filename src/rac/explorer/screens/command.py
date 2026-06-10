@@ -148,7 +148,7 @@ class CommandScreen(ModalScreen[None]):
         context = self.adapter.context_state(path)
         if context is not None:
             self.app.pop_screen()
-            self.app.push_screen(ContextScreen(context))
+            self.app.push_screen(ContextScreen(self.adapter, context))
 
     def _pop_to_home(self) -> None:
         from .repository import RepositoryScreen

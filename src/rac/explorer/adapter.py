@@ -28,6 +28,8 @@ from rac.services.review import (
     review_from_portfolio,
 )
 
+from . import editor as editor_mod
+from .editor import EditorOutcome
 from .state import (
     ArtifactRow,
     AttentionRow,
@@ -355,6 +357,10 @@ class ExplorerAdapter:
             groups=groups,
             total=len(rows),
         )
+
+    def open_in_editor(self, path: str) -> EditorOutcome:
+        """Open ``path`` in the user's configured editor (v0.8.4, ADR-024)."""
+        return editor_mod.open_in_editor(path)
 
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""

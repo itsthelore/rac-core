@@ -74,7 +74,7 @@ class HealthScreen(Screen[None]):
         row = self.health.attention[int(event.option_id)]
         context = self.adapter.context_state(row.path)
         if context is not None:
-            self.app.push_screen(ContextScreen(context))
+            self.app.push_screen(ContextScreen(self.adapter, context))
 
     def action_recommendations(self) -> None:
         recommendations = self.adapter.recommendations_state()

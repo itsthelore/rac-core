@@ -11,6 +11,7 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import ContextState
 
 
@@ -53,16 +54,26 @@ def render_context(context: ContextState) -> str:
 class ContextScreen(Screen[None]):
     """Read-only artifact context; editing belongs to external tools (ADR-024)."""
 
-    BINDINGS = [Binding("escape", "back", "Back")]
+    BINDINGS = [
+        Binding("escape", "back", "Back"),
+        Binding("e", "open_in_editor", "Open in editor"),
+    ]
 
-    def __init__(self, context: ContextState) -> None:
+    def __init__(self, adapter: ExplorerAdapter, context: ContextState) -> None:
         super().__init__()
+        self.adapter = adapter
         self.context = context
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(render_context(self.context), id="context-panel")
+        yield Static("", id="context-status")
         yield Footer()
+
+    def action_open_in_editor(self) -> None:
+        # ADR-024: Explorer hands the file to an external editor; it never edits.
+        outcome = self.adapter.open_in_editor(self.context.path)
+        self.query_one("#context-status", Static).update(outcome.message)
 
     def action_back(self) -> None:
         self.app.pop_screen()
