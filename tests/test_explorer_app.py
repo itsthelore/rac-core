@@ -481,6 +481,28 @@ async def test_context_e_opens_external_editor(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_context_e_terminal_editor_needs_suspend(monkeypatch):
+    # Headless sessions cannot suspend; the terminal-editor path must fall
+    # back to guidance instead of crashing or launching blind.
+    import rac.explorer.editor as editor_mod
+
+    launched: list[list[str]] = []
+    monkeypatch.setattr(editor_mod, "_BLOCKING_RUNNER", lambda cmd: launched.append(list(cmd)))
+    monkeypatch.setenv("EDITOR", "vim")
+    monkeypatch.delenv("VISUAL", raising=False)
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_first_artifact(app, pilot)
+        await pilot.press("e")
+        await pilot.pause()
+        status = str(app.screen.query_one("#context-status", Static).content)
+        assert "vim" in status and "suspend" in status
+        assert launched == []  # nothing ran without a terminal to hand over
+
+
+@pytest.mark.asyncio
 async def test_context_e_without_editor_shows_guidance(monkeypatch):
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.delenv("EDITOR", raising=False)
@@ -578,18 +600,107 @@ async def test_slash_browse_with_type_filter_focuses_the_group():
         assert sidebar.cursor_node.is_expanded
 
 
+# --- settings ---------------------------------------------------------------------
+
+
+async def _open_settings(app: ExplorerApp, pilot, command: str = "settings") -> None:
+    await pilot.press("/")
+    await pilot.press(*command)
+    await pilot.press("enter")
+    await pilot.pause()
+
+
 @pytest.mark.asyncio
-async def test_slash_preferences_shows_values_and_path():
+async def test_slash_settings_opens_interactive_view():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
-        await pilot.press("/")
-        await pilot.press(*"preferences")
+        await _open_settings(app, pilot)
+        assert app.screen.current_view == "view-settings"
+        listing = app.screen.query_one("#settings-list", OptionList)
+        keys = [listing.get_option_at_index(i).id for i in range(listing.option_count)]
+        assert keys == ["theme", "mascot", "animations", "artifact_grouping", "editor"]
+        footer = str(app.screen.query_one("#settings-footer", Static).content)
+        assert "explorer.json" in footer
+
+
+@pytest.mark.asyncio
+async def test_preferences_command_still_opens_settings():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_settings(app, pilot, command="preferences")
+        assert app.screen.current_view == "view-settings"
+
+
+@pytest.mark.asyncio
+async def test_settings_theme_cycles_live_and_persists():
+    from rac.explorer.preferences import load_preferences
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_settings(app, pilot)
+        assert app.theme == "rac-lantern"
+        await pilot.press("enter")  # theme row (highlighted first)
+        await pilot.pause()
+        assert app.theme != "rac-lantern"  # applied live
+        assert load_preferences().theme == app.theme  # and persisted
+
+
+@pytest.mark.asyncio
+async def test_settings_toggle_persists_across_sessions():
+    from rac.explorer.preferences import load_preferences
+
+    directory = str(FIXTURES / "valid_clean")
+    app = ExplorerApp(directory)
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_settings(app, pilot)
+        await pilot.press("down", "enter")  # mascot row → toggle off
+        await pilot.pause()
+        assert load_preferences().mascot is False
+
+    app2 = ExplorerApp(directory)
+    assert app2.adapter.preferences.mascot is False  # next session adopts it
+
+
+@pytest.mark.asyncio
+async def test_settings_editor_row_takes_typed_input():
+    from rac.explorer.preferences import load_preferences
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_settings(app, pilot)
+        await pilot.press("down", "down", "down", "down", "enter")  # editor row
+        await pilot.pause()
+        field = app.screen.query_one("#settings-editor-input", Input)
+        assert field.display and app.focused is field
+
+        await pilot.press(*"code --wait")
         await pilot.press("enter")
         await pilot.pause()
-        results = app.screen.query_one("#command-results", OptionList)
-        rendered = " ".join(str(opt.prompt) for opt in results._options)
-        assert "mascot" in rendered and "explorer.json" in rendered
+        assert load_preferences().editor == "code --wait"
+        assert not field.display  # back to the list, row shows the value
+        listing = app.screen.query_one("#settings-list", OptionList)
+        rendered = " ".join(
+            str(listing.get_option_at_index(i).prompt) for i in range(listing.option_count)
+        )
+        assert "code --wait" in rendered
+
+
+@pytest.mark.asyncio
+async def test_settings_grouping_change_rebuilds_sidebar():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_settings(app, pilot)
+        await pilot.press("down", "down", "down", "enter")  # artifact_grouping
+        await pilot.pause()
+        sidebar = app.screen.query_one(NavigationSidebar)
+        # Flat grouping: rows directly under the root, no type groups.
+        assert all((node.data or "").endswith(".md") for node in sidebar.root.children)
 
 
 # --- onboarding -------------------------------------------------------------------

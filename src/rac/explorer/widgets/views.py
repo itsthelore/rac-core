@@ -9,17 +9,21 @@ panel via ``ContentSwitcher`` — the layout never jumps
 
 from __future__ import annotations
 
-from textual import work
-from textual.app import ComposeResult
+from dataclasses import replace
+
+from textual import events, work
+from textual.app import ComposeResult, SuspendNotSupported
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
-from textual.widgets import Markdown, OptionList, Static, TabbedContent, TabPane, Tabs
+from textual.widgets import Input, Markdown, OptionList, Static, TabbedContent, TabPane, Tabs
 from textual.widgets.option_list import Option
 from textual.worker import Worker, WorkerState, get_current_worker
 
+from rac.explorer import editor as editor_mod
 from rac.explorer import firstrun, mascot
 from rac.explorer.adapter import ExplorerAdapter
+from rac.explorer.preferences import GROUPING_FLAT, GROUPING_TYPE, preferences_path
 from rac.explorer.state import (
     ContextState,
     HealthState,
@@ -49,6 +53,14 @@ class BrowseRequested(Message):
 
 class ShowRecommendations(Message):
     """The health view asks the screen to show repository recommendations."""
+
+
+class SettingsChanged(Message):
+    """A preference changed; the screen may refresh dependent widgets."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__()
+        self.key = key
 
 
 def _highlight_first(listing: OptionList) -> None:
@@ -308,7 +320,22 @@ class ContextView(Vertical):
         # ADR-024: Explorer hands the file to an external editor; it never edits.
         if self.context is None:
             return
-        outcome = self.adapter.open_in_editor(self.context.path)
+        editor = self.adapter.resolved_editor()
+        if editor is not None and editor_mod.is_terminal_editor(editor):
+            # Terminal editors own the terminal: suspend, run, resume.
+            try:
+                with self.app.suspend():
+                    outcome = self.adapter.open_in_editor(self.context.path, blocking=True)
+            except SuspendNotSupported:
+                outcome = editor_mod.EditorOutcome(
+                    launched=False,
+                    message=(
+                        f"'{editor}' needs the terminal, and this session cannot "
+                        "suspend. Configure a GUI editor in /settings."
+                    ),
+                )
+        else:
+            outcome = self.adapter.open_in_editor(self.context.path)
         self.query_one("#context-status", Static).update(outcome.message)
         self.query_one(TabbedContent).active = "tab-inspection"
 
@@ -470,8 +497,99 @@ class ImportView(Vertical):
         self.query_one("#import-panel", Static).update(f"{message}\n\nPress Esc to go back.")
 
 
+class SettingsView(Vertical):
+    """Interactive settings — Explorer edits its own config only (ADR-024).
+
+    Enter changes the highlighted setting: enumerations cycle (the theme
+    live-previews), booleans toggle, and the editor row takes typed input.
+    Every change persists immediately through the adapter (v0.8.8).
+    """
+
+    def __init__(self, adapter: ExplorerAdapter) -> None:
+        super().__init__(id="view-settings")
+        self.adapter = adapter
+
+    def compose(self) -> ComposeResult:
+        yield OptionList(id="settings-list")
+        editor_input = Input(
+            placeholder="Editor command, e.g. code or vim — empty uses $VISUAL/$EDITOR",
+            id="settings-editor-input",
+        )
+        editor_input.display = False
+        yield editor_input
+        yield Static(id="settings-footer")
+
+    def show_settings(self, *, highlight: str | None = None) -> None:
+        prefs = self.adapter.preferences
+        rows = (
+            ("theme", prefs.theme),
+            ("mascot", "on" if prefs.mascot else "off"),
+            ("animations", "on" if prefs.animations else "off"),
+            ("artifact_grouping", prefs.artifact_grouping),
+            ("editor", prefs.editor or "(from $VISUAL / $EDITOR)"),
+        )
+        listing = self.query_one("#settings-list", OptionList)
+        listing.clear_options()
+        listing.add_options([Option(f"{key:<19} {value}", id=key) for key, value in rows])
+        keys = [key for key, _ in rows]
+        listing.highlighted = keys.index(highlight) if highlight in keys else 0
+        self.query_one("#settings-footer", Static).update(
+            f"Enter changes a setting · stored in {preferences_path()}"
+        )
+
+    def take_focus(self) -> None:
+        self.query_one("#settings-list", OptionList).focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        event.stop()
+        key = event.option_id
+        prefs = self.adapter.preferences
+        if key == "theme":
+            themes = sorted(self.app.available_themes)
+            current = themes.index(prefs.theme) if prefs.theme in themes else -1
+            chosen = themes[(current + 1) % len(themes)]
+            self.app.theme = chosen  # live preview before anything else
+            updated = replace(prefs, theme=chosen)
+        elif key == "mascot":
+            updated = replace(prefs, mascot=not prefs.mascot)
+        elif key == "animations":
+            updated = replace(prefs, animations=not prefs.animations)
+        elif key == "artifact_grouping":
+            grouping = GROUPING_FLAT if prefs.artifact_grouping == GROUPING_TYPE else GROUPING_TYPE
+            updated = replace(prefs, artifact_grouping=grouping)
+        else:  # editor — reveal the inline input instead of cycling
+            field = self.query_one("#settings-editor-input", Input)
+            field.display = True
+            field.value = prefs.editor
+            field.focus()
+            return
+        self.adapter.save_preferences(updated)
+        self.show_settings(highlight=key)
+        if key is not None:
+            self.post_message(SettingsChanged(key))
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        self.adapter.save_preferences(replace(self.adapter.preferences, editor=event.value.strip()))
+        self._dismiss_editor_input()
+        self.post_message(SettingsChanged("editor"))
+
+    def on_key(self, event: events.Key) -> None:
+        # Esc while typing the editor command cancels the edit only; from the
+        # list it bubbles to the screen's view history as usual.
+        field = self.query_one("#settings-editor-input", Input)
+        if event.key == "escape" and field.display:
+            event.stop()
+            self._dismiss_editor_input()
+
+    def _dismiss_editor_input(self) -> None:
+        self.query_one("#settings-editor-input", Input).display = False
+        self.show_settings(highlight="editor")
+        self.take_focus()
+
+
 class ResultsView(Vertical):
-    """Search results, lookups, help, and preferences — in the context region.
+    """Search results, lookups, and help — in the context region.
 
     Results render here rather than in a modal, so the layout never jumps
     (DESIGN-command-surface).

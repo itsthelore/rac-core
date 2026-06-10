@@ -10,7 +10,7 @@ from __future__ import annotations
 from rac.explorer.commands import EXAMPLES, REGISTRY, SEARCH, parse, suggestions
 
 
-def test_registry_is_the_v086_contract():
+def test_registry_is_the_v088_contract():
     assert [spec.name for spec in REGISTRY] == [
         "open",
         "find",
@@ -20,7 +20,7 @@ def test_registry_is_the_v086_contract():
         "import",
         "relationships",
         "resume",
-        "preferences",
+        "settings",
         "home",
         "help",
         "quit",
@@ -36,13 +36,19 @@ def test_action_commands_are_discoverable():
         "import",
         "relationships",
         "resume",
-        "preferences",
+        "settings",
     } <= names
     assert parse("/recommendations").command == "recommendations"
     assert parse("import notes.pdf").command == "import"
     assert parse("import notes.pdf out.md").args == "notes.pdf out.md"
     assert parse("relationships req-001").command == "relationships"
     assert parse("/resume").command == "resume"
+
+
+def test_preferences_aliases_to_settings():
+    # Muscle memory from v0.8.6 keeps working without growing the registry.
+    assert parse("/preferences").command == "settings"
+    assert parse("preferences").command == "settings"
 
 
 def test_registered_command_routes_with_args():

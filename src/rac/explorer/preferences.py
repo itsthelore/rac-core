@@ -27,6 +27,9 @@ class Preferences:
     mascot: bool = True
     animations: bool = True
     artifact_grouping: str = GROUPING_TYPE
+    # The default Markdown editor command (v0.8.8); empty falls back to
+    # $VISUAL / $EDITOR (DESIGN-editor-integration).
+    editor: str = ""
 
 
 def preferences_path() -> Path:
@@ -52,6 +55,7 @@ def load_preferences() -> Preferences:
         mascot=bool(data.get("mascot", defaults.mascot)),
         animations=bool(data.get("animations", defaults.animations)),
         artifact_grouping=grouping,
+        editor=str(data.get("editor", defaults.editor)),
     )
 
 

@@ -33,7 +33,7 @@ from rac.services.review import (
 
 from . import editor as editor_mod
 from .editor import EditorOutcome
-from .preferences import GROUPING_FLAT, Preferences, load_preferences
+from .preferences import GROUPING_FLAT, Preferences, load_preferences, save_preferences
 from .state import (
     ArtifactRow,
     AttentionRow,
@@ -191,22 +191,6 @@ class ExplorerAdapter:
         if path is None or self.repository is None:
             return None
         return path if any(a.path == path for a in self.repository.artifacts) else None
-
-    def preferences_lines(self) -> tuple[str, ...]:
-        """Current preferences and the file that controls them (read-only)."""
-        from .preferences import preferences_path
-
-        prefs = self.preferences
-        return (
-            "Preferences",
-            "",
-            f"  theme              {prefs.theme}",
-            f"  mascot             {'on' if prefs.mascot else 'off'}",
-            f"  animations         {'on' if prefs.animations else 'off'}",
-            f"  artifact_grouping  {prefs.artifact_grouping}",
-            "",
-            f"Edit {preferences_path()} to change these.",
-        )
 
     def load(
         self,
@@ -413,9 +397,27 @@ class ExplorerAdapter:
             total=len(rows),
         )
 
-    def open_in_editor(self, path: str) -> EditorOutcome:
-        """Open ``path`` in the user's configured editor (v0.8.4, ADR-024)."""
-        return editor_mod.open_in_editor(path)
+    def open_in_editor(self, path: str, *, blocking: bool = False) -> EditorOutcome:
+        """Open ``path`` in the user's configured editor (v0.8.4, ADR-024).
+
+        The `editor` preference (v0.8.8) beats `$VISUAL`/`$EDITOR`;
+        ``blocking`` runs terminal editors in the foreground (the caller
+        suspends the application around it).
+        """
+        return editor_mod.open_in_editor(path, self.preferences.editor, blocking=blocking)
+
+    def resolved_editor(self) -> str | None:
+        """The editor command the next open would use, if any."""
+        return editor_mod.resolve_editor(self.preferences.editor)
+
+    def save_preferences(self, preferences: Preferences) -> None:
+        """Persist updated preferences and adopt them for this session.
+
+        Explorer writes its own configuration only — never artifacts
+        (ADR-024); failures stay silent like every preference write.
+        """
+        save_preferences(preferences)
+        self.preferences = preferences
 
     def import_preview(self, source: str, target: str | None = None) -> ImportPreview | str:
         """Convert ``source`` via Core ingest for review (v0.8.4).

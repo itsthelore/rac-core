@@ -37,6 +37,8 @@ from rac.explorer.widgets.views import (
     OpenArtifact,
     RecommendationsView,
     ResultsView,
+    SettingsChanged,
+    SettingsView,
     ShowRecommendations,
 )
 
@@ -51,6 +53,7 @@ _VIEW_REGIONS = {
     "view-recommendations": ("recommendations", "Recommendations"),
     "view-import": ("import", "Import"),
     "view-results": ("results", "Results"),
+    "view-settings": ("settings", "Settings"),
 }
 
 
@@ -94,6 +97,7 @@ class MainScreen(Screen[None]):
                 yield RecommendationsView(self.adapter)
                 yield ImportView(self.adapter)
                 yield ResultsView()
+                yield SettingsView(self.adapter)
         yield StatusLine()
         # Floats over the context region on its own layer; hidden when idle.
         yield CommandPalette(self.adapter)
@@ -278,6 +282,12 @@ class MainScreen(Screen[None]):
         message.stop()
         self._show_recommendations()
 
+    def on_settings_changed(self, message: SettingsChanged) -> None:
+        message.stop()
+        if message.key == "artifact_grouping":
+            # The sidebar mirrors the grouping preference immediately.
+            self.query_one(NavigationSidebar).show_repository(self.adapter.browser_state())
+
     def on_tree_node_selected(self, event: Tree.NodeSelected[str]) -> None:
         path = event.node.data
         if path is not None and not path.startswith("group:"):
@@ -376,10 +386,9 @@ class MainScreen(Screen[None]):
         elif invocation.command == "recommendations":
             if not self._show_recommendations():
                 self._show_message("Repository not loaded yet")
-        elif invocation.command == "preferences":
-            self._show_results(
-                [Option(line, disabled=True) for line in self.adapter.preferences_lines()]
-            )
+        elif invocation.command == "settings":
+            self.query_one(SettingsView).show_settings()
+            self.show_view("view-settings")
         elif invocation.command == "resume":
             path = self.adapter.resume_path()
             if path is None:

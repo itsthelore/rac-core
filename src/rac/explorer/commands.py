@@ -46,13 +46,17 @@ REGISTRY: tuple[CommandSpec, ...] = (
     CommandSpec("import", "import <source> [target]", "Convert a document into Markdown"),
     CommandSpec("relationships", "relationships <ref>", "Traverse an artifact's relationships"),
     CommandSpec("resume", "resume", "Reopen the last artifact in this repository"),
-    CommandSpec("preferences", "preferences", "Show preferences and where to change them"),
+    CommandSpec("settings", "settings", "View and change Explorer settings"),
     CommandSpec("home", "home", "Return to the repository home"),
     CommandSpec("help", "help", "List available commands"),
     CommandSpec("quit", "quit", "Quit the Explorer"),
 )
 
 _NAMES = {spec.name: spec for spec in REGISTRY}
+
+# Accepted spellings that route to a registered command (muscle memory from
+# earlier releases stays valid without growing the discoverable registry).
+_ALIASES = {"preferences": "settings"}
 
 # Shown when the surface is empty: teach by example (DESIGN-command-surface).
 EXAMPLES: tuple[str, ...] = (
@@ -71,8 +75,9 @@ def parse(text: str) -> Invocation:
     """
     stripped = text.strip().lstrip("/").strip()
     head, _, rest = stripped.partition(" ")
-    if head.casefold() in _NAMES:
-        return Invocation(command=head.casefold(), args=rest.strip())
+    name = _ALIASES.get(head.casefold(), head.casefold())
+    if name in _NAMES:
+        return Invocation(command=name, args=rest.strip())
     return Invocation(command=SEARCH, args=stripped)
 
 
