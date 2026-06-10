@@ -19,10 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from rac.core.artifacts import spec_for
-from rac.core.classification import classify
-from rac.core.fs import find_markdown_files
+from rac.core.corpus import walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
-from rac.core.markdown import parse_file
 
 
 @dataclass
@@ -82,14 +80,13 @@ class RepositoryIndex:
 def build_repository_index(directory: str, recursive: bool = True) -> RepositoryIndex:
     """Walk ``directory`` and inventory every Markdown artifact (one parse each)."""
     artifacts: list[IndexEntry] = []
-    for path in find_markdown_files(directory, recursive=recursive):
-        product = parse_file(str(path))
-        artifact_type = classify(product).type
-        spec = spec_for(artifact_type)  # None for Unknown
+    for entry in walk_corpus(directory, recursive=recursive):
+        path, product = entry.path, entry.product
+        spec = spec_for(entry.artifact_type)  # None for Unknown
         artifacts.append(
             IndexEntry(
                 id=artifact_identifier(product, spec, str(path)),
-                type=artifact_type,
+                type=entry.artifact_type,
                 title=product.title,
                 path=str(path),
                 aliases=artifact_identifiers(product, spec, str(path)),
