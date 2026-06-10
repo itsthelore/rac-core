@@ -16,6 +16,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header
 from textual.worker import Worker, WorkerState, get_current_worker
 
+from rac.explorer import firstrun
 from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
 from rac.explorer.widgets import RepositoryPanel
@@ -45,6 +46,9 @@ class RepositoryScreen(Screen[None]):
     def __init__(self, adapter: ExplorerAdapter) -> None:
         super().__init__()
         self.adapter = adapter
+        # The summary held back while first-run onboarding is on screen;
+        # Enter dismisses onboarding and reveals it (no forced setup).
+        self._onboarding_summary: RepositorySummaryState | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -61,6 +65,11 @@ class RepositoryScreen(Screen[None]):
         self._load_repository()
 
     def action_browse(self) -> None:
+        if self._onboarding_summary is not None:
+            summary, self._onboarding_summary = self._onboarding_summary, None
+            firstrun.mark_onboarded()
+            self.query_one(RepositoryPanel).show_summary(summary)
+            return
         browser = self.adapter.browser_state()
         if browser is not None:
             self.app.push_screen(BrowserScreen(self.adapter, browser))
@@ -83,7 +92,11 @@ class RepositoryScreen(Screen[None]):
         if event.state == WorkerState.SUCCESS:
             result = event.worker.result
             if isinstance(result, RepositorySummaryState):
-                panel.show_summary(result)
+                if firstrun.is_first_run():
+                    self._onboarding_summary = result
+                    panel.show_onboarding(result)
+                else:
+                    panel.show_summary(result)
             elif isinstance(result, LoadErrorState):
                 panel.show_error(result)
             # None — the load was cancelled; a fresh worker is taking over.

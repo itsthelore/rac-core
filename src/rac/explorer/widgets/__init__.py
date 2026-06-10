@@ -53,6 +53,56 @@ class RepositoryPanel(Static):
         lines.extend(["", "Press / for anything · Enter to browse"])
         self.update("\n".join(lines))
 
+    def show_onboarding(self, summary: RepositorySummaryState) -> None:
+        """The first-run state (v0.8.1): existing, empty, or invalid repository.
+
+        Derived from repository content; Enter always continues into the
+        normal summary (no forced setup, DESIGN-first-run-experience).
+        """
+        lines = ["Welcome to RAC Explorer", "Your product knowledge workspace.", ""]
+        if summary.artifact_total == 0:
+            lines.extend(
+                [
+                    "No RAC artifacts found.",
+                    "",
+                    "Start by:",
+                    "  creating an artifact   rac new requirement <path>",
+                    "  importing a document   rac ingest <file>",
+                    "",
+                    "Press Enter to continue",
+                ]
+            )
+        elif summary.error_count:
+            lines.extend(
+                [
+                    "Repository issues found",
+                    "",
+                    f"  ✗ {summary.error_count} validation errors",
+                    f"  ! {summary.warning_count} warnings",
+                    "",
+                    "Press Enter to open anyway",
+                ]
+            )
+        else:
+            lines.append("Repository found")
+            lines.append("")
+            lines.extend(f"  ✓ {name}  {count}" for name, count in summary.by_type)
+            lines.extend(
+                [
+                    f"  ✓ relationships  {summary.relationship_total}",
+                    "",
+                    "Navigation",
+                    "  /      search and commands",
+                    "  ↑ ↓    move",
+                    "  Enter  open",
+                    "  Esc    back",
+                    "  q      quit",
+                    "",
+                    "Press / for anything · Enter to continue",
+                ]
+            )
+        self.update("\n".join(lines))
+
     def show_error(self, error: LoadErrorState) -> None:
         lines = [f"✗ {error.title}", "", error.detail]
         if error.can_retry:

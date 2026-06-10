@@ -11,10 +11,25 @@ from pathlib import Path
 
 import pytest
 
+from rac.explorer import firstrun
 from rac.explorer.app import ExplorerApp
 from rac.explorer.widgets import RepositoryPanel
 
 FIXTURES = Path(__file__).parent / "fixtures" / "portfolio_summary"
+
+
+@pytest.fixture(autouse=True)
+def onboarded_state(tmp_path_factory, monkeypatch):
+    """Run every app test as a returning user; onboarding tests reset this."""
+    state = tmp_path_factory.mktemp("xdg-state")
+    monkeypatch.setenv("XDG_STATE_HOME", str(state))
+    firstrun.mark_onboarded()
+    return state
+
+
+@pytest.fixture
+def fresh_first_run(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "fresh-state"))
 
 
 async def _settled_panel_text(app: ExplorerApp, pilot) -> str:
@@ -208,6 +223,62 @@ async def test_slash_browse_with_type_filter():
         assert isinstance(app.screen, BrowserScreen)
         artifact_list = app.screen.query_one(OptionList)
         assert artifact_list.option_count == 2  # the type header + one decision
+
+
+def test_first_run_marker_round_trip(fresh_first_run):
+    assert firstrun.is_first_run()
+    firstrun.mark_onboarded()
+    assert not firstrun.is_first_run()
+
+
+@pytest.mark.asyncio
+async def test_first_run_shows_onboarding_then_enter_continues(fresh_first_run):
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert "Welcome to RAC Explorer" in text
+        assert "Repository found" in text
+        assert "✓ relationships  1" in text
+        assert "/      search and commands" in text
+
+        await pilot.press("enter")
+        await pilot.pause()
+        text = str(app.screen.query_one(RepositoryPanel).content)
+        assert "Health" in text  # the normal summary
+    assert not firstrun.is_first_run()  # marker written
+
+
+@pytest.mark.asyncio
+async def test_returning_users_skip_onboarding():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert "Welcome to RAC Explorer" not in text
+        assert "Health" in text
+
+
+@pytest.mark.asyncio
+async def test_first_run_empty_repository_teaches(fresh_first_run, tmp_path):
+    app = ExplorerApp(str(tmp_path))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert "No RAC artifacts found." in text
+        assert "rac new" in text and "rac ingest" in text
+
+
+@pytest.mark.asyncio
+async def test_first_run_invalid_repository_opens_anyway(fresh_first_run):
+    app = ExplorerApp(str(FIXTURES / "invalid_known"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert "Repository issues found" in text
+        assert "✗ 1 validation errors" in text
+        assert "Press Enter to open anyway" in text
+
+        await pilot.press("enter")
+        await pilot.pause()
+        text = str(app.screen.query_one(RepositoryPanel).content)
+        assert "Health" in text
 
 
 @pytest.mark.asyncio
