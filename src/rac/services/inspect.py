@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import classify
-from rac.core.fs import find_markdown_files
+from rac.core.corpus import walk_corpus
 from rac.core.markdown import parse, parse_file
 from rac.core.models import Product
 
@@ -166,7 +166,7 @@ def inspect_file(path: str) -> InspectionResult:
 def inspect_directory(directory: str, recursive: bool = True) -> DirectoryInspection:
     """Inspect every Markdown file under ``directory`` and aggregate the types."""
     files = []
-    for path in find_markdown_files(directory, recursive=recursive):
-        result = inspect_file(str(path))
-        files.append(FileInspection(path=str(path), type=result.type, confidence=result.confidence))
+    for entry in walk_corpus(directory, recursive=recursive):
+        c = entry.classification
+        files.append(FileInspection(path=str(entry.path), type=c.type, confidence=c.confidence))
     return DirectoryInspection(directory=directory, recursive=recursive, files=files)
