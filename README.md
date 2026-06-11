@@ -69,8 +69,80 @@ Everything stays plain Markdown — see **[docs/artifacts.md](docs/artifacts.md)
 - [Artifact types](docs/artifacts.md) — the five types and their sections
 - [Relationships](docs/relationships.md) — link artifacts and validate the links
 - [Repository workflow](docs/repo-workflow.md) — organize a repo with RAC
+- [Guide (MCP server)](docs/mcp.md) — connect coding agents to your repository
 - [Testing & contributing](docs/testing.md) — local setup and verification
 - [Examples](docs/examples.md) — small, realistic artifacts
+
+## RAC Guide — MCP server for coding agents
+
+RAC Guide is an MCP server that serves your repository's requirements,
+decisions, designs, and roadmaps to coding agents as callable tools, so
+recorded decisions are respected instead of rediscovered. A single
+`pip install` is all that is needed — no separate package, no extra flag.
+
+```bash
+rac mcp                   # serve the current directory
+rac mcp --root path/to/repo
+```
+
+### Configure your client
+
+**Claude Code**
+
+```bash
+claude mcp add rac-guide -- rac mcp --root /path/to/your/repo
+```
+
+Or add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "rac-guide": {
+      "command": "rac",
+      "args": ["mcp", "--root", "/path/to/your/repo"]
+    }
+  }
+}
+```
+
+<!-- TODO: verify against Claude Code <version> before release -->
+
+**Claude Desktop** — add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "rac-guide": {
+      "command": "rac",
+      "args": ["mcp", "--root", "/path/to/your/repo"]
+    }
+  }
+}
+```
+
+<!-- TODO: verify against Claude Desktop <version> before release -->
+
+**Cursor** — add to `.cursor/mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "rac-guide": {
+      "command": "rac",
+      "args": ["mcp", "--root", "/path/to/your/repo"]
+    }
+  }
+}
+```
+
+<!-- TODO: verify against Cursor <version> before release -->
+
+Want to try Guide against a ready-made corpus before pointing it at your own
+repository? See **[examples/guide/](examples/guide/)**.
+
+Full onboarding path, troubleshooting, and first-question walkthrough:
+**[docs/mcp.md](docs/mcp.md)**.
 
 ## How RAC earns trust
 
