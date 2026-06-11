@@ -8,6 +8,24 @@ details, release history over commit history.
 
 ### Added
 
+- Explorer command palette and settings (v0.8.8): pressing `/` summons a
+  command palette — an input with a live, navigable menu below it that lists
+  every command when empty, filters and completes them as you type, and
+  quick-opens matching artifacts for any other text; `Esc` dismisses it and
+  `?` opens help. `/settings` (alias `preferences`) changes everything in
+  place — theme with live preview, mascot, animations, artifact grouping,
+  and a new default-editor command; terminal editors (vim, nvim, emacs,
+  nano, …) now run with the Explorer suspended and resume it on exit.
+  Reading is first-class: the Content tab takes the keyboard (`j`/`k`
+  scrolls, capped reading width), artifact references inside the rendered
+  document open in place so the corpus reads like a wiki, and the Links and
+  Findings tabs carry count badges. The mascot animates through per-state
+  frame sequences (searching plays while loading; static with animations
+  off), the sidebar leads with artifact titles and marks invalid artifacts
+  `✗`, keeps its expansion across reloads, and opens the highlighted
+  artifact in your editor with `e`; resume restores the last view as well as
+  the last artifact, and `Esc` always has somewhere to go (home, at worst).
+
 - Explorer visual overhaul (v0.8.7): one persistent workspace frame replaces
   the screen-per-view shell — a navigation sidebar of type-tagged artifacts
   (`REQ` `ADR` `RMP` `PRM` `DSG`, grouped with counts or flat by preference),
@@ -91,6 +109,14 @@ details, release history over commit history.
   (v0.7.14).
 
 ### Changed
+
+- The Explorer's persistent bottom command bar is gone (v0.8.8): `/` summons
+  the palette instead, returning two rows to the content. The `/preferences`
+  command became `/settings` (the old spelling still routes), status chips
+  use one casing everywhere (`✓ Valid`, `! Warning`, `✗ Error`), key hints
+  live only in the status-line chips, sidebar rows show artifact titles
+  rather than opaque IDs, and the app bar shows the short version with
+  `~`-contracted paths.
 
 - Explorer command results, lookups, help, and preferences now render inside
   the context panel instead of a modal overlay, so the layout never jumps
