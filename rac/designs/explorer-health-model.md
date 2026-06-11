@@ -69,6 +69,10 @@ Issues should be:
 - Linked to artifacts
 - Prioritized
 
+Selecting an attention item opens the affected artifact on its Inspection
+tab, where the validation diagnostics explain the finding (v0.8.9) — the
+drill-down lands on the reason, never on a dead end.
+
 Example:
 
 ```text
@@ -141,6 +145,7 @@ Red
 ## Related Roadmaps
 
 - v0.8.2-explorer-health
+- v0.8.9-explorer-live-workspace
 
 ---
 

@@ -345,7 +345,8 @@ navigation sidebar of type-tagged artifacts on the left, a context panel
 that swaps views on the right, and a status line of key hints with the
 health chip — under the rac-lantern theme by default. Pressing `/` summons
 the palette (v0.8.8): an input with a live, navigable suggestion menu below
-it.
+it. The workspace is live (v0.8.9): Explorer watches the repository and
+reloads itself when artifacts change on disk.
 
 Explorer is a presentation layer over the same services the CLI uses: everything
 it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
@@ -357,17 +358,22 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
 - **Keys:** `/` summons the command palette from anywhere · `↑ ↓` navigate ·
   `Enter` select · `Tab` cycle panels · `Esc` back (palette → dismiss;
   context → view history; otherwise → home) · `h` health · `r` reload ·
-  `?` help · `q` quit. Single-letter shortcuts are suspended while you type
-  in the palette.
-- **Palette (`/`):** empty input lists every command; a command prefix
-  filters them (Enter completes argument-taking commands into the input);
-  any other text shows live artifact matches — Enter quick-opens the
-  highlighted one — plus a "search all results" row. Commands:
-  `open <ref>` · `find <query> [type]` · `browse [type]` · `health` ·
-  `recommendations` · `import <source> [target]` · `relationships <ref>` ·
-  `resume` · `settings` · `home` · `help` · `quit` — anything else is a
-  search, resolved with `rac resolve` / `rac find` semantics. Full results
-  render in the context panel; the layout never jumps.
+  `f` filter results by type · `?` help · `q` quit. Single-letter shortcuts
+  are suspended while you type in the palette.
+- **Palette (`/`):** empty input offers the artifacts you opened most
+  recently in this repository (Enter reopens one) above the full command
+  list; a command prefix filters them (Enter completes argument-taking
+  commands into the input); any other text shows live artifact matches —
+  Enter quick-opens the highlighted one — plus a "search all results" row.
+  Commands: `open <ref>` · `find <query> [type]` · `browse [type]` ·
+  `health` · `recommendations` · `import <source> [target]` ·
+  `relationships <ref>` · `resume` · `schema [type]` · `settings` · `home` ·
+  `help` · `quit` — anything else is a search, resolved with `rac resolve` /
+  `rac find` semantics. Full results render in the context panel (the layout
+  never jumps), where `f` narrows artifact results by type — all → each type
+  present → all. `/schema` lists the registered artifact types; `/schema
+  decision` renders the type's expected sections, the same facts `rac
+  schema` reports.
 - **Sidebar:** every artifact under "Artifacts", grouped by type with counts
   (or flat, per the `artifact_grouping` setting); rows carry a colour-coded
   type tag (`REQ` `ADR` `RMP` `PRM` `DSG`) beside the title, invalid
@@ -378,19 +384,24 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   (the document's rendered Markdown, read-only — the default; it takes the
   keyboard, scrolls with `j`/`k`/PgUp/PgDn, and artifact references inside
   the text open in place, so the corpus reads like a wiki), **Inspection**
-  (status, completeness, diagnostics), **Links** (relationships, impact,
+  (status, completeness, and the artifact's validation diagnostics — the
+  same issues `rac validate` reports), **Links** (relationships, impact,
   lineage; connected artifacts open on Enter, so the graph traverses one hop
   at a time and `Esc` unwinds), and **Findings** (the artifact's
-  recommendations). Links and Findings carry count badges; `g` jumps to
-  Links; `←`/`→` switch tabs.
+  recommendations, plus an Improvement group from the improve service —
+  one suggestion per missing section, with the schema's guidance question
+  as the action). Inspection, Links, and Findings carry count badges; `g`
+  jumps to Links; `←`/`→` switch tabs.
 - **Health:** `h` or `/health` opens the health view — Core's score with a text
   label, the Completeness / Relationships / Validation / Coverage areas, and a
-  prioritized attention list whose items open the affected artifact.
+  prioritized attention list whose items open the affected artifact on its
+  Inspection tab, where the diagnostics explain the finding.
 - **Recommendations:** `/recommendations` (or `r` from the health view) presents
   Core's review findings grouped by category (Validation, Relationships,
   Repository Health, Quality), each with its impact, a suggested `rac` command,
-  and navigation to the affected artifact. Advisory only — Explorer applies
-  nothing. `x` exports them to a Markdown file (preview, then confirm).
+  and navigation to the affected artifact's Findings tab. Advisory only —
+  Explorer applies nothing. `x` exports them to a Markdown file (preview,
+  then confirm).
 - **Actions:** `e` opens the current artifact in your editor — the `editor`
   setting, then `$VISUAL` / `$EDITOR`; terminal editors (vim, nvim, emacs,
   nano, …) run with the Explorer suspended and resume it on exit; guidance
@@ -398,6 +409,13 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   `/import <source> [target]` converts a document via the ingest service,
   previews the Markdown, and writes it only after you confirm with `y`
   (never overwriting). Long conversions report progress.
+- **Live reload:** Explorer compares the corpus files on disk every two
+  seconds (paths and mtimes only — no parsing) and reloads when something
+  changed: the sidebar keeps its expansion and cursor, the open artifact
+  keeps its tab and scroll position, and the health chip updates. The
+  watcher holds while a terminal editor owns the screen and rescans the
+  moment Explorer resumes, so a saved edit shows immediately; an open
+  artifact that disappears falls back home. `r` still reloads on demand.
 - **First run:** onboarding derives from repository content (existing, empty, or
   invalid repository) and is skipped for returning users; a lantern-carrying
   mascot animates in the welcome, empty, and loading states (static with

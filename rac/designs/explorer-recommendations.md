@@ -80,7 +80,18 @@ Recommended remediation.
 
 ### Navigation
 
-Direct access to affected artifacts.
+Direct access to affected artifacts. Selecting a recommendation opens the
+artifact on its Findings tab, where the same finding is shown in the
+artifact's own context (v0.8.9).
+
+### Improvement Suggestions
+
+For artifact types the improve service supports, the artifact's Findings
+tab also carries an Improvement group sourced from `rac improve`: one row
+per missing section, with the schema's guidance question as the suggested
+action (v0.8.9). Improvements are fetched when an artifact opens — never
+during repository load — and follow the same render-only rule as every
+recommendation.
 
 ## Severity Levels
 

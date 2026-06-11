@@ -60,7 +60,9 @@ advertises `/`. Esc dismisses the palette and restores the previous focus.
 
 The menu is live:
 
-- empty input lists the whole command registry
+- empty input offers the artifacts opened most recently in this repository
+  (newest first, Enter reopens one) above the whole command registry,
+  each group labelled (v0.8.9)
 - a command prefix filters the registry
 - any other text shows matching artifacts (quick-open) and a search hint
 
@@ -68,7 +70,8 @@ The menu is live:
 argument-taking command into the input, runs an argless one, opens a
 highlighted artifact match, or routes bare text as a search. Large result
 sets and ambiguous lookups render in the context region, so the layout
-never jumps.
+never jumps; artifact results there can be narrowed by type from the
+keyboard — `f` cycles all → each type present → all (v0.8.9).
 
 Example:
 
@@ -169,11 +172,18 @@ Examples:
 /import
 
 /health
+
+/schema decision
 ```
 
 Explorer invokes RAC Core services.
 
 Explorer does not implement operation logic.
+
+Reference questions belong here too: `/schema` lists the registered
+artifact types, and `/schema <type>` renders the type's expected structure
+from the core schema registry (v0.8.9) — the same facts `rac schema`
+reports.
 
 ---
 
@@ -288,6 +298,7 @@ Red item
 - v0.8.4-explorer-action-workflow
 - v0.8.7-explorer-visual-overhaul
 - v0.8.8-explorer-command-palette
+- v0.8.9-explorer-live-workspace
 
 ---
 

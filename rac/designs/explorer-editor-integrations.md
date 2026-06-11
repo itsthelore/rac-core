@@ -62,6 +62,10 @@ terminal: Explorer suspends itself, runs the editor in the foreground, and
 resumes when the editor exits. Where the runtime cannot suspend, Explorer
 reports guidance instead of failing.
 
+The live watcher (v0.8.9) holds while a terminal editor owns the screen and
+rescans the moment Explorer resumes, so a saved edit is visible immediately
+on return — the edit-and-look loop closes without a keystroke.
+
 ## First Run Experience
 
 Users may select a preferred editor during onboarding.
