@@ -766,8 +766,10 @@ async def test_first_run_invalid_repository_opens_anyway(fresh_first_run):
 async def test_first_run_welcome_shows_mascot_when_enabled(fresh_first_run):
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
-        text = await _settled_panel_text(app, pilot)
-        assert mascot.label(mascot.DISCOVERY) in text  # mascot present by default
+        await _settled_panel_text(app, pilot)
+        art = app.screen.query_one("#mascot", Static)
+        assert art.display  # mascot present by default
+        assert mascot.label(mascot.DISCOVERY) in str(art.content)
 
 
 @pytest.mark.asyncio
@@ -779,8 +781,64 @@ async def test_mascot_can_be_disabled(fresh_first_run, tmp_path, monkeypatch):
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         text = await _settled_panel_text(app, pilot)
-        assert mascot.label(mascot.DISCOVERY) not in text  # disabling loses the art
+        assert not app.screen.query_one("#mascot", Static).display  # art gone
         assert "Repository found" in text  # but no information is lost
+
+
+def test_mascot_frames_are_equal_sized_per_state():
+    # DESIGN-mascot-animations: cycling frames must never shift the layout.
+    for state in (mascot.IDLE, mascot.SEARCHING, mascot.DISCOVERY, mascot.EMPTY):
+        sequence = mascot.frames(state)
+        assert len(sequence) >= 1
+        shapes = {
+            (len(frame.split("\n")), max(len(line) for line in frame.split("\n")))
+            for frame in sequence
+        }
+        assert len(shapes) == 1  # one height and one width per state
+    # Every frame still carries the text label (ADR-028).
+    assert mascot.label(mascot.SEARCHING) in mascot.figure(mascot.SEARCHING, 2)
+
+
+@pytest.mark.asyncio
+async def test_mascot_animates_only_with_animations_on(fresh_first_run):
+    from rac.explorer.widgets.views import HomeView
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        home = app.screen.query_one(HomeView)
+        art = app.screen.query_one("#mascot", Static)
+        before = str(art.content)
+        home._tick_mascot()  # advance a frame deterministically
+        await pilot.pause()
+        assert str(art.content) != before  # the lantern moved
+
+        # With animations off the figure holds its first frame.
+        from dataclasses import replace
+
+        app.adapter.preferences = replace(app.adapter.preferences, animations=False)
+        home.show_mascot(mascot.DISCOVERY)
+        held = str(art.content)
+        home._tick_mascot()
+        await pilot.pause()
+        assert str(art.content) == held
+
+
+@pytest.mark.asyncio
+async def test_mascot_searches_while_loading(fresh_first_run):
+    from rac.explorer.state import LoadProgressState
+    from rac.explorer.widgets.views import HomeView
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        home = app.screen.query_one(HomeView)
+        home.show_progress(
+            LoadProgressState(phase="scan", completed=0, total=None, label="Scanning artifacts")
+        )
+        art = app.screen.query_one("#mascot", Static)
+        assert mascot.label(mascot.SEARCHING) in str(art.content)
 
 
 # --- health and recommendations ----------------------------------------------------

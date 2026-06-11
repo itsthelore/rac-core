@@ -28,6 +28,8 @@ from rac.explorer.state import (
     ContextState,
     HealthState,
     ImportPreview,
+    LoadErrorState,
+    LoadProgressState,
     RecommendationRow,
     RecommendationsState,
     RelationshipsView,
@@ -188,7 +190,13 @@ def render_preview(preview: ImportPreview) -> str:
 
 
 class HomeView(Vertical):
-    """The repository summary: loading → summary/onboarding → error."""
+    """The repository summary: loading → summary/onboarding → error.
+
+    Owns the mascot (v0.8.8): a frame sequence cycled on a slow timer, only
+    while visible and while animations are enabled (DESIGN-mascot-animations).
+    The searching state plays during a load; welcome and empty states keep
+    theirs; everything else hides the mascot.
+    """
 
     can_focus = True
     BINDINGS = [Binding("enter", "continue", "Browse")]
@@ -199,9 +207,17 @@ class HomeView(Vertical):
         # The summary held back while first-run onboarding is on screen;
         # Enter dismisses onboarding and reveals it (no forced setup).
         self._onboarding_summary: RepositorySummaryState | None = None
+        self._mascot_state: str | None = None
+        self._mascot_frame = 0
 
     def compose(self) -> ComposeResult:
+        art = Static(id="mascot")
+        art.display = False
+        yield art
         yield RepositoryPanel(id="repository-panel")
+
+    def on_mount(self) -> None:
+        self.set_interval(0.6, self._tick_mascot)
 
     @property
     def onboarding_active(self) -> bool:
@@ -211,21 +227,59 @@ class HomeView(Vertical):
     def panel(self) -> RepositoryPanel:
         return self.query_one(RepositoryPanel)
 
+    # --- the mascot -----------------------------------------------------------
+
+    def show_mascot(self, state: str) -> None:
+        if not self.adapter.preferences.mascot:
+            return
+        self._mascot_state = state
+        self._mascot_frame = 0
+        art = self.query_one("#mascot", Static)
+        art.display = True
+        art.update(mascot.figure(state, 0, animations=self.adapter.preferences.animations))
+
+    def hide_mascot(self) -> None:
+        self._mascot_state = None
+        self.query_one("#mascot", Static).display = False
+
+    def _tick_mascot(self) -> None:
+        if self._mascot_state is None or not self.adapter.preferences.animations:
+            return
+        self._mascot_frame += 1
+        self.query_one("#mascot", Static).update(
+            mascot.figure(self._mascot_state, self._mascot_frame)
+        )
+
+    # --- load states ------------------------------------------------------------
+
+    def show_progress(self, progress: LoadProgressState) -> None:
+        self.panel.show_progress(progress)
+        if self._mascot_state != mascot.SEARCHING:
+            self.show_mascot(mascot.SEARCHING)
+
     def show_result(self, summary: RepositorySummaryState) -> None:
         if firstrun.is_first_run():
             self._onboarding_summary = summary
             self.panel.show_onboarding(summary, header=self._welcome_header(summary))
+            self.show_mascot(mascot.EMPTY if summary.artifact_total == 0 else mascot.DISCOVERY)
+            return
+        self.panel.show_summary(summary)
+        self._mascot_for_summary(summary)
+
+    def show_error(self, error: LoadErrorState) -> None:
+        self.panel.show_error(error)
+        self.hide_mascot()
+
+    def _mascot_for_summary(self, summary: RepositorySummaryState) -> None:
+        # The mascot lives in the welcome and empty states only (DESIGN-mascot).
+        if summary.artifact_total == 0:
+            self.show_mascot(mascot.EMPTY)
         else:
-            self.panel.show_summary(summary)
+            self.hide_mascot()
 
     def _welcome_header(self, summary: RepositorySummaryState) -> str:
-        """Mascot, recent repositories, and a resume hint for the welcome state."""
+        """Recent repositories and a resume hint for the welcome state."""
         lines: list[str] = []
-        prefs = self.adapter.preferences
-        if prefs.mascot:
-            state = mascot.EMPTY if summary.artifact_total == 0 else mascot.DISCOVERY
-            lines.append(mascot.figure(state, animations=prefs.animations))
-            lines.append("")
         resume = self.adapter.resume_path()
         if resume is not None:
             lines.append(f"Resume last artifact: press .  ({resume})")
@@ -239,6 +293,7 @@ class HomeView(Vertical):
             summary, self._onboarding_summary = self._onboarding_summary, None
             firstrun.mark_onboarded()
             self.panel.show_summary(summary)
+            self._mascot_for_summary(summary)
             return
         self.post_message(BrowseRequested())
 

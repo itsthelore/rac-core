@@ -194,7 +194,7 @@ class MainScreen(Screen[None]):
     # --- loading (moved from the v0.8.0 repository screen) ----------------------
 
     def action_reload(self) -> None:
-        self.query_one(HomeView).panel.show_progress(
+        self.query_one(HomeView).show_progress(
             LoadProgressState(phase="scan", completed=0, total=None, label="Scanning artifacts")
         )
         self._load_repository()
@@ -206,7 +206,7 @@ class MainScreen(Screen[None]):
 
         def relay(progress: LoadProgressState) -> None:
             if not worker.is_cancelled:
-                self.app.call_from_thread(self.query_one(HomeView).panel.show_progress, progress)
+                self.app.call_from_thread(self.query_one(HomeView).show_progress, progress)
 
         return self.adapter.load(on_progress=relay, cancel=token)
 
@@ -221,12 +221,12 @@ class MainScreen(Screen[None]):
                 self.query_one(NavigationSidebar).show_repository(self.adapter.browser_state())
                 self.query_one(StatusLine).show_summary(result)
             elif isinstance(result, LoadErrorState):
-                home.panel.show_error(result)
+                home.show_error(result)
             # None — the load was cancelled; a fresh worker is taking over.
         elif event.state == WorkerState.ERROR:
             # The adapter is the recoverable boundary, so this is unexpected —
             # but the interface must still never crash (Initiative 6).
-            home.panel.show_error(
+            home.show_error(
                 LoadErrorState(
                     title="Unexpected failure",
                     detail=str(event.worker.error),
