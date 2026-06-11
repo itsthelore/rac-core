@@ -111,6 +111,27 @@ class RepositoryPanel(Static):
             )
         self.update("\n".join(lines))
 
+    def show_editor_prompt(self, resolved: str | None) -> None:
+        """The optional first-run editor step (v0.8.11).
+
+        One prefilled, skippable line: Enter accepts (empty keeps the
+        $VISUAL/$EDITOR fallback), typing sets the preference, Esc skips —
+        `/settings` can change it any time (DESIGN-editor-integration).
+        """
+        detected = f"Detected from environment: {resolved}" if resolved else "None detected"
+        self.update(
+            "\n".join(
+                [
+                    "Choose your editor",
+                    "",
+                    "  `e` opens artifacts in your own editor.",
+                    f"  {detected}",
+                    "",
+                    "  Enter accepts · type a command to set one · Esc skips",
+                ]
+            )
+        )
+
     def show_error(self, error: LoadErrorState) -> None:
         lines = [f"✗ {error.title}", "", error.detail]
         if error.can_retry:

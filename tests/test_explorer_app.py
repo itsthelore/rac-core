@@ -905,6 +905,13 @@ async def test_first_run_shows_onboarding_then_enter_continues(fresh_first_run):
 
         await pilot.press("enter")
         await pilot.pause()
+        # The optional editor step (v0.8.11): one prefilled, skippable line.
+        text = str(app.screen.query_one(RepositoryPanel).content)
+        assert "Choose your editor" in text
+        assert firstrun.is_first_run()  # not onboarded until the step ends
+
+        await pilot.press("enter")  # accept: empty keeps the env fallback
+        await pilot.pause()
         text = str(app.screen.query_one(RepositoryPanel).content)
         assert "Health" in text  # the normal summary
     assert not firstrun.is_first_run()  # marker written
@@ -937,7 +944,8 @@ async def test_first_run_invalid_repository_opens_anyway(fresh_first_run):
         assert "✗ 1 validation errors" in text
         assert "Press Enter to open anyway" in text
 
-        await pilot.press("enter")
+        await pilot.press("enter")  # welcome → editor step
+        await pilot.press("enter")  # accept the editor default
         await pilot.pause()
         text = str(app.screen.query_one(RepositoryPanel).content)
         assert "Health" in text
@@ -1851,3 +1859,65 @@ async def test_stats_command_renders_the_dashboard():
         await pilot.press("escape")
         await pilot.pause()
         assert app.screen.current_view == "view-home"
+
+
+# --- first-run editor prompt (v0.8.11) --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_first_run_editor_prompt_persists_a_typed_command(fresh_first_run):
+    from rac.explorer.preferences import load_preferences
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # welcome → editor step
+        await pilot.pause()
+        assert app.focused is app.screen.query_one("#firstrun-editor", Input)
+
+        await pilot.press(*"code --wait")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert load_preferences().editor == "code --wait"
+        assert not firstrun.is_first_run()
+        text = str(app.screen.query_one(RepositoryPanel).content)
+        assert "Health" in text  # onboarding finished into the summary
+
+
+@pytest.mark.asyncio
+async def test_first_run_editor_prompt_empty_enter_keeps_the_fallback(fresh_first_run):
+    from rac.explorer.preferences import load_preferences
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter", "enter")  # welcome → step → accept empty
+        await pilot.pause()
+        assert load_preferences().editor == ""  # the $VISUAL/$EDITOR fallback
+        assert not firstrun.is_first_run()
+
+
+@pytest.mark.asyncio
+async def test_first_run_editor_prompt_esc_skips_without_writing(fresh_first_run, monkeypatch):
+    from rac.explorer.preferences import preferences_path
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # welcome → editor step
+        await pilot.press("escape")  # skip
+        await pilot.pause()
+        assert not preferences_path().exists()  # nothing written
+        assert not firstrun.is_first_run()  # but onboarding completed
+        text = str(app.screen.query_one(RepositoryPanel).content)
+        assert "Health" in text
+        assert not app.screen.query_one("#firstrun-editor", Input).display
+
+
+@pytest.mark.asyncio
+async def test_returning_users_never_see_the_editor_prompt():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        assert "Choose your editor" not in text
+        assert not app.screen.query_one("#firstrun-editor", Input).display

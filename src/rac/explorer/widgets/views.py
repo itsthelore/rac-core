@@ -242,6 +242,8 @@ class HomeView(Vertical):
         # The summary held back while first-run onboarding is on screen;
         # Enter dismisses onboarding and reveals it (no forced setup).
         self._onboarding_summary: RepositorySummaryState | None = None
+        # The optional editor step between welcome and summary (v0.8.11).
+        self._prompting_editor = False
         self._mascot_state: str | None = None
         self._mascot_frame = 0
 
@@ -250,6 +252,12 @@ class HomeView(Vertical):
         art.display = False
         yield art
         yield RepositoryPanel(id="repository-panel")
+        editor_input = Input(
+            placeholder="Editor command, e.g. code or vim — empty keeps $VISUAL/$EDITOR",
+            id="firstrun-editor",
+        )
+        editor_input.display = False
+        yield editor_input
 
     def on_mount(self) -> None:
         self.set_interval(0.6, self._tick_mascot)
@@ -331,13 +339,41 @@ class HomeView(Vertical):
 
     def action_continue(self) -> None:
         if self._onboarding_summary is not None:
-            summary, self._onboarding_summary = self._onboarding_summary, None
-            firstrun.mark_onboarded()
-            self.remove_class("welcome")
-            self.panel.show_summary(summary)
-            self._mascot_for_summary(summary)
+            if not self._prompting_editor:
+                # The optional editor step (v0.8.11): one prefilled,
+                # skippable line between the welcome and the summary.
+                self._prompting_editor = True
+                self.panel.show_editor_prompt(editor_mod.resolve_editor(""))
+                field = self.query_one("#firstrun-editor", Input)
+                field.display = True
+                field.focus()
             return
         self.post_message(BrowseRequested())
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        # Enter accepts: an empty value stores "" — the $VISUAL/$EDITOR
+        # fallback — matching /settings semantics (ADR-024: explorer.json only).
+        self.adapter.save_preferences(replace(self.adapter.preferences, editor=event.value.strip()))
+        self._finish_onboarding()
+
+    def on_key(self, event: events.Key) -> None:
+        # Esc skips the editor step without writing anything; today's
+        # behavior exactly. Only intercepted while the prompt is up.
+        if event.key == "escape" and self._prompting_editor:
+            event.stop()
+            self._finish_onboarding()
+
+    def _finish_onboarding(self) -> None:
+        summary, self._onboarding_summary = self._onboarding_summary, None
+        self._prompting_editor = False
+        self.query_one("#firstrun-editor", Input).display = False
+        firstrun.mark_onboarded()
+        self.remove_class("welcome")
+        self.focus()
+        if summary is not None:
+            self.panel.show_summary(summary)
+            self._mascot_for_summary(summary)
 
 
 class ContextView(Vertical):
