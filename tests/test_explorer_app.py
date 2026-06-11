@@ -1754,3 +1754,100 @@ async def test_directory_rows_neither_open_nor_edit(tmp_path):
         await pilot.press("e")  # a directory row has no file to edit
         await pilot.pause()
         assert app.screen.current_view == "view-home"
+
+
+# --- artifact creation and portfolio stats (v0.8.10) ------------------------------
+
+
+async def _route(app: ExplorerApp, pilot, command: str) -> None:
+    await pilot.press("/")
+    await pilot.press(*command)
+    await pilot.press("enter")
+    await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_bare_new_lists_creatable_types_and_usage():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _route(app, pilot, "new")
+        assert app.screen.current_view == "view-results"
+        results = app.screen.query_one("#command-results", OptionList)
+        listing = "\n".join(
+            str(results.get_option_at_index(i).prompt) for i in range(results.option_count)
+        )
+        for name in ("requirement", "decision", "roadmap", "prompt", "design"):
+            assert name in listing
+        assert "Usage: /new <type> <path>" in listing
+
+
+@pytest.mark.asyncio
+async def test_new_previews_then_confirm_creates_and_opens(tmp_path):
+    from rac.services.init import init_repository
+
+    init_repository(str(tmp_path), key="RAC")
+    (tmp_path / "seed.md").write_text("# Seed Note\n", encoding="utf-8")
+    app = ExplorerApp(str(tmp_path))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        target = tmp_path / "adr-demo.md"
+        await _route(app, pilot, f"new decision {target}")
+        assert app.screen.current_view == "view-import"
+        panel = str(app.screen.query_one("#import-panel", Static).content)
+        assert "ID assigned on write" in panel
+        assert not target.exists()  # nothing written before the confirm
+
+        await pilot.press("y")
+        await app.workers.wait_for_complete()  # the reload the write triggers
+        await pilot.pause()
+        await pilot.pause()
+        assert target.exists()
+        text = target.read_text(encoding="utf-8")
+        assert text.startswith("---\n") and "id: RAC-" in text
+
+        # The new artifact opened, and the sidebar knows it.
+        assert app.screen.current_view == "view-context"
+        view = app.screen.query_one(ContextView)
+        assert view.context is not None and view.context.path == str(target)
+        sidebar = app.screen.query_one(NavigationSidebar)
+        assert str(target) in sidebar._node_by_data
+
+
+@pytest.mark.asyncio
+async def test_new_onto_an_existing_file_refuses_and_writes_nothing(tmp_path):
+    from rac.services.init import init_repository
+
+    init_repository(str(tmp_path), key="RAC")
+    taken = tmp_path / "taken.md"
+    taken.write_text("# Mine\n", encoding="utf-8")
+    app = ExplorerApp(str(tmp_path))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _route(app, pilot, f"new decision {taken}")
+        await pilot.press("y")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        panel = str(app.screen.query_one("#import-panel", Static).content)
+        assert "Refusing to overwrite" in panel
+        assert taken.read_text(encoding="utf-8") == "# Mine\n"
+        assert app.screen.current_view == "view-import"  # no reload, no open
+
+
+@pytest.mark.asyncio
+async def test_stats_command_renders_the_dashboard():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _route(app, pilot, "stats")
+        assert app.screen.current_view == "view-stats"
+        await app.workers.wait_for_complete()  # the collection worker
+        await pilot.pause()
+        panel = str(app.screen.query_one("#stats-panel", Static).content)
+        assert "Portfolio Statistics" in panel
+        assert "Overview" in panel and "Requirements & Quality" in panel
+        assert "Decisions" in panel
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen.current_view == "view-home"

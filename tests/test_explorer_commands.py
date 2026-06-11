@@ -10,13 +10,15 @@ from __future__ import annotations
 from rac.explorer.commands import EXAMPLES, REGISTRY, SEARCH, parse, suggestions
 
 
-def test_registry_is_the_v089_contract():
+def test_registry_is_the_v0810_contract():
     assert [spec.name for spec in REGISTRY] == [
         "open",
         "find",
         "browse",
         "health",
+        "stats",
         "recommendations",
+        "new",
         "import",
         "relationships",
         "resume",

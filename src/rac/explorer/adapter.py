@@ -17,6 +17,15 @@ from rac.core.frontmatter import split_frontmatter
 from rac.core.fs import find_markdown_files
 from rac.core.operations import CancelToken, OperationCancelled, Progress
 from rac.core.schema import SchemaReference, available_schemas, schema_reference
+from rac.core.templates import TemplateNotFound, TemplateResourceMissing
+from rac.services.create import (
+    IdGenerationExhausted,
+    MissingRepositoryConfig,
+    OutputDirectoryMissing,
+    OutputPathExists,
+    create_artifact,
+    render_artifact,
+)
 from rac.services.improve import improve_file
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.repository import Artifact, Repository, load_repository
@@ -34,6 +43,7 @@ from rac.services.review import (
     ReviewIssue,
     review_from_portfolio,
 )
+from rac.services.stats import collect_stats
 
 from . import editor as editor_mod
 from .editor import EditorOutcome
@@ -61,6 +71,7 @@ from .state import (
     RelationshipLink,
     RelationshipsView,
     RepositorySummaryState,
+    StatsState,
     health_label,
 )
 from .workspace import Workspace, load_workspace, save_workspace
@@ -616,6 +627,93 @@ class ExplorerAdapter:
         """
         save_preferences(preferences)
         self.preferences = preferences
+
+    def new_preview(self, artifact_type: str, target: str) -> ImportPreview | str:
+        """The canonical template for ``artifact_type``, awaiting confirmation (v0.8.10).
+
+        Pure render through Core's create service — no writes, no ID minting;
+        the ID note tells the user where the identity comes from (ADR-026).
+        Unknown types return a message rather than raising into the UI.
+        """
+        try:
+            body = render_artifact(artifact_type)
+        except (TemplateNotFound, TemplateResourceMissing):
+            return f"Unknown artifact type: {artifact_type} — try /schema"
+        note = "(ID assigned on write — rac mints it against the repository index)"
+        return ImportPreview(
+            source=f"new {artifact_type}",
+            converter="template",
+            target=target,
+            markdown=f"{note}\n\n{body}",
+        )
+
+    def write_new(self, artifact_type: str, target: str) -> str:
+        """Create ``target`` from its template via Core (v0.8.10, ADR-024).
+
+        Core's create service is the only writer: it mints the ID against the
+        repository index and refuses existing paths, missing directories, and
+        uninitialized repositories — each refusal becomes a recoverable
+        message, and nothing is written on any failure.
+        """
+        try:
+            created = create_artifact(artifact_type, target)
+        except (TemplateNotFound, TemplateResourceMissing):
+            return f"Unknown artifact type: {artifact_type} — try /schema"
+        except OutputPathExists:
+            return f"Refusing to overwrite existing file: {target}"
+        except OutputDirectoryMissing as exc:
+            return f"Directory does not exist: {exc.path} — create it first"
+        except MissingRepositoryConfig:
+            return "No repository identity found — run `rac init` first, then retry"
+        except IdGenerationExhausted as exc:
+            return str(exc)
+        return f"Created {created.path} (ID {created.id})"
+
+    def stats_state(self) -> StatsState:
+        """The portfolio statistics dashboard (v0.8.10).
+
+        Built from Core's stats service — the same facts `rac stats` reports
+        (ADR-015). A fresh corpus walk, so callers run it off the UI thread;
+        it needs no loaded repository.
+        """
+        stats = collect_stats(self.directory)
+        overview = [
+            f"Files found     {stats.files_found}",
+            f"Requirements    {stats.valid_features} valid, {stats.invalid_features} invalid",
+            f"Decisions       {stats.decision_count}",
+            f"Roadmaps        {stats.valid_roadmaps} valid of {stats.roadmap_count}",
+            f"Prompts         {stats.valid_prompts} valid of {stats.prompt_count}",
+            f"Designs         {stats.valid_designs} valid of {stats.design_count}",
+            f"Unrecognized    {len(stats.unrecognized)}",
+        ]
+        quality = [
+            f"Requirements    {stats.total_requirements}",
+            f"Success metrics {stats.total_metrics}",
+            f"Risks           {stats.total_risks}",
+            f"Missing metrics {stats.features_missing_metrics} feature(s)",
+            f"Missing risks   {stats.features_missing_risks} feature(s)",
+        ]
+        decisions = [
+            *(f"{status:<15} {count}" for status, count in stats.decision_status_counts.items()),
+        ]
+        categories = [
+            f"{category:<15} {count}"
+            for category, count in stats.decision_category_counts.items()
+        ]
+        if categories:
+            decisions.extend(["", "By category", *categories])
+        relationships = [
+            f"{kind:<24} {count}" for kind, count in sorted(stats.relationship_counts.items())
+        ]
+        sections: list[tuple[str, tuple[str, ...]]] = [
+            ("Overview", tuple(overview)),
+            ("Requirements & Quality", tuple(quality)),
+        ]
+        if decisions:
+            sections.append(("Decisions", tuple(decisions)))
+        if relationships:
+            sections.append(("Relationships", tuple(relationships)))
+        return StatsState(directory=self.directory, sections=tuple(sections))
 
     def import_preview(self, source: str, target: str | None = None) -> ImportPreview | str:
         """Convert ``source`` via Core ingest for review (v0.8.4).

@@ -191,6 +191,18 @@ class RelationshipsView:
 
 
 @dataclass(frozen=True)
+class StatsState:
+    """The portfolio statistics dashboard (v0.8.10): (section title, lines).
+
+    A summary surface, not per-artifact listings — the browser and results
+    views already navigate individual artifacts.
+    """
+
+    directory: str
+    sections: tuple[tuple[str, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
 class ImportPreview:
     """A converted document awaiting confirmation before it is written."""
 
