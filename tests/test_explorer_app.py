@@ -1432,3 +1432,51 @@ async def test_watcher_does_not_run_after_a_load_error(tmp_path):
         await pilot.pause()
         text = str(screen.query_one(RepositoryPanel).content)
         assert "Could not load repository" in text  # only `r` recovers
+
+
+# --- validation drill-down (v0.8.9) ---------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_attention_item_lands_on_the_inspection_tab():
+    app = ExplorerApp(str(FIXTURES / "broken_rels"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("h")
+        await pilot.pause()
+        await pilot.press("enter")  # first attention item (highlighted)
+        await pilot.pause()
+        assert app.screen.current_view == "view-context"
+        tabs = app.screen.query_one(TabbedContent)
+        assert tabs.active == "tab-inspection"
+        panel = str(app.screen.query_one("#context-panel", Static).content)
+        assert "Diagnostics" in panel
+        assert "✓ none" not in panel  # the reason is on the tab, not a dead end
+
+
+@pytest.mark.asyncio
+async def test_recommendation_lands_on_the_findings_tab():
+    app = ExplorerApp(str(FIXTURES / "broken_rels"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"recommendations")
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("enter")  # first recommendation (highlighted)
+        await pilot.pause()
+        assert app.screen.current_view == "view-context"
+        assert app.screen.query_one(TabbedContent).active == "tab-findings"
+        panel = str(app.screen.query_one("#findings-panel", Static).content)
+        assert "✓ No findings" not in panel
+
+
+@pytest.mark.asyncio
+async def test_inspection_tab_carries_a_diagnostics_badge():
+    app = ExplorerApp(str(FIXTURES / "invalid_known"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_first_artifact(app, pilot)
+        tabs = app.screen.query_one(TabbedContent)
+        label = str(tabs.get_tab("tab-inspection").label)
+        assert label.startswith("Inspection (") and label != "Inspection (0)"

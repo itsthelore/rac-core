@@ -411,6 +411,10 @@ class ContextView(Vertical):
 
         # Count badges: whether a tab is worth visiting, before visiting it.
         tabs = self.query_one(TabbedContent)
+        diagnostics_count = len(context.diagnostics)
+        tabs.get_tab("tab-inspection").label = (
+            f"Inspection ({diagnostics_count})" if diagnostics_count else "Inspection"
+        )
         links_count = len(self._link_paths)
         tabs.get_tab("tab-links").label = f"Links ({links_count})" if links_count else "Links"
         tabs.get_tab("tab-findings").label = (
@@ -522,7 +526,10 @@ class HealthView(Vertical):
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_id is None or self.health is None:
             return
-        self.post_message(OpenArtifact(self.health.attention[int(event.option_id)].path))
+        # Drill-down (v0.8.9): an attention item lands on the tab that
+        # explains it — the Inspection diagnostics — not on the document.
+        path = self.health.attention[int(event.option_id)].path
+        self.post_message(OpenArtifact(path, tab="tab-inspection"))
 
     def action_recommendations(self) -> None:
         self.post_message(ShowRecommendations())
@@ -571,7 +578,9 @@ class RecommendationsView(Vertical):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_id is not None:
-            self.post_message(OpenArtifact(self._paths[int(event.option_id)]))
+            # Drill-down (v0.8.9): a recommendation opens the artifact on its
+            # own Findings tab, where this finding is shown in context.
+            self.post_message(OpenArtifact(self._paths[int(event.option_id)], tab="tab-findings"))
 
     def action_export(self) -> None:
         result = self.adapter.export_recommendations()
