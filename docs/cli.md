@@ -277,10 +277,13 @@ Findings are grouped by priority, highest impact first:
 | 4 | Missing recommended information | no — advisory |
 
 Every finding carries a concrete suggested action (`rac validate <file>`,
-`rac relationships <dir> --validate`, `rac improve <file> --template`, …), and
+`rac relationships <dir> --validate`, `rac improve <file> --template`, …) and
+an `impact` sentence explaining why it matters (additive in v0.8.11), and
 the report ends with the same health score `portfolio` computes. The `--json`
 form is a stable contract (`schema_version: "1"`) with `ok`, `artifacts`,
-`validation`, `relationships`, `health`, `issues[]`, and `actions[]`.
+`validation`, `relationships`, `health`, `issues[]` (each with `priority`,
+`severity`, `path`, `identifier`, `code`, `message`, `action`, `impact`),
+and `actions[]`.
 
 `review` composes the same analysis `portfolio` runs; use `portfolio` for a
 one-screen summary and `review` when you want the prioritized worklist.
@@ -436,6 +439,9 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   invalid repository) and is skipped for returning users; a lantern-carrying
   mascot animates in the welcome, empty, and loading states (static with
   `animations = off`, hidden with `mascot = off` — no information is lost).
+  One optional editor step follows the welcome: Enter accepts (an empty
+  value keeps the `$VISUAL`/`$EDITOR` fallback), typing sets the `editor`
+  preference, Esc skips — `/settings` can change it any time.
 - **Settings & continuity:** `/settings` changes everything in place — theme
   (default `rac-lantern`; Enter cycles every Textual theme with live
   preview), mascot, animations, artifact grouping (`folders` default), and
