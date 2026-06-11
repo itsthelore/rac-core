@@ -9,6 +9,7 @@ panel via ``ContentSwitcher`` — the layout never jumps
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 
 from textual import events, work
@@ -36,6 +37,7 @@ from rac.explorer.state import (
     RecommendationsState,
     RelationshipsView,
     RepositorySummaryState,
+    StatsState,
 )
 from rac.explorer.widgets import RepositoryPanel
 
@@ -593,15 +595,25 @@ class RecommendationsView(Vertical):
         self.app.push_screen(ConfirmWriteScreen(self.adapter, result))
 
 
-class ImportView(Vertical):
-    """Guided import: converting → preview (y confirms) → result (v0.8.4).
+class ArtifactCreated(Message):
+    """A `/new` write succeeded — the screen reloads and opens the artifact."""
 
-    Conversion runs off the UI thread; nothing is written until the user
-    confirms, and writes never overwrite (Initiative 4, ADR-024).
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+
+
+class ImportView(Vertical):
+    """The guided write workflow: preview (y confirms) → result (v0.8.4).
+
+    One confirm path for both writers: document import (conversion runs off
+    the UI thread) and `/new` template creation (v0.8.10, rendered
+    instantly). Nothing is written until the user confirms, and writes never
+    overwrite (Initiative 4, ADR-024).
     """
 
     can_focus = True
-    BINDINGS = [Binding("y", "confirm", "Confirm import")]
+    BINDINGS = [Binding("y", "confirm", "Confirm write")]
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
         super().__init__(id="view-import")
@@ -609,6 +621,9 @@ class ImportView(Vertical):
         self.source = ""
         self.target: str | None = None
         self.preview: ImportPreview | None = None
+        # The pending write for the confirmed preview; set with the preview
+        # so `y` runs the right Core writer (import vs create).
+        self._writer: Callable[[], str] | None = None
         self._done = False
 
     def compose(self) -> ComposeResult:
@@ -618,9 +633,26 @@ class ImportView(Vertical):
         self.source = source
         self.target = target
         self.preview = None
+        self._writer = None
         self._done = False
         self.query_one("#import-panel", Static).update(f"Converting {source}…")
         self._convert()
+
+    def start_creation(self, artifact_type: str, target: str) -> None:
+        """Preview a `/new` template; the confirmed write goes through Core's
+        create service, which mints the ID (v0.8.10)."""
+        self.preview = None
+        self._writer = None
+        self._done = False
+        result = self.adapter.new_preview(artifact_type, target)
+        panel = self.query_one("#import-panel", Static)
+        if isinstance(result, ImportPreview):
+            self.preview = result
+            self._writer = lambda: self.adapter.write_new(artifact_type, target)
+            panel.update(render_preview(result))
+        else:
+            self._done = True
+            panel.update(f"✗ Cannot create\n\n{result}\n\nPress Esc to go back.")
 
     @work(thread=True, exclusive=True, group="import-convert")
     def _convert(self) -> ImportPreview | str:
@@ -636,17 +668,73 @@ class ImportView(Vertical):
         panel = self.query_one("#import-panel", Static)
         if isinstance(result, ImportPreview):
             self.preview = result
+            preview = result
+            self._writer = lambda: self.adapter.write_import(preview)
             panel.update(render_preview(result))
         else:  # an error message — recoverable, no write happened
             self._done = True
             panel.update(f"✗ Import failed\n\n{result}\n\nPress Esc to go back.")
 
     def action_confirm(self) -> None:
-        if self.preview is None or self._done:
+        if self.preview is None or self._writer is None or self._done:
             return
-        message = self.adapter.write_import(self.preview)
+        target = self.preview.target
+        message = self._writer()
         self._done = True
         self.query_one("#import-panel", Static).update(f"{message}\n\nPress Esc to go back.")
+        if message.startswith("Created "):
+            # The new artifact joins the workspace: reload, then open it.
+            self.post_message(ArtifactCreated(target))
+
+
+class StatsView(Vertical):
+    """The portfolio statistics dashboard (v0.8.10).
+
+    Collection re-walks the corpus, so it runs in a worker on request —
+    never during the repository load. The dashboard scrolls under the
+    keyboard like the content tab.
+    """
+
+    BINDINGS = [
+        Binding("j", "scroll_stats(1)", "Scroll", show=False),
+        Binding("k", "scroll_stats(-1)", "Scroll", show=False),
+    ]
+
+    def __init__(self, adapter: ExplorerAdapter) -> None:
+        super().__init__(id="view-stats")
+        self.adapter = adapter
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="stats-scroll", can_focus=True):
+            yield Static(id="stats-panel")
+
+    def show_stats(self) -> None:
+        self.query_one("#stats-panel", Static).update("Collecting portfolio statistics…")
+        self._collect()
+
+    @work(thread=True, exclusive=True, group="stats-collect")
+    def _collect(self) -> StatsState:
+        return self.adapter.stats_state()
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        if event.worker.group != "stats-collect" or event.state != WorkerState.SUCCESS:
+            return
+        stats = event.worker.result
+        if isinstance(stats, StatsState):
+            blocks = [f"Portfolio Statistics  {stats.directory}"]
+            for title, lines in stats.sections:
+                blocks.append("")
+                blocks.append(title)
+                blocks.extend(f"  {line}" for line in lines)
+            self.query_one("#stats-panel", Static).update("\n".join(blocks))
+
+    def take_focus(self) -> None:
+        self.query_one("#stats-scroll", VerticalScroll).focus()
+
+    def action_scroll_stats(self, direction: int) -> None:
+        self.query_one("#stats-scroll", VerticalScroll).scroll_relative(
+            y=direction * 3, animate=False
+        )
 
 
 class SettingsView(Vertical):

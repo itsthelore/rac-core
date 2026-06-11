@@ -639,3 +639,79 @@ def test_type_rows_lists_one_type_for_browse(tmp_path):
     assert lookup.rows[0].type == "decision"
     empty = adapter.type_rows("nonsense")
     assert empty.rows == () and empty.message == "Nothing to browse: nonsense"
+
+
+# --- artifact creation (/new, v0.8.10) ------------------------------------------
+
+
+def test_new_preview_renders_the_template_without_writing(tmp_path):
+    adapter = ExplorerAdapter(str(tmp_path))
+    preview = adapter.new_preview("decision", str(tmp_path / "adr.md"))
+    assert not isinstance(preview, str)
+    assert "ID assigned on write" in preview.markdown
+    assert "## Status" in preview.markdown  # the canonical template body
+    assert preview.converter == "template"
+    assert not (tmp_path / "adr.md").exists()  # preview never writes
+
+
+def test_new_preview_reports_unknown_types(tmp_path):
+    adapter = ExplorerAdapter(str(tmp_path))
+    result = adapter.new_preview("nonsense", str(tmp_path / "x.md"))
+    assert result == "Unknown artifact type: nonsense — try /schema"
+
+
+def test_write_new_creates_through_core_with_a_minted_id(tmp_path):
+    from rac.services.init import init_repository
+
+    init_repository(str(tmp_path), key="RAC")
+    adapter = ExplorerAdapter(str(tmp_path))
+    target = tmp_path / "adr-demo.md"
+    message = adapter.write_new("decision", str(target))
+    assert message.startswith("Created ") and "RAC-" in message
+    text = target.read_text(encoding="utf-8")
+    assert text.startswith("---\n") and "id: RAC-" in text  # Core minted the ID
+
+
+def test_write_new_refusals_write_nothing(tmp_path):
+    from rac.services.init import init_repository
+
+    init_repository(str(tmp_path), key="RAC")
+    adapter = ExplorerAdapter(str(tmp_path))
+
+    existing = tmp_path / "taken.md"
+    existing.write_text("# Mine\n", encoding="utf-8")
+    message = adapter.write_new("decision", str(existing))
+    assert message == f"Refusing to overwrite existing file: {existing}"
+    assert existing.read_text(encoding="utf-8") == "# Mine\n"
+
+    missing_dir = tmp_path / "nowhere" / "adr.md"
+    message = adapter.write_new("decision", str(missing_dir))
+    assert "Directory does not exist" in message
+    assert not missing_dir.exists()
+
+    assert adapter.write_new("nonsense", str(tmp_path / "x.md")).startswith(
+        "Unknown artifact type"
+    )
+
+
+def test_write_new_guides_uninitialized_repositories(tmp_path):
+    adapter = ExplorerAdapter(str(tmp_path))
+    message = adapter.write_new("decision", str(tmp_path / "adr.md"))
+    assert "rac init" in message
+    assert not (tmp_path / "adr.md").exists()
+
+
+# --- portfolio stats (/stats, v0.8.10) -------------------------------------------
+
+
+def test_stats_state_renders_the_dashboard_sections():
+    fixtures = Path(__file__).parent / "fixtures"
+    adapter = ExplorerAdapter(str(fixtures / "portfolio"))
+    stats = adapter.stats_state()  # needs no loaded repository
+    titles = [title for title, _ in stats.sections]
+    assert titles[:2] == ["Overview", "Requirements & Quality"]
+    lines = dict(stats.sections)["Overview"]
+    assert any(line.startswith("Files found") for line in lines)
+    assert any("Requirements" in line and "valid" in line for line in lines)
+    quality = dict(stats.sections)["Requirements & Quality"]
+    assert any(line.startswith("Requirements    7") for line in quality)

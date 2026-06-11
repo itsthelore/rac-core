@@ -40,9 +40,11 @@ REGISTRY: tuple[CommandSpec, ...] = (
     CommandSpec("find", "find <query> [type]", "Search artifacts by ID, title, or path"),
     CommandSpec("browse", "browse [type]", "Browse the sidebar; a type lists results"),
     CommandSpec("health", "health", "Show repository health and attention items"),
+    CommandSpec("stats", "stats", "Show portfolio statistics"),
     CommandSpec(
         "recommendations", "recommendations", "Show recommendations with impact and actions"
     ),
+    CommandSpec("new", "new <type> <path>", "Create an artifact from its template"),
     CommandSpec("import", "import <source> [target]", "Convert a document into Markdown"),
     CommandSpec("relationships", "relationships <ref>", "Traverse an artifact's relationships"),
     CommandSpec("resume", "resume", "Reopen the last artifact in this repository"),

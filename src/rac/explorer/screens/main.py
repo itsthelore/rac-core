@@ -34,6 +34,7 @@ from rac.explorer.widgets.palette import CommandPalette
 from rac.explorer.widgets.sidebar import NavigationSidebar
 from rac.explorer.widgets.statusline import StatusLine
 from rac.explorer.widgets.views import (
+    ArtifactCreated,
     BrowseRequested,
     ContextView,
     HealthView,
@@ -45,6 +46,7 @@ from rac.explorer.widgets.views import (
     SettingsChanged,
     SettingsView,
     ShowRecommendations,
+    StatsView,
     launch_editor,
 )
 
@@ -63,6 +65,7 @@ _VIEW_REGIONS = {
     "view-import": ("import", "Import"),
     "view-results": ("results", "Results"),
     "view-settings": ("settings", "Settings"),
+    "view-stats": ("stats", "Portfolio Stats"),
 }
 
 
@@ -98,6 +101,9 @@ class MainScreen(Screen[None]):
         # load error, or while the application is suspended for an editor.
         self._watch_baseline: tuple[tuple[str, int], ...] | None = None
         self._watch_paused = False
+        # A `/new` write reloads the repository and then opens the artifact
+        # it created (v0.8.10) — the path waits here for the load to finish.
+        self._open_after_load: str | None = None
 
     # --- frame ----------------------------------------------------------------
 
@@ -113,6 +119,7 @@ class MainScreen(Screen[None]):
                 yield ImportView(self.adapter)
                 yield ResultsView()
                 yield SettingsView(self.adapter)
+                yield StatsView(self.adapter)
         yield StatusLine()
         # Floats over the context region on its own layer; hidden when idle.
         yield CommandPalette(self.adapter)
@@ -255,7 +262,12 @@ class MainScreen(Screen[None]):
                 self.query_one(NavigationSidebar).show_repository(self.adapter.browser_state())
                 self.query_one(StatusLine).show_summary(result)
                 self._refresh_current_view()
+                pending, self._open_after_load = self._open_after_load, None
+                if pending is not None and self.adapter.context_state(pending) is not None:
+                    # The artifact a confirmed `/new` just created (v0.8.10).
+                    self.open_artifact(pending)
             elif isinstance(result, LoadErrorState):
+                self._open_after_load = None
                 home.show_error(result)
             # None — the load was cancelled; a fresh worker is taking over.
         elif event.state == WorkerState.ERROR:
@@ -392,6 +404,11 @@ class MainScreen(Screen[None]):
     def on_show_recommendations(self, message: ShowRecommendations) -> None:
         message.stop()
         self._show_recommendations()
+
+    def on_artifact_created(self, message: ArtifactCreated) -> None:
+        message.stop()
+        self._open_after_load = message.path
+        self.action_reload()
 
     def on_settings_changed(self, message: SettingsChanged) -> None:
         message.stop()
@@ -565,6 +582,22 @@ class MainScreen(Screen[None]):
             target = parts[1] if len(parts) > 1 else None
             self.query_one(ImportView).start(parts[0], target)
             self.show_view("view-import")
+        elif invocation.command == "new":
+            parts = invocation.args.split()
+            if len(parts) < 2:
+                # Bare (or path-less) /new teaches: the creatable types plus usage.
+                options: list[Option | None] = [
+                    Option(f"{name:<14} {summary}", disabled=True)
+                    for name, summary in self.adapter.schema_overview()
+                ]
+                options.append(Option("Usage: /new <type> <path>", disabled=True))
+                self._show_results(options)
+                return
+            self.query_one(ImportView).start_creation(parts[0].casefold(), parts[1])
+            self.show_view("view-import")
+        elif invocation.command == "stats":
+            self.query_one(StatsView).show_stats()
+            self.show_view("view-stats")
         elif invocation.command == "browse":
             artifact_type = invocation.args.casefold() or None
             if artifact_type is None:
