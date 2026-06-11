@@ -187,7 +187,9 @@ def test_cli_json_contract(capsys):
             "code",
             "message",
             "action",
+            "impact",
         }
+        assert issue["impact"]  # Core-owned, always present (v0.8.11)
     assert rc in (0, 1)
 
 
@@ -215,3 +217,15 @@ def test_top_level_flag(capsys):
 def test_empty_directory_reviews_ok(tmp_path, capsys):
     assert main(["review", str(tmp_path)]) == 0
     assert "Nothing needs attention" in capsys.readouterr().out
+
+
+def test_impact_is_core_owned_and_always_present():
+    # v0.8.11: the "why it matters" sentence is repository intelligence,
+    # not viewer copy — every consumer reads the same text.
+    from rac.services.review import impact_for
+
+    report = build_review(str(FIXTURES / "invalid_known"))
+    assert report.issues
+    for issue in report.issues:
+        assert issue.impact == impact_for(issue.code)
+    assert impact_for("some-future-code") == "This finding affects repository quality."

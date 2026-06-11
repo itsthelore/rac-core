@@ -37,7 +37,8 @@
       "identifier": "broken",
       "code": "invalid-artifact",
       "message": "Validation errors: missing-title",
-      "action": "Run: rac validate tests/fixtures/portfolio/broken.md"
+      "action": "Run: rac validate tests/fixtures/portfolio/broken.md",
+      "impact": "The artifact fails its schema, so tooling and validation cannot trust it."
     },
     {
       "priority": 4,
@@ -46,7 +47,8 @@
       "identifier": "broken",
       "code": "missing-recommended-sections",
       "message": "Missing recommended sections: Success Metrics, Risks, Assumptions",
-      "action": "Run: rac improve tests/fixtures/portfolio/broken.md --template"
+      "action": "Run: rac improve tests/fixtures/portfolio/broken.md --template",
+      "impact": "Recommended sections are empty, weakening the artifact's completeness."
     },
     {
       "priority": 4,
@@ -55,7 +57,8 @@
       "identifier": "feature_a",
       "code": "missing-recommended-sections",
       "message": "Missing recommended sections: Assumptions",
-      "action": "Run: rac improve tests/fixtures/portfolio/feature_a.md --template"
+      "action": "Run: rac improve tests/fixtures/portfolio/feature_a.md --template",
+      "impact": "Recommended sections are empty, weakening the artifact's completeness."
     },
     {
       "priority": 4,
@@ -64,7 +67,8 @@
       "identifier": "feature_b",
       "code": "missing-recommended-sections",
       "message": "Missing recommended sections: Success Metrics, Risks, Assumptions",
-      "action": "Run: rac improve tests/fixtures/portfolio/feature_b.md --template"
+      "action": "Run: rac improve tests/fixtures/portfolio/feature_b.md --template",
+      "impact": "Recommended sections are empty, weakening the artifact's completeness."
     },
     {
       "priority": 4,
@@ -73,7 +77,8 @@
       "identifier": "feature_c",
       "code": "missing-recommended-sections",
       "message": "Missing recommended sections: Success Metrics, Risks, Assumptions",
-      "action": "Run: rac improve tests/fixtures/portfolio/sub/feature_c.md --template"
+      "action": "Run: rac improve tests/fixtures/portfolio/sub/feature_c.md --template",
+      "impact": "Recommended sections are empty, weakening the artifact's completeness."
     }
   ],
   "actions": [

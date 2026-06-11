@@ -47,6 +47,27 @@ _ATTENTION_PRIORITY = {
     ATTENTION_MISSING_RECOMMENDED: PRIORITY_MISSING_RECOMMENDED,
 }
 
+# "Why it matters" per finding code (v0.8.11) — Core owns the impact text so
+# every consumer (JSON, CLI, Explorer) reads the same sentence. Moved here
+# from the Explorer adapter; an unrecognized code gets the generic sentence,
+# so the field is always present.
+_GENERIC_IMPACT = "This finding affects repository quality."
+_IMPACT = {
+    ATTENTION_INVALID: "The artifact fails its schema, so tooling and validation cannot trust it.",
+    ATTENTION_BROKEN_RELATIONSHIP: (
+        "A declared reference does not resolve, leaving traceability incomplete."
+    ),
+    ATTENTION_MISSING_RECOMMENDED: (
+        "Recommended sections are empty, weakening the artifact's completeness."
+    ),
+    REVIEW_UNKNOWN_ARTIFACT: "No schema matched, so required structure cannot be checked.",
+}
+
+
+def impact_for(code: str) -> str:
+    """The Core-owned impact sentence for a finding ``code``."""
+    return _IMPACT.get(code, _GENERIC_IMPACT)
+
 
 @dataclass
 class ReviewIssue:
@@ -59,6 +80,7 @@ class ReviewIssue:
     code: str
     message: str
     action: str  # a runnable command or concrete edit
+    impact: str  # why it matters (v0.8.11; additive JSON field, ADR-007)
 
     def to_dict(self) -> dict:
         return {
@@ -69,6 +91,7 @@ class ReviewIssue:
             "code": self.code,
             "message": self.message,
             "action": self.action,
+            "impact": self.impact,
         }
 
 
@@ -175,6 +198,7 @@ def review_from_portfolio(
                 code=item.code,
                 message=item.message,
                 action=action,
+                impact=impact_for(item.code),
             )
         )
 
@@ -190,6 +214,7 @@ def review_from_portfolio(
                 code=REVIEW_UNKNOWN_ARTIFACT,
                 message="No artifact schema matched this document.",
                 action=f"Run: rac inspect {path} (see rac schema --list)",
+                impact=impact_for(REVIEW_UNKNOWN_ARTIFACT),
             )
         )
 

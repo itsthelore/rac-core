@@ -128,19 +128,6 @@ _SEVERITY_LABEL = {
     "info": "· Suggestion",
 }
 
-# "Why it matters" — fixed presentation copy keyed by the Core finding code
-# (display text, like the status and phase labels; not analysis).
-_IMPACT = {
-    ATTENTION_INVALID: "The artifact fails its schema, so tooling and validation cannot trust it.",
-    ATTENTION_BROKEN_RELATIONSHIP: (
-        "A declared reference does not resolve, leaving traceability incomplete."
-    ),
-    ATTENTION_MISSING_RECOMMENDED: (
-        "Recommended sections are empty, weakening the artifact's completeness."
-    ),
-    REVIEW_UNKNOWN_ARTIFACT: "No schema matched, so required structure cannot be checked.",
-}
-
 
 def _recommendation(issue: ReviewIssue) -> RecommendationRow:
     return RecommendationRow(
@@ -149,7 +136,8 @@ def _recommendation(issue: ReviewIssue) -> RecommendationRow:
         category=_CODE_CATEGORY.get(issue.code, "Quality"),
         severity_label=_SEVERITY_LABEL.get(issue.severity, issue.severity),
         finding=issue.message,
-        impact=_IMPACT.get(issue.code, "This finding affects repository quality."),
+        # Core owns the impact sentence (v0.8.11) — the adapter renders it.
+        impact=issue.impact,
         action=issue.action,
     )
 
