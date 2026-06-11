@@ -63,10 +63,11 @@ _PHASE_LABELS = {
 }
 
 # Validation status → text-bearing label (never colour or symbol alone).
+# One chip casing everywhere (DESIGN-visual-system, v0.8.8).
 _STATUS_LABELS = {
-    "valid": "✓ valid",
-    "invalid": "✗ invalid",
-    "skipped": "– unknown",
+    "valid": "✓ Valid",
+    "invalid": "✗ Invalid",
+    "skipped": "– Unknown",
 }
 
 ProgressHandler = Callable[[LoadProgressState], None]
@@ -184,6 +185,15 @@ class ExplorerAdapter:
         """Remember the last artifact opened in this repository."""
         self.workspace.record_artifact(self.directory, path)
         save_workspace(self.workspace)
+
+    def record_view(self, view: str) -> None:
+        """Remember the active view so resume can restore it (v0.8.8)."""
+        self.workspace.record_view(self.directory, view)
+        save_workspace(self.workspace)
+
+    def resume_view(self) -> str | None:
+        """The last recorded view for this repository, if any."""
+        return self.workspace.resume_view(self.directory)
 
     def resume_path(self) -> str | None:
         """The last artifact opened here, if it still exists in the load."""
@@ -360,7 +370,7 @@ class ExplorerAdapter:
             AttentionRow(
                 path=item.path,
                 identifier=item.identifier,
-                severity_label="✗ error" if item.severity == "error" else "! warning",
+                severity_label="✗ Error" if item.severity == "error" else "! Warning",
                 message=item.message,
             )
             for item in portfolio.attention

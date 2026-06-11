@@ -104,7 +104,7 @@ def test_browser_state_groups_by_type_in_walk_order():
     ]
     assert all(rows for _, rows in browser.groups)
     [unknown_rows] = [rows for group, rows in browser.groups if group == "unknown"]
-    assert unknown_rows[0].status_label == "– unknown"
+    assert unknown_rows[0].status_label == "– Unknown"
 
 
 def test_context_state_renders_resolved_and_incoming_relationships():

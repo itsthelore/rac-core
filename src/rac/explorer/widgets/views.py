@@ -65,6 +65,28 @@ class SettingsChanged(Message):
         self.key = key
 
 
+def launch_editor(widget, adapter: ExplorerAdapter, path: str) -> editor_mod.EditorOutcome:
+    """Open ``path`` in the configured editor from any widget (ADR-024).
+
+    Terminal editors run with the application suspended and resumed;
+    sessions that cannot suspend get guidance instead of a blind launch.
+    """
+    editor = adapter.resolved_editor()
+    if editor is not None and editor_mod.is_terminal_editor(editor):
+        try:
+            with widget.app.suspend():
+                return adapter.open_in_editor(path, blocking=True)
+        except SuspendNotSupported:
+            return editor_mod.EditorOutcome(
+                launched=False,
+                message=(
+                    f"'{editor}' needs the terminal, and this session cannot "
+                    "suspend. Configure a GUI editor in /settings."
+                ),
+            )
+    return adapter.open_in_editor(path)
+
+
 def _highlight_first(listing: OptionList) -> None:
     """Highlight the first selectable option after a dynamic rebuild.
 
@@ -253,6 +275,9 @@ class HomeView(Vertical):
     # --- load states ------------------------------------------------------------
 
     def show_progress(self, progress: LoadProgressState) -> None:
+        # Loading and welcome compose centred ("welcome"); the summary reads
+        # top-left like every other view.
+        self.add_class("welcome")
         self.panel.show_progress(progress)
         if self._mascot_state != mascot.SEARCHING:
             self.show_mascot(mascot.SEARCHING)
@@ -260,13 +285,16 @@ class HomeView(Vertical):
     def show_result(self, summary: RepositorySummaryState) -> None:
         if firstrun.is_first_run():
             self._onboarding_summary = summary
+            self.add_class("welcome")
             self.panel.show_onboarding(summary, header=self._welcome_header(summary))
             self.show_mascot(mascot.EMPTY if summary.artifact_total == 0 else mascot.DISCOVERY)
             return
+        self.remove_class("welcome")
         self.panel.show_summary(summary)
         self._mascot_for_summary(summary)
 
     def show_error(self, error: LoadErrorState) -> None:
+        self.remove_class("welcome")
         self.panel.show_error(error)
         self.hide_mascot()
 
@@ -292,6 +320,7 @@ class HomeView(Vertical):
         if self._onboarding_summary is not None:
             summary, self._onboarding_summary = self._onboarding_summary, None
             firstrun.mark_onboarded()
+            self.remove_class("welcome")
             self.panel.show_summary(summary)
             self._mascot_for_summary(summary)
             return
@@ -419,22 +448,7 @@ class ContextView(Vertical):
         # ADR-024: Explorer hands the file to an external editor; it never edits.
         if self.context is None:
             return
-        editor = self.adapter.resolved_editor()
-        if editor is not None and editor_mod.is_terminal_editor(editor):
-            # Terminal editors own the terminal: suspend, run, resume.
-            try:
-                with self.app.suspend():
-                    outcome = self.adapter.open_in_editor(self.context.path, blocking=True)
-            except SuspendNotSupported:
-                outcome = editor_mod.EditorOutcome(
-                    launched=False,
-                    message=(
-                        f"'{editor}' needs the terminal, and this session cannot "
-                        "suspend. Configure a GUI editor in /settings."
-                    ),
-                )
-        else:
-            outcome = self.adapter.open_in_editor(self.context.path)
+        outcome = launch_editor(self, self.adapter, self.context.path)
         self.query_one("#context-status", Static).update(outcome.message)
         self.query_one(TabbedContent).active = "tab-inspection"
 
@@ -458,13 +472,13 @@ class HealthView(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Static(id="health-overview")
-        attention = OptionList(id="attention-list")
-        attention.border_title = "Attention"
-        yield attention
+        yield OptionList(id="attention-list")
 
     def show_health(self, health: HealthState) -> None:
         self.health = health
-        self.query_one("#health-overview", Static).update(render_health(health))
+        # A plain section line, not another border: the region border already
+        # frames this view (v0.8.8 de-dup).
+        self.query_one("#health-overview", Static).update(render_health(health) + "\n\nAttention")
         # Options are keyed by list index, not artifact path: several findings
         # may concern the same artifact, and OptionList ids must be unique.
         attention = self.query_one(OptionList)
@@ -503,12 +517,16 @@ class RecommendationsView(Vertical):
         self._paths: list[str] = []
 
     def compose(self) -> ComposeResult:
+        yield Static(id="recommendations-summary")
         yield OptionList(id="recommendations-list")
 
     def show_recommendations(self, recommendations: RecommendationsState) -> None:
         listing = self.query_one(OptionList)
         listing.clear_options()
-        listing.border_title = f"Recommendations ({recommendations.total})"
+        # A plain count line — the region border already says where we are.
+        self.query_one("#recommendations-summary", Static).update(
+            f"{recommendations.total} recommendation(s)"
+        )
         self._paths = []
         options: list[Option | None] = []
         if recommendations.groups:

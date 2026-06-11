@@ -19,10 +19,11 @@ _RECENT_LIMIT = 10
 
 @dataclass
 class Workspace:
-    """Recently opened repositories and the last artifact opened in each."""
+    """Recently opened repositories, plus the last artifact and view in each."""
 
     recent: list[str] = field(default_factory=list)
     last_artifact: dict[str, str] = field(default_factory=dict)
+    last_view: dict[str, str] = field(default_factory=dict)
 
     def record_open(self, directory: str) -> None:
         """Move ``directory`` to the front of the recent list (deduped)."""
@@ -33,6 +34,13 @@ class Workspace:
 
     def resume_artifact(self, directory: str) -> str | None:
         return self.last_artifact.get(directory)
+
+    def record_view(self, directory: str, view: str) -> None:
+        """Remember the active view so resume can restore it (v0.8.8)."""
+        self.last_view[directory] = view
+
+    def resume_view(self, directory: str) -> str | None:
+        return self.last_view.get(directory)
 
 
 def workspace_path() -> Path:
@@ -49,13 +57,20 @@ def load_workspace() -> Workspace:
         return Workspace()
     if not isinstance(data, dict):
         return Workspace()
+
+    def _str_map(key: str) -> dict[str, str]:
+        return {
+            str(k): str(v)
+            for k, v in (data.get(key, {}) or {}).items()
+            if isinstance(k, str) and isinstance(v, str)
+        }
+
     recent = [str(d) for d in data.get("recent", []) if isinstance(d, str)]
-    last = {
-        str(k): str(v)
-        for k, v in (data.get("last_artifact", {}) or {}).items()
-        if isinstance(k, str) and isinstance(v, str)
-    }
-    return Workspace(recent=recent[:_RECENT_LIMIT], last_artifact=last)
+    return Workspace(
+        recent=recent[:_RECENT_LIMIT],
+        last_artifact=_str_map("last_artifact"),
+        last_view=_str_map("last_view"),
+    )
 
 
 def save_workspace(workspace: Workspace) -> None:
@@ -63,7 +78,11 @@ def save_workspace(workspace: Workspace) -> None:
     path = workspace_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"recent": workspace.recent, "last_artifact": workspace.last_artifact}
+        payload = {
+            "recent": workspace.recent,
+            "last_artifact": workspace.last_artifact,
+            "last_view": workspace.last_view,
+        }
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     except OSError:
         pass
