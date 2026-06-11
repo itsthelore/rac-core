@@ -16,6 +16,7 @@ from textual.app import ComposeResult, SuspendNotSupported
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
+from textual.widget import Widget
 from textual.widgets import Input, Markdown, OptionList, Static, TabbedContent, TabPane, Tabs
 from textual.widgets.option_list import Option
 from textual.worker import Worker, WorkerState, get_current_worker
@@ -66,7 +67,7 @@ class SettingsChanged(Message):
         self.key = key
 
 
-def launch_editor(widget, adapter: ExplorerAdapter, path: str) -> editor_mod.EditorOutcome:
+def launch_editor(widget: Widget, adapter: ExplorerAdapter, path: str) -> editor_mod.EditorOutcome:
     """Open ``path`` in the configured editor from any widget (ADR-024).
 
     Terminal editors run with the application suspended and resumed;

@@ -20,6 +20,7 @@ from textual.widgets.option_list import Option
 
 from rac.explorer import commands
 from rac.explorer.adapter import ExplorerAdapter
+from rac.explorer.state import ArtifactRow
 from rac.explorer.widgets.sidebar import type_tag
 
 # Quick-open shows at most this many artifact matches; full result sets
@@ -38,7 +39,7 @@ def _command_option(spec: commands.CommandSpec) -> Option:
     return Option(label, id=f"cmd:{spec.name}")
 
 
-def _artifact_option(row) -> Option:
+def _artifact_option(row: ArtifactRow) -> Option:
     tag, colour = type_tag(row.type)
     label = Text()
     label.append(tag, style=f"bold {colour}")

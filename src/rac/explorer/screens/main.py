@@ -23,7 +23,12 @@ from textual.worker import Worker, WorkerState, get_current_worker
 
 from rac.explorer import commands, mascot
 from rac.explorer.adapter import ExplorerAdapter
-from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
+from rac.explorer.state import (
+    LoadErrorState,
+    LoadProgressState,
+    LookupState,
+    RepositorySummaryState,
+)
 from rac.explorer.widgets.appbar import AppBar
 from rac.explorer.widgets.palette import CommandPalette
 from rac.explorer.widgets.sidebar import NavigationSidebar
@@ -86,7 +91,7 @@ class MainScreen(Screen[None]):
     def __init__(self, adapter: ExplorerAdapter) -> None:
         super().__init__()
         self.adapter = adapter
-        self._history: list[str] = []
+        self._history: list[tuple[str, str | None]] = []
         self._last_focus: Widget | None = None
         # Live reload (v0.8.9): the corpus snapshot the last load saw. None
         # means "do not watch" — before the first successful load, after a
@@ -461,7 +466,7 @@ class MainScreen(Screen[None]):
         options.extend(Option(f"  {example}", disabled=True) for example in commands.EXAMPLES)
         self._show_results(options)
 
-    def _show_lookup(self, lookup) -> None:
+    def _show_lookup(self, lookup: LookupState) -> None:
         if lookup.rows:
             # Artifact rows render through the filterable path (v0.8.9).
             self.query_one(ResultsView).show_lookup(lookup.rows, lookup.message)

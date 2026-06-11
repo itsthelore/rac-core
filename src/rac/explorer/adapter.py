@@ -15,7 +15,7 @@ from pathlib import Path
 from rac.core.frontmatter import split_frontmatter
 from rac.core.fs import find_markdown_files
 from rac.core.operations import CancelToken, OperationCancelled, Progress
-from rac.core.schema import available_schemas, schema_reference
+from rac.core.schema import SchemaReference, available_schemas, schema_reference
 from rac.services.improve import improve_file
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.repository import Artifact, Repository, load_repository
@@ -479,7 +479,7 @@ class ExplorerAdapter:
         return "\n".join(lines)
 
     @staticmethod
-    def _schema_section(ref, section: str) -> str:
+    def _schema_section(ref: SchemaReference, section: str) -> str:
         description = ref.descriptions.get(section)
         values = ref.metadata.get(section)
         line = f"  {section.title()}"
