@@ -7,7 +7,12 @@ type: requirement
 
 ## Status
 
-Proposed
+Deferred
+
+Deferred behind RAC Guide (the v0.10.x series). The agent context surface
+ships first; Watchkeeper, when built, consumes the same Core services and
+stable output contracts Guide consumes. The capability definition below
+stands unchanged.
 
 ## Problem
 
@@ -520,6 +525,8 @@ Watchkeeper succeeds when:
 
 - rac-repository-review-mode
 
+- rac-agent-context-guide
+
 ## Future Considerations
 
 Future versions may add:
@@ -530,4 +537,3 @@ Future versions may add:
 - release intent summaries
 - historical drift reports
 - advanced agent integrations
-```
