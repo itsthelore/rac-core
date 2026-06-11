@@ -8,6 +8,21 @@ details, release history over commit history.
 
 ### Added
 
+- Explorer creation, stats, and the directory view (v0.8.10): the sidebar
+  now mirrors the repository's actual directory structure by default —
+  directories as collapsible nodes (name, trailing `/`, artifact count),
+  nested exactly as on disk, with expansion and cursor surviving reloads at
+  any depth and `/open` revealing a nested artifact along its filesystem
+  path; the `artifact_grouping` setting cycles `folders` | `type` | `flat`.
+  `/new <type> <path>` creates an artifact from its canonical template:
+  preview first, `y` confirms, the ID is minted by the same Core service as
+  `rac new`, and nothing ever overwrites — on success the Explorer reloads
+  and opens the new file, ready for `e`. `/stats` opens a portfolio
+  dashboard (per-type validity, requirement and quality totals, decision
+  status and category breakdowns, relationship counts), collected off the
+  UI thread. `/browse <type>` now lists that type in the filterable results
+  view in every grouping mode; bare `/browse` focuses the sidebar.
+
 - Explorer live workspace and validation depth (v0.8.9): the Explorer now
   watches the repository and reloads itself when artifacts change on disk —
   a cheap path/mtime comparison every two seconds, with the sidebar keeping
