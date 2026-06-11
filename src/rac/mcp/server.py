@@ -19,10 +19,16 @@ input produce identical output, within the per-response character budget
 
 Failed lookups return structured error data, never protocol exceptions
 (ADR-034, :mod:`rac.mcp.errors`): an agent recovers from a JSON body.
+
+Startup diagnostics (v0.10.1): ``run_server`` writes a one-line notice to
+stderr when the repository root contains no recognized artifacts, so the first
+run against a misconfigured or empty root fails helpfully rather than silently.
+stdout belongs to the MCP protocol; only stderr carries diagnostics.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -207,11 +213,40 @@ def build_server(root: str, budget: int = DEFAULT_BUDGET) -> FastMCP:
     return server
 
 
+def _check_corpus(root: str) -> None:
+    """Emit a helpful stderr notice when the repository root has no artifacts.
+
+    Called once at startup — after the validity check for the root directory
+    (which lives in the CLI layer) but before the server begins serving.
+    stdout belongs to the MCP protocol; this function only writes to stderr.
+    Absence of a corpus is not an error (the server runs and ``get_summary``
+    reports zero artifacts), but silence on the first misconfigured run would
+    obscure the problem.
+    """
+    try:
+        index = build_repository_index(root, recursive=True)
+        known = [e for e in index.artifacts if e.type != "unknown"]
+        if not known:
+            print(
+                f"rac mcp: no RAC artifacts found under {root!r}. "
+                "Point --root at a directory containing RAC Markdown artifacts, "
+                "or run 'rac init' to initialize a new repository. "
+                "The server is running; get_summary will report the empty state.",
+                file=sys.stderr,
+            )
+    except Exception:  # pragma: no cover — defensive; corpus walk is stable
+        pass
+
+
 def run_server(root: str, budget: int = DEFAULT_BUDGET) -> int:
     """Run the Guide server over stdio until the client disconnects.
 
     Returns ``0`` on clean shutdown. stdout belongs to the MCP protocol; any
     diagnostics a caller emits go to stderr (the CLI owns that channel).
+
+    Emits a one-line notice to stderr when the repository root contains no
+    recognized artifacts (v0.10.1 startup hardening).
     """
+    _check_corpus(root)
     build_server(root, budget=budget).run(transport="stdio")
     return 0

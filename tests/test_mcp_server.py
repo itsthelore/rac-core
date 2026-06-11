@@ -116,3 +116,52 @@ def test_run_server_returns_zero_on_clean_shutdown(monkeypatch):
 
 def test_default_budget_is_ten_thousand():
     assert DEFAULT_BUDGET == 10_000
+
+
+# --- Empty-corpus startup hardening (v0.10.1) ---------------------------------
+
+
+def test_empty_corpus_startup_emits_helpful_stderr(tmp_path, capsys):
+    # An empty directory (no RAC artifacts) must produce a diagnostic on stderr
+    # so the first misconfigured run fails visibly, not silently.
+    from rac.mcp.server import _check_corpus
+
+    _check_corpus(str(tmp_path))
+    captured = capsys.readouterr()
+    assert captured.out == "", "diagnostics must not go to stdout (protocol channel)"
+    assert "no RAC artifacts found" in captured.err
+    assert "get_summary" in captured.err
+
+
+def test_empty_corpus_get_summary_returns_zero_artifacts(tmp_path):
+    # get_summary must work and report zero artifacts on an empty root, never fail.
+    import asyncio
+    import json
+
+    server = build_server(str(tmp_path))
+    result, _ = asyncio.run(server.call_tool("get_summary", {}))
+    payload = json.loads(result[0].text)
+    assert payload["schema_version"] == "1"
+    assert payload["artifacts"]["total"] == 0
+
+
+def test_non_empty_corpus_startup_emits_no_stderr(capsys):
+    # A root with known artifacts must produce no startup diagnostic.
+    from rac.mcp.server import _check_corpus
+
+    _check_corpus(CORPUS)
+    captured = capsys.readouterr()
+    assert captured.err == "", "no diagnostic expected for a populated corpus"
+
+
+def test_run_server_empty_corpus_exits_zero(tmp_path, monkeypatch):
+    # run_server on an empty root must still start (and exit 0) after emitting
+    # the helpful stderr notice — the empty state is not a fatal error.
+    ran = {}
+
+    def _fake_run(self, transport="stdio", mount_path=None):
+        ran["transport"] = transport
+
+    monkeypatch.setattr("mcp.server.fastmcp.FastMCP.run", _fake_run)
+    assert run_server(str(tmp_path)) == 0
+    assert ran["transport"] == "stdio"
