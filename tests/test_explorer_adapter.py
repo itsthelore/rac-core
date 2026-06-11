@@ -689,9 +689,7 @@ def test_write_new_refusals_write_nothing(tmp_path):
     assert "Directory does not exist" in message
     assert not missing_dir.exists()
 
-    assert adapter.write_new("nonsense", str(tmp_path / "x.md")).startswith(
-        "Unknown artifact type"
-    )
+    assert adapter.write_new("nonsense", str(tmp_path / "x.md")).startswith("Unknown artifact type")
 
 
 def test_write_new_guides_uninitialized_repositories(tmp_path):

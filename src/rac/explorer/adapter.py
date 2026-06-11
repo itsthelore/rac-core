@@ -697,8 +697,7 @@ class ExplorerAdapter:
             *(f"{status:<15} {count}" for status, count in stats.decision_status_counts.items()),
         ]
         categories = [
-            f"{category:<15} {count}"
-            for category, count in stats.decision_category_counts.items()
+            f"{category:<15} {count}" for category, count in stats.decision_category_counts.items()
         ]
         if categories:
             decisions.extend(["", "By category", *categories])
