@@ -14,7 +14,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "tcballard" }]
 keywords = ["requirements", "product-management", "markdown", "linter", "cli", "diff"]
-dependencies = ["markdown-it-py>=3.0", "pyyaml>=6.0"]
+dependencies = ["markdown-it-py>=3.0", "pyyaml>=6.0", "mcp>=1.0"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
