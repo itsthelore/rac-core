@@ -360,6 +360,9 @@ class MainScreen(Screen[None]):
             for row in rows
             if row.path == path
         )
+        # Improvement suggestions (v0.8.9) join the review findings — fetched
+        # on open, never during the repository load.
+        findings += self.adapter.improvement_rows(path)
         # Snapshot before the context view is overwritten, so Esc can unwind
         # artifact-to-artifact traversal across the graph.
         if record and not same:

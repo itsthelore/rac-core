@@ -557,3 +557,36 @@ def test_fingerprint_ignores_non_markdown_and_dotted_dirs(tmp_path):
     hidden.mkdir()
     (hidden / "c.md").write_text("# Hidden\n", encoding="utf-8")
     assert adapter.fingerprint() == baseline
+
+
+# --- improvement suggestions (v0.8.9) ------------------------------------------
+
+
+def _sparse_requirement(tmp_path: Path) -> Path:
+    path = tmp_path / "req-sparse.md"
+    path.write_text(
+        "# Sparse Feature\n\n## Problem\n\nUsers cannot do the thing.\n\n"
+        "## Requirements\n\n[REQ-001] Users can do the thing.\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_improvement_rows_render_missing_sections_with_guidance(tmp_path):
+    path = _sparse_requirement(tmp_path)
+    adapter = ExplorerAdapter(str(tmp_path))
+    adapter.load()
+    rows = adapter.improvement_rows(str(path))
+    assert rows, "a sparse requirement should yield improvement suggestions"
+    assert all(row.category == "Improvement" for row in rows)
+    findings = {row.finding for row in rows}
+    assert any("Success Metrics" in f for f in findings)
+    assert all(row.action for row in rows)  # guidance question or fallback
+
+
+def test_improvement_rows_empty_for_unknown_paths_and_before_load(tmp_path):
+    path = _sparse_requirement(tmp_path)
+    adapter = ExplorerAdapter(str(tmp_path))
+    assert adapter.improvement_rows(str(path)) == ()  # before a load
+    adapter.load()
+    assert adapter.improvement_rows("elsewhere.md") == ()  # outside the load

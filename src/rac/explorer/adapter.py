@@ -15,6 +15,7 @@ from pathlib import Path
 from rac.core.frontmatter import split_frontmatter
 from rac.core.fs import find_markdown_files
 from rac.core.operations import CancelToken, OperationCancelled, Progress
+from rac.services.improve import improve_file
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.repository import Artifact, Repository, load_repository
 from rac.services.resolve import (
@@ -427,6 +428,49 @@ class ExplorerAdapter:
             groups=groups,
             total=len(rows),
         )
+
+    def improvement_rows(self, path: str) -> tuple[RecommendationRow, ...]:
+        """Improvement suggestions for the artifact at ``path`` (v0.8.9).
+
+        Core's improve analysis (`rac improve`) rendered as findings rows
+        under the Improvement group — Explorer shows suggestions, it never
+        applies them (ADR-024). Empty for paths outside the load, types the
+        improve service does not support, and analysis trouble.
+        """
+        repository = self.repository
+        if repository is None:
+            return ()
+        artifact = next((a for a in repository.artifacts if a.path == path), None)
+        if artifact is None:
+            return ()
+        try:
+            result = improve_file(path)
+        except (OSError, ValueError):
+            return ()  # unreadable mid-edit — the findings simply stay review-only
+        if not result.supported:
+            return ()
+        rows: list[RecommendationRow] = []
+        groups = ((True, result.missing_required), (False, result.missing_recommended))
+        for required, sections in groups:
+            for section in sections:
+                guidance = result.guidance.get(section, [])
+                rows.append(
+                    RecommendationRow(
+                        path=path,
+                        identifier=artifact.id,
+                        category="Improvement",
+                        severity_label="! Warning" if required else "· Suggestion",
+                        finding=f"Missing {'required' if required else 'recommended'} "
+                        f"section: {section.title()}",
+                        impact=(
+                            "The schema requires this section; validation fails without it."
+                            if required
+                            else "Filling recommended sections strengthens completeness."
+                        ),
+                        action=guidance[0] if guidance else f"Add a {section.title()} section.",
+                    )
+                )
+        return tuple(rows)
 
     def open_in_editor(self, path: str, *, blocking: bool = False) -> EditorOutcome:
         """Open ``path`` in the user's configured editor (v0.8.4, ADR-024).

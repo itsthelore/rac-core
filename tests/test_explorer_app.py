@@ -1480,3 +1480,25 @@ async def test_inspection_tab_carries_a_diagnostics_badge():
         tabs = app.screen.query_one(TabbedContent)
         label = str(tabs.get_tab("tab-inspection").label)
         assert label.startswith("Inspection (") and label != "Inspection (0)"
+
+
+# --- improvement suggestions on findings (v0.8.9) --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_findings_tab_carries_improvement_suggestions(tmp_path):
+    (tmp_path / "req-sparse.md").write_text(
+        "# Sparse Feature\n\n## Problem\n\nUsers cannot do the thing.\n\n"
+        "## Requirements\n\n[REQ-001] Users can do the thing.\n",
+        encoding="utf-8",
+    )
+    app = ExplorerApp(str(tmp_path))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_first_artifact(app, pilot)
+        panel = str(app.screen.query_one("#findings-panel", Static).content)
+        assert "Improvement" in panel
+        assert "Missing recommended section: Success Metrics" in panel
+        # The badge counts review findings and improvements together.
+        label = str(app.screen.query_one(TabbedContent).get_tab("tab-findings").label)
+        assert label.startswith("Findings (")
