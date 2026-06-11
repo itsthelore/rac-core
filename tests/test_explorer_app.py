@@ -408,6 +408,89 @@ async def test_context_renders_the_artifact_markdown_by_default():
 
 
 @pytest.mark.asyncio
+async def test_content_pane_takes_focus_and_scrolls(tmp_path):
+    from textual.containers import VerticalScroll
+
+    # A document long enough to overflow the pane.
+    body = "# Long Doc\n\n## Problem\n\n" + "\n\n".join(f"Paragraph {i}." for i in range(80))
+    (tmp_path / "req-001.md").write_text(body + "\n\n## Requirements\n\n[REQ-001] x.\n")
+    app = ExplorerApp(str(tmp_path))
+    async with app.run_test(size=(100, 24)) as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"open req-001")
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+
+        pane = app.screen.query_one("#content-scroll", VerticalScroll)
+        assert app.focused is pane  # the document is under the keyboard
+        await pilot.press("j", "j")
+        await pilot.pause()
+        assert pane.scroll_offset.y > 0
+        await pilot.press("k")
+        await pilot.pause()
+
+        # Re-opening resets the reading position to the top.
+        scrolled = pane.scroll_offset.y
+        assert scrolled > 0
+        app.screen.open_artifact(str(tmp_path / "req-001.md"))
+        await pilot.pause()
+        assert pane.scroll_offset.y == 0
+
+
+@pytest.mark.asyncio
+async def test_markdown_links_navigate_in_app(tmp_path):
+    (tmp_path / "adr-001.md").write_text(
+        "# ADR-001 Choose\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n"
+    )
+    (tmp_path / "req-001.md").write_text(
+        "# Search Feature\n\n## Problem\n\nSee [the decision](adr-001.md).\n\n"
+        "## Requirements\n\n[REQ-001] x.\n"
+    )
+    app = ExplorerApp(str(tmp_path))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"open req-001")
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Activate the in-document reference (pointer event, posted directly).
+        markdown = app.screen.query_one("#artifact-markdown", Markdown)
+        view = app.screen.query_one(ContextView)
+        view.post_message(Markdown.LinkClicked(markdown, "adr-001.md"))
+        await pilot.pause()
+        await pilot.pause()
+        title = str(app.screen.query_one("#context-region").border_title)
+        assert "adr-001" in title  # walked the hypertext
+
+        await pilot.press("escape")  # the same history walks back
+        await pilot.pause()
+        title = str(app.screen.query_one("#context-region").border_title)
+        assert "req-001" in title
+
+        # An unresolvable link reports and stays put.
+        view.post_message(Markdown.LinkClicked(markdown, "missing.md"))
+        await pilot.pause()
+        assert "req-001" in str(app.screen.query_one("#context-region").border_title)
+
+
+@pytest.mark.asyncio
+async def test_tabs_carry_count_badges():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"open adr-001")
+        await pilot.press("enter")
+        await pilot.pause()
+        tabs = app.screen.query_one(TabbedContent)
+        assert str(tabs.get_tab("tab-links").label) == "Links (1)"
+        assert str(tabs.get_tab("tab-findings").label) == "Findings"  # none — no badge
+
+
+@pytest.mark.asyncio
 async def test_context_tabs_carry_text_labels():
     # ADR-028: tab meaning rides on the label text, never colour alone.
     app = ExplorerApp(str(FIXTURES / "valid_clean"))

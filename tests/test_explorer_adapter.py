@@ -166,6 +166,27 @@ def test_artifact_markdown_without_frontmatter_is_unchanged():
     assert adapter.artifact_markdown(path) == Path(path).read_text(encoding="utf-8")
 
 
+def test_resolve_link_by_reference_path_and_stem(tmp_path):
+    (tmp_path / "adr-001.md").write_text(
+        "# ADR-001 Choose\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "req-001.md").write_text(
+        "# Search Feature\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] shall work.\n",
+        encoding="utf-8",
+    )
+    adapter = ExplorerAdapter(str(tmp_path))
+    adapter.load()
+    source = str(tmp_path / "req-001.md")
+    target = str(tmp_path / "adr-001.md")
+
+    assert adapter.resolve_link("adr-001", source) == target  # reference
+    assert adapter.resolve_link("adr-001.md", source) == target  # relative path
+    assert adapter.resolve_link("./adr-001.md#status", source) == target  # anchor stripped
+    assert adapter.resolve_link("https://example.com/x", source) is None  # external
+    assert adapter.resolve_link("nope.md", source) is None  # unresolvable
+
+
 def test_artifact_markdown_unknown_path_returns_none():
     adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
     adapter.load()

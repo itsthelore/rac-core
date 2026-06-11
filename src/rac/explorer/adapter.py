@@ -572,6 +572,35 @@ class ExplorerAdapter:
             return f"Could not read {path}: {exc}"
         return split_frontmatter(text).body.lstrip("\n")
 
+    def resolve_link(self, href: str, source_path: str) -> str | None:
+        """Resolve a Markdown link inside an artifact to another artifact (v0.8.8).
+
+        Tries reference resolution (IDs and aliases, `rac resolve` semantics),
+        then a path relative to the linking document, then the linked file's
+        stem as a reference. External URLs and unresolvable links return
+        None — the Explorer reports rather than guesses.
+        """
+        repository = self.repository
+        if repository is None:
+            return None
+        target = href.partition("#")[0].strip()
+        if not target or "://" in target:
+            return None
+        lookup = self.open_ref(target)
+        if len(lookup.rows) == 1 and lookup.message is None:
+            return lookup.rows[0].path
+        candidate = (Path(source_path).parent / target).as_posix()
+        normalized = str(Path(candidate))
+        for artifact in repository.artifacts:
+            if str(Path(artifact.path)) == normalized:
+                return artifact.path
+        stem = Path(target).stem
+        if stem and stem != target:
+            lookup = self.open_ref(stem)
+            if len(lookup.rows) == 1 and lookup.message is None:
+                return lookup.rows[0].path
+        return None
+
     def context_state(self, path: str) -> ContextState | None:
         """The context view for the artifact at ``path``, or None if unknown."""
         repository = self.repository

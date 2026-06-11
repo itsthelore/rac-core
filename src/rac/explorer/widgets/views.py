@@ -301,13 +301,19 @@ class HomeView(Vertical):
 class ContextView(Vertical):
     """One artifact in full: Content │ Inspection │ Links │ Findings.
 
-    Content (the default tab) renders the document's Markdown read-only —
-    editing belongs to external tools (ADR-024).
+    Content (the default tab) renders the document's Markdown read-only
+    (ADR-024) and takes the keyboard on open: the pane scrolls with
+    `j`/`k`/PgUp/PgDn, `←`/`→` switch tabs from anywhere in the view, and
+    artifact references inside the document navigate in place (v0.8.8).
     """
 
     BINDINGS = [
         Binding("e", "open_in_editor", "Open in editor"),
         Binding("g", "links", "Links"),
+        Binding("j", "scroll_content(1)", "Scroll", show=False),
+        Binding("k", "scroll_content(-1)", "Scroll", show=False),
+        Binding("left", "switch_tab(-1)", "Tab", show=False),
+        Binding("right", "switch_tab(1)", "Tab", show=False),
     ]
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
@@ -365,11 +371,49 @@ class ContextView(Vertical):
             blocks = "✓ No findings for this artifact"
         self.query_one("#findings-panel", Static).update(blocks)
 
-        self.query_one(TabbedContent).active = tab or "tab-content"
+        # Count badges: whether a tab is worth visiting, before visiting it.
+        tabs = self.query_one(TabbedContent)
+        links_count = len(self._link_paths)
+        tabs.get_tab("tab-links").label = f"Links ({links_count})" if links_count else "Links"
+        tabs.get_tab("tab-findings").label = (
+            f"Findings ({len(findings)})" if findings else "Findings"
+        )
+
+        tabs.active = tab or "tab-content"
+        # A fresh document starts at the top.
+        self.query_one("#content-scroll", VerticalScroll).scroll_home(animate=False)
 
     def take_focus(self) -> None:
-        # TabbedContent is a container; its Tabs strip takes the focus.
-        self.query_one(Tabs).focus()
+        # The document is the point: the content pane takes the keyboard on
+        # open; other tabs hand focus to the tab strip.
+        if self.query_one(TabbedContent).active == "tab-content":
+            self.query_one("#content-scroll", VerticalScroll).focus()
+        else:
+            self.query_one(Tabs).focus()
+
+    def action_scroll_content(self, direction: int) -> None:
+        self.query_one("#content-scroll", VerticalScroll).scroll_relative(
+            y=direction * 3, animate=False
+        )
+
+    def action_switch_tab(self, direction: int) -> None:
+        tabs = self.query_one(Tabs)
+        if direction > 0:
+            tabs.action_next_tab()
+        else:
+            tabs.action_previous_tab()
+
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        # References inside the document are walkable hypertext: resolve
+        # through the adapter and navigate with the same history as any open.
+        event.stop()
+        if self.context is None:
+            return
+        target = self.adapter.resolve_link(event.href, self.context.path)
+        if target is not None:
+            self.post_message(OpenArtifact(target))
+        else:
+            self.app.notify(f"Cannot resolve link: {event.href}", severity="warning")
 
     def action_open_in_editor(self) -> None:
         # ADR-024: Explorer hands the file to an external editor; it never edits.

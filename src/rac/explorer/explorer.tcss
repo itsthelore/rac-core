@@ -76,6 +76,14 @@ ContextView TabbedContent {
 
 #content-scroll {
     height: 1fr;
+    align-horizontal: center;
+}
+
+/* Notion content focus: cap the reading measure so prose stays readable
+   in wide terminals. */
+#artifact-markdown {
+    max-width: 96;
+    width: 100%;
 }
 
 /* Command palette — summoned by `/`, hidden when idle
