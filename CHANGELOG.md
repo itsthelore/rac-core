@@ -8,6 +8,15 @@ details, release history over commit history.
 
 ### Added
 
+- Review impact and the first-run editor (v0.8.11): every `rac review`
+  finding now carries an `impact` sentence — why it matters — owned by Core
+  and present in the JSON contract (additive field; `schema_version`
+  unchanged), so the CLI, automation, and the Explorer all read identical
+  text. Explorer onboarding gains one optional editor step after the
+  welcome: Enter accepts (an empty value keeps the `$VISUAL`/`$EDITOR`
+  fallback), typing persists the `editor` preference, Esc skips — and
+  returning users never see it.
+
 - Explorer creation, stats, and the directory view (v0.8.10): the sidebar
   now mirrors the repository's actual directory structure by default —
   directories as collapsible nodes (name, trailing `/`, artifact count),
