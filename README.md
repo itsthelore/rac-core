@@ -88,9 +88,12 @@ same standard it applies to your repository:
 
 ## Project Status
 
-RAC is early and evolving quickly. A terminal Explorer for browsing your knowledge
-base is under construction — browse artifacts, open them in context, and search
-or run commands from `/`:
+RAC is early and evolving quickly. A terminal Explorer ships alongside the
+CLI — browse the artifact tree, read documents with their references as
+navigable links, assess repository health, and reach anything from the `/`
+command palette:
+
+![RAC Explorer reading an artifact: the sidebar, tabbed context panel, and status line under the rac-lantern theme](docs/images/explorer-hero.svg)
 
 ```bash
 pip install 'requirements-as-code[explorer]'
