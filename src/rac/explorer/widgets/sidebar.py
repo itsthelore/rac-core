@@ -1,9 +1,11 @@
 """The navigation sidebar — every artifact, one persistent tree (v0.8.7).
 
-A titled panel ("Artifacts") of type groups with counts; rows carry a
-fixed-width colour-coded type tag next to the id and title, so meaning never
-rides on colour alone (ADR-028). Children populate lazily on expand from the
-already-loaded :class:`BrowserState` — the sidebar never calls Core
+A titled panel ("Artifacts") that mirrors the repository's directory
+structure by default (v0.8.10), or groups by type with counts, or lists
+flat — per the grouping preference. Rows carry a fixed-width colour-coded
+type tag next to the id and title, so meaning never rides on colour alone
+(ADR-028). Everything renders from the already-loaded :class:`BrowserState`
+— the sidebar never calls Core and derives no structure of its own
 (ADR-015). The selected artifact's status chip shows in the border-bottom.
 """
 
@@ -15,7 +17,7 @@ from textual.message import Message
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
-from rac.explorer.state import ArtifactRow, BrowserState
+from rac.explorer.state import ArtifactRow, BrowserState, DirectoryNode
 
 # Type → (fixed-width tag, hue). The tag text is always rendered beside the
 # name, so the colour is reinforcement, never the only carrier of meaning.
@@ -67,31 +69,39 @@ class NavigationSidebar(Tree[str]):
         self.border_title = "Artifacts"
         self._rows_by_group: dict[str, tuple[ArtifactRow, ...]] = {}
         self._status_by_path: dict[str, str] = {}
+        # Every eagerly-built node by its data key (folder and flat modes,
+        # plus type-mode group headers) — O(1) reveal and cursor restore.
+        self._node_by_data: dict[str, TreeNode[str]] = {}
 
     def show_repository(self, browser: BrowserState | None) -> None:
         """Rebuild the tree from a loaded repository's browser state.
 
-        Reloads keep the user's place: expanded groups stay expanded and the
-        cursor returns to the same row when it still exists (v0.8.8).
+        Reloads keep the user's place: expanded nodes — nested directories
+        included — stay expanded and the cursor returns to the same row when
+        it still exists (v0.8.8, folders v0.8.10).
         """
-        expanded = {
-            node.data for node in self.root.children if node.allow_expand and node.is_expanded
-        }
+        expanded = self._expanded_data()
         cursor = self.cursor_node.data if self.cursor_node is not None else None
 
         self.clear()
         self.border_subtitle = ""
         self._rows_by_group = {}
         self._status_by_path = {}
+        self._node_by_data = {}
         if browser is None:
             return
         self._status_by_path = {
             row.path: row.status_label for _, rows in browser.groups for row in rows
         }
-        if len(browser.groups) == 1 and browser.groups[0][0] == "all":
+        if browser.tree is not None:
+            # Folders grouping (the default, v0.8.10): the real directory
+            # structure, built eagerly but collapsed.
+            self._add_directory(self.root, browser.tree, expanded)
+        elif len(browser.groups) == 1 and browser.groups[0][0] == "all":
             # Flat grouping (preference): rows directly, no type headers.
             for row in browser.groups[0][1]:
-                self.root.add_leaf(_row_label(row), data=row.path)
+                leaf = self.root.add_leaf(_row_label(row), data=row.path)
+                self._node_by_data[row.path] = leaf
         else:
             for group_type, rows in browser.groups:
                 self._rows_by_group[group_type] = rows
@@ -99,18 +109,56 @@ class NavigationSidebar(Tree[str]):
                 label.append(f"{group_type.title():<14}")
                 label.append(f"{len(rows):>4}", style="dim")
                 node = self.root.add(label, data=f"group:{group_type}")
+                self._node_by_data[f"group:{group_type}"] = node
                 if node.data in expanded:
                     self._populate(node)
                     node.expand()
         if cursor is not None:
             self._restore_cursor(cursor)
 
+    def _expanded_data(self) -> set[str]:
+        """Data keys of every expanded node, however deep."""
+        expanded: set[str] = set()
+        stack = list(self.root.children)
+        while stack:
+            node = stack.pop()
+            if node.allow_expand and node.is_expanded and node.data is not None:
+                expanded.add(node.data)
+            stack.extend(node.children)
+        return expanded
+
+    @staticmethod
+    def _count_rows(directory: DirectoryNode) -> int:
+        return len(directory.rows) + sum(
+            NavigationSidebar._count_rows(child) for child in directory.dirs
+        )
+
+    def _add_directory(
+        self, parent: TreeNode[str], directory: DirectoryNode, expanded: set[str]
+    ) -> None:
+        """Render one directory's children: subdirectories first, then rows."""
+        for child in directory.dirs:
+            label = Text()
+            label.append(f"{child.name}/")
+            label.append(f"  {self._count_rows(child)}", style="dim")
+            data = f"dir:{child.path}"
+            node = parent.add(label, data=data)
+            self._node_by_data[data] = node
+            self._add_directory(node, child, expanded)
+            if data in expanded:
+                node.expand()
+        for row in directory.rows:
+            leaf = parent.add_leaf(_row_label(row), data=row.path)
+            self._node_by_data[row.path] = leaf
+
     def _restore_cursor(self, data: str) -> None:
-        for node in self.root.children:
-            if node.data == data:
-                self.call_after_refresh(self.move_cursor, node)
-                return
-            for child in node.children:
+        node = self._node_by_data.get(data)
+        if node is not None:
+            self.call_after_refresh(self.move_cursor, node)
+            return
+        # Type mode populates lazily, so a leaf may not be in the map yet.
+        for group in self.root.children:
+            for child in group.children:
                 if child.data == data:
                     self.call_after_refresh(self.move_cursor, child)
                     return
@@ -121,7 +169,7 @@ class NavigationSidebar(Tree[str]):
         if node.children or data == group_type:
             return  # already populated, or a leaf
         for row in self._rows_by_group.get(group_type, ()):
-            node.add_leaf(_row_label(row), data=row.path)
+            self._node_by_data[row.path] = node.add_leaf(_row_label(row), data=row.path)
 
     def on_tree_node_expanded(self, event: Tree.NodeExpanded[str]) -> None:
         self._populate(event.node)
@@ -135,24 +183,27 @@ class NavigationSidebar(Tree[str]):
     def reveal(self, path: str) -> None:
         """Move the cursor to ``path`` (after a command-driven open).
 
-        Expands and populates the containing group if needed; moving the
-        cursor selects nothing, so revealing never re-navigates.
+        Expands the chain of containing directories (folders mode) or
+        populates the containing group (type mode); moving the cursor
+        selects nothing, so revealing never re-navigates.
         """
-        for node in self.root.children:
-            candidates = (
-                self._rows_by_group.get((node.data or "").removeprefix("group:"), ())
-                if node.allow_expand
-                else ()
-            )
-            if node.data == path:
-                self.call_after_refresh(self.move_cursor, node)
-                return
+        node = self._node_by_data.get(path)
+        if node is not None:
+            ancestor = node.parent
+            while ancestor is not None and ancestor is not self.root:
+                ancestor.expand()
+                ancestor = ancestor.parent
+            # Newly expanded lines exist only after a refresh.
+            self.call_after_refresh(self.move_cursor, node)
+            return
+        # Type mode populates lazily: find the group whose rows hold the path.
+        for group in self.root.children:
+            candidates = self._rows_by_group.get((group.data or "").removeprefix("group:"), ())
             if any(row.path == path for row in candidates):
-                self._populate(node)
-                node.expand()
-                for child in node.children:
+                self._populate(group)
+                group.expand()
+                for child in group.children:
                     if child.data == path:
-                        # Newly expanded lines exist only after a refresh.
                         self.call_after_refresh(self.move_cursor, child)
                         return
 
@@ -161,23 +212,8 @@ class NavigationSidebar(Tree[str]):
         self.border_subtitle = status_label
 
     def action_edit_highlighted(self) -> None:
+        # Only artifact rows are editable — group headers and directories
+        # carry no file of their own.
         node = self.cursor_node
-        if node is not None and node.data is not None and not node.data.startswith("group:"):
+        if node is not None and node.data is not None and node.data in self._status_by_path:
             self.post_message(self.EditRequested(node.data))
-
-    def focus_group(self, artifact_type: str | None) -> bool:
-        """Focus the tree at ``artifact_type``'s group (the `/browse` route).
-
-        Returns False when the named group does not exist.
-        """
-        if artifact_type:
-            for node in self.root.children:
-                if node.data == f"group:{artifact_type}":
-                    self._populate(node)
-                    node.expand()
-                    self.move_cursor(node)
-                    self.focus()
-                    return True
-            return False
-        self.focus()
-        return True

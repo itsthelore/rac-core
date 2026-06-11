@@ -14,9 +14,13 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+# Sidebar groupings, in settings-cycle order; folders — the repository's
+# real directory structure — is the default (v0.8.10).
+GROUPING_FOLDERS = "folders"
 GROUPING_TYPE = "type"
 GROUPING_FLAT = "flat"
-_GROUPINGS = (GROUPING_TYPE, GROUPING_FLAT)
+GROUPINGS = (GROUPING_FOLDERS, GROUPING_TYPE, GROUPING_FLAT)
+_GROUPINGS = GROUPINGS
 
 
 @dataclass(frozen=True)
@@ -26,7 +30,7 @@ class Preferences:
     theme: str = "rac-lantern"
     mascot: bool = True
     animations: bool = True
-    artifact_grouping: str = GROUPING_TYPE
+    artifact_grouping: str = GROUPING_FOLDERS
     # The default Markdown editor command (v0.8.8); empty falls back to
     # $VISUAL / $EDITOR (DESIGN-editor-integration).
     editor: str = ""

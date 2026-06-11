@@ -6,6 +6,7 @@ from pathlib import Path
 
 from rac.core.operations import CancellationToken
 from rac.explorer.adapter import ExplorerAdapter
+from rac.explorer.preferences import Preferences
 from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
 from rac.services.portfolio import build_portfolio_summary
 
@@ -90,6 +91,7 @@ def test_browser_state_requires_a_load():
 
 def test_browser_state_groups_by_type_in_walk_order():
     adapter = ExplorerAdapter(str(FIXTURES / "all_types"))
+    adapter.preferences = Preferences(artifact_grouping="type")
     adapter.load()
     browser = adapter.browser_state()
     assert browser is not None
@@ -590,3 +592,50 @@ def test_improvement_rows_empty_for_unknown_paths_and_before_load(tmp_path):
     assert adapter.improvement_rows(str(path)) == ()  # before a load
     adapter.load()
     assert adapter.improvement_rows("elsewhere.md") == ()  # outside the load
+
+
+# --- the directory tree (folders grouping, v0.8.10) -----------------------------
+
+
+def _nested_repo(tmp_path: Path) -> Path:
+    (tmp_path / "roadmaps" / "v1").mkdir(parents=True)
+    (tmp_path / "decisions").mkdir()
+    (tmp_path / "roadmaps" / "v1" / "a.md").write_text("# A\n", encoding="utf-8")
+    (tmp_path / "decisions" / "b.md").write_text("# B\n", encoding="utf-8")
+    (tmp_path / "c.md").write_text("# C\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_folders_grouping_mirrors_the_directory_structure(tmp_path):
+    adapter = ExplorerAdapter(str(_nested_repo(tmp_path)))
+    adapter.load()
+    browser = adapter.browser_state()
+    assert browser is not None and browser.tree is not None  # the default mode
+    root = browser.tree
+    assert root.path == "" and [d.name for d in root.dirs] == ["decisions", "roadmaps"]
+    assert [row.path for row in root.rows] == [str(tmp_path / "c.md")]
+    roadmaps = root.dirs[1]
+    assert roadmaps.path == "roadmaps" and [d.name for d in roadmaps.dirs] == ["v1"]
+    v1 = roadmaps.dirs[0]
+    assert v1.path == "roadmaps/v1"  # posix-pinned relpath: the dir: data key
+    assert [row.path for row in v1.rows] == [str(tmp_path / "roadmaps" / "v1" / "a.md")]
+
+
+def test_type_and_flat_groupings_carry_no_tree(tmp_path):
+    adapter = ExplorerAdapter(str(_nested_repo(tmp_path)))
+    adapter.load()
+    for grouping in ("type", "flat"):
+        adapter.preferences = Preferences(artifact_grouping=grouping)
+        browser = adapter.browser_state()
+        assert browser is not None and browser.tree is None
+
+
+def test_type_rows_lists_one_type_for_browse(tmp_path):
+    adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
+    assert adapter.type_rows("decision").message == "Repository not loaded yet"
+    adapter.load()
+    lookup = adapter.type_rows("decision")
+    assert lookup.message is None and len(lookup.rows) == 1
+    assert lookup.rows[0].type == "decision"
+    empty = adapter.type_rows("nonsense")
+    assert empty.rows == () and empty.message == "Nothing to browse: nonsense"

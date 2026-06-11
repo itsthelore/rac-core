@@ -38,7 +38,7 @@ class Invocation:
 REGISTRY: tuple[CommandSpec, ...] = (
     CommandSpec("open", "open <ref>", "Open an artifact by ID or alias"),
     CommandSpec("find", "find <query> [type]", "Search artifacts by ID, title, or path"),
-    CommandSpec("browse", "browse [type]", "Browse all artifacts"),
+    CommandSpec("browse", "browse [type]", "Browse the sidebar; a type lists results"),
     CommandSpec("health", "health", "Show repository health and attention items"),
     CommandSpec(
         "recommendations", "recommendations", "Show recommendations with impact and actions"

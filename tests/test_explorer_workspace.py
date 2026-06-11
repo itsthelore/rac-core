@@ -51,7 +51,9 @@ def test_unknown_grouping_falls_back():
     path = preferences_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"artifact_grouping": "spirals"}), encoding="utf-8")
-    assert load_preferences().artifact_grouping == "type"
+    # Unknown values fall back to the default — folders since v0.8.10.
+    assert load_preferences().artifact_grouping == "folders"
+    assert Preferences().artifact_grouping == "folders"
 
 
 # --- workspace -----------------------------------------------------------------

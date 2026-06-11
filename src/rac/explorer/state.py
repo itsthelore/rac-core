@@ -62,12 +62,30 @@ class ArtifactRow:
 
 
 @dataclass(frozen=True)
+class DirectoryNode:
+    """One directory in the repository tree (folders grouping, v0.8.10).
+
+    ``path`` is the posix relpath from the repository root (the root node
+    carries ``name="" path=""``); ``rows`` are the artifacts directly inside
+    this directory, in repository order.
+    """
+
+    name: str
+    path: str
+    dirs: tuple[DirectoryNode, ...]  # sorted by name
+    rows: tuple[ArtifactRow, ...]
+
+
+@dataclass(frozen=True)
 class BrowserState:
     """The artifact browser: artifacts grouped by type, walk order."""
 
     directory: str
     groups: tuple[tuple[str, tuple[ArtifactRow, ...]], ...]  # (type, rows)
     total: int
+    # Folders grouping (v0.8.10): the repository directory tree mirroring
+    # the structure on disk; None for type and flat grouping.
+    tree: DirectoryNode | None = None
 
 
 @dataclass(frozen=True)

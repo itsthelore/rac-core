@@ -9,8 +9,9 @@ testable without a terminal.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from rac.core.frontmatter import split_frontmatter
 from rac.core.fs import find_markdown_files
@@ -36,12 +37,19 @@ from rac.services.review import (
 
 from . import editor as editor_mod
 from .editor import EditorOutcome
-from .preferences import GROUPING_FLAT, Preferences, load_preferences, save_preferences
+from .preferences import (
+    GROUPING_FLAT,
+    GROUPING_FOLDERS,
+    Preferences,
+    load_preferences,
+    save_preferences,
+)
 from .state import (
     ArtifactRow,
     AttentionRow,
     BrowserState,
     ContextState,
+    DirectoryNode,
     HealthAreaState,
     HealthState,
     ImportPreview,
@@ -143,6 +151,36 @@ def _row(artifact: Artifact) -> ArtifactRow:
         title=artifact.title,
         status_label=_status_label(artifact.status),
     )
+
+
+def _directory_tree(rows: tuple[ArtifactRow, ...], directory: str) -> DirectoryNode:
+    """The repository directory tree from artifact paths (folders grouping).
+
+    Paths are taken relative to the repository root and pinned to posix so
+    the sidebar's expansion keys stay stable across platforms. Empty
+    directories cannot occur — the tree is derived from the artifacts. A
+    path outside the root (cannot happen from the scanner; normalized
+    defensively) lands at the top level.
+    """
+    root: dict = {"dirs": {}, "rows": []}
+    for row in rows:
+        rel = PurePath(os.path.relpath(row.path, directory)).as_posix()
+        parts = [part for part in rel.split("/") if part]
+        if parts and parts[0] == "..":
+            parts = parts[-1:]
+        node = root
+        for part in parts[:-1]:
+            node = node["dirs"].setdefault(part, {"dirs": {}, "rows": []})
+        node["rows"].append(row)
+
+    def freeze(name: str, path: str, node: dict) -> DirectoryNode:
+        dirs = tuple(
+            freeze(child, f"{path}/{child}" if path else child, node["dirs"][child])
+            for child in sorted(node["dirs"])
+        )
+        return DirectoryNode(name=name, path=path, dirs=dirs, rows=tuple(node["rows"]))
+
+    return freeze("", "", root)
 
 
 def _progress_state(progress: Progress) -> LoadProgressState:
@@ -299,11 +337,22 @@ class ExplorerAdapter:
     def browser_state(self, artifact_type: str | None = None) -> BrowserState | None:
         """Artifacts grouped by type for the browser, or None before a load.
 
-        ``artifact_type`` narrows the browser to one group (`/browse decision`).
+        ``artifact_type`` narrows the browser to one group.
         """
         if self.repository is None:
             return None
         repository = self.repository
+        if artifact_type is None and self.preferences.artifact_grouping == GROUPING_FOLDERS:
+            # Folders grouping (the default, v0.8.10): the tree mirrors the
+            # repository's directory structure; groups stay populated so
+            # status lookups need no second path.
+            rows = tuple(_row(a) for a in repository.artifacts)
+            return BrowserState(
+                directory=repository.directory,
+                groups=(("all", rows),),
+                total=len(rows),
+                tree=_directory_tree(rows, repository.directory),
+            )
         if artifact_type is None and self.preferences.artifact_grouping == GROUPING_FLAT:
             # Flat grouping (preference): one list, no type headers.
             rows = tuple(_row(a) for a in repository.artifacts)
@@ -360,6 +409,20 @@ class ExplorerAdapter:
         rows = tuple(_row(by_path[m.path]) for m in result.matches)
         if not rows:
             return LookupState(rows=(), message=f"No matches for '{args.strip()}'")
+        return LookupState(rows=rows)
+
+    def type_rows(self, artifact_type: str) -> LookupState:
+        """Every artifact of one type, for `/browse <type>` (v0.8.10).
+
+        Rendered in the results view in every grouping mode — browsing by
+        type no longer depends on the sidebar having type groups.
+        """
+        repository = self.repository
+        if repository is None:
+            return LookupState(rows=(), message="Repository not loaded yet")
+        rows = tuple(_row(a) for a in repository.artifacts_of_type(artifact_type))
+        if not rows:
+            return LookupState(rows=(), message=f"Nothing to browse: {artifact_type}")
         return LookupState(rows=rows)
 
     def health_state(self) -> HealthState | None:

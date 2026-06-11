@@ -24,7 +24,7 @@ from textual.worker import Worker, WorkerState, get_current_worker
 from rac.explorer import editor as editor_mod
 from rac.explorer import firstrun, mascot
 from rac.explorer.adapter import ExplorerAdapter
-from rac.explorer.preferences import GROUPING_FLAT, GROUPING_TYPE, preferences_path
+from rac.explorer.preferences import GROUPINGS, preferences_path
 from rac.explorer.state import (
     ArtifactRow,
     ContextState,
@@ -707,8 +707,9 @@ class SettingsView(Vertical):
         elif key == "animations":
             updated = replace(prefs, animations=not prefs.animations)
         elif key == "artifact_grouping":
-            grouping = GROUPING_FLAT if prefs.artifact_grouping == GROUPING_TYPE else GROUPING_TYPE
-            updated = replace(prefs, artifact_grouping=grouping)
+            # folders → type → flat → folders (the canonical order, v0.8.10).
+            current = GROUPINGS.index(prefs.artifact_grouping)
+            updated = replace(prefs, artifact_grouping=GROUPINGS[(current + 1) % len(GROUPINGS)])
         else:  # editor — reveal the inline input instead of cycling
             field = self.query_one("#settings-editor-input", Input)
             field.display = True

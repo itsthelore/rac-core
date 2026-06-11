@@ -48,11 +48,13 @@ async def _settled_panel_text(app: ExplorerApp, pilot) -> str:
 
 
 async def _open_first_artifact(app: ExplorerApp, pilot) -> None:
-    """Home → sidebar → expand the first group → open its first artifact."""
+    """Home → sidebar → open the first artifact leaf.
+
+    Fixture repositories keep artifacts at the root, so the folders default
+    (v0.8.10) renders them as top-level leaves.
+    """
     await pilot.press("enter")  # home → sidebar
-    await pilot.press("down", "enter")  # first type group → expand
-    await pilot.pause()
-    await pilot.press("down", "enter")  # first artifact → context view
+    await pilot.press("down", "enter")  # first artifact leaf → context view
     await pilot.pause()
 
 
@@ -319,6 +321,9 @@ async def test_status_line_hints_follow_the_focused_panel():
 
 @pytest.mark.asyncio
 async def test_sidebar_groups_carry_type_tags_and_counts():
+    from rac.explorer.preferences import Preferences, save_preferences
+
+    save_preferences(Preferences(artifact_grouping="type"))
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
@@ -343,15 +348,16 @@ async def test_sidebar_marks_invalid_artifacts():
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
         sidebar = app.screen.query_one(NavigationSidebar)
-        for group in sidebar.root.children:
-            group.expand()
-        await pilot.pause()
-        labels = [str(child.label) for group in sidebar.root.children for child in group.children]
+        # Folders default: root-level artifacts render as top-level leaves.
+        labels = [str(node.label) for node in sidebar.root.children]
         assert any("✗" in label for label in labels)  # trouble visible from the tree
 
 
 @pytest.mark.asyncio
 async def test_sidebar_keeps_expansion_and_cursor_across_reload():
+    from rac.explorer.preferences import Preferences, save_preferences
+
+    save_preferences(Preferences(artifact_grouping="type"))  # lazy-population coverage
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
@@ -706,7 +712,7 @@ async def test_slash_home_returns_to_the_home_view():
 
 
 @pytest.mark.asyncio
-async def test_slash_browse_with_type_filter_focuses_the_group():
+async def test_slash_browse_with_type_lists_in_results_view():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
@@ -714,11 +720,53 @@ async def test_slash_browse_with_type_filter_focuses_the_group():
         await pilot.press(*"browse decision")
         await pilot.press("enter")
         await pilot.pause()
-        sidebar = app.screen.query_one(NavigationSidebar)
-        assert app.focused is sidebar
-        assert sidebar.cursor_node is not None
-        assert sidebar.cursor_node.data == "group:decision"
-        assert sidebar.cursor_node.is_expanded
+        assert app.screen.current_view == "view-results"
+        region = app.screen.query_one("#context-region")
+        assert str(region.border_title) == "Results · 1"
+        await pilot.press("enter")  # first (highlighted) result opens
+        await pilot.pause()
+        assert app.screen.current_view == "view-context"
+        context = app.screen.query_one(ContextView).context
+        assert context is not None and context.type == "decision"
+
+
+@pytest.mark.asyncio
+async def test_slash_browse_behaves_the_same_in_type_grouping():
+    from rac.explorer.preferences import Preferences, save_preferences
+
+    save_preferences(Preferences(artifact_grouping="type"))
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"browse decision")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.screen.current_view == "view-results"  # not a sidebar group
+
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.press("/")
+        await pilot.press(*"browse nonsense")
+        await pilot.press("enter")
+        await pilot.pause()
+        results = app.screen.query_one("#command-results", OptionList)
+        listing = "\n".join(
+            str(results.get_option_at_index(i).prompt) for i in range(results.option_count)
+        )
+        assert "Nothing to browse: nonsense" in listing
+
+
+@pytest.mark.asyncio
+async def test_bare_slash_browse_focuses_the_sidebar():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"browse")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.focused is app.screen.query_one(NavigationSidebar)
 
 
 # --- settings ---------------------------------------------------------------------
@@ -812,16 +860,28 @@ async def test_settings_editor_row_takes_typed_input():
 
 
 @pytest.mark.asyncio
-async def test_settings_grouping_change_rebuilds_sidebar():
+async def test_settings_grouping_cycles_three_values_and_rebuilds_sidebar():
+    from rac.explorer.preferences import load_preferences
+
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
         await _open_settings(app, pilot)
-        await pilot.press("down", "down", "down", "enter")  # artifact_grouping
-        await pilot.pause()
         sidebar = app.screen.query_one(NavigationSidebar)
-        # Flat grouping: rows directly under the root, no type groups.
+
+        await pilot.press("down", "down", "down", "enter")  # folders → type
+        await pilot.pause()
+        assert load_preferences().artifact_grouping == "type"
+        assert all((node.data or "").startswith("group:") for node in sidebar.root.children)
+
+        await pilot.press("enter")  # type → flat
+        await pilot.pause()
+        assert load_preferences().artifact_grouping == "flat"
         assert all((node.data or "").endswith(".md") for node in sidebar.root.children)
+
+        await pilot.press("enter")  # flat → folders (the default)
+        await pilot.pause()
+        assert load_preferences().artifact_grouping == "folders"
 
 
 # --- onboarding -------------------------------------------------------------------
@@ -1196,11 +1256,9 @@ async def test_remains_responsive_at_repository_scale(tmp_path):
     async with app.run_test() as pilot:
         text = await _settled_panel_text(app, pilot)
         assert "Artifacts      1200" in text
-        # The sidebar mounts groups lazily; expanding one renders 600 rows.
+        # Folders default builds eagerly: 1200 root-level leaves at once.
         sidebar = app.screen.query_one(NavigationSidebar)
-        sidebar.root.children[0].expand()
-        await pilot.pause()
-        assert len(sidebar.root.children[0].children) == 600
+        assert len(sidebar.root.children) == 1200
     assert time.monotonic() - started < 60  # generous ceiling; catch regressions
 
 
@@ -1596,3 +1654,103 @@ async def test_results_filter_cycles_types_with_f():
         await pilot.pause()
         assert results.option_count == 2
         assert "Filter: all" in str(filter_line.content)
+
+
+# --- the directory view (folders grouping, v0.8.10) -------------------------------
+
+
+def _nested_repo(tmp_path: Path) -> Path:
+    (tmp_path / "roadmaps" / "v1").mkdir(parents=True)
+    (tmp_path / "decisions").mkdir()
+    (tmp_path / "roadmaps" / "v1" / "deep-roadmap.md").write_text(
+        "# Deep Roadmap\n\n## Outcomes\n\nShip.\n\n## Initiatives\n\nBuild.\n\n"
+        "## Success Measures\n\nShipped.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "decisions" / "some-call.md").write_text("# Some Call\n", encoding="utf-8")
+    (tmp_path / "top-note.md").write_text("# Top Note\n", encoding="utf-8")
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_sidebar_mirrors_the_directory_structure_by_default(tmp_path):
+    app = ExplorerApp(str(_nested_repo(tmp_path)))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        sidebar = app.screen.query_one(NavigationSidebar)
+        labels = [str(node.label) for node in sidebar.root.children]
+        # Directories first (trailing slash + dim count), then root leaves.
+        assert labels[0].startswith("decisions/") and "1" in labels[0]
+        assert labels[1].startswith("roadmaps/") and "1" in labels[1]
+        assert "Top Note" in labels[2]
+
+        roadmaps = sidebar.root.children[1]
+        assert roadmaps.data == "dir:roadmaps"
+        v1 = roadmaps.children[0]
+        assert v1.data == "dir:roadmaps/v1"
+        leaf_label = str(v1.children[0].label)
+        assert leaf_label.startswith("RMP ") and "Deep Roadmap" in leaf_label
+
+
+@pytest.mark.asyncio
+async def test_folder_expansion_and_cursor_survive_reload(tmp_path):
+    app = ExplorerApp(str(_nested_repo(tmp_path)))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # sidebar
+        await pilot.press("down", "down", "enter")  # roadmaps/ → expand
+        await pilot.pause()
+        await pilot.press("down", "enter")  # v1/ → expand
+        await pilot.pause()
+        await pilot.press("down")  # cursor on the nested artifact leaf
+        await pilot.pause()
+        sidebar = app.screen.query_one(NavigationSidebar)
+        cursor_data = sidebar.cursor_node.data
+        assert cursor_data is not None and cursor_data.endswith("deep-roadmap.md")
+
+        await pilot.press("r")  # manual reload
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        await pilot.pause()
+        roadmaps = sidebar.root.children[1]
+        assert roadmaps.is_expanded and roadmaps.children[0].is_expanded
+        assert sidebar.cursor_node is not None
+        assert sidebar.cursor_node.data == cursor_data
+
+        # The watcher's reload keeps the place too (v0.8.9 continuity).
+        (tmp_path / "another.md").write_text("# Another\n", encoding="utf-8")
+        await _force_scan(app, pilot)
+        roadmaps = sidebar.root.children[1]
+        assert roadmaps.is_expanded and roadmaps.children[0].is_expanded
+
+
+@pytest.mark.asyncio
+async def test_open_reveals_a_nested_artifact_along_its_path(tmp_path):
+    app = ExplorerApp(str(_nested_repo(tmp_path)))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("/")
+        await pilot.press(*"open deep-roadmap")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.screen.current_view == "view-context"
+        sidebar = app.screen.query_one(NavigationSidebar)
+        roadmaps = sidebar.root.children[1]
+        assert roadmaps.is_expanded  # the ancestor chain opened
+        assert roadmaps.children[0].is_expanded
+        assert sidebar.cursor_node is not None
+        assert (sidebar.cursor_node.data or "").endswith("deep-roadmap.md")
+
+
+@pytest.mark.asyncio
+async def test_directory_rows_neither_open_nor_edit(tmp_path):
+    app = ExplorerApp(str(_nested_repo(tmp_path)))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # sidebar
+        await pilot.press("down", "enter")  # decisions/ — expands, must not open
+        await pilot.pause()
+        assert app.screen.current_view == "view-home"
+        await pilot.press("e")  # a directory row has no file to edit
+        await pilot.pause()
+        assert app.screen.current_view == "view-home"

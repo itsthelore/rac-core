@@ -401,7 +401,7 @@ class MainScreen(Screen[None]):
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[str]) -> None:
         path = event.node.data
-        if path is not None and not path.startswith("group:"):
+        if path is not None and not path.startswith(("group:", "dir:")):
             self.open_artifact(path, reveal=False)
 
     def action_health(self) -> None:
@@ -567,8 +567,12 @@ class MainScreen(Screen[None]):
             self.show_view("view-import")
         elif invocation.command == "browse":
             artifact_type = invocation.args.casefold() or None
-            if not self.query_one(NavigationSidebar).focus_group(artifact_type):
-                self._show_message(f"Nothing to browse: {invocation.args}")
+            if artifact_type is None:
+                self.query_one(NavigationSidebar).focus()
+            else:
+                # By type lists in the results view — identical in every
+                # grouping mode (v0.8.10).
+                self._show_lookup(self.adapter.type_rows(artifact_type))
         elif invocation.command == "open":
             lookup = self.adapter.open_ref(invocation.args)
             if len(lookup.rows) == 1 and lookup.message is None:
