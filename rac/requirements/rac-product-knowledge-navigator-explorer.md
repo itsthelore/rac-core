@@ -327,6 +327,8 @@ Explorer succeeds when:
 
 - rac-product-intent-ci-watchkeeper
 
+- rac-agent-context-guide
+
 ## Related Artifacts
 
 ### Depends On
