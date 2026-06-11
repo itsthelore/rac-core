@@ -61,7 +61,7 @@ App bar:
 one plain line — application name and version in the accent colour on the left, repository path on the right. No stock Header.
 
 Navigation sidebar:
-a titled rounded panel ("Artifacts") fixed at 28 cells, hidden below 80 columns. Hosts the artifact tree. Rows show the type tag and the artifact title (ID only when untitled); invalid artifacts carry a `✗` marker beside the tag.
+a titled rounded panel ("Artifacts") fixed at 28 cells, hidden below 80 columns. Hosts the artifact tree, which mirrors the repository's directory structure by default (v0.8.10): directory rows show the name with a trailing `/` and a dim artifact count; type and flat groupings remain as settings. Artifact rows show the type tag and the artifact title (ID only when untitled); invalid artifacts carry a `✗` marker beside the tag.
 
 Context panel:
 a titled rounded panel hosting exactly one view at a time (home, artifact context, health, recommendations, import, results, settings). When an artifact is open, the panel title is its `ID — title`.
@@ -182,3 +182,4 @@ Type tags and key chips always carry text; disabling colour loses no meaning.
 
 - v0.8.7-explorer-visual-overhaul
 - v0.8.8-explorer-command-palette
+- v0.8.10-explorer-create-and-stats

@@ -371,15 +371,20 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   `help` · `quit` — anything else is a search, resolved with `rac resolve` /
   `rac find` semantics. Full results render in the context panel (the layout
   never jumps), where `f` narrows artifact results by type — all → each type
-  present → all. `/schema` lists the registered artifact types; `/schema
-  decision` renders the type's expected sections, the same facts `rac
-  schema` reports.
-- **Sidebar:** every artifact under "Artifacts", grouped by type with counts
-  (or flat, per the `artifact_grouping` setting); rows carry a colour-coded
-  type tag (`REQ` `ADR` `RMP` `PRM` `DSG`) beside the title, invalid
-  artifacts are marked `✗`, and the highlighted artifact's status chip shows
-  in the panel border. `e` opens the highlighted artifact in your editor.
-  Expansion and cursor survive reloads; the sidebar hides below 80 columns.
+  present → all. `/browse <type>` lists that type in the results panel in
+  every grouping mode; bare `/browse` focuses the sidebar. `/schema` lists
+  the registered artifact types; `/schema decision` renders the type's
+  expected sections, the same facts `rac schema` reports.
+- **Sidebar:** every artifact under "Artifacts", mirroring the repository's
+  directory structure by default — directories as collapsible nodes (name
+  with a trailing `/` and an artifact count), nested exactly as on disk.
+  The `artifact_grouping` setting cycles `folders` | `type` | `flat`. Rows
+  carry a colour-coded type tag (`REQ` `ADR` `RMP` `PRM` `DSG`) beside the
+  title, invalid artifacts are marked `✗`, and the highlighted artifact's
+  status chip shows in the panel border. `e` opens the highlighted artifact
+  in your editor. Expansion and cursor survive reloads — nested directories
+  included — and opening an artifact reveals it along its filesystem path;
+  the sidebar hides below 80 columns.
 - **Artifact context:** opening an artifact shows four tabs — **Content**
   (the document's rendered Markdown, read-only — the default; it takes the
   keyboard, scrolls with `j`/`k`/PgUp/PgDn, and artifact references inside
@@ -422,7 +427,8 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   `animations = off`, hidden with `mascot = off` — no information is lost).
 - **Settings & continuity:** `/settings` changes everything in place — theme
   (default `rac-lantern`; Enter cycles every Textual theme with live
-  preview), mascot, animations, artifact grouping, and the editor command —
+  preview), mascot, animations, artifact grouping (`folders` default), and
+  the editor command —
   persisted to `$XDG_CONFIG_HOME/rac/explorer.json` (no login, cloud, or
   sync). Explorer remembers recently opened repositories plus the last
   artifact and view per repository (under `$XDG_STATE_HOME/rac/`); `.` or
