@@ -1,0 +1,91 @@
+# Manual rehearsal of the release pipeline against TestPyPI
+# (https://test.pypi.org), so a build can be exercised end-to-end — gate,
+# build, upload, pip install — without the release hitting the real index.
+# Run it from the Actions tab against any branch or tag.
+#
+# Mirrors python-publish.yml stage for stage (test gate -> build -> publish).
+# The deliberate differences:
+#   - trigger: manual (workflow_dispatch) instead of a published release
+#   - index: TestPyPI via repository-url, never PyPI
+#   - version: the local segment (+g<sha>) is stripped at build time, because
+#     PyPI-family indexes reject local versions; the no-local-version override
+#     keeps rehearsal uploads unique per commit (e.g. 0.10.0.dev3).
+#
+# One-time setup before the first run:
+#   1. On test.pypi.org, add a trusted publisher for requirements-as-code
+#      pointing at this repository, this workflow file (test-publish.yml),
+#      and the `testpypi` environment.
+#   2. In the repository settings, create the `testpypi` environment.
+#
+# Install a rehearsal build (deps come from real PyPI via the extra index):
+#   pip install --index-url https://test.pypi.org/simple/ \
+#       --extra-index-url https://pypi.org/simple/ \
+#       requirements-as-code==<rehearsal version>
+
+name: Test Publish (TestPyPI)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Same gate as the real release: the full battery grid must pass before
+    # anything is built or uploaded, so the rehearsal proves the gate too.
+    uses: ./.github/workflows/tests.yml
+
+  rehearsal-build:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # setuptools-scm derives the version from git tags, so we need the
+          # full history + tags (the default shallow checkout omits them).
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build rehearsal distributions
+        env:
+          # Strip the +g<sha> local segment; TestPyPI rejects local versions.
+          SETUPTOOLS_SCM_OVERRIDES_FOR_REQUIREMENTS_AS_CODE: '{ local_scheme = "no-local-version" }'
+        run: |
+          python -m pip install build
+          python -m build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: testpypi-dists
+          path: dist/
+
+  testpypi-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - rehearsal-build
+    permissions:
+      # Mandatory for trusted publishing (same mechanism as the real publish).
+      id-token: write
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/requirements-as-code
+
+    steps:
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: testpypi-dists
+          path: dist/
+
+      - name: Publish release distributions to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
