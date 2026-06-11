@@ -64,7 +64,7 @@ async def test_shell_renders_repository_summary():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
         text = await _settled_panel_text(app, pilot)
-        assert "Artifacts   2" in text
+        assert "Artifacts      2" in text
         assert "requirement" in text and "decision" in text
         assert "Relationships  1" in text
         assert "Health         100 / 100  ✓ Healthy" in text
@@ -112,7 +112,7 @@ async def test_reload_binding_recovers_after_repair(tmp_path):
         bad.write_text("# Repaired Note\n", encoding="utf-8")
         await pilot.press("r")
         text = await _settled_panel_text(app, pilot)
-        assert "Artifacts   1" in text
+        assert "Artifacts      1" in text
 
 
 @pytest.mark.asyncio
@@ -122,7 +122,8 @@ async def test_home_shows_attention_and_hint():
         text = await _settled_panel_text(app, pilot)
         assert "Attention" in text
         assert "! 1 broken relationship" in text
-        assert "Press / for anything" in text
+        # The key hints live in the status-line chips, not panel text (v0.8.8).
+        assert "Press / for anything" not in text
 
 
 # --- the persistent frame -----------------------------------------------------
@@ -327,11 +328,48 @@ async def test_sidebar_groups_carry_type_tags_and_counts():
         assert any("Decision" in label for label in labels)
 
         # Lazy population: rows appear on expand, tagged with text (ADR-028).
+        # The human title leads; the opaque ID lives in the context panel.
         sidebar.root.children[0].expand()
         await pilot.pause()
         row_label = str(sidebar.root.children[0].children[0].label)
         assert row_label.startswith("REQ ")
-        assert "req-001" in row_label
+        assert "Search Feature" in row_label
+        assert "req-001" not in row_label
+
+
+@pytest.mark.asyncio
+async def test_sidebar_marks_invalid_artifacts():
+    app = ExplorerApp(str(FIXTURES / "invalid_known"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        sidebar = app.screen.query_one(NavigationSidebar)
+        for group in sidebar.root.children:
+            group.expand()
+        await pilot.pause()
+        labels = [str(child.label) for group in sidebar.root.children for child in group.children]
+        assert any("✗" in label for label in labels)  # trouble visible from the tree
+
+
+@pytest.mark.asyncio
+async def test_sidebar_keeps_expansion_and_cursor_across_reload():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # focus sidebar
+        await pilot.press("down", "enter")  # expand the first group
+        await pilot.pause()
+        await pilot.press("down")  # cursor onto the first artifact row
+        await pilot.pause()
+        sidebar = app.screen.query_one(NavigationSidebar)
+        cursor_data = sidebar.cursor_node.data
+
+        await pilot.press("r")  # reload rebuilds the tree
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        await pilot.pause()
+        assert sidebar.root.children[0].is_expanded  # the group stayed open
+        assert sidebar.cursor_node is not None
+        assert sidebar.cursor_node.data == cursor_data  # same row under the cursor
 
 
 @pytest.mark.asyncio
@@ -346,7 +384,7 @@ async def test_sidebar_enter_opens_context_and_esc_returns_home():
         assert "Completeness  ✓ all recommended sections present" in text
         assert "Relationships" in text and "Diagnostics" in text
         # The selected artifact's status chip sits in the sidebar border.
-        assert app.screen.query_one(NavigationSidebar).border_subtitle == "✓ valid"
+        assert app.screen.query_one(NavigationSidebar).border_subtitle == "✓ Valid"
 
         await pilot.press("escape")  # context → home (view history)
         await pilot.pause()
@@ -1157,7 +1195,7 @@ async def test_remains_responsive_at_repository_scale(tmp_path):
     app = ExplorerApp(str(root))
     async with app.run_test() as pilot:
         text = await _settled_panel_text(app, pilot)
-        assert "Artifacts   1200" in text
+        assert "Artifacts      1200" in text
         # The sidebar mounts groups lazily; expanding one renders 600 rows.
         sidebar = app.screen.query_one(NavigationSidebar)
         sidebar.root.children[0].expand()
@@ -1173,3 +1211,111 @@ async def test_quit_binding_exits_cleanly():
         await app.workers.wait_for_complete()
         await pilot.press("q")
     assert not app.is_running
+
+
+# --- v0.8.8 refinements --------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_esc_never_dead_ends():
+    # A context view reached via resume has no history — Esc still goes home.
+    directory = str(FIXTURES / "valid_clean")
+    app = ExplorerApp(directory)
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await _open_first_artifact(app, pilot)
+        await pilot.press("q")
+
+    app2 = ExplorerApp(directory)
+    async with app2.run_test() as pilot:
+        await _settled_panel_text(app2, pilot)
+        await pilot.press("full_stop")  # resume straight into the artifact
+        await pilot.pause()
+        assert app2.screen.current_view == "view-context"
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app2.screen.current_view == "view-home"
+
+
+@pytest.mark.asyncio
+async def test_resume_restores_the_last_view():
+    directory = str(FIXTURES / "valid_clean")
+    app = ExplorerApp(directory)
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("h")  # leave the session on the health view
+        await pilot.pause()
+        assert app.screen.current_view == "view-health"
+        await pilot.press("q")
+
+    app2 = ExplorerApp(directory)
+    async with app2.run_test() as pilot:
+        await _settled_panel_text(app2, pilot)
+        await pilot.press("full_stop")
+        await pilot.pause()
+        assert app2.screen.current_view == "view-health"  # the view, not just the artifact
+
+
+@pytest.mark.asyncio
+async def test_question_mark_opens_help():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("question_mark")
+        await pilot.pause()
+        assert app.screen.current_view == "view-results"
+        results = app.screen.query_one("#command-results", OptionList)
+        assert results.option_count == 12  # the whole registry
+
+
+@pytest.mark.asyncio
+async def test_results_title_carries_the_count_and_empty_uses_mascot():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        screen = app.screen
+        screen.route_command("find feature")
+        await pilot.pause()
+        title = str(screen.query_one("#context-region").border_title)
+        assert title.startswith("Results · ")
+
+        screen.route_command("find zzz-no-such-thing")
+        await pilot.pause()
+        assert str(screen.query_one("#context-region").border_title) == "Results · 0"
+        results = screen.query_one("#command-results", OptionList)
+        rendered = " ".join(
+            str(results.get_option_at_index(i).prompt) for i in range(results.option_count)
+        )
+        assert mascot.label(mascot.EMPTY) in rendered  # a calm empty state
+
+
+@pytest.mark.asyncio
+async def test_sidebar_e_opens_highlighted_artifact_in_editor(monkeypatch):
+    import rac.explorer.editor as editor_mod
+
+    launched: list[list[str]] = []
+    monkeypatch.setattr(editor_mod, "_RUNNER", lambda cmd: launched.append(list(cmd)))
+    monkeypatch.setenv("EDITOR", "code")
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.press("enter")  # sidebar
+        await pilot.press("down", "enter")  # expand first group
+        await pilot.pause()
+        await pilot.press("down")  # highlight the first artifact
+        await pilot.press("e")
+        await pilot.pause()
+        assert launched and launched[0][0] == "code"
+        assert launched[0][-1].endswith(".md")
+
+
+@pytest.mark.asyncio
+async def test_app_bar_shows_short_version_and_tilde_path(tmp_path, monkeypatch):
+    from rac.explorer.widgets.appbar import _SHORT_VERSION, _tilde
+
+    assert "+" not in _SHORT_VERSION  # local-build suffix trimmed
+    monkeypatch.setenv("HOME", str(tmp_path))
+    inside = tmp_path / "work" / "repo"
+    assert _tilde(str(inside)) == "~/work/repo"
+    assert _tilde("rac/") == "rac/"  # non-home paths stay as they are

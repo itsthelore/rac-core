@@ -31,26 +31,28 @@ class RepositoryPanel(Static):
         self.update(f"{progress.label}…")
 
     def show_summary(self, summary: RepositorySummaryState) -> None:
+        # One label column (DESIGN-visual-system); the key hints live in the
+        # status-line chips, never duplicated as panel text (v0.8.8).
         lines = [
-            f"Repository  {summary.directory}",
+            f"{'Repository':<15}{summary.directory}",
             "",
-            f"Artifacts   {summary.artifact_total}",
+            f"{'Artifacts':<15}{summary.artifact_total}",
         ]
-        lines.extend(f"  {name:<12} {count}" for name, count in summary.by_type)
+        lines.extend(f"  {name:<13}{count}" for name, count in summary.by_type)
         broken = f" ({summary.broken_relationships} broken)" if summary.broken_relationships else ""
         health = f"{summary.health_score} / 100  {_health_label(summary.health_score)}"
+        diagnostics = f"{summary.error_count} errors, {summary.warning_count} warnings"
         lines.extend(
             [
                 "",
-                f"Relationships  {summary.relationship_total}{broken}",
-                f"Diagnostics    {summary.error_count} errors, {summary.warning_count} warnings",
-                f"Health         {health}",
+                f"{'Relationships':<15}{summary.relationship_total}{broken}",
+                f"{'Diagnostics':<15}{diagnostics}",
+                f"{'Health':<15}{health}",
             ]
         )
         if summary.attention:
             lines.extend(["", "Attention"])
             lines.extend(f"  ! {line}" for line in summary.attention)
-        lines.extend(["", "Press / for anything · Enter to browse"])
         self.update("\n".join(lines))
 
     def show_onboarding(self, summary: RepositorySummaryState, header: str = "") -> None:

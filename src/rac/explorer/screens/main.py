@@ -21,7 +21,7 @@ from textual.widgets import ContentSwitcher, Tree
 from textual.widgets.option_list import Option
 from textual.worker import Worker, WorkerState, get_current_worker
 
-from rac.explorer import commands
+from rac.explorer import commands, mascot
 from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
 from rac.explorer.widgets.appbar import AppBar
@@ -40,6 +40,7 @@ from rac.explorer.widgets.views import (
     SettingsChanged,
     SettingsView,
     ShowRecommendations,
+    launch_editor,
 )
 
 # The sidebar hides below this width so the context panel keeps room to read.
@@ -76,6 +77,7 @@ class MainScreen(Screen[None]):
         Binding("h", "health", "Health"),
         Binding("full_stop", "resume", "Resume last"),
         Binding("escape", "back", "Back"),
+        Binding("question_mark", "help", "Help", show=False),
     ]
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
@@ -139,6 +141,9 @@ class MainScreen(Screen[None]):
         switcher.current = view_id
         self._set_region_title(view_id)
         self.query_one(StatusLine).show_hints(_VIEW_REGIONS[view_id][0])
+        if view_id in ("view-health", "view-recommendations", "view-context"):
+            # Workspace continuity (v0.8.8): resume restores the view too.
+            self.adapter.record_view(view_id)
         if focus:
             self._focus_view(view_id)
 
@@ -184,12 +189,18 @@ class MainScreen(Screen[None]):
 
     def action_back(self) -> None:
         if not self._history:
+            # Never a dead-end: with nothing to unwind, Esc returns home.
+            if self.current_view != "view-home":
+                self.show_view("view-home", record=False)
             return
         view_id, path = self._history.pop()
         if view_id == "view-context" and path is not None:
             self.open_artifact(path, record=False)
             return
         self.show_view(view_id, record=False)
+
+    def action_help(self) -> None:
+        self.route_command("help")
 
     # --- loading (moved from the v0.8.0 repository screen) ----------------------
 
@@ -310,18 +321,42 @@ class MainScreen(Screen[None]):
         return True
 
     def action_resume(self) -> None:
-        # Workspace continuity (v0.8.6): reopen the last artifact, on request.
+        # Workspace continuity (v0.8.6, view restore v0.8.8): reopen the last
+        # view — health and recommendations included — on request.
         if self.query_one(HomeView).onboarding_active:
+            return
+        view = self.adapter.resume_view()
+        if view == "view-health":
+            self.action_health()
+            return
+        if view == "view-recommendations":
+            self._show_recommendations()
             return
         path = self.adapter.resume_path()
         if path is not None:
             self.open_artifact(path)
 
+    def on_navigation_sidebar_edit_requested(
+        self, message: NavigationSidebar.EditRequested
+    ) -> None:
+        message.stop()
+        outcome = launch_editor(self, self.adapter, message.path)
+        self.app.notify(outcome.message)
+
     # --- command routing (the summoned `/` palette) --------------------------------
 
-    def _show_results(self, options: list[Option | None], *, focus: bool = False) -> None:
+    def _show_results(
+        self,
+        options: list[Option | None],
+        *,
+        focus: bool = False,
+        count: int | None = None,
+    ) -> None:
         self.query_one(ResultsView).show_options(options, focus_first=focus)
         self.show_view("view-results", focus=focus)
+        # The panel says what it holds: a count when results are countable.
+        region = self.query_one("#context-region")
+        region.border_title = "Results" if count is None else f"Results · {count}"
 
     def _show_message(self, message: str) -> None:
         self._show_results([Option(message, disabled=True)])
@@ -333,13 +368,19 @@ class MainScreen(Screen[None]):
 
     def _show_lookup(self, lookup) -> None:
         options: list[Option | None] = []
+        if not lookup.rows:
+            # The mascot's empty state keeps zero-result moments calm
+            # (text label included, so `mascot = false` loses nothing).
+            if self.adapter.preferences.mascot:
+                figure = mascot.figure(mascot.EMPTY, animations=self.adapter.preferences.animations)
+                options.append(Option(figure, disabled=True))
         if lookup.message:
             options.append(Option(lookup.message, disabled=True))
         options.extend(
             Option(f"{row.status_label}  {row.title or row.id}  ({row.type})", id=row.path)
             for row in lookup.rows
         )
-        self._show_results(options, focus=bool(lookup.rows))
+        self._show_results(options, focus=bool(lookup.rows), count=len(lookup.rows))
 
     def summon_palette(self) -> None:
         self.query_one(CommandPalette).show()

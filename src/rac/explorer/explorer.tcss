@@ -144,6 +144,31 @@ ConfirmWriteScreen {
     margin-top: 1;
 }
 
+/* Welcome and loading compose centred; the mascot and panel shrink to
+   their content so the block sits as one composed unit. */
+HomeView.welcome {
+    align: center middle;
+}
+
+HomeView.welcome > #repository-panel {
+    width: auto;
+    height: auto;
+    max-width: 90%;
+}
+
+HomeView.welcome > #mascot {
+    width: auto;
+    height: auto;
+}
+
+/* Quiet scrollbars: the accent never rides a scrollbar. */
+MainScreen *, ConfirmWriteScreen * {
+    scrollbar-color: $panel;
+    scrollbar-color-hover: $primary 40%;
+    scrollbar-color-active: $primary 60%;
+    scrollbar-size-vertical: 1;
+}
+
 /* Status line — key chips left, health right. No stock Footer. */
 StatusLine {
     height: 1;

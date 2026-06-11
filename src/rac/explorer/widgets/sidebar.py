@@ -10,6 +10,8 @@ already-loaded :class:`BrowserState` — the sidebar never calls Core
 from __future__ import annotations
 
 from rich.text import Text
+from textual.binding import Binding
+from textual.message import Message
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
@@ -33,18 +35,30 @@ def type_tag(artifact_type: str) -> tuple[str, str]:
 
 
 def _row_label(row: ArtifactRow) -> Text:
+    # The human title leads (the ID lives in the context panel and the
+    # Inspection tab); invalid artifacts carry the ✗ marker beside the tag,
+    # so repository trouble is visible from the tree (ADR-028: text, not
+    # colour, carries the state).
     tag, colour = type_tag(row.type)
     label = Text()
     label.append(tag, style=f"bold {colour}")
-    label.append(" ")
-    label.append(row.id)
-    if row.title and row.title != row.id:
-        label.append(f" {row.title}", style="dim")
+    if "✗" in row.status_label:
+        label.append(" ✗", style="bold")
+    label.append(f" {row.title or row.id}")
     return label
 
 
 class NavigationSidebar(Tree[str]):
     """The persistent artifact tree; node data is the artifact path."""
+
+    BINDINGS = [Binding("e", "edit_highlighted", "Edit", show=False)]
+
+    class EditRequested(Message):
+        """`e` on a highlighted artifact row — open it in the editor."""
+
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
 
     def __init__(self) -> None:
         super().__init__("Artifacts", id="sidebar")
@@ -55,7 +69,16 @@ class NavigationSidebar(Tree[str]):
         self._status_by_path: dict[str, str] = {}
 
     def show_repository(self, browser: BrowserState | None) -> None:
-        """Rebuild the tree from a loaded repository's browser state."""
+        """Rebuild the tree from a loaded repository's browser state.
+
+        Reloads keep the user's place: expanded groups stay expanded and the
+        cursor returns to the same row when it still exists (v0.8.8).
+        """
+        expanded = {
+            node.data for node in self.root.children if node.allow_expand and node.is_expanded
+        }
+        cursor = self.cursor_node.data if self.cursor_node is not None else None
+
         self.clear()
         self.border_subtitle = ""
         self._rows_by_group = {}
@@ -69,13 +92,28 @@ class NavigationSidebar(Tree[str]):
             # Flat grouping (preference): rows directly, no type headers.
             for row in browser.groups[0][1]:
                 self.root.add_leaf(_row_label(row), data=row.path)
-            return
-        for group_type, rows in browser.groups:
-            self._rows_by_group[group_type] = rows
-            label = Text()
-            label.append(group_type.title())
-            label.append(f"  {len(rows)}", style="dim")
-            self.root.add(label, data=f"group:{group_type}")
+        else:
+            for group_type, rows in browser.groups:
+                self._rows_by_group[group_type] = rows
+                label = Text()
+                label.append(f"{group_type.title():<14}")
+                label.append(f"{len(rows):>4}", style="dim")
+                node = self.root.add(label, data=f"group:{group_type}")
+                if node.data in expanded:
+                    self._populate(node)
+                    node.expand()
+        if cursor is not None:
+            self._restore_cursor(cursor)
+
+    def _restore_cursor(self, data: str) -> None:
+        for node in self.root.children:
+            if node.data == data:
+                self.call_after_refresh(self.move_cursor, node)
+                return
+            for child in node.children:
+                if child.data == data:
+                    self.call_after_refresh(self.move_cursor, child)
+                    return
 
     def _populate(self, node: TreeNode[str]) -> None:
         data = node.data or ""
@@ -121,6 +159,11 @@ class NavigationSidebar(Tree[str]):
     def show_status(self, status_label: str) -> None:
         """The selected artifact's status chip in the border-bottom."""
         self.border_subtitle = status_label
+
+    def action_edit_highlighted(self) -> None:
+        node = self.cursor_node
+        if node is not None and node.data is not None and not node.data.startswith("group:"):
+            self.post_message(self.EditRequested(node.data))
 
     def focus_group(self, artifact_type: str | None) -> bool:
         """Focus the tree at ``artifact_type``'s group (the `/browse` route).
