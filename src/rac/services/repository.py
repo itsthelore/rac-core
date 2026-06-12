@@ -14,11 +14,12 @@ CLI command exposes one (ADR-007).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from rac.core.artifacts import spec_for
 from rac.core.classification import missing_sections
-from rac.core.corpus import collect_corpus
+from rac.core.corpus import CorpusEntry, collect_corpus
 from rac.core.models import SearchSection
 from rac.core.operations import CancelToken, Progress, ProgressCallback, checkpoint
 
@@ -181,6 +182,26 @@ def load_repository(
             on_progress(Progress(phase=phase, completed=1, total=1))
 
     entries = collect_corpus(directory, recursive=recursive, on_progress=on_progress, cancel=cancel)
+    return repository_from_corpus(directory, entries, recursive=recursive, on_phase=phase_done)
+
+
+def repository_from_corpus(
+    directory: str,
+    entries: list[CorpusEntry],
+    *,
+    recursive: bool = True,
+    on_phase: Callable[[str], None] | None = None,
+) -> Repository:
+    """Compose the repository model from an already-walked corpus snapshot (v0.12.0).
+
+    The corpus-once seam for consumers that hold their own snapshot — the
+    watchkeeper comparison loads two states and must not pay (or interleave)
+    a second walk per side. Same result as :func:`load_repository`.
+    """
+
+    def phase_done(phase: str) -> None:
+        if on_phase is not None:
+            on_phase(phase)
 
     index = index_from_corpus(directory, entries, recursive=recursive)
     identifiers = {entry.path: entry.id for entry in index.artifacts}
