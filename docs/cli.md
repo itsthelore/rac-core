@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with twenty-one subcommands. This page documents each
+RAC ships a single command, `rac`, with twenty-two subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash

@@ -8,7 +8,7 @@ details, release history over commit history.
 
 ### Added
 
-- Anonymous usage sharing (v0.10.5, opt-in): `rac telemetry on|off|status`
+- Anonymous usage sharing (v0.10.6, opt-in): `rac telemetry on|off|status`
   and a one-time, TTY-only consent question at `rac init` (default No).
   With consent, `rac mcp` sends at most one anonymous daily ping — a random
   install id, the RAC version, and a 30-day active-repo count; never paths,

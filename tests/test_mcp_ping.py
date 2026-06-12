@@ -1,4 +1,4 @@
-"""Anonymous usage ping contracts — consented, pinned, one module wide (v0.10.5).
+"""Anonymous usage ping contracts — consented, pinned, one module wide (v0.10.6).
 
 The battery pins ADR-041's shape: nothing sends without recorded consent and a
 configured key; the payload is the entire transmission, asserted key-for-key

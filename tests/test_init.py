@@ -118,7 +118,7 @@ def test_cli_init_missing_directory_exit_2(tmp_path, capsys):
     assert exc.value.code == 2
 
 
-# --- usage-sharing prompt (v0.10.5, ADR-041) ----------------------------------
+# --- usage-sharing prompt (v0.10.6, ADR-041) ----------------------------------
 
 
 def _tty(monkeypatch, stdin: bool, stdout: bool) -> None:

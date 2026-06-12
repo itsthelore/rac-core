@@ -1,4 +1,4 @@
-"""Usage-sharing consent — opt-in twice over, anonymous by construction (v0.10.5).
+"""Usage-sharing consent — opt-in twice over, anonymous by construction (v0.10.6).
 
 ADR-041 allows RAC one anonymous daily ping, and only with consent recorded
 here. The record lives as JSON under ``$XDG_CONFIG_HOME/rac/telemetry.json``

@@ -26,7 +26,7 @@ classifies the structured payload, and returns it unchanged — tool responses
 are byte-identical with telemetry on and off, and the log is never an input
 to a response. Default is off; nothing is recorded without ``--telemetry``.
 
-Anonymous usage sharing (v0.10.5, ADR-041): with consent recorded via
+Anonymous usage sharing (v0.10.6, ADR-041): with consent recorded via
 ``rac telemetry on`` (or the ``rac init`` prompt), ``run_server`` starts the
 daily-ping daemon thread (:mod:`rac.mcp.ping`) — at most one pinned,
 content-free ping per 24 hours, independent of ``--telemetry``, announced on

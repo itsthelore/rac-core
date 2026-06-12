@@ -1,4 +1,4 @@
-"""The anonymous daily ping — RAC's entire network surface (v0.10.5).
+"""The anonymous daily ping — RAC's entire network surface (v0.10.6).
 
 ADR-041 allows one transmission and pins it in full: with consent recorded
 (:mod:`rac.consent`) and a PostHog key configured, the Guide server sends at
