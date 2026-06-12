@@ -1,0 +1,15 @@
+.lore-check {
+  margin: 0;
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.lore-check__glyph {
+  color: var(--success);
+  flex: none;
+}
+
+.lore-check__text {
+  color: var(--text);
+}

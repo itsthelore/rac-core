@@ -1,0 +1,6 @@
+{
+  "lore_web_commit": "39fb44e",
+  "shell_sha256": "0dabe5939d3fa684030b1e3a9a798d780e317e294f9fdd68edee7b543b5e220d",
+  "viewer_source_sha256": "82a56a553a5e8d6a780cbbe188f726c78c23258b2613c229b9506b37da8800eb",
+  "vendored_with": "lore-web/scripts/vendor-portal-shell.mjs"
+}

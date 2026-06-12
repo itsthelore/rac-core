@@ -1,0 +1,239 @@
+/* Landing page layout and local styles. Every colour, space and border
+ * comes from src/styles/tokens.css — no literal colour values here. */
+
+/* Smooth anchor scrolling, respecting reduced-motion preferences. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ---- page shell ------------------------------------------------------- */
+
+.landing {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--space-5);
+  /* keep the last content clear of the fixed footer palette */
+  padding-bottom: calc(var(--space-8) + var(--space-7));
+}
+
+.landing__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-7);
+  align-items: start;
+}
+
+.landing__main > * + * {
+  margin-top: var(--space-6);
+}
+
+.landing__rail > * + * {
+  margin-top: var(--space-5);
+}
+
+.landing__section {
+  scroll-margin-top: var(--space-5);
+}
+
+.landing__section:focus {
+  /* focus arrives programmatically from the palette; the scroll is the
+   * indicator — no ring on the whole section */
+  outline: none;
+}
+
+.landing__h2 {
+  color: var(--text);
+  font-size: var(--font-size);
+  margin-bottom: var(--space-4);
+}
+
+/* ---- hero ------------------------------------------------------------- */
+
+.hero {
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-start;
+}
+
+.hero__mascot {
+  /* high-resolution art shipped at 2x density (500x395 -> 250px wide);
+   * not pixel-grid, so no .pixel-art treatment */
+  width: 250px;
+  height: auto;
+  max-width: 100%;
+  flex: none;
+}
+
+.hero__title {
+  color: var(--accent);
+  font-size: var(--font-size-xl);
+  max-width: 26ch;
+}
+
+.hero__sub {
+  color: var(--text-muted);
+  margin-top: var(--space-4);
+  max-width: 40ch;
+}
+
+/* ---- differentiators --------------------------------------------------- */
+
+.diff__list {
+  list-style: none;
+}
+
+.diff__list > * + * {
+  margin-top: var(--space-3);
+}
+
+.diff__item {
+  /* the mock's vertical amber accent rule; decorative per the mockup,
+   * not an interactive border */
+  border-left: 2px solid var(--accent);
+  padding-left: var(--space-3);
+  color: var(--text);
+}
+
+.diff__em {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---- next steps -------------------------------------------------------- */
+
+.next__list > * + * {
+  margin-top: var(--space-3);
+}
+
+/* ---- demo recording ------------------------------------------------------ */
+
+/* animated SVG of a real recorded session; it carries its own window
+ * chrome, so no TerminalFrame wrapper. The frame holds the SVG's
+ * aspect ratio so the deferred img mounts without layout shift. */
+.demo__frame {
+  width: 100%;
+  aspect-ratio: 840 / 581;
+}
+
+.demo__recording {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.demo__caption {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-3);
+  max-width: 60ch;
+}
+
+/* ---- get lore ------------------------------------------------------------ */
+
+.get__steps > * + * {
+  margin-top: var(--space-3);
+}
+
+.get__step {
+  color: var(--text);
+}
+
+.get__lead {
+  color: var(--text-muted);
+}
+
+.get__note {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-4);
+  max-width: 62ch;
+}
+
+/* ---- right rail ---------------------------------------------------------- */
+
+.rail__heading {
+  color: var(--accent);
+  font-size: var(--font-size);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 4px;
+}
+
+.rail__note {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-2);
+}
+
+.rail__label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  margin-bottom: var(--space-3);
+}
+
+.rail__tools {
+  margin-bottom: var(--space-5);
+}
+
+.rail__tools > * + * {
+  margin-top: var(--space-3);
+}
+
+/* ---- copyable command ----------------------------------------------------- */
+
+.copy-cmd__code {
+  /* commands are semantic: teal, as in the Prompt tool variant */
+  color: var(--info);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.copy-cmd__button {
+  /* interactive: solid border, element surface */
+  background: var(--bg-element);
+  border: var(--line);
+  border-radius: var(--radius-key);
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  padding: 0 var(--space-2);
+  margin-left: var(--space-2);
+  cursor: pointer;
+}
+
+.copy-cmd__button:hover {
+  border-color: var(--border-active);
+  color: var(--accent);
+}
+
+/* ---- responsive ------------------------------------------------------------ */
+
+@media (max-width: 56rem) {
+  .landing__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+}
+
+@media (max-width: 30rem) {
+  .landing {
+    padding: var(--space-3);
+    padding-bottom: calc(var(--space-8) + var(--space-7));
+  }
+
+  .hero {
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .hero__mascot {
+    width: 200px;
+  }
+
+  .hero__title {
+    font-size: var(--font-size-lg);
+  }
+}

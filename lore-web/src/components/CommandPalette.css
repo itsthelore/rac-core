@@ -1,0 +1,101 @@
+.lore-palette {
+  position: relative;
+}
+
+.lore-palette--fixed {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 10;
+}
+
+.lore-palette__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--bg-panel);
+  border-top: var(--dash-subtle);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* inline (non-fixed) usage gets full chrome */
+.lore-palette:not(.lore-palette--fixed) .lore-palette__bar {
+  border: var(--dash-subtle);
+}
+
+.lore-palette__prompt {
+  color: var(--accent);
+  font-weight: 700;
+  flex: none;
+}
+
+.lore-palette__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size);
+  caret-color: var(--accent);
+  min-width: 0;
+}
+
+.lore-palette__input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.lore-palette__input:focus-visible {
+  outline: none; /* the bar carries focus styling */
+}
+
+.lore-palette:focus-within .lore-palette__bar {
+  border-color: var(--border-active);
+}
+
+/* the listbox opens above the bar (it is fixed-bottom capable) */
+.lore-palette__list {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin: 0 0 var(--space-1);
+  padding: var(--space-1);
+  list-style: none;
+  background: var(--bg-panel);
+  border: var(--line); /* interactive: solid */
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.lore-palette__option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.lore-palette__option-label {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.lore-palette__option-hint {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.lore-palette__option--active {
+  background: var(--accent-muted);
+}
+
+.lore-palette__option--active .lore-palette__option-label {
+  color: var(--accent-bright);
+}
+
+.lore-palette__empty {
+  color: var(--text-muted);
+  padding: var(--space-1) var(--space-2);
+}

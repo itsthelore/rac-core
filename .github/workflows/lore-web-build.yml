@@ -1,0 +1,63 @@
+name: Lore Web Build
+
+# Builds the lore-web static surface to a CI artifact only. There is
+# deliberately NO publish or deploy step: GATE-1 — the site must not go
+# public until external-communications policy review is complete.
+on:
+  pull_request:
+    paths:
+      - "lore-web/**"
+      - ".github/workflows/lore-web-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lore-web-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (vite static + viewer artifact)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lore-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: lore-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Design-system gate — no hex literals outside tokens.css
+        run: |
+          if grep -rn '#[0-9a-fA-F]\{3,8\}' src/ index.html viewer/index.html demo/index.html \
+            --include='*.tsx' --include='*.ts' --include='*.css' --include='*.html' \
+            | grep -v 'styles/tokens.css'; then
+            echo 'Hex literal found outside tokens.css' >&2
+            exit 1
+          fi
+
+      - name: Contrast report
+        run: npm run contrast
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Build single-file viewer artifact
+        run: npm run build:viewer
+
+      # Upload only — no deploy (GATE-1).
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lore-web-dist
+          path: lore-web/dist/
+          retention-days: 14

@@ -1,0 +1,181 @@
+import { useState } from 'react';
+import {
+  CheckItem,
+  CommandPalette,
+  KeyboardHint,
+  Panel,
+  Prompt,
+  TerminalFrame,
+} from '../components';
+import type { CommandPaletteItem } from '../components';
+import lanternUrl from '../../design/lantern.png';
+import './demo.css';
+
+interface SectionProps {
+  name: string;
+  note?: string;
+  children: React.ReactNode;
+}
+
+function Section({ name, note, children }: SectionProps) {
+  return (
+    <section className="demo-section">
+      <h2 className="demo-section__name">{name}</h2>
+      {note ? <p className="demo-section__note">{note}</p> : null}
+      <div className="demo-section__body">{children}</div>
+    </section>
+  );
+}
+
+export function DemoApp() {
+  const [lastAction, setLastAction] = useState<string>('none yet');
+
+  const paletteItems: CommandPaletteItem[] = [
+    {
+      label: 'get_summary',
+      hint: 'repo decision map',
+      action: () => setLastAction('get_summary'),
+    },
+    {
+      label: 'search_artifacts',
+      hint: 'find the relevant decision',
+      action: () => setLastAction('search_artifacts'),
+    },
+    {
+      label: 'get_artifact',
+      hint: 'full record, by ID',
+      action: () => setLastAction('get_artifact'),
+    },
+    {
+      label: 'get_related',
+      hint: 'walk the graph',
+      action: () => setLastAction('get_related'),
+    },
+    {
+      label: 'lore validate',
+      hint: 'gate the graph on every push',
+      action: () => setLastAction('lore validate'),
+    },
+    {
+      label: 'Docs',
+      hint: 'section',
+      action: () => setLastAction('navigate: docs'),
+    },
+    {
+      label: 'Closed beta',
+      hint: 'section',
+      action: () => setLastAction('navigate: closed beta'),
+    },
+  ];
+
+  return (
+    <main className="demo">
+      <header className="demo-header">
+        <h1 className="demo-header__title">Lore design system — primitives</h1>
+        <p className="demo-header__sub">
+          Every colour, space and border on this page comes from
+          src/styles/tokens.css. Dashed borders are container chrome; solid
+          borders are interactive.
+        </p>
+      </header>
+
+      <Section
+        name="Panel"
+        note="Dashed chrome with the title sitting in a gap in the top border."
+      >
+        <Panel title="Why agents do better with Lore">
+          <CheckItem>Citations by ID — decisions land in the diff</CheckItem>
+          <CheckItem>Typed Markdown + YAML, versioned with your code</CheckItem>
+          <CheckItem>One command: claude mcp add lore -- lore mcp</CheckItem>
+        </Panel>
+      </Section>
+
+      <Section
+        name="TerminalFrame"
+        note="Traffic lights, amber title bar, dashed outer border."
+      >
+        <TerminalFrame title="Lore — CLOSED BETA">
+          <p>
+            Ground every agent edit in what your team actually decided.
+          </p>
+        </TerminalFrame>
+      </Section>
+
+      <Section
+        name="Prompt"
+        note="Tool variant (teal, semantic: commands) and numbered next-step variant."
+      >
+        <div className="demo-stack">
+          <Prompt command="get_summary" description="repo decision map" />
+          <Prompt
+            command="search_artifacts"
+            description="find the relevant decision"
+          />
+          <Prompt command="get_artifact" description="full record, by ID" />
+          <Prompt command="get_related" description="walk the graph" />
+        </div>
+        <div className="demo-stack">
+          <Prompt variant="next" index={1}>
+            Run the 90-second demo.
+          </Prompt>
+          <Prompt variant="next" index={2}>
+            See the four MCP tools.
+          </Prompt>
+          <Prompt variant="next" index={3}>
+            Join the closed beta.
+          </Prompt>
+        </div>
+      </Section>
+
+      <Section name="CheckItem" note="Green is semantic: pass/check only.">
+        <div className="demo-stack">
+          <CheckItem>Deterministic graph lookups — no RAG, no guessing</CheckItem>
+          <CheckItem>Read-only MCP server — four tools, one command</CheckItem>
+        </div>
+      </Section>
+
+      <Section
+        name="KeyboardHint"
+        note="Solid border: the interactive affordance style."
+      >
+        <p>
+          Press <KeyboardHint keys={['Ctrl', 'K']} /> to open the palette, or{' '}
+          <KeyboardHint keys={['Esc']} /> to dismiss it.
+        </p>
+      </Section>
+
+      <Section
+        name="CommandPalette"
+        note="Filterable listbox over {label, hint, action} items. Combobox ARIA pattern, result counts announced. It navigates and invokes callbacks — it is not a chatbot."
+      >
+        <p className="demo-palette-state">
+          Last invoked action: <strong>{lastAction}</strong>
+        </p>
+        <CommandPalette items={paletteItems} ariaLabel="Navigate the demo" />
+      </Section>
+
+      <Section
+        name="Pixel lantern (placeholder)"
+        note="Generated by scripts/make-lantern.mjs from token colours; rendered at integer scale with image-rendering: pixelated. Placeholder pending the real lamplighter mascot."
+      >
+        <div className="demo-lanterns">
+          <img
+            className="pixel-art demo-lantern demo-lantern--x4"
+            src={lanternUrl}
+            alt="Pixel-art lantern placeholder"
+            width={16}
+            height={24}
+          />
+          <img
+            className="pixel-art demo-lantern demo-lantern--x6"
+            src={lanternUrl}
+            alt=""
+            aria-hidden="true"
+            width={16}
+            height={24}
+          />
+        </div>
+      </Section>
+    </main>
+  );
+}

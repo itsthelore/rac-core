@@ -15,6 +15,7 @@ from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
 from rac.services.create import CreatedArtifact
+from rac.services.export import CorpusExport
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
 from rac.services.ingest import IngestResult
@@ -259,6 +260,18 @@ def render_portfolio_json(s: PortfolioSummary) -> str:
 def render_index_json(index: RepositoryIndex) -> str:
     """JSON `rac index` output (stable contract, ADR-007)."""
     return json.dumps(index.to_dict(), indent=2)
+
+
+# --- export (v0.11.0) ---------------------------------------------------------
+
+
+def render_export_json(export: CorpusExport) -> str:
+    """JSON `rac export` output (stable contract, ADR-007).
+
+    This payload *is* the product: it is what the Portal shell embeds and what
+    external viewers consume (ADR-014).
+    """
+    return json.dumps(export.to_dict(), indent=2)
 
 
 # --- create (rac new / rac templates, v0.7.10) -------------------------------

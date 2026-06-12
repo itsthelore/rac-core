@@ -8,6 +8,23 @@ details, release history over commit history.
 
 ### Added
 
+- Portal export (v0.11.0): `rac export` turns a repository's corpus
+  into shareable artifacts. The default mode prints a deterministic
+  JSON payload to stdout — artifacts with stable ids, aliases, type,
+  status, title, path, and CommonMark-rendered bodies (raw HTML in
+  sources arrives escaped), plus relationships as `relates-to` edges
+  with unresolved references preserved verbatim — a stable contract for
+  anyone building their own viewer. `rac export --html` writes the
+  Portal: one self-contained HTML file with search, type/status
+  filters, citation cross-links, and a related-artifacts panel, opening
+  from `file://` with zero network requests — attach it to a release or
+  send it to a stakeholder. The viewer shell is vendored from the
+  repository's own `lore-web` source with provenance recorded, and a
+  drift-guard test fails the build if the viewer source changes without
+  re-vendoring. No timestamps and stable ordering keep two exports of
+  the same tree byte-identical; both output modes are pinned by golden
+  and round-trip tests. No new dependencies.
+
 - Anonymous usage sharing (v0.10.6, opt-in): `rac telemetry on|off|status`
   and a one-time, TTY-only consent question at `rac init` (default No).
   With consent, `rac mcp` sends at most one anonymous daily ping — a random

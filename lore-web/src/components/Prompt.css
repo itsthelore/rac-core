@@ -1,0 +1,26 @@
+.lore-prompt {
+  margin: 0;
+}
+
+/* commands and tools are semantic: teal */
+.lore-prompt__glyph {
+  color: var(--info);
+}
+
+.lore-prompt__command {
+  color: var(--info);
+  font-weight: 700;
+}
+
+.lore-prompt__desc {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.lore-prompt__num {
+  color: var(--accent);
+}
+
+.lore-prompt__text {
+  color: var(--text);
+}

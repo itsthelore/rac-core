@@ -1,0 +1,468 @@
+{
+  "schema_version": "1",
+  "corpus": {
+    "name": "ledgerline — SAMPLE DATA (fictional service)",
+    "rac_version": "0.0.0-sample",
+    "artifact_count": 30,
+    "sample": true
+  },
+  "artifacts": [
+    {
+      "id": "RAC-YW02VDR2Z2RT",
+      "aliases": [
+        "adr-001",
+        "adr-001-record-architecture-decisions-as-adrs"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Record architecture decisions as ADRs",
+      "path": "lore/decisions/adr-001-record-architecture-decisions-as-adrs.md",
+      "body_html": "<p>Ledgerline has grown past the point where decisions survive in chat history. New engineers re-litigate settled questions because the reasoning behind the current shape of the system is not written down anywhere durable.</p>\n<p>We will record every architecturally significant decision as a numbered ADR in the repository, in typed Markdown with YAML frontmatter, reviewed through the same pull-request flow as code.</p>\n<p>Consequence: decisions are versioned with the code they govern, and superseding a decision is an explicit, reviewable act rather than silent drift.</p>"
+    },
+    {
+      "id": "RAC-6VD81MBSCA2F",
+      "aliases": [
+        "adr-002",
+        "adr-002-use-flask-for-the-http-layer"
+      ],
+      "type": "adr",
+      "status": "Superseded",
+      "title": "Use Flask for the HTTP layer",
+      "path": "lore/decisions/adr-002-use-flask-for-the-http-layer.md",
+      "body_html": "<p>The original prototype needed an HTTP layer quickly and the team knew Flask well. The service surface was three endpoints and a health check.</p>\n<p>We chose Flask with blueprints, gunicorn workers, and marshmallow for request validation.</p>\n<p>This decision was superseded by ADR-014 when the endpoint count and the cost of hand-rolled validation outgrew the framework. The migration notes live with ADR-014.</p>"
+    },
+    {
+      "id": "RAC-S02J1C9WRCEH",
+      "aliases": [
+        "adr-003",
+        "adr-003-postgresql-as-the-primary-datastore"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "PostgreSQL as the primary datastore",
+      "path": "lore/decisions/adr-003-postgresql-as-the-primary-datastore.md",
+      "body_html": "<p>Ledgerline is a ledger: correctness under concurrent writes matters more than write throughput. We evaluated PostgreSQL, MySQL and DynamoDB against our consistency and reporting requirements.</p>\n<p>PostgreSQL wins on transactional semantics, mature tooling, and the team’s operational experience. Serializable isolation is available where the ledger invariants demand it.</p>\n<p>All durable state lives in a single PostgreSQL cluster until measurement, not intuition, proves we need otherwise. Reporting load is addressed separately in ADR-023.</p>"
+    },
+    {
+      "id": "RAC-T9J5YN2V5EP8",
+      "aliases": [
+        "adr-004",
+        "adr-004-schema-migrations-with-alembic"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Schema migrations with Alembic",
+      "path": "lore/decisions/adr-004-schema-migrations-with-alembic.md",
+      "body_html": "<p>Schema changes were being applied by hand against staging and production, and the two had drifted. We need migrations that are ordered, reviewable and reversible.</p>\n<p>We adopt Alembic, with one migration per pull request and a CI check that the migration history applies cleanly to an empty database. Autogenerate output is a starting point, never committed unreviewed.</p>\n<p>Destructive migrations (drops, type narrowing) require a two-step expand/contract sequence across releases, so deploys stay backwards compatible per ADR-028.</p>"
+    },
+    {
+      "id": "RAC-Y3FE4XMV5C14",
+      "aliases": [
+        "adr-005",
+        "adr-005-celery-with-a-redis-broker-for-background-work"
+      ],
+      "type": "adr",
+      "status": "Superseded",
+      "title": "Celery with a Redis broker for background work",
+      "path": "lore/decisions/adr-005-celery-with-a-redis-broker-for-background-work.md",
+      "body_html": "<p>Invoice generation and webhook delivery are too slow for the request path. We need a task queue.</p>\n<p>We chose Celery with Redis as the broker, since Redis was already deployed for caching (ADR-006) and Celery was the de facto standard for Python at the time.</p>\n<p>In practice Celery’s configuration surface and prefork worker model caused recurring operational pain. Superseded by ADR-021, which records the move to Dramatiq.</p>"
+    },
+    {
+      "id": "RAC-BKQF8PWYREH0",
+      "aliases": [
+        "adr-006",
+        "adr-006-redis-caching-with-explicit-ttls-only"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Redis caching with explicit TTLs only",
+      "path": "lore/decisions/adr-006-redis-caching-with-explicit-ttls-only.md",
+      "body_html": "<p>Tariff lookups and customer entitlement checks dominate read load and change rarely. A cache is justified; an incoherent cache in a billing system is not.</p>\n<p>We cache in Redis with an explicit TTL on every key and no cache-invalidation-by-event anywhere. If a value cannot tolerate being stale for its TTL, it must not be cached.</p>\n<p>Keys follow the pattern documented in STD-002, and every cached read path must degrade correctly when Redis is unavailable: the cache is an optimisation, never a source of truth.</p>"
+    },
+    {
+      "id": "RAC-49R5AMBEQPAJ",
+      "aliases": [
+        "adr-007",
+        "adr-007-authenticate-via-oidc-against-the-corporate-idp"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Authenticate via OIDC against the corporate IdP",
+      "path": "lore/decisions/adr-007-authenticate-via-oidc-against-the-corporate-idp.md",
+      "body_html": "<p>Ledgerline must not own passwords. Operators authenticate with their corporate identity; service-to-service callers use workload identities.</p>\n<p>Human sessions use the OIDC authorization-code flow against the corporate identity provider. Machine callers present short-lived JWTs minted by the platform’s workload identity service; we validate issuer, audience and expiry on every request.</p>\n<p>No local user table, no API keys in headers, no long-lived shared secrets. Authorization is a separate concern, recorded in ADR-008.</p>"
+    },
+    {
+      "id": "RAC-G54WT38ZFVXG",
+      "aliases": [
+        "adr-008",
+        "adr-008-role-based-authorization-enforced-in-the-service-layer"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Role-based authorization enforced in the service layer",
+      "path": "lore/decisions/adr-008-role-based-authorization-enforced-in-the-service-layer.md",
+      "body_html": "<p>With authentication settled in ADR-007, we need a consistent answer for what a caller may do. Endpoint-by-endpoint ad hoc checks have already produced one near-miss.</p>\n<p>Authorization is role-based, evaluated in the service layer rather than in HTTP handlers, so the same rules govern the API, background tasks and the admin CLI. Roles are declared in code; assignments live in the database.</p>\n<p>Every privileged operation must name its required role explicitly. A missing declaration fails closed and fails loudly in CI.</p>"
+    },
+    {
+      "id": "RAC-ZMK1H2MB957J",
+      "aliases": [
+        "adr-009",
+        "adr-009-structured-logging-with-structlog"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Structured logging with structlog",
+      "path": "lore/decisions/adr-009-structured-logging-with-structlog.md",
+      "body_html": "<p>Grepping interleaved free-text logs across gunicorn workers does not survive contact with a real incident.</p>\n<p>All logs are structured key-value events emitted through structlog, JSON-rendered in production, with request_id and customer_id bound automatically at the edge of every request and task.</p>\n<p>Log messages are lowercase event names, not sentences; context goes in fields. Nothing sensitive (PANs, tokens, raw payloads) may be logged — enforced by a processor that redacts known field names.</p>"
+    },
+    {
+      "id": "RAC-M2DRS9ENQXFW",
+      "aliases": [
+        "adr-010",
+        "adr-010-prometheus-metrics-grafana-dashboards"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Prometheus metrics, Grafana dashboards",
+      "path": "lore/decisions/adr-010-prometheus-metrics-grafana-dashboards.md",
+      "body_html": "<p>We need quantitative answers to \"is it slow\" and \"is it failing\" that do not require reading logs (ADR-009).</p>\n<p>The service exposes Prometheus metrics: RED metrics per endpoint and per task type, plus domain counters such as invoices_issued_total. Dashboards live in Grafana, provisioned from JSON in this repository.</p>\n<p>Every alert must page on symptoms (error rate, latency, queue age), not causes. Cause-level metrics exist for diagnosis, not alerting.</p>"
+    },
+    {
+      "id": "RAC-VKB9F8FSMWD0",
+      "aliases": [
+        "adr-011",
+        "adr-011-distributed-tracing-with-opentelemetry"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Distributed tracing with OpenTelemetry",
+      "path": "lore/decisions/adr-011-distributed-tracing-with-opentelemetry.md",
+      "body_html": "<p>A single invoice touches the API, two background tasks and three external calls. Logs (ADR-009) and metrics (ADR-010) tell us something is slow; they do not tell us where.</p>\n<p>We instrument with OpenTelemetry, propagating W3C trace context across HTTP calls and through the task queue, and export to the platform’s collector. Sampling is head-based at 10% with errors always sampled.</p>\n<p>Spans are added at service boundaries and around external calls only; we do not trace every function. Trace IDs are bound into log events so logs, metrics and traces cross-reference.</p>"
+    },
+    {
+      "id": "RAC-NCJFPY5TG4HP",
+      "aliases": [
+        "adr-012",
+        "adr-012-ship-a-single-docker-image-per-release"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Ship a single Docker image per release",
+      "path": "lore/decisions/adr-012-ship-a-single-docker-image-per-release.md",
+      "body_html": "<p>API, worker and scheduler were drifting apart as three separately built artefacts with three dependency snapshots.</p>\n<p>One Docker image per release contains the whole application; the entrypoint argument selects the role (api, worker, scheduler). The image is built once in CI and promoted unchanged through staging to production.</p>\n<p>Configuration is environment-only, per twelve-factor practice. Secrets are injected at runtime as recorded in ADR-027, never baked into the image.</p>"
+    },
+    {
+      "id": "RAC-1J0TN93HK1P2",
+      "aliases": [
+        "adr-013",
+        "adr-013-pin-dependencies-with-pip-tools"
+      ],
+      "type": "adr",
+      "status": "Superseded",
+      "title": "Pin dependencies with pip-tools",
+      "path": "lore/decisions/adr-013-pin-dependencies-with-pip-tools.md",
+      "body_html": "<p>Unpinned dependencies made builds unreproducible: two images built an hour apart differed.</p>\n<p>We adopted pip-tools: requirements.in declares direct dependencies, requirements.txt is the compiled lockfile, and CI fails if the two disagree.</p>\n<p>Superseded by ADR-024. pip-tools served well, but uv subsumes it with much faster resolution and a single tool for environments and locking.</p>"
+    },
+    {
+      "id": "RAC-FE47FF0GT6ZM",
+      "aliases": [
+        "adr-014",
+        "adr-014-move-the-http-layer-from-flask-to-fastapi"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Move the HTTP layer from Flask to FastAPI",
+      "path": "lore/decisions/adr-014-move-the-http-layer-from-flask-to-fastapi.md",
+      "body_html": "<p>This decision supersedes ADR-002. The API has grown to forty-plus endpoints; hand-written marshmallow schemas duplicate type information that already exists in our domain models, and the duplication has caused real validation bugs.</p>\n<p>We move to FastAPI. Pydantic models give us request and response validation from type annotations, an OpenAPI document for free, and async handlers where outbound calls dominate.</p>\n<p>Migration is incremental: new endpoints are FastAPI-only, existing Flask blueprints are ported as they are next touched, and the OpenAPI document becomes the API contract of record under ADR-015.</p>\n<p>The Flask stack was removed entirely in release 2.9 after eleven months of coexistence.</p>"
+    },
+    {
+      "id": "RAC-76TAJX4QNS4V",
+      "aliases": [
+        "adr-015",
+        "adr-015-version-the-public-api-by-url-prefix"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Version the public API by URL prefix",
+      "path": "lore/decisions/adr-015-version-the-public-api-by-url-prefix.md",
+      "body_html": "<p>External integrators need a stability promise. We must be able to change the API without breaking them.</p>\n<p>The public API is versioned by URL prefix (/v1/, /v2/). Within a version, changes must be strictly additive; anything else requires a new version. At most two versions are live at once, with a published deprecation window of twelve months.</p>\n<p>Internal endpoints carry no version prefix and no stability promise. The OpenAPI document from ADR-014 is generated per version.</p>"
+    },
+    {
+      "id": "RAC-VD428SDNC5R3",
+      "aliases": [
+        "adr-016",
+        "adr-016-cursor-based-pagination-for-list-endpoints"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Cursor-based pagination for list endpoints",
+      "path": "lore/decisions/adr-016-cursor-based-pagination-for-list-endpoints.md",
+      "body_html": "<p>This refines ADR-015. Offset pagination over the transactions table both performs badly at depth and silently skips or repeats rows under concurrent writes — unacceptable for a ledger.</p>\n<p>All list endpoints paginate with opaque cursors encoding the last-seen sort key. Cursors are signed so clients cannot forge or decompose them, and page size is capped at 200.</p>\n<p>Offset parameters on the two endpoints that already shipped with them remain accepted in /v1/ but are documented as deprecated and absent from /v2/.</p>"
+    },
+    {
+      "id": "RAC-4AMMH3QYP66R",
+      "aliases": [
+        "adr-017",
+        "adr-017-idempotency-keys-on-all-mutating-endpoints"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Idempotency keys on all mutating endpoints",
+      "path": "lore/decisions/adr-017-idempotency-keys-on-all-mutating-endpoints.md",
+      "body_html": "<p>Clients retry. Without idempotency, a retried POST /v1/payments charges a customer twice; this has happened once in staging and must never happen in production.</p>\n<p>Every mutating endpoint requires an Idempotency-Key header. The key, the request hash and the response are stored for 48 hours; a replay with the same key and body returns the stored response, and the same key with a different body is rejected with 422.</p>\n<p>The storage piggybacks on PostgreSQL (ADR-003) rather than Redis, because losing idempotency records is a correctness failure, not a performance one.</p>"
+    },
+    {
+      "id": "RAC-7YHHAXKZEJ44",
+      "aliases": [
+        "adr-018",
+        "adr-018-represent-money-as-integer-minor-units"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Represent money as integer minor units",
+      "path": "lore/decisions/adr-018-represent-money-as-integer-minor-units.md",
+      "body_html": "<p>Floating-point money is forbidden. The question is decimals versus integers.</p>\n<p>All amounts are integers in minor units (pence, cents) paired with an ISO 4217 currency code, in the database, in the API and in code. A Money value object owns arithmetic and rounding; raw integer arithmetic on amounts is rejected in review.</p>\n<p>Rounding policy is banker’s rounding, applied only at explicitly marked boundaries such as tax calculation. Conversion to display strings happens at the edge, never in the domain.</p>"
+    },
+    {
+      "id": "RAC-3AYK73APR6V5",
+      "aliases": [
+        "adr-019",
+        "adr-019-utc-everywhere-timezones-at-the-edge"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "UTC everywhere; timezones at the edge",
+      "path": "lore/decisions/adr-019-utc-everywhere-timezones-at-the-edge.md",
+      "body_html": "<p>A billing-period bug traced to a naive datetime crossing a DST boundary cost two days. Time handling needs one rule, not judgement calls.</p>\n<p>All timestamps are timezone-aware UTC in the database (timestamptz), in the API (RFC 3339 with Z), and in code. Naive datetimes are banned and rejected by a lint rule. Customer-local times exist only at presentation, derived from an explicit per-account timezone.</p>\n<p>Billing period boundaries are defined in the customer’s account timezone and converted to UTC instants when periods are materialised — this is the one place local time enters the domain, and it is heavily tested.</p>"
+    },
+    {
+      "id": "RAC-W3DGPEDXHYTP",
+      "aliases": [
+        "adr-020",
+        "adr-020-database-backed-feature-flags"
+      ],
+      "type": "adr",
+      "status": "Proposed",
+      "title": "Database-backed feature flags",
+      "path": "lore/decisions/adr-020-database-backed-feature-flags.md",
+      "body_html": "<p>We need to ship the new dunning flow dark and enable it per customer cohort. A SaaS flag service is overkill for our needs and adds a hard runtime dependency.</p>\n<p>Proposal: a feature_flags table read through the existing cache (ADR-006) with a 60-second TTL, exposing boolean and percentage rollout flags keyed optionally by account. Flags are declared in code with an owner and an expiry date; CI warns on expired flags.</p>\n<p>Open questions for review: whether percentage rollout hashes on account or on actor, and whether flag reads belong in domain code or only at entry points.</p>"
+    },
+    {
+      "id": "RAC-7TM8CVQ0R7E3",
+      "aliases": [
+        "adr-021",
+        "adr-021-replace-celery-with-dramatiq"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Replace Celery with Dramatiq",
+      "path": "lore/decisions/adr-021-replace-celery-with-dramatiq.md",
+      "body_html": "<p>This supersedes ADR-005. Three incidents in two quarters traced to Celery worker lockups and lost acks, and per-task configuration had become folklore.</p>\n<p>We move background work to Dramatiq with the Redis broker retained. Middleware gives us retries with exponential backoff and dead-letter queues by default; task signatures are plain functions, which makes ADR-025’s strict typing actually enforceable on task boundaries.</p>\n<p>Delivery remains at-least-once. Every task must therefore be idempotent, reusing the patterns from ADR-017 where tasks have external effects.</p>\n<p>Migration ran queue-by-queue behind the abstraction layer introduced for the purpose; the last Celery worker was decommissioned in release 3.4.</p>"
+    },
+    {
+      "id": "RAC-CFHEJTFAEYTQ",
+      "aliases": [
+        "adr-022",
+        "adr-022-transactional-outbox-for-outbound-events"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Transactional outbox for outbound events",
+      "path": "lore/decisions/adr-022-transactional-outbox-for-outbound-events.md",
+      "body_html": "<p>Webhook and event-bus publishes were performed inside request handlers after the database commit, so a crash between commit and publish silently dropped events. Relates to the at-least-once delivery posture of ADR-021.</p>\n<p>Domain events are written to an outbox table in the same transaction as the state change (ADR-003 gives us this for free). A Dramatiq relay task drains the outbox and publishes, marking rows only after the broker acknowledges.</p>\n<p>Consumers must deduplicate on event ID, since the relay guarantees at-least-once. Event payload schemas are versioned and documented alongside the API contract from ADR-015.</p>"
+    },
+    {
+      "id": "RAC-QWE6CRBX3N1M",
+      "aliases": [
+        "adr-023",
+        "adr-023-read-replicas-for-reporting-queries"
+      ],
+      "type": "adr",
+      "status": "Proposed",
+      "title": "Read replicas for reporting queries",
+      "path": "lore/decisions/adr-023-read-replicas-for-reporting-queries.md",
+      "body_html": "<p>Month-end reporting queries now contend with transactional load on the primary (ADR-003), and the finance team’s dashboards time out on the first of the month.</p>\n<p>Proposal: add one streaming read replica and route explicitly marked reporting queries to it through a separate session factory. Replication lag is surfaced as a Prometheus metric (ADR-010) with reporting queries refusing to run if lag exceeds five minutes.</p>\n<p>Explicitly out of scope: any general read/write splitting of transactional traffic. The ledger’s read-your-writes guarantees stay on the primary.</p>"
+    },
+    {
+      "id": "RAC-K8XMS09XVQHY",
+      "aliases": [
+        "adr-024",
+        "adr-024-manage-dependencies-and-environments-with-uv"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Manage dependencies and environments with uv",
+      "path": "lore/decisions/adr-024-manage-dependencies-and-environments-with-uv.md",
+      "body_html": "<p>This supersedes ADR-013. CI spent four minutes per run resolving and installing dependencies with pip-tools and pip; uv does the same work in seconds and replaces two tools with one.</p>\n<p>We adopt uv for lockfile management (uv.lock committed), local environments and CI installs. The Docker build (ADR-012) uses uv sync against the lockfile, keeping images reproducible byte-for-byte with respect to Python dependencies.</p>\n<p>pyproject.toml remains the single declaration of direct dependencies. requirements.in and requirements.txt are deleted.</p>"
+    },
+    {
+      "id": "RAC-RKT8BPT3MV0Y",
+      "aliases": [
+        "adr-025",
+        "adr-025-mypy-strict-gates-merges"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "mypy --strict gates merges",
+      "path": "lore/decisions/adr-025-mypy-strict-gates-merges.md",
+      "body_html": "<p>Type annotations are only trustworthy if they are checked. Unchecked annotations rot into documentation that lies.</p>\n<p>mypy runs in strict mode over the whole package in CI and failures block merge, as encoded in STD-001. Third-party gaps are bridged with typed stubs or narrow, documented overrides in pyproject.toml; blanket ignores are banned.</p>\n<p>The Pydantic and SQLAlchemy plugins are enabled so model definitions (ADR-014, ADR-003) check end to end. New code lands fully typed; the legacy allowlist shrank to empty in release 3.1 and may not grow again.</p>"
+    },
+    {
+      "id": "RAC-STZCHHKRTM3N",
+      "aliases": [
+        "adr-026",
+        "adr-026-graphql-gateway-in-front-of-the-public-api"
+      ],
+      "type": "adr",
+      "status": "Rejected",
+      "title": "GraphQL gateway in front of the public API",
+      "path": "lore/decisions/adr-026-graphql-gateway-in-front-of-the-public-api.md",
+      "body_html": "<p>Two integrators asked for more flexible queries, and a GraphQL gateway over the REST API (ADR-015) was prototyped during an innovation week.</p>\n<p>Rejected. The gateway added a second API contract to version and secure, resolver fan-out reintroduced exactly the N+1 query patterns ADR-016 was designed to prevent, and field-level authorization would duplicate the rules from ADR-008 in a second place.</p>\n<p>The underlying need is met more cheaply with sparse fieldsets and the expanded filter parameters shipped in /v2/. Revisit only if a concrete integrator need cannot be expressed in REST.</p>"
+    },
+    {
+      "id": "RAC-04S9AMQ0RDWR",
+      "aliases": [
+        "adr-027",
+        "adr-027-secrets-from-the-platform-vault-at-runtime"
+      ],
+      "type": "adr",
+      "status": "Accepted",
+      "title": "Secrets from the platform vault at runtime",
+      "path": "lore/decisions/adr-027-secrets-from-the-platform-vault-at-runtime.md",
+      "body_html": "<p>Database credentials and signing keys were arriving as plain environment variables set by hand in the deploy tooling, with no rotation story.</p>\n<p>Secrets are fetched at container start from the platform vault by a sidecar that renders them to a tmpfs file the application reads on boot; the application itself holds no vault credentials beyond its workload identity (ADR-007). Rotation is a restart, which ADR-028’s deployment model makes routine.</p>\n<p>Environment variables remain for non-secret configuration only. CI scans for secret-shaped strings in the image as a release gate alongside the checks in STD-001.</p>"
+    },
+    {
+      "id": "RAC-09FWXH1VMWEV",
+      "aliases": [
+        "adr-028",
+        "adr-028-blue-green-deployments"
+      ],
+      "type": "adr",
+      "status": "Deprecated",
+      "title": "Blue-green deployments",
+      "path": "lore/decisions/adr-028-blue-green-deployments.md",
+      "body_html": "<p>Releases needed an instant rollback story while the schema expand/contract discipline from ADR-004 was still bedding in.</p>\n<p>We ran two full environments, blue and green, switching traffic at the load balancer after smoke tests, with rollback being a switch back.</p>\n<p>Deprecated since the platform team’s rolling-deploy primitive matured: it gives the same backwards-compatibility guarantees at half the standing cost. Kept for the historical record; the expand/contract migration discipline it enforced remains in force via ADR-004.</p>"
+    },
+    {
+      "id": "RAC-1CZSVS790SZ5",
+      "aliases": [
+        "std-001",
+        "std-001-ci-merge-gates"
+      ],
+      "type": "standard",
+      "status": "Accepted",
+      "title": "CI merge gates",
+      "path": "lore/standards/std-001-ci-merge-gates.md",
+      "body_html": "<p>Implements the enforcement halves of ADR-025 and ADR-004. A pull request may merge only when every gate passes; no human may override a red gate.</p>\n<p>Gates, in order: ruff lint and format check; mypy --strict (ADR-025); pytest with the coverage floor at 85% on changed files; Alembic migration check against an empty database (ADR-004); secret scan of the built image (ADR-027).</p>\n<p>The gate list changes only by amending this standard. CI configuration that drifts from this document is a bug in the configuration, not in the document.</p>"
+    },
+    {
+      "id": "RAC-GRCYFC59V0KE",
+      "aliases": [
+        "std-002",
+        "std-002-naming-conventions-for-cache-keys-and-events"
+      ],
+      "type": "standard",
+      "status": "Accepted",
+      "title": "Naming conventions for cache keys and events",
+      "path": "lore/standards/std-002-naming-conventions-for-cache-keys-and-events.md",
+      "body_html": "<p>Cache keys (ADR-006) and event names (ADR-022) are public-ish namespaces shared across services; collisions and renames are expensive.</p>\n<p>Cache keys are colon-separated: ledgerline:{domain}:{entity}:{id}:{version}, with the version segment bumped when the cached shape changes — there is no in-place invalidation. Event names are dotted past-tense facts: ledgerline.invoice.issued, versioned with a trailing .v2 only on breaking change.</p>\n<p>Both namespaces are catalogued in the repository, and review rejects additions that bypass the catalogue. A worked example and the reserved-word list live alongside this standard.</p>"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "RAC-FE47FF0GT6ZM",
+      "to": "RAC-6VD81MBSCA2F",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-7TM8CVQ0R7E3",
+      "to": "RAC-Y3FE4XMV5C14",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-K8XMS09XVQHY",
+      "to": "RAC-1J0TN93HK1P2",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-VD428SDNC5R3",
+      "to": "RAC-76TAJX4QNS4V",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-G54WT38ZFVXG",
+      "to": "RAC-49R5AMBEQPAJ",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-GRCYFC59V0KE",
+      "to": "RAC-BKQF8PWYREH0",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-1CZSVS790SZ5",
+      "to": "RAC-RKT8BPT3MV0Y",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-1CZSVS790SZ5",
+      "to": "RAC-T9J5YN2V5EP8",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-CFHEJTFAEYTQ",
+      "to": "RAC-7TM8CVQ0R7E3",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-BKQF8PWYREH0",
+      "to": "RAC-Y3FE4XMV5C14",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-VKB9F8FSMWD0",
+      "to": "RAC-ZMK1H2MB957J",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-VKB9F8FSMWD0",
+      "to": "RAC-M2DRS9ENQXFW",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-QWE6CRBX3N1M",
+      "to": "RAC-S02J1C9WRCEH",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-4AMMH3QYP66R",
+      "to": "RAC-7TM8CVQ0R7E3",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-04S9AMQ0RDWR",
+      "to": "RAC-NCJFPY5TG4HP",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-09FWXH1VMWEV",
+      "to": "RAC-T9J5YN2V5EP8",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-STZCHHKRTM3N",
+      "to": "RAC-76TAJX4QNS4V",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-W3DGPEDXHYTP",
+      "to": "RAC-BKQF8PWYREH0",
+      "type": "relates-to"
+    },
+    {
+      "from": "RAC-3AYK73APR6V5",
+      "to": "runbook-billing-period-rollover",
+      "type": "relates-to"
+    }
+  ]
+}

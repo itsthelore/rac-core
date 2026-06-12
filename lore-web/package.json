@@ -1,0 +1,28 @@
+{
+  "name": "lore-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build && node scripts/prerender-landing.mjs",
+    "preview": "vite preview",
+    "contrast": "node scripts/contrast-report.mjs",
+    "lantern": "node scripts/make-lantern.mjs",
+    "corpus": "node scripts/make-corpus.mjs",
+    "build:viewer": "tsc -b && vite build --config vite.config.viewer.ts && node scripts/build-viewer-artifact.mjs",
+    "vendor:shell": "node scripts/vendor-portal-shell.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
+    "@vitejs/plugin-react": "^4.4.1",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

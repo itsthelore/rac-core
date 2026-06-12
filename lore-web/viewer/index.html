@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Lore export viewer — a read-only view of a repository's decision corpus."
+    />
+    <title>Lore — export viewer</title>
+    <!--
+      Data injection (see VIEWER_CONTRACT.md): the built single-file
+      artifact carries the corpus inline as
+        <script type="application/json" id="lore-export">…</script>
+      inserted by scripts/build-viewer-artifact.mjs. In dev there is no
+      inline element, so the app fetches the committed sample corpus.
+    -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <p>The Lore export viewer needs JavaScript to render the corpus.</p>
+    </noscript>
+    <script type="module" src="/src/viewer/main.tsx"></script>
+  </body>
+</html>

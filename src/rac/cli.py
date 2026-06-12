@@ -12,6 +12,7 @@ Commands:
     rac review <directory> [--json] [--top-level]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
+    rac export [directory] [--json | --html] [--out PATH]
     rac explorer [directory] [--top-level]
     rac mcp [--root PATH] [--telemetry]
     rac mcp-stats [--json | --share]
@@ -34,7 +35,8 @@ Exit codes:
        disconnect; skill(s) installed; skills listed; mcp-stats summary
        produced, even from an empty or missing telemetry log; telemetry
        consent shown or changed, including when no endpoint key is
-       configured)
+       configured; export payload produced — JSON to stdout, or the
+       --html Portal file written, an empty corpus included)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
@@ -49,7 +51,8 @@ Exit codes:
        refuse-to-overwrite, missing output directory, repository not
        initialized, invalid repository key, explorer extra not installed,
        mcp --root not a directory, skill --dir not a directory, unknown
-       skill name)
+       skill name, export --out without --html or unwritable, missing or
+       corrupt vendored portal shell)
 """
 
 from __future__ import annotations
@@ -71,6 +74,7 @@ from rac.core.templates import (
     available_templates,
 )
 from rac.core.validation import has_errors, validate
+from rac.output.portal import PortalSeamMissing, PortalShellMissing
 from rac.services.create import (
     IdGenerationExhausted,
     MissingRepositoryConfig,
@@ -79,6 +83,7 @@ from rac.services.create import (
     create_artifact,
 )
 from rac.services.diff import diff as diff_asts
+from rac.services.export import build_corpus_export
 from rac.services.improve import improve_product
 from rac.services.index import build_repository_index
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
@@ -404,6 +409,38 @@ def cmd_index(args: argparse.Namespace) -> int:
         print(outputs.render_index_json(index))
     else:
         print(outputs.render_index_human(index))
+    return EXIT_OK
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    if args.out is not None and not args.html:
+        print("rac: --out requires --html (--json writes to stdout)", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    export = build_corpus_export(args.directory)
+
+    # JSON is the default mode (unlike sibling commands): the payload *is* the
+    # product, and stdout keeps it pipeable. --json is an explicit no-op.
+    if not args.html:
+        print(outputs.render_export_json(export))
+        return EXIT_OK
+
+    try:
+        html = outputs.render_export_html(export)
+    except (PortalShellMissing, PortalSeamMissing) as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    out = args.out if args.out is not None else "lore-export.html"
+    try:
+        Path(out).write_text(html, encoding="utf-8")
+    except OSError as exc:
+        print(f"rac: cannot write {out}: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    edges = len(export.relationships)
+    print(f"wrote {out} — {export.artifact_count} artifact(s), {edges} relationship(s)")
     return EXIT_OK
 
 
@@ -915,6 +952,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_index.set_defaults(func=cmd_index)
+
+    p_export = sub.add_parser(
+        "export",
+        help="Export the corpus as a deterministic JSON payload or a self-contained HTML Portal.",
+        parents=[version_parent],
+    )
+    p_export.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Directory to scan recursively for *.md (default: current directory).",
+    )
+    export_mode = p_export.add_mutually_exclusive_group()
+    export_mode.add_argument(
+        "--json",
+        action="store_true",
+        help="Write the export JSON to stdout (the default; explicit for pipelines).",
+    )
+    export_mode.add_argument(
+        "--html",
+        action="store_true",
+        help="Inject the payload into the vendored Portal shell and write one "
+        "self-contained HTML file.",
+    )
+    p_export.add_argument(
+        "--out",
+        default=None,
+        help="Where --html writes the Portal (default: lore-export.html). "
+        "Exports are build artifacts: an existing file is overwritten.",
+    )
+    p_export.set_defaults(func=cmd_export)
 
     p_explorer = sub.add_parser(
         "explorer",

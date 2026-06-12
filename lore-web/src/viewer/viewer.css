@@ -1,0 +1,323 @@
+/* Export viewer styles. Every colour, space and border comes from
+ * src/styles/tokens.css — no hex literals here.
+ * Dashed borders = container chrome; solid borders = interactive. */
+
+.viewer {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+/* ---- corpus metadata header ---------------------------------------- */
+
+.viewer-meta {
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--dash-subtle);
+}
+
+.viewer-meta__name {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: var(--font-size-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.viewer-meta__line {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-1);
+}
+
+/* ---- chips ----------------------------------------------------------- */
+
+.viewer-chips {
+  display: inline-flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.viewer-chip {
+  display: inline-block;
+  border: var(--line);
+  border-radius: var(--radius-key);
+  background: var(--bg-element);
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  line-height: 1.5;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.viewer-chip--type {
+  color: var(--text-muted);
+}
+
+/* status colours only where semantic */
+.viewer-chip--accepted {
+  color: var(--success);
+}
+
+.viewer-chip--rejected {
+  color: var(--error);
+}
+
+.viewer-chip--muted {
+  color: var(--text-muted);
+}
+
+.viewer-chip--sample {
+  color: var(--warning);
+  border-style: dashed;
+  background: transparent;
+}
+
+/* ---- search bar (prompt-bar styled: solid border = interactive) ----- */
+
+.viewer-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.viewer-search__bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: var(--line);
+  background: var(--bg-element);
+  padding: var(--space-2) var(--space-3);
+}
+
+.viewer-search__bar:focus-within {
+  border: var(--line-active);
+}
+
+.viewer-search__prefix {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.viewer-search__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  min-width: 0;
+}
+
+.viewer-search__input::placeholder {
+  color: var(--text-muted);
+}
+
+.viewer-search__hint {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+/* ---- filters --------------------------------------------------------- */
+
+.viewer-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.viewer-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.viewer-filter__label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-right: var(--space-1);
+}
+
+.viewer-toggle {
+  border: var(--line);
+  border-radius: var(--radius-key);
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  padding: 0 var(--space-2);
+  line-height: 1.8;
+  cursor: pointer;
+}
+
+.viewer-toggle:hover {
+  color: var(--text);
+}
+
+.viewer-toggle[aria-pressed='true'] {
+  border: var(--line-active);
+  background: var(--accent-muted);
+  color: var(--accent-bright);
+}
+
+/* ---- result count / states ------------------------------------------ */
+
+.viewer-count {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-3);
+}
+
+.viewer-empty {
+  color: var(--text-muted);
+  padding: var(--space-4) 0;
+}
+
+.viewer-error {
+  color: var(--error);
+  padding: var(--space-4) 0;
+}
+
+/* ---- artifact list --------------------------------------------------- */
+
+.viewer-rows {
+  list-style: none;
+  border-top: var(--dash-subtle);
+}
+
+.viewer-rowitem {
+  border-bottom: var(--dash-subtle);
+}
+
+.viewer-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-2);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.viewer-row:hover {
+  background: var(--bg-element);
+  color: var(--text);
+}
+
+.viewer-row__id {
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+  min-width: 7ch;
+}
+
+.viewer-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- detail ----------------------------------------------------------- */
+
+.viewer-backline {
+  margin-bottom: var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.viewer-backline__hint {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.viewer-detail__head {
+  margin-bottom: var(--space-5);
+}
+
+.viewer-detail__id {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.viewer-detail__title {
+  color: var(--accent-bright);
+  font-size: var(--font-size-lg);
+  margin: var(--space-1) 0 var(--space-3);
+}
+
+/* opaque id + source path provenance line */
+.viewer-detail__provenance {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.viewer-body {
+  max-width: 64rem;
+}
+
+.viewer-body p {
+  margin-bottom: var(--space-4);
+}
+
+.viewer-body code {
+  background: var(--bg-element);
+  padding: 0 var(--space-1);
+}
+
+.viewer-body ul,
+.viewer-body ol {
+  margin: 0 0 var(--space-4) var(--space-5);
+}
+
+/* ---- related artifacts panel ----------------------------------------- */
+
+.viewer-related {
+  margin-top: var(--space-6);
+}
+
+.viewer-related__heading {
+  color: var(--text);
+  font-size: var(--font-size);
+  margin-bottom: var(--space-2);
+}
+
+.viewer-related__list {
+  list-style: none;
+}
+
+.viewer-related__list li {
+  padding-left: var(--space-4);
+  margin-bottom: var(--space-1);
+}
+
+.viewer-related__title {
+  color: var(--text-muted);
+}
+
+/* ---- footer ----------------------------------------------------------- */
+
+.viewer-foot {
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.viewer-foot__sample {
+  color: var(--warning);
+}
