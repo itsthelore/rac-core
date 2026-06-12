@@ -20,6 +20,12 @@ input produce identical output, within the per-response character budget
 Failed lookups return structured error data, never protocol exceptions
 (ADR-034, :mod:`rac.mcp.errors`): an agent recovers from a JSON body.
 
+Opt-in telemetry (v0.10.4, ADR-039): when serving with a recorder, each tool
+call routes through :func:`rac.mcp.telemetry.observe`, which times the call,
+classifies the structured payload, and returns it unchanged — tool responses
+are byte-identical with telemetry on and off, and the log is never an input
+to a response. Default is off; nothing is recorded without ``--telemetry``.
+
 Startup diagnostics (v0.10.1): ``run_server`` writes a one-line notice to
 stderr when the repository root contains no recognized artifacts, so the first
 run against a misconfigured or empty root fails helpfully rather than silently.
@@ -34,8 +40,9 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from rac.core.corpus import walk_corpus
-from rac.mcp import errors
+from rac.mcp import errors, telemetry
 from rac.mcp.budget import DEFAULT_BUDGET, serialize
+from rac.mcp.telemetry import TelemetryRecorder
 from rac.services.index import build_repository_index, index_from_corpus
 from rac.services.portfolio import build_portfolio_summary
 from rac.services.relationships import relationships_from_corpus
@@ -156,11 +163,68 @@ def _incoming_from(relationships: list, by_path: dict, target_path: str) -> list
     return incoming
 
 
-def build_server(root: str, budget: int = DEFAULT_BUDGET) -> FastMCP:
+def _get_artifact(root: str, artifact_id: str, budget: int) -> str:
+    result = _resolve(root, artifact_id)
+    if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
+        return serialize(errors.from_resolution(result), budget)
+    try:
+        content = _read_content(result.artifact.path)
+    except (OSError, UnicodeDecodeError):
+        # The artifact resolved, but its file could not be read (deleted
+        # between walk and read, permissions, non-UTF-8). Return the failure
+        # as data, never a protocol exception (ADR-034).
+        return serialize(errors.unreadable(result.artifact.id, result.artifact.path), budget)
+    payload = {
+        "schema_version": "1",
+        **result.artifact.to_dict(),
+        "content": content,
+    }
+    return serialize(payload, budget)
+
+
+def _search_artifacts(root: str, query: str, artifact_type: str | None, budget: int) -> str:
+    entries = build_repository_index(root, recursive=True).artifacts
+    result = search_index(entries, query, artifact_type=artifact_type)
+    return serialize(result.to_dict(), budget)
+
+
+def _get_related(root: str, artifact_id: str, budget: int) -> str:
+    # One corpus walk feeds resolution, outgoing, and incoming, so the whole
+    # response reflects a single atomic snapshot of the repository (ADR-032):
+    # there is no window in which the relationship view drifts mid-call.
+    # Caching across calls remains forbidden — the snapshot lives and dies
+    # inside this call.
+    entries = list(walk_corpus(root, recursive=True))
+    index = index_from_corpus(root, entries, recursive=True).artifacts
+    result = resolve_in_index(index, artifact_id)
+    if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
+        return serialize(errors.from_resolution(result), budget)
+    artifact = result.artifact
+    relationships = relationships_from_corpus(entries)
+    by_path = {entry.path: entry for entry in index}
+    payload = {
+        "schema_version": "1",
+        **artifact.to_dict(),
+        "outgoing": _outgoing_from(relationships, artifact.path),
+        "incoming": _incoming_from(relationships, by_path, artifact.path),
+    }
+    return serialize(payload, budget)
+
+
+def _get_summary(root: str, budget: int) -> str:
+    summary = build_portfolio_summary(root, recursive=True)
+    return serialize(summary.to_dict(), budget)
+
+
+def build_server(
+    root: str, budget: int = DEFAULT_BUDGET, recorder: TelemetryRecorder | None = None
+) -> FastMCP:
     """Build the Guide MCP server bound to repository ``root``.
 
     ``budget`` is the per-response character cap (ADR-033), configurable here at
-    startup; there is no per-call override. The returned :class:`FastMCP`
+    startup; there is no per-call override. ``recorder`` enables opt-in usage
+    telemetry (ADR-039): with ``None`` — the default — nothing is recorded and
+    every call is exactly the bare tool body. The returned :class:`FastMCP`
     instance has the four pinned tools registered and is ready to run over any
     transport — the CLI runs it over stdio.
     """
@@ -168,56 +232,21 @@ def build_server(root: str, budget: int = DEFAULT_BUDGET) -> FastMCP:
 
     @server.tool(name="get_artifact", description=DESC_GET_ARTIFACT)
     def get_artifact(id: str) -> str:
-        result = _resolve(root, id)
-        if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
-            return serialize(errors.from_resolution(result), budget)
-        try:
-            content = _read_content(result.artifact.path)
-        except (OSError, UnicodeDecodeError):
-            # The artifact resolved, but its file could not be read (deleted
-            # between walk and read, permissions, non-UTF-8). Return the failure
-            # as data, never a protocol exception (ADR-034).
-            return serialize(errors.unreadable(result.artifact.id, result.artifact.path), budget)
-        payload = {
-            "schema_version": "1",
-            **result.artifact.to_dict(),
-            "content": content,
-        }
-        return serialize(payload, budget)
+        return telemetry.observe(recorder, "get_artifact", lambda: _get_artifact(root, id, budget))
 
     @server.tool(name="search_artifacts", description=DESC_SEARCH_ARTIFACTS)
     def search_artifacts(query: str, type: str | None = None) -> str:
-        entries = build_repository_index(root, recursive=True).artifacts
-        result = search_index(entries, query, artifact_type=type)
-        return serialize(result.to_dict(), budget)
+        return telemetry.observe(
+            recorder, "search_artifacts", lambda: _search_artifacts(root, query, type, budget)
+        )
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
     def get_related(id: str) -> str:
-        # One corpus walk feeds resolution, outgoing, and incoming, so the whole
-        # response reflects a single atomic snapshot of the repository (ADR-032):
-        # there is no window in which the relationship view drifts mid-call.
-        # Caching across calls remains forbidden — the snapshot lives and dies
-        # inside this call.
-        entries = list(walk_corpus(root, recursive=True))
-        index = index_from_corpus(root, entries, recursive=True).artifacts
-        result = resolve_in_index(index, id)
-        if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
-            return serialize(errors.from_resolution(result), budget)
-        artifact = result.artifact
-        relationships = relationships_from_corpus(entries)
-        by_path = {entry.path: entry for entry in index}
-        payload = {
-            "schema_version": "1",
-            **artifact.to_dict(),
-            "outgoing": _outgoing_from(relationships, artifact.path),
-            "incoming": _incoming_from(relationships, by_path, artifact.path),
-        }
-        return serialize(payload, budget)
+        return telemetry.observe(recorder, "get_related", lambda: _get_related(root, id, budget))
 
     @server.tool(name="get_summary", description=DESC_GET_SUMMARY)
     def get_summary() -> str:
-        summary = build_portfolio_summary(root, recursive=True)
-        return serialize(summary.to_dict(), budget)
+        return telemetry.observe(recorder, "get_summary", lambda: _get_summary(root, budget))
 
     return server
 
@@ -247,15 +276,25 @@ def _check_corpus(root: str) -> None:
         pass
 
 
-def run_server(root: str, budget: int = DEFAULT_BUDGET) -> int:
+def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool = False) -> int:
     """Run the Guide server over stdio until the client disconnects.
 
     Returns ``0`` on clean shutdown. stdout belongs to the MCP protocol; any
     diagnostics a caller emits go to stderr (the CLI owns that channel).
 
     Emits a one-line notice to stderr when the repository root contains no
-    recognized artifacts (v0.10.1 startup hardening).
+    recognized artifacts (v0.10.1 startup hardening), and another when
+    telemetry is enabled — opt-in recording is announced, never silent
+    (ADR-039).
     """
     _check_corpus(root)
-    build_server(root, budget=budget).run(transport="stdio")
+    recorder: TelemetryRecorder | None = None
+    if telemetry_enabled:
+        recorder = telemetry.create_recorder()
+        print(
+            "rac mcp: telemetry on — appending tool-call events "
+            f"(no arguments, no content) to {recorder.path}",
+            file=sys.stderr,
+        )
+    build_server(root, budget=budget, recorder=recorder).run(transport="stdio")
     return 0
