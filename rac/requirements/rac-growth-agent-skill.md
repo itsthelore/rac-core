@@ -36,6 +36,8 @@ code.claude.com/docs/en/skills). RAC should ship one.
 
 - [REQ-007] The repository's dogfood copy at `.claude/skills/rac-artifacts/SKILL.md` and the packaged resource are byte-identical, enforced by a test.
 
+- [REQ-008] Every bundled skill is installable by name (`rac skill install <name>`), all bundled skills install together when no name is given (refusing all-or-nothing if any target exists), `rac skill list` enumerates them, and each skill carries its own packaged-resource/dogfood byte-equality test.
+
 ## Success Metrics
 
 - The skill file exists at the documented path and is valid per the
@@ -69,6 +71,7 @@ code.claude.com/docs/en/skills). RAC should ship one.
 
 - v1.4-claude-skills
 - v0.10.4-bundled-agent-skill
+- v0.10.5-review-and-ingest-skills
 
 ## Related Requirements
 
