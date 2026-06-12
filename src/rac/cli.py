@@ -10,6 +10,7 @@ Commands:
     rac schema [--list] [type] [--json | --template]
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
     rac review <directory> [--json] [--top-level]
+    rac watchkeeper [directory] [--base REF] [--head REF] [--json]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
     rac export [directory] [--json | --html] [--out PATH]
@@ -36,7 +37,8 @@ Exit codes:
        produced, even from an empty or missing telemetry log; telemetry
        consent shown or changed, including when no endpoint key is
        configured; export payload produced — JSON to stdout, or the
-       --html Portal file written, an empty corpus included)
+       --html Portal file written, an empty corpus included; watchkeeper
+       comparison produced, with or without changes)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
@@ -52,7 +54,8 @@ Exit codes:
        initialized, invalid repository key, explorer extra not installed,
        mcp --root not a directory, skill --dir not a directory, unknown
        skill name, export --out without --html or unwritable, missing or
-       corrupt vendored portal shell)
+       corrupt vendored portal shell, watchkeeper revision unknown or
+       directory not inside a git repository)
 """
 
 from __future__ import annotations
@@ -110,9 +113,11 @@ from rac.services.resolve import (
     resolve_artifact,
 )
 from rac.services.review import build_review
+from rac.services.revisions import NotAGitRepository, RevisionNotFound
 from rac.services.skill import SkillFileExists, install_skills
 from rac.services.stats import collect_stats
 from rac.services.validate import validate_directory
+from rac.services.watchkeeper import build_watchkeeper_report
 
 from . import __version__
 
@@ -384,6 +389,28 @@ def cmd_review(args: argparse.Namespace) -> int:
     # Priority 1-2 findings (invalid artifacts, broken relationships) fail the
     # review; priority 3-4 findings are advisory (REQ-Repository-Review-Mode).
     return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
+
+
+def cmd_watchkeeper(args: argparse.Namespace) -> int:
+    if args.directory is None:
+        # ADR-018: rac/ is the conventional knowledge root — compare it when it
+        # exists; otherwise the current directory.
+        args.directory = "rac" if Path("rac").is_dir() else "."
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    try:
+        report = build_watchkeeper_report(args.directory, base=args.base, head=args.head)
+    except (NotAGitRepository, RevisionNotFound) as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    if args.json:
+        print(outputs.render_watchkeeper_json(report))
+    else:
+        print(outputs.render_watchkeeper_human(report))
+    # Comparison is informational in v0.12.0; failure policy arrives with
+    # review recommendations (v0.12.2).
+    return EXIT_OK
 
 
 def cmd_portfolio(args: argparse.Namespace) -> int:
@@ -905,6 +932,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_review.set_defaults(func=cmd_review)
+
+    p_watchkeeper = sub.add_parser(
+        "watchkeeper",
+        help="Review product knowledge changes between two repository states.",
+        parents=[version_parent],
+    )
+    p_watchkeeper.add_argument(
+        "directory",
+        nargs="?",
+        default=None,
+        help="Corpus to compare (default: rac/ when present, else the current directory).",
+    )
+    p_watchkeeper.add_argument(
+        "--base",
+        default="main",
+        help="Base state: a git revision or an existing directory (default: main).",
+    )
+    p_watchkeeper.add_argument(
+        "--head",
+        default=None,
+        help="Head state: a git revision or an existing directory (default: the working tree).",
+    )
+    p_watchkeeper.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_watchkeeper.set_defaults(func=cmd_watchkeeper)
 
     p_portfolio = sub.add_parser(
         "portfolio",

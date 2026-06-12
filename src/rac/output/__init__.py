@@ -32,6 +32,7 @@ from .human import (
     render_unknown_schema,
     render_validate_dir_human,
     render_validation_human,
+    render_watchkeeper_human,
 )
 from .json import (
     render_diff_json,
@@ -59,6 +60,7 @@ from .json import (
     render_templates_json,
     render_validate_dir_json,
     render_validation_json,
+    render_watchkeeper_json,
 )
 from .portal import render_export_html
 from .templates import render_improve_template, render_schema_template
@@ -117,4 +119,6 @@ __all__ = [
     "render_validate_dir_json",
     "render_validation_human",
     "render_validation_json",
+    "render_watchkeeper_human",
+    "render_watchkeeper_json",
 ]

@@ -15,6 +15,12 @@ from rac.core.classification import CONFIDENCE_THRESHOLD, TypeScore
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
+from rac.services.compare import (
+    CHANGE_ADDED,
+    CHANGE_MODIFIED,
+    CHANGE_REMOVED,
+    RelationshipIssueRef,
+)
 from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
@@ -45,6 +51,7 @@ from rac.services.review import (
 from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
 from rac.services.validate import STATUS_INVALID, DirectoryValidation
+from rac.services.watchkeeper import WatchkeeperReport
 
 from ._shared import _UNKNOWN_MESSAGE, _unsupported_message
 
@@ -924,4 +931,97 @@ def render_mcp_stats_human(summary: MCPTelemetrySummary) -> str:
         )
     if summary.skipped_lines:
         lines += ["", f"Skipped Unreadable Lines: {summary.skipped_lines}"]
+    return "\n".join(lines)
+
+
+# --- watchkeeper --------------------------------------------------------------
+
+
+def _delta(base: int, head: int) -> str:
+    return f"{base} → {head}"
+
+
+def _issue_phrase(issue: RelationshipIssueRef) -> str:
+    if issue.relationship is None:
+        subject = issue.identifier or issue.path
+        return f"{subject}: {issue.code}"
+    label = issue.relationship.replace("_", " ").title()
+    return f"{issue.path} — {label} reference '{issue.target}' ({issue.code})"
+
+
+def render_watchkeeper_human(report: WatchkeeperReport) -> str:
+    """Human-readable `rac watchkeeper` output (v0.12.0).
+
+    One report answering "what changed between these repository states?":
+    changed artifacts, validation delta, relationship delta, and repository
+    statistics delta.
+    """
+    comparison = report.comparison
+    lines = [
+        _bold("RAC Watchkeeper"),
+        "===============",
+        "",
+        f"Directory:  {report.directory}",
+        f"Comparing:  {report.base} → {report.head}",
+        "",
+        _bold("Changed Artifacts"),
+        "-----------------",
+        "",
+    ]
+    if comparison.changes:
+        icons = {CHANGE_ADDED: "+", CHANGE_MODIFIED: "~", CHANGE_REMOVED: "-"}
+        for change in comparison.changes:
+            lines.append(f"  {icons[change.change]} {change.path}  ({change.type})")
+    else:
+        lines.append("  No product artifact changes detected.")
+
+    validation = comparison.validation
+    lines += [
+        "",
+        _bold("Validation"),
+        "----------",
+        "",
+        f"  Valid:    {_delta(validation.base_valid, validation.head_valid)}",
+        f"  Invalid:  {_delta(validation.base_invalid, validation.head_invalid)}",
+    ]
+    if validation.newly_invalid:
+        lines += ["", "  Newly invalid:"]
+        lines += [f"    {_red('✗')} {path}" for path in validation.newly_invalid]
+    if validation.newly_valid:
+        lines += ["", "  Newly valid:"]
+        lines += [f"    {_green('✓')} {path}" for path in validation.newly_valid]
+
+    relationships = comparison.relationships
+    lines += [
+        "",
+        _bold("Relationships"),
+        "-------------",
+        "",
+        f"  Total:    {_delta(relationships.base.total, relationships.head.total)}",
+        f"  Valid:    {_delta(relationships.base.valid, relationships.head.valid)}",
+        f"  Broken:   {_delta(relationships.base.broken, relationships.head.broken)}",
+    ]
+    if relationships.new_issues:
+        lines += ["", "  New issues:"]
+        lines += [
+            f"    {_yellow('!')} {_issue_phrase(issue)}" for issue in relationships.new_issues
+        ]
+    if relationships.resolved_issues:
+        lines += ["", "  Resolved issues:"]
+        lines += [
+            f"    {_green('✓')} {_issue_phrase(issue)}" for issue in relationships.resolved_issues
+        ]
+
+    stats = comparison.stats
+    lines += [
+        "",
+        _bold("Repository Changes"),
+        "------------------",
+        "",
+    ]
+    for type_name, (base_count, head_count) in stats.by_type.items():
+        if base_count or head_count:
+            lines.append(f"  {type_name.title():<14} {_delta(base_count, head_count)}")
+    lines.append(f"  {'Total':<14} {_delta(stats.total[0], stats.total[1])}")
+
     return "\n".join(lines)
