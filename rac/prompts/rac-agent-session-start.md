@@ -23,6 +23,18 @@ Before coding:
 
 Do not implement until I approve the plan.
 
+Grounding (when the `rac-guide` MCP tools are available in your session):
+- Call `get_summary` once at session start to learn what recorded
+  knowledge exists.
+- Call `search_artifacts` before designing or implementing; recorded
+  decisions take precedence over conventions inferred from the code.
+- When an artifact ID is mentioned, call `get_artifact`; call
+  `get_related` before changing anything an artifact covers.
+- Cite decisions by ID. If a task conflicts with a recorded decision,
+  say so and stop — do not silently override it.
+Without the tools, the same knowledge lives under `rac/`; use the
+`rac` CLI (`find`, `resolve`, `relationships`) instead.
+
 Testing:
 - Add negative boundary tests for each new artifact type.
 - Test that adjacent artifact types do not misclassify as each other.
