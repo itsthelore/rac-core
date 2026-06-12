@@ -290,6 +290,85 @@ one-screen summary and `review` when you want the prioritized worklist.
 
 ---
 
+## watchkeeper
+
+Review product knowledge *changes* between two repository states: what was
+added, modified, or removed, and how validation, relationships, and repository
+statistics moved. `review` answers "what needs attention now?"; `watchkeeper`
+answers "what changed, and how did it move the repository?".
+
+- **Input:** `rac watchkeeper [directory]` — the corpus to compare (default:
+  `rac/` when present, else the current directory). The working tree is the
+  head state.
+- **Options:** `--base REF` (default `main`) · `--head REF` · `--json`
+- **Exit codes:** `0` comparison produced (informational in v0.12.0) ·
+  `2` not a directory, unknown revision, or not inside a git repository
+
+`--base` and `--head` each accept a git revision (`main`,
+`origin/some-branch`, a commit SHA) **or** an existing directory path —
+directories are compared as-is, with no git involved. Revisions are
+materialized read-only via `git archive` (ADR-042): nothing mutates your
+repository, and only the corpus subpath is extracted.
+
+```bash
+rac watchkeeper rac --base main
+```
+
+```text
+RAC Watchkeeper
+===============
+
+Directory:  rac
+Comparing:  main → rac
+
+Changed Artifacts
+-----------------
+
+  + requirements/billing.md  (requirement)
+  ~ requirements/checkout.md  (requirement)
+  - requirements/legacy-upload.md  (requirement)
+
+Validation
+----------
+
+  Valid:    5 → 4
+  Invalid:  0 → 1
+
+  Newly invalid:
+    ✗ requirements/payouts.md
+
+Relationships
+-------------
+
+  Total:    3 → 3
+  Broken:   0 → 1
+
+  New issues:
+    ! decisions/adr-001-payment-provider.md — Related Requirements reference 'legacy-upload' (relationship-target-not-found)
+
+Repository Changes
+------------------
+
+  Requirement    3 → 3
+  Total          5 → 5
+```
+
+Artifacts are matched by corpus-relative path, so a renamed artifact reports
+as removed plus added. A base revision that predates the corpus directory
+compares against an empty base — a brand-new corpus is a valid
+"everything added" review.
+
+The `--json` form is a stable contract (`schema_version: "1"`) with `base`,
+`head`, `directory`, `changes[]` (each with `change`, `type`, `id`, `title`,
+`path`, `base_status`, `head_status`, and a requirement-level `diff` for
+modified artifacts), `validation` (per-side counts plus `newly_invalid` /
+`newly_valid`), `relationships` (per-side summaries plus `new_issues` /
+`resolved_issues`), and `stats` (per-type and total counts for both sides).
+Intent findings and review recommendations arrive later in the v0.12.x
+series.
+
+---
+
 ## portfolio
 
 A one-screen repository intelligence summary: artifact counts by type, validity,
