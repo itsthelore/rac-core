@@ -12,6 +12,7 @@ from dataclasses import asdict
 
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
+from rac.core.skills import SkillSpec
 from rac.services.create import CreatedArtifact
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
@@ -23,7 +24,7 @@ from rac.services.portfolio import PortfolioSummary
 from rac.services.relationships import RelationshipReport, RelationshipValidation
 from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
-from rac.services.skill import InstalledSkill
+from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
 from rac.services.validate import DirectoryValidation
 
@@ -295,9 +296,18 @@ def render_migrate_json(report: MigrationReport) -> str:
     return json.dumps(report.to_dict(), indent=2)
 
 
-# --- skill (rac skill install, v0.10.4) ---------------------------------------
+# --- skill (rac skill install / list, v0.10.4-v0.10.5) ------------------------
 
 
-def render_skill_install_json(installed: InstalledSkill) -> str:
+def render_skill_install_json(installation: SkillInstallation) -> str:
     """JSON `rac skill install` output (stable contract, ADR-007)."""
-    return json.dumps(installed.to_dict(), indent=2)
+    return json.dumps(installation.to_dict(), indent=2)
+
+
+def render_skill_list_json(specs: list[SkillSpec]) -> str:
+    """JSON `rac skill list` output (stable contract, ADR-007)."""
+    payload = {
+        "schema_version": "1",
+        "skills": [{"skill": spec.name, "description": spec.description} for spec in specs],
+    }
+    return json.dumps(payload, indent=2)
