@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from rac.core.artifacts import spec_for
 from rac.core.classification import missing_sections
 from rac.core.corpus import collect_corpus
+from rac.core.models import SearchSection
 from rac.core.operations import CancelToken, Progress, ProgressCallback, checkpoint
 
 from .index import index_from_corpus
@@ -67,6 +68,10 @@ class Artifact:
     aliases: tuple[str, ...]
     status: str
     missing_recommended: tuple[str, ...] = ()
+    # Searchable section headings/body lines, original text preserved (v0.10.3):
+    # lets the repository model serve body-tier `rac find` searches through the
+    # shared resolver seam without a second walk. Not part of any JSON contract.
+    search_sections: tuple[SearchSection, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -209,6 +214,7 @@ def load_repository(
             aliases=tuple(entry.aliases),
             status=status_by_path[entry.path],
             missing_recommended=missing_by_path.get(entry.path, ()),
+            search_sections=tuple(entry.search_sections),
         )
         for entry in index.artifacts
     ]

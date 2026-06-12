@@ -16,7 +16,7 @@ import re
 from markdown_it import MarkdownIt
 
 from .frontmatter import parse_frontmatter, split_frontmatter
-from .models import Issue, MalformedRequirement, Product, Requirement
+from .models import Issue, MalformedRequirement, Product, Requirement, SearchSection
 
 # A requirement line: a leading ``[...]`` ID token followed by description text.
 # We capture anything inside the brackets so we can distinguish a *malformed* ID
@@ -98,6 +98,10 @@ def parse(text: str, source_path: str = "") -> Product:
     extra_title_lines: list[int] = []
     section: str | None = None  # current tracked section key, or None/"other"
     current_h2: str | None = None  # normalized heading of the current ## section
+    # Searchable sections in document order, original heading/line text preserved
+    # (v0.10.3): the source of snippet text for body-tier search.
+    search_sections: list[SearchSection] = []
+    current_search: SearchSection | None = None
 
     problem_lines: list[str] = []
     requirement_lines: list[tuple[str, int]] = []
@@ -123,12 +127,17 @@ def parse(text: str, source_path: str = "") -> Product:
                     extra_title_lines.append((tok.map[0] + 1 + offset) if tok.map else 0)
                 section = None  # content directly under the title is ignored
                 current_h2 = None
+                current_search = None
             elif tok.tag == "h2":
                 normalized = _normalize_heading(heading_text)
                 current_h2 = normalized
                 # Record the heading immediately so empty sections still appear
                 # in product.sections (classification keys off heading presence).
                 section_bodies.setdefault(normalized, [])
+                # Searchable section carries the heading text exactly as stored,
+                # so body-tier snippets render the document's own heading.
+                current_search = SearchSection(heading=heading_text.strip())
+                search_sections.append(current_search)
                 key = _SECTIONS.get(normalized)
                 section = key
                 if key is not None:
@@ -150,6 +159,8 @@ def parse(text: str, source_path: str = "") -> Product:
                 stripped = raw.strip()
                 if stripped:
                     section_bodies.setdefault(current_h2, []).append(stripped)
+                    if current_search is not None:
+                        current_search.lines.append(stripped)
 
         if section is None or section == "other":
             continue
@@ -189,6 +200,7 @@ def parse(text: str, source_path: str = "") -> Product:
         success_metrics=metric_lines,
         risks=risk_lines,
         sections=sections,
+        search_sections=search_sections,
         has_problem_section=has["problem"],
         has_requirements_section=has["requirements"],
         has_metrics_section=has["success_metrics"],

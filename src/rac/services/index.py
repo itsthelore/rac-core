@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
+from rac.core.models import SearchSection
 
 
 @dataclass
@@ -39,6 +40,12 @@ class IndexEntry:
     # Every identifier the artifact answers to, canonical first (v0.7.12,
     # additive): legacy aliases keep resolving during identity migration.
     aliases: list[str] = field(default_factory=list)
+    # Searchable section headings and body lines, original text preserved
+    # (v0.10.3): the body/heading tiers of `rac find` and their snippets read
+    # from here, sourced from the same corpus walk — never a second read. Not
+    # serialized: the index JSON contract is unchanged (id/type/title/path/
+    # aliases only).
+    search_sections: list[SearchSection] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -102,6 +109,7 @@ def index_from_corpus(
                 title=product.title,
                 path=str(path),
                 aliases=artifact_identifiers(product, spec, str(path)),
+                search_sections=product.search_sections,
             )
         )
     return RepositoryIndex(directory=directory, recursive=recursive, artifacts=artifacts)

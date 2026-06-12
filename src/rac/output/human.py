@@ -808,7 +808,15 @@ def render_find_human(result: SearchResult) -> str:
         return f"No artifacts match {result.query!r}."
     id_w = max(len(m.id) for m in result.matches)
     type_w = max(len(m.type) for m in result.matches)
-    lines = [f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}" for m in result.matches]
+    lines: list[str] = []
+    for m in result.matches:
+        lines.append(f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}")
+        # Heading/body matches carry a snippet; show the matched section and line
+        # indented under the row so an agent or reader can triage without opening
+        # the file (ADR-038). Metadata matches have no snippet and stay one line.
+        if m.snippet is not None:
+            section = f"{m.section}: " if m.section else ""
+            lines.append(f"{' ' * id_w}  {' ' * type_w}  ↳ {section}{m.snippet}")
     lines.append("")
     lines.append(f"{result.match_count} match(es) for {result.query!r}.")
     return "\n".join(lines)

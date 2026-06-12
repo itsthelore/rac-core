@@ -44,6 +44,21 @@ class MalformedRequirement:
 
 
 @dataclass
+class SearchSection:
+    """One ``##`` section's searchable content, original text preserved (v0.10.3).
+
+    Distinct from :attr:`Product.sections` (casefolded heading -> joined body):
+    search needs the heading and body lines *as stored* so snippets render the
+    document's own text. ``heading`` is the ``##`` heading exactly as written;
+    ``lines`` are the section's non-blank body lines, each stripped of
+    surrounding whitespace, in document order.
+    """
+
+    heading: str
+    lines: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Product:
     """The structured representation of a single requirement file."""
 
@@ -61,6 +76,11 @@ class Product:
     # types: classification, inspection metadata, and validation read from here
     # rather than re-parsing the Markdown.
     sections: dict[str, str] = field(default_factory=dict)
+    # Searchable section content with original heading/line text (v0.10.3,
+    # additive): the source of snippet text for body-tier search matches. Kept
+    # separate from ``sections`` (which casefolds headings and joins bodies for
+    # classification and validation) so search renders the document's own text.
+    search_sections: list[SearchSection] = field(default_factory=list)
     # Distinguish "section absent" from "section present but empty".
     has_problem_section: bool = False
     has_requirements_section: bool = False
