@@ -1,7 +1,7 @@
 """Opt-in local usage telemetry for Guide (v0.10.4).
 
 Telemetry answers one product question — is Guide actually used, and which
-tools matter — without spending the trust the Guide asks for (ADR-039). The
+tools matter — without spending the trust the Guide asks for (ADR-040). The
 shape is pinned: opt-in and default-off, local-only, and content-free. Events
 carry counts and metadata; tool arguments, artifact IDs, query strings, paths,
 and repository content are never recorded.
@@ -44,17 +44,17 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Pinned event schema version (ADR-039). Bumping it is a recorded decision.
+# Pinned event schema version (ADR-040). Bumping it is a recorded decision.
 SCHEMA_VERSION = "1"
 
 TELEMETRY_FILENAME = "guide-telemetry.jsonl"
 
 # Rotation threshold: events are ~120 bytes, so 1 MB holds roughly 8,000
 # calls. One previous generation is kept (``.1``), bounding disk use at about
-# 2 MB with no in-flight rotation and no retention configuration (ADR-039).
+# 2 MB with no in-flight rotation and no retention configuration (ADR-040).
 MAX_LOG_BYTES = 1_000_000
 
-# Share flow (ADR-039): a prefilled new-issue URL against the repository's
+# Share flow (ADR-040): a prefilled new-issue URL against the repository's
 # usage-report issue form. Issue forms accept ``?field_id=value`` prefill;
 # the user's browser transmits, RAC never does.
 SHARE_ISSUE_URL = "https://github.com/tcballard/requirements-as-code/issues/new"
@@ -283,7 +283,7 @@ def share_url(summary: TelemetrySummary) -> str:
     """The prefilled usage-report issue URL for ``summary``.
 
     String formatting only — the user opens the URL, reviews the prefilled
-    report, and submits it with their own GitHub account (ADR-039). The
+    report, and submits it with their own GitHub account (ADR-040). The
     local log path stays out of the shared report: a home-directory path
     can embed a username, and the report is counts and timestamps only.
     """

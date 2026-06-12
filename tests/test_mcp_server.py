@@ -100,7 +100,7 @@ def test_cli_valid_root_runs_server_and_returns_zero(monkeypatch):
     args = parser.parse_args(["mcp", "--root", CORPUS])
     assert args.func(args) == cli.EXIT_OK
     assert captured["root"] == CORPUS
-    assert captured["telemetry"] is False, "telemetry is opt-in, default off (ADR-039)"
+    assert captured["telemetry"] is False, "telemetry is opt-in, default off (ADR-040)"
 
 
 def test_run_server_returns_zero_on_clean_shutdown(monkeypatch):

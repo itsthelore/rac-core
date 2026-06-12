@@ -20,7 +20,7 @@ input produce identical output, within the per-response character budget
 Failed lookups return structured error data, never protocol exceptions
 (ADR-034, :mod:`rac.mcp.errors`): an agent recovers from a JSON body.
 
-Opt-in telemetry (v0.10.4, ADR-039): when serving with a recorder, each tool
+Opt-in telemetry (v0.10.4, ADR-040): when serving with a recorder, each tool
 call routes through :func:`rac.mcp.telemetry.observe`, which times the call,
 classifies the structured payload, and returns it unchanged — tool responses
 are byte-identical with telemetry on and off, and the log is never an input
@@ -223,7 +223,7 @@ def build_server(
 
     ``budget`` is the per-response character cap (ADR-033), configurable here at
     startup; there is no per-call override. ``recorder`` enables opt-in usage
-    telemetry (ADR-039): with ``None`` — the default — nothing is recorded and
+    telemetry (ADR-040): with ``None`` — the default — nothing is recorded and
     every call is exactly the bare tool body. The returned :class:`FastMCP`
     instance has the four pinned tools registered and is ready to run over any
     transport — the CLI runs it over stdio.
@@ -285,7 +285,7 @@ def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool 
     Emits a one-line notice to stderr when the repository root contains no
     recognized artifacts (v0.10.1 startup hardening), and another when
     telemetry is enabled — opt-in recording is announced, never silent
-    (ADR-039).
+    (ADR-040).
     """
     _check_corpus(root)
     recorder: TelemetryRecorder | None = None

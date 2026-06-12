@@ -856,7 +856,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Record tool-call counts and metadata (never arguments or content) "
-            "to a local log; off by default (ADR-039)."
+            "to a local log; off by default (ADR-040)."
         ),
     )
     p_mcp.set_defaults(func=cmd_mcp)

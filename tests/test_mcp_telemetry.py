@@ -1,6 +1,6 @@
 """Guide telemetry contracts — opt-in, local-only, content-free (v0.10.4).
 
-The battery pins ADR-039's shape: nothing is recorded without the explicit
+The battery pins ADR-040's shape: nothing is recorded without the explicit
 opt-in; events carry the pinned field set and never tool arguments or
 repository content; tool responses are byte-identical with a recorder attached
 and without one (the ADR-032 guard); a recorder that cannot write disables
@@ -41,7 +41,7 @@ CORPUS = fixture_path("mcp", "corpus")
 
 DEC = "RAC-MCPDEC000001"
 
-# The pinned event field set, in emission order (ADR-039). ``error`` appears
+# The pinned event field set, in emission order (ADR-040). ``error`` appears
 # only on error outcomes, between ``outcome`` and ``duration_ms``.
 EVENT_FIELDS = ["schema_version", "ts", "session", "tool", "outcome", "duration_ms", "truncated"]
 EVENT_FIELDS_ERROR = [
@@ -143,7 +143,7 @@ def test_each_tool_records_exactly_one_pinned_event(tmp_path):
 
 
 def test_events_never_carry_arguments_or_content(tmp_path):
-    # The content-free guarantee is a test, not a comment (ADR-039): the
+    # The content-free guarantee is a test, not a comment (ADR-040): the
     # artifact ID argument and the repository content the call returned must
     # not appear anywhere in the log.
     recorder = make_recorder(tmp_path)

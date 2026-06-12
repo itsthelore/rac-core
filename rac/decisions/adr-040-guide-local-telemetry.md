@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KTY25D945HYK
 type: decision
 ---
-# ADR-039: Guide Local Telemetry
+# ADR-040: Guide Local Telemetry
 
 ## Status
 
