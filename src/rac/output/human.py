@@ -1035,4 +1035,13 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
             ]
             lines += [f"      {line}" for line in finding.evidence]
 
+    # Review verdict (v0.12.2).
+    lines += ["", _bold("Review"), "------", ""]
+    if report.review_recommended:
+        lines.append(f"  {_yellow('Review recommended.')}")
+        lines += ["", "  Reasons:", ""]
+        lines += [f"    · {rec.reason}  [{rec.code}]" for rec in report.recommendations]
+    else:
+        lines.append(f"  {_green('✓ Nothing requiring attention.')}")
+
     return "\n".join(lines)

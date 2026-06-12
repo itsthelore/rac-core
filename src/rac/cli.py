@@ -10,7 +10,9 @@ Commands:
     rac schema [--list] [type] [--json | --template]
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
     rac review <directory> [--json] [--top-level]
-    rac watchkeeper [directory] [--base REF] [--head REF] [--json]
+    rac watchkeeper [directory] [--base REF] [--head REF]
+                    [--format human|json|github] [--json] [--fail-on POLICY]
+                    [--no-annotate]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
     rac export [directory] [--json | --html] [--out PATH]
@@ -38,7 +40,8 @@ Exit codes:
        consent shown or changed, including when no endpoint key is
        configured; export payload produced — JSON to stdout, or the
        --html Portal file written, an empty corpus included; watchkeeper
-       comparison produced, with or without changes)
+       comparison with nothing requiring attention under the chosen
+       --fail-on policy, always with --fail-on none)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
@@ -48,7 +51,9 @@ Exit codes:
        artifact not found or duplicate ID; migrate: malformed repository
        config or ID generation exhausted; skill install: any target file
        already exists (never overwritten; no-name installs refuse
-       all-or-nothing) or packaged skill missing (broken installation)
+       all-or-nothing) or packaged skill missing (broken installation);
+       watchkeeper: review recommended (--fail-on error, the default) or
+       any warning finding (--fail-on warning)
     2  usage / IO error (file not found, not a directory, unsupported type,
        refuse-to-overwrite, missing output directory, repository not
        initialized, invalid repository key, explorer extra not installed,
@@ -404,12 +409,27 @@ def cmd_watchkeeper(args: argparse.Namespace) -> int:
     except (NotAGitRepository, RevisionNotFound) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE) from None
-    if args.json:
+    output_format = "json" if args.json else args.format
+    if output_format == "json":
         print(outputs.render_watchkeeper_json(report))
+    elif output_format == "github":
+        # stdout is the step-summary Markdown; annotations go to stderr so
+        # `> "$GITHUB_STEP_SUMMARY"` keeps them in the step log, where the
+        # runner turns workflow commands into inline annotations.
+        print(outputs.render_watchkeeper_github(report))
+        if args.annotate:
+            for line in outputs.watchkeeper_annotations(report):
+                print(line, file=sys.stderr)
     else:
         print(outputs.render_watchkeeper_human(report))
-    # Comparison is informational in v0.12.0; failure policy arrives with
-    # review recommendations (v0.12.2).
+    # Failure policy (v0.12.2): `error` fails on a review recommendation,
+    # `warning` also on any warning-severity finding, `none` never fails.
+    if args.fail_on == "none":
+        return EXIT_OK
+    if report.review_recommended:
+        return EXIT_VALIDATION_FAILED
+    if args.fail_on == "warning" and report.has_warnings:
+        return EXIT_VALIDATION_FAILED
     return EXIT_OK
 
 
@@ -955,7 +975,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Head state: a git revision or an existing directory (default: the working tree).",
     )
     p_watchkeeper.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+        "--format",
+        choices=["human", "json", "github"],
+        default="human",
+        help=(
+            "Output format: human (default), json (stable contract), or github "
+            "(step-summary Markdown on stdout, workflow-command annotations on stderr)."
+        ),
+    )
+    p_watchkeeper.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit JSON instead of human-readable text (alias for --format json).",
+    )
+    p_watchkeeper.add_argument(
+        "--fail-on",
+        choices=["error", "warning", "none"],
+        default="error",
+        help=(
+            "Failure policy: error (exit 1 when review is recommended, the default), "
+            "warning (also on any warning finding), or none (never fail)."
+        ),
+    )
+    p_watchkeeper.add_argument(
+        "--no-annotate",
+        dest="annotate",
+        action="store_false",
+        help="Suppress workflow-command annotations (github format only).",
     )
     p_watchkeeper.set_defaults(func=cmd_watchkeeper)
 
