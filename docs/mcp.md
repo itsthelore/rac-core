@@ -130,7 +130,54 @@ a decision covers.
 The tool descriptions contain the trigger language; well-tuned agents call them
 without being told to.
 
-## 6. Troubleshooting
+## 6. Team setup: route CLAUDE.md to a RAC prompt (Claude Code)
+
+The tool descriptions are sufficient on their own — the grounding demo proves
+that — but teams adopting RAC can raise the call rate by giving every session
+standing guidance. Rather than pasting instructions into `CLAUDE.md`, record
+the guidance as a RAC prompt artifact and route to it, the same pattern this
+repository uses for its own agent guidance:
+
+```bash
+rac new prompt rac/prompts/agent-session-start.md
+```
+
+Fill the artifact with your team's standing instructions, for example:
+
+- at session start, call `get_summary` to learn what recorded knowledge exists
+- before designing or implementing, call `search_artifacts` for the feature
+  area — recorded decisions take precedence over conventions inferred from
+  the code
+- when an artifact ID is mentioned, call `get_artifact`; call `get_related`
+  before changing anything an artifact covers
+- cite decisions by ID; if a task conflicts with a recorded decision, say so
+  instead of silently overriding it
+
+Then make `CLAUDE.md` a router:
+
+```markdown
+# Agent session context
+
+Canonical agent guidance lives in `rac/prompts/` as validated RAC artifacts.
+
+@rac/prompts/agent-session-start.md
+```
+
+Claude Code inlines the referenced artifact at session start, so the effect is
+identical to pasting the text — but the guidance is now a governed artifact:
+`rac validate` checks it in CI, it is versioned and diffable like any other
+decision, and Guide itself can serve it (`get_artifact` retrieves your usage
+instructions — the system is self-describing).
+
+Two caveats:
+
+- The import inlines the artifact verbatim, YAML frontmatter included. That
+  is harmless, and the agent then knows the artifact's own ID.
+- `@import` syntax is Claude Code-specific. For Cursor or Claude Desktop,
+  carry the same pointer in their native convention (for example
+  `.cursor/rules`); the prompt artifact remains the single source of truth.
+
+## 7. Troubleshooting
 
 ### Server not listed in the client
 
