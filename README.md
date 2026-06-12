@@ -134,6 +134,23 @@ New to Lore? Author your first artifact in five minutes: **[docs/quickstart.md](
 
 Everything stays plain Markdown — see **[docs/artifacts.md](https://github.com/tcballard/requirements-as-code/blob/main/docs/artifacts.md)**.
 
+## Sharing the corpus (the Portal)
+
+Agents read your lore over MCP; people get the Portal — a single
+self-contained HTML file of the whole corpus that opens from `file://`
+with zero network requests. Attach it to a release, send it to a
+stakeholder, open it on a plane.
+
+```bash
+rac export rac/                                  # canonical JSON to stdout
+rac export rac/ --html --out lore-export.html    # the Portal, one file
+```
+
+The JSON payload is a stable contract (artifacts with ids, aliases,
+status, rendered bodies; relationships as edges) for anyone building
+their own viewer. The Portal ships search, type/status filters, and
+citation cross-links out of the box.
+
 ## How Lore earns trust
 
 Lore asks you to trust it with your product knowledge, so it holds itself to the same standard it applies to your repository:
