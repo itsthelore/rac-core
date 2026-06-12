@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 from contextlib import ExitStack
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from rac.core.models import Diff
@@ -26,6 +26,7 @@ from rac.services.compare import (
     compare_states,
     load_state,
 )
+from rac.services.intent import IntentFinding, analyze_intent
 from rac.services.relationships import RelationshipSummary
 from rac.services.revisions import materialized_revision, repository_root
 
@@ -38,6 +39,7 @@ class WatchkeeperReport:
     base: str  # base label: revision name or directory path
     head: str  # head label: revision name or directory path (working tree)
     comparison: RepositoryComparison
+    findings: list[IntentFinding] = field(default_factory=list)  # v0.12.1, additive
 
     @property
     def has_changes(self) -> bool:
@@ -72,6 +74,8 @@ class WatchkeeperReport:
                     for type_name, counts in stats.by_type.items()
                 },
             },
+            # Additive in v0.12.1 (ADR-007): deterministic intent findings.
+            "findings": [_finding_dict(finding) for finding in self.findings],
         }
 
 
@@ -124,6 +128,17 @@ def _issue_dict(issue: RelationshipIssueRef) -> dict:
     }
 
 
+def _finding_dict(finding: IntentFinding) -> dict:
+    return {
+        "code": finding.code,
+        "severity": finding.severity,
+        "path": finding.path,
+        "identifier": finding.identifier,
+        "detail": finding.detail,
+        "evidence": list(finding.evidence),
+    }
+
+
 def _resolve_side(stack: ExitStack, directory: str, ref: str) -> str:
     """A directory for one comparison side: ``ref`` itself, or a materialization."""
     if Path(ref).is_dir():
@@ -149,4 +164,11 @@ def build_watchkeeper_report(
         base_state = load_state(base_dir, label=base)
         head_state = load_state(head_dir, label=head_label)
         comparison = compare_states(base_state, head_state)
-    return WatchkeeperReport(directory=directory, base=base, head=head_label, comparison=comparison)
+        findings = analyze_intent(comparison)
+    return WatchkeeperReport(
+        directory=directory,
+        base=base,
+        head=head_label,
+        comparison=comparison,
+        findings=findings,
+    )

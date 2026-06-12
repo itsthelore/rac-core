@@ -1024,4 +1024,15 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
             lines.append(f"  {type_name.title():<14} {_delta(base_count, head_count)}")
     lines.append(f"  {'Total':<14} {_delta(stats.total[0], stats.total[1])}")
 
+    if report.findings:
+        lines += ["", _bold(f"Findings ({len(report.findings)})"), "--------"]
+        for finding in report.findings:
+            icon = _yellow("!") if finding.severity == "warning" else "·"
+            lines += [
+                "",
+                f"  {icon} [{finding.code}] {finding.path}",
+                f"      {finding.detail}",
+            ]
+            lines += [f"      {line}" for line in finding.evidence]
+
     return "\n".join(lines)
