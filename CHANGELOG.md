@@ -8,6 +8,14 @@ details, release history over commit history.
 
 ### Added
 
+- Opt-in Guide telemetry (v0.10.4): `rac mcp --telemetry` records tool-call
+  counts and metadata — never arguments or repository content — to a local
+  log under `$XDG_STATE_HOME/rac/`; off by default and announced on stderr
+  when on. Tool responses are byte-identical with telemetry on and off. A
+  new `rac mcp-stats` command summarizes the log (`--json` is the shareable
+  export; `--share` prints a prefilled GitHub usage-report issue URL you
+  review and submit yourself — RAC contains no network code).
+
 - Review impact and the first-run editor (v0.8.11): every `rac review`
   finding now carries an `impact` sentence — why it matters — owned by Core
   and present in the JSON contract (additive field; `schema_version`

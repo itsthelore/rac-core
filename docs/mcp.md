@@ -177,7 +177,57 @@ Two caveats:
   carry the same pointer in their native convention (for example
   `.cursor/rules`); the prompt artifact remains the single source of truth.
 
-## 7. Troubleshooting
+## 7. Telemetry (opt-in)
+
+Guide records nothing by default. If you want to see whether it is actually
+being used — and help decide where Guide investment goes — opt in with an
+explicit flag in your client's server configuration:
+
+```json
+{
+  "mcpServers": {
+    "rac-guide": {
+      "command": "rac",
+      "args": ["mcp", "--root", "/path/to/repo", "--telemetry"]
+    }
+  }
+}
+```
+
+When enabled, each tool call appends one JSON line to a local log
+(`~/.local/state/rac/guide-telemetry.jsonl`, or under `$XDG_STATE_HOME`):
+
+```json
+{"schema_version": "1", "ts": "2026-06-12T14:03:22.512Z", "session": "a3f29c1b",
+ "tool": "search_artifacts", "outcome": "ok", "duration_ms": 12, "truncated": false}
+```
+
+What is recorded: timestamp, a random per-session id, the tool name, whether
+the call succeeded, how long it took, and whether the response was truncated.
+What is **never** recorded: tool arguments, artifact IDs, search queries,
+file paths, or any repository content. The server announces the log path on
+stderr at startup, so enablement is never silent.
+
+Read the log back any time:
+
+```bash
+rac mcp-stats          # human summary: events, sessions, per-tool usage
+rac mcp-stats --json   # the same summary as JSON — this is the export
+```
+
+If you want to share your usage with the project (early reports directly
+shape Guide's roadmap):
+
+```bash
+rac mcp-stats --share
+```
+
+This prints a prefilled GitHub issue URL. Open it, review the report — counts
+and timestamps only — and submit it with your own account. RAC never sends
+anything anywhere; building a URL is string formatting, and transmission
+belongs to you and your browser. Submitted reports are public issues.
+
+## 8. Troubleshooting
 
 ### Server not listed in the client
 

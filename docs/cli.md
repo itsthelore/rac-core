@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with eighteen subcommands. This page documents each
+RAC ships a single command, `rac`, with twenty subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -461,6 +461,49 @@ rac explorer rac/
 ```
 
 Without the extra, `rac explorer` prints the install hint above and exits `2`.
+
+---
+
+## mcp
+
+Serve RAC repository knowledge to coding agents over MCP (stdio). The four
+read-only tools, client configuration, and team setup are documented in the
+[MCP server guide](mcp.md).
+
+```bash
+rac mcp --root /path/to/repo
+rac mcp --root /path/to/repo --telemetry
+```
+
+- **`--root PATH`** — repository root to serve (default: current directory)
+- **`--telemetry`** — record tool-call counts and metadata (never arguments
+  or content) to a local log under `$XDG_STATE_HOME/rac/` (default
+  `~/.local/state/rac/guide-telemetry.jsonl`); off by default, announced on
+  stderr when on
+- **Exit codes:** `0` server shutdown on client disconnect · `2` `--root` is
+  not a directory
+
+---
+
+## mcp-stats
+
+Summarize the local Guide telemetry log: events, sessions, first and last
+timestamps, and per-tool calls, errors, truncation, and average duration.
+An empty or missing log is a valid answer — telemetry is opt-in and off by
+default.
+
+```bash
+rac mcp-stats           # human summary
+rac mcp-stats --json    # the same summary as JSON (the shareable export)
+rac mcp-stats --share   # prefilled GitHub usage-report issue URL
+```
+
+`--share` prints a URL that opens a prefilled usage-report issue containing
+only counts and timestamps; you review and submit it in your own browser —
+RAC sends nothing itself. `--json` and `--share` are mutually exclusive.
+
+- **Exit codes:** `0` summary produced (including from an empty or missing
+  log) · `2` usage error
 
 ---
 

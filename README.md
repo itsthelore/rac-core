@@ -106,6 +106,7 @@ Lore asks you to trust it with your product knowledge, so it holds itself to the
 - **No AI in the core.** Retrieval is deterministic: the same repo state and the same query always return the same result. The reasoning is your agent's job; Lore's job is to hand it the facts.
 - **It dogfoods itself.** Lore's own planning corpus under [`rac/`](https://github.com/tcballard/requirements-as-code/tree/main/rac) is validated by RAC in CI — if the tool's rules break the tool's own artifacts, the build fails.
 - **Output is a contract.** Golden tests pin CLI and MCP output; any change to what the tools return is reviewed as a product change.
+- **Telemetry is opt-in, local-only, and content-free.** Nothing is recorded without an explicit flag, events never include your arguments or repository content, and nothing leaves your machine unless you submit a report yourself — Lore contains no network code.
 
 ## Documentation
 
