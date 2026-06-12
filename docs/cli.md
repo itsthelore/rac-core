@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with eighteen subcommands. This page documents each
+RAC ships a single command, `rac`, with nineteen subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -683,5 +683,43 @@ rac migrate metadata rac/ --json
       "type": "decision"
     }
   ]
+}
+```
+
+---
+
+## skill
+
+Install the bundled Claude Code agent skill (`rac-artifacts`) into a project.
+The skill content ships with the distribution as a package resource, so
+installation works from an installed wheel without this repository, network
+access, or AI involvement. Exactly one skill is bundled; a skill-name argument
+is introduced only when a second skill exists.
+
+- **Input:** `rac skill install`
+- **Options:** `--dir PATH` (target project directory; default: current
+  directory) · `--json`
+- **Exit codes:** `0` installed · `1` the skill file already exists (never
+  overwritten), or the packaged skill resource is missing (broken
+  installation) · `2` `--dir` is not a directory
+
+`rac skill install` writes `.claude/skills/rac-artifacts/SKILL.md` under the
+target directory — the documented Claude Code project-level discovery path —
+creating parent directories as needed. An existing skill file is never
+overwritten: the command refuses, reports the path, and leaves the file
+untouched.
+
+```bash
+rac skill install                  # into the current project
+rac skill install --dir ../app     # into another project
+rac skill install --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "installed": true,
+  "skill": "rac-artifacts",
+  "path": ".claude/skills/rac-artifacts/SKILL.md"
 }
 ```
