@@ -195,3 +195,70 @@ def test_json_flag_remains_an_alias(capsys, monkeypatch):
     payload = json.loads(out)
     assert payload["schema_version"] == "1"
     assert payload["review"]["recommended"] is True
+
+
+# --- action.yml / workflow contracts (v0.12.3) ----------------------------------
+#
+# The composite action and reusable workflow are thin wrappers around the
+# CLI; these tests pin their input surface and invocation shape so the YAML
+# cannot drift from the command contract silently (same philosophy as the
+# bundled-skill sync test).
+
+
+def _load_yaml(rel_path):
+    yaml = pytest.importorskip("yaml")
+    return yaml.safe_load((REPO_ROOT / rel_path).read_text(encoding="utf-8"))
+
+
+def test_action_inputs_and_defaults():
+    action = _load_yaml("action.yml")
+    inputs = action["inputs"]
+    assert {
+        "path": "rac",
+        "base": "",
+        "fail-on": "error",
+        "annotate": "true",
+        "rac-version": "",
+        "install-from": "pypi",
+    } == {name: spec["default"] for name, spec in inputs.items()}
+    assert all(spec["required"] is False for spec in inputs.values())
+
+
+def test_action_runs_exactly_one_watchkeeper_invocation():
+    action = _load_yaml("action.yml")
+    assert action["runs"]["using"] == "composite"
+    run_steps = [s.get("run", "") for s in action["runs"]["steps"]]
+    invocations = [r for r in run_steps if "rac watchkeeper" in r]
+    assert len(invocations) == 1
+    command = invocations[0]
+    # The wrapper forwards, never reinterprets: github format, the fail-on
+    # policy, and the step-summary redirect must all be present verbatim.
+    assert "--format github" in command
+    assert '--fail-on "$FAIL_ON"' in command
+    assert '> "$GITHUB_STEP_SUMMARY"' in command
+
+
+def test_action_supports_source_installs_for_dogfooding():
+    action = _load_yaml("action.yml")
+    install = next(s["run"] for s in action["runs"]["steps"] if "pip install" in s.get("run", ""))
+    assert "$GITHUB_ACTION_PATH" in install  # source mode
+    assert "requirements-as-code" in install  # pypi mode
+
+
+def test_reusable_workflow_passes_inputs_through():
+    workflow = _load_yaml(".github/workflows/watchkeeper.yml")
+    # PyYAML parses the unquoted `on:` key as boolean True.
+    call_inputs = workflow[True]["workflow_call"]["inputs"]
+    assert set(call_inputs) == {"path", "base", "fail-on", "annotate", "rac-version"}
+    job = workflow["jobs"]["watchkeeper"]
+    action_step = next(s for s in job["steps"] if "requirements-as-code" in s.get("uses", ""))
+    assert set(action_step["with"]) == set(call_inputs)
+    checkout = next(s for s in job["steps"] if "checkout" in s.get("uses", ""))
+    assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_pr_dogfood_job_uses_local_action_from_source():
+    workflow = _load_yaml(".github/workflows/pr-checks.yml")
+    job = workflow["jobs"]["watchkeeper"]
+    action_step = next(s for s in job["steps"] if s.get("uses") == "./")
+    assert action_step["with"]["install-from"] == "source"
