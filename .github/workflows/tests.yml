@@ -65,6 +65,8 @@ jobs:
             paths: "tests/test_create.py tests/test_templates.py"
           - name: diff
             paths: "tests/test_diff.py"
+          - name: export
+            paths: "tests/test_export_cmd.py"
           - name: improve
             paths: "tests/test_improve.py"
           - name: index
