@@ -8,6 +8,7 @@ Markdown templates in :mod:`rac.output.templates`.
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
 
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import CONFIDENCE_THRESHOLD, TypeScore
@@ -44,6 +45,9 @@ from rac.services.stats import PortfolioStats
 from rac.services.validate import STATUS_INVALID, DirectoryValidation
 
 from ._shared import _UNKNOWN_MESSAGE, _unsupported_message
+
+if TYPE_CHECKING:
+    from rac.mcp.telemetry import TelemetrySummary as MCPTelemetrySummary
 
 # --- Minimal color (auto-disabled when not writing to a TTY) ----------------
 
@@ -853,4 +857,48 @@ def render_migrate_human(report: MigrationReport) -> str:
         f"{report.already_canonical} already canonical, "
         f"{report.skipped_unknown} skipped (unknown type).",
     ]
+    return "\n".join(lines)
+
+
+# --- mcp-stats (v0.10.4) ----------------------------------------------------
+
+
+def render_mcp_stats_human(summary: MCPTelemetrySummary) -> str:
+    """Human `rac mcp-stats` output — what the local telemetry log says.
+
+    An empty or missing log is a valid answer (telemetry is off by default),
+    rendered as guidance rather than an error.
+    """
+    lines = [
+        _bold("Guide Telemetry"),
+        "===============",
+        "",
+        f"Log: {summary.path}",
+    ]
+    if summary.event_count == 0:
+        lines += [
+            "",
+            "No telemetry recorded.",
+            "Telemetry is off by default; enable it with: rac mcp --telemetry",
+        ]
+        if summary.skipped_lines:
+            lines += ["", f"Skipped Unreadable Lines: {summary.skipped_lines}"]
+        return "\n".join(lines)
+    lines += [
+        f"Events: {summary.event_count}",
+        f"Sessions: {summary.session_count}",
+        f"First Event: {summary.first_ts}",
+        f"Last Event: {summary.last_ts}",
+        "",
+        _bold("Tool Usage"),
+        "==========",
+        "",
+    ]
+    for usage in summary.tools:
+        lines.append(
+            f"  {usage.tool}: {usage.calls} call(s), {usage.errors} error(s), "
+            f"{usage.truncated} truncated, avg {usage.avg_duration_ms} ms"
+        )
+    if summary.skipped_lines:
+        lines += ["", f"Skipped Unreadable Lines: {summary.skipped_lines}"]
     return "\n".join(lines)

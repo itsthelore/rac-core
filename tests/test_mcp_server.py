@@ -90,8 +90,9 @@ def test_cli_bad_root_exits_usage_without_serving(monkeypatch):
 def test_cli_valid_root_runs_server_and_returns_zero(monkeypatch):
     captured = {}
 
-    def _fake_run(root: str) -> int:
+    def _fake_run(root: str, telemetry_enabled: bool = False) -> int:
         captured["root"] = root
+        captured["telemetry"] = telemetry_enabled
         return 0
 
     monkeypatch.setattr("rac.mcp.server.run_server", _fake_run)
@@ -99,6 +100,7 @@ def test_cli_valid_root_runs_server_and_returns_zero(monkeypatch):
     args = parser.parse_args(["mcp", "--root", CORPUS])
     assert args.func(args) == cli.EXIT_OK
     assert captured["root"] == CORPUS
+    assert captured["telemetry"] is False, "telemetry is opt-in, default off (ADR-039)"
 
 
 def test_run_server_returns_zero_on_clean_shutdown(monkeypatch):

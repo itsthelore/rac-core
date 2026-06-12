@@ -13,7 +13,8 @@ Commands:
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
     rac explorer [directory] [--top-level]
-    rac mcp [--root PATH]
+    rac mcp [--root PATH] [--telemetry]
+    rac mcp-stats [--json | --share]
     rac new <artifact-type> <output-path> [--json]
     rac templates [--json]
     rac init [directory] [--key KEY] [--json]
@@ -27,7 +28,8 @@ Exit codes:
        index produced; artifact created; templates listed; find with or without
        matches; migration or dry run completed, even with nothing to migrate;
        explorer session quit by the user; mcp server shutdown on client
-       disconnect)
+       disconnect; mcp-stats summary produced, even from an empty or
+       missing telemetry log)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
@@ -422,7 +424,24 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     # to the MCP protocol, so any diagnostics here go to stderr.
     from rac.mcp.server import run_server
 
-    return run_server(args.root)
+    return run_server(args.root, telemetry_enabled=args.telemetry)
+
+
+def cmd_mcp_stats(args: argparse.Namespace) -> int:
+    # Imported lazily for the same reason as cmd_mcp: importing the telemetry
+    # module executes the rac.mcp package, which pulls in the MCP SDK.
+    from rac.mcp.telemetry import share_url, summarize
+
+    summary = summarize()
+    if args.share:
+        print(share_url(summary))
+    elif args.json:
+        print(outputs.render_mcp_stats_json(summary))
+    else:
+        print(outputs.render_mcp_stats_human(summary))
+    # An empty or missing log is a valid answer (telemetry is off by default),
+    # like `rac find` with no matches.
+    return EXIT_OK
 
 
 def cmd_new(args: argparse.Namespace) -> int:
@@ -832,7 +851,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Repository root to serve (default: current directory).",
     )
+    p_mcp.add_argument(
+        "--telemetry",
+        action="store_true",
+        help=(
+            "Record tool-call counts and metadata (never arguments or content) "
+            "to a local log; off by default (ADR-039)."
+        ),
+    )
     p_mcp.set_defaults(func=cmd_mcp)
+
+    p_mcp_stats = sub.add_parser(
+        "mcp-stats",
+        help="Summarize the local Guide telemetry log.",
+        parents=[version_parent],
+    )
+    mcp_stats_mode = p_mcp_stats.add_mutually_exclusive_group()
+    mcp_stats_mode.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    mcp_stats_mode.add_argument(
+        "--share",
+        action="store_true",
+        help=(
+            "Print a prefilled GitHub usage-report issue URL to review and "
+            "submit in your browser; RAC sends nothing itself."
+        ),
+    )
+    p_mcp_stats.set_defaults(func=cmd_mcp_stats)
 
     p_new = sub.add_parser(
         "new",
