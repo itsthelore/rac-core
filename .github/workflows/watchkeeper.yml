@@ -1,0 +1,69 @@
+# Reusable Watchkeeper workflow (v0.12.3).
+#
+# Consumers call this with `uses:` to get product knowledge review on pull
+# requests without writing checkout/base-ref wiring themselves:
+#
+#   jobs:
+#     watchkeeper:
+#       uses: tcballard/requirements-as-code/.github/workflows/watchkeeper.yml@<tag>
+#       with:
+#         path: rac
+#
+# Pin an exact release tag. No moving major tag is published: package
+# versions derive from git tags via setuptools-scm, and a floating tag
+# would corrupt version derivation (see docs/watchkeeper.md).
+name: Watchkeeper
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: "Corpus directory to compare."
+        type: string
+        required: false
+        default: "rac"
+      base:
+        description: "Base revision (empty: origin/<PR base branch>)."
+        type: string
+        required: false
+        default: ""
+      fail-on:
+        description: "Failure policy: error, warning, or none."
+        type: string
+        required: false
+        default: "error"
+      annotate:
+        description: "Emit inline annotations."
+        type: boolean
+        required: false
+        default: true
+      rac-version:
+        description: "Exact requirements-as-code version from PyPI (empty: latest)."
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  watchkeeper:
+    name: watchkeeper
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The comparison needs the base revision's history, and a
+          # source-mode install needs git metadata for setuptools-scm.
+          fetch-depth: 0
+
+      # Reusable workflows run in the caller's repository, so the action is
+      # referenced by full path. Update this ref when cutting a release tag;
+      # until the first v0.12.x release it tracks main.
+      - uses: tcballard/requirements-as-code@main
+        with:
+          path: ${{ inputs.path }}
+          base: ${{ inputs.base }}
+          fail-on: ${{ inputs.fail-on }}
+          annotate: ${{ inputs.annotate }}
+          rac-version: ${{ inputs.rac-version }}
