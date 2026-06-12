@@ -70,7 +70,7 @@ code.claude.com/docs/en/skills). RAC should ship one.
 ## Related Roadmaps
 
 - v1.4-claude-skills
-- v0.10.4-bundled-agent-skill
+- v0.10.5-bundled-agent-skill
 - v0.10.5-review-and-ingest-skills
 
 ## Related Requirements

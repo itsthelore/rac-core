@@ -1,4 +1,4 @@
-"""Skill installation — `rac skill install` (v0.10.4, extended v0.10.5).
+"""Skill installation — `rac skill install` (v0.10.5).
 
 ``install_skills`` is the reusable installation capability: it owns resource
 loading, the never-overwrite check, parent directory creation, and the result

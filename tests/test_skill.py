@@ -1,6 +1,6 @@
 """Tests for rac.core.skills, rac.services.skill, and the `rac skill` CLI.
 
-Pins the v0.10.4-v0.10.5 bundled-skill contract (REQ-005..008 of
+Pins the v0.10.5 bundled-skill contract (REQ-005..008 of
 rac/requirements/rac-growth-agent-skill.md): every bundled skill ships as a
 package resource byte-identical to the repository's dogfood copy under
 `.claude/skills/`, `rac skill install` writes all skills (all-or-nothing) or

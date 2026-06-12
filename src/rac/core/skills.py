@@ -1,4 +1,4 @@
-"""Bundled agent skill registry — `rac skill` (v0.10.4, extended v0.10.5).
+"""Bundled agent skill registry — `rac skill` (v0.10.5).
 
 The bundled skill set is a static registry of named skills with one-line
 descriptions, surfaced by `rac skill list` and installable by name. Skill
