@@ -427,6 +427,9 @@ modified artifacts), `validation` (per-side counts plus `newly_invalid` /
 `evidence`; additive in v0.12.1), and `review` (`recommended` plus
 `reasons[]` with `code` and `reason`; additive in v0.12.2).
 
+To run Watchkeeper on pull requests with the bundled GitHub Action and
+reusable workflow, see **[watchkeeper.md](watchkeeper.md)**.
+
 ---
 
 ## portfolio

@@ -8,6 +8,19 @@ details, release history over commit history.
 
 ### Added
 
+- Watchkeeper GitHub Action and reusable workflow (v0.12.3): a composite
+  `action.yml` at the repository root (`uses:
+  tcballard/requirements-as-code@<tag>`) and a callable
+  `.github/workflows/watchkeeper.yml` bring product knowledge review to
+  pull requests — failed check per the `fail-on` policy, inline
+  annotations on the artifacts needing attention, and a step-summary
+  report. The action is logic-free (install RAC, resolve the base ref,
+  run one `rac watchkeeper --format github`, propagate the exit code) and
+  this repository's own PR checks run it from source as the live
+  end-to-end test. Pin exact release tags; no moving major tag is
+  published (setuptools-scm derives versions from git tags). See
+  `docs/watchkeeper.md`.
+
 - Watchkeeper review verdict, GitHub format, and CI policy (v0.12.2):
   `rac watchkeeper` now ends with a deterministic review recommendation —
   validation regressions, broken relationships, and clarity-regression

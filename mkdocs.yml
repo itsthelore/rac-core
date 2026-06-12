@@ -31,6 +31,7 @@ nav:
   - Quickstart: quickstart.md
   - MCP Server: mcp.md
   - CLI Reference: cli.md
+  - Watchkeeper: watchkeeper.md
   - Artifacts: artifacts.md
   - Relationships: relationships.md
   - Repository Workflow: repo-workflow.md
