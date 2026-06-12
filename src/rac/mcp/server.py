@@ -33,11 +33,12 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+from rac.core.corpus import walk_corpus
 from rac.mcp import errors
 from rac.mcp.budget import DEFAULT_BUDGET, serialize
-from rac.services.index import build_repository_index
+from rac.services.index import build_repository_index, index_from_corpus
 from rac.services.portfolio import build_portfolio_summary
-from rac.services.relationships import build_relationship_report
+from rac.services.relationships import relationships_from_corpus
 from rac.services.resolve import (
     OUTCOME_RESOLVED,
     ResolutionResult,
@@ -108,57 +109,49 @@ def _resolve(root: str, artifact_id: str) -> ResolutionResult:
     return resolve_in_index(entries, artifact_id)
 
 
-def _outgoing_for(root: str, path: str) -> dict[str, list[str]]:
+def _outgoing_from(relationships: list, path: str) -> dict[str, list[str]]:
     """The resolved artifact's own relationship sections, references as stored.
 
-    Filters the repository relationship report for ``path`` (ADR-031,
-    presentation-only). Keys are snake_case section names in the artifact's own
-    spec order, exactly as Core emits them.
+    Filters the Core-computed relationship list for references *declared by*
+    ``path`` (ADR-031, presentation-only). Keys are snake_case section names in
+    the artifact's own spec order; ``relationships_from_corpus`` yields
+    references in that order, so a first-seen-wins dict preserves it. References
+    are the raw stored text — the source of truth (ADR-016).
     """
-    report = build_relationship_report(root, recursive=True)
-    for artifact in report.artifacts:
-        if artifact.path == path:
-            return artifact.relationships
-    return {}
+    outgoing: dict[str, list[str]] = {}
+    for rel in relationships:
+        if rel.source_path == path:
+            outgoing.setdefault(rel.relationship, []).append(rel.target)
+    return outgoing
 
 
-def _incoming_for(root: str, target_path: str) -> list[dict]:
+def _incoming_from(relationships: list, by_path: dict, target_path: str) -> list[dict]:
     """Artifacts whose declared references resolve to ``target_path``.
 
-    For every reference declared anywhere in the repository, resolution uses the
-    resolver's own in-index semantics (the server invents no matching). A
-    reference contributes an incoming entry when it resolves *uniquely* to the
-    target artifact. Entries are ordered by source path, then section, matching
-    the deterministic ordering the design pins.
+    Filters the Core-computed relationship list for references whose
+    ``resolved_path`` is the target — resolution stays Core-owned (ADR-031): a
+    reference is an incoming edge exactly when Core resolved it uniquely to the
+    target. Self-references are excluded. Entries are ordered by source path,
+    then section, matching the deterministic ordering the design pins.
     """
-    index = build_repository_index(root, recursive=True).artifacts
-    by_path = {entry.path: entry for entry in index}
-    report = build_relationship_report(root, recursive=True)
-
     incoming: list[dict] = []
-    for artifact in report.artifacts:
-        if artifact.path == target_path:
-            continue  # self-references are not incoming edges
-        source = by_path.get(artifact.path)
-        if source is None:  # pragma: no cover — every report path is indexed
+    for rel in relationships:
+        if rel.resolved_path != target_path:
             continue
-        for section, refs in artifact.relationships.items():
-            for ref in refs:
-                resolution = resolve_in_index(index, ref)
-                if (
-                    resolution.outcome == OUTCOME_RESOLVED
-                    and resolution.artifact is not None
-                    and resolution.artifact.path == target_path
-                ):
-                    incoming.append(
-                        {
-                            "id": source.id,
-                            "type": source.type,
-                            "title": source.title,
-                            "path": source.path,
-                            "section": section,
-                        }
-                    )
+        if rel.source_path == target_path:
+            continue  # self-references are not incoming edges
+        source = by_path.get(rel.source_path)
+        if source is None:  # pragma: no cover — every relationship source is indexed
+            continue
+        incoming.append(
+            {
+                "id": source.id,
+                "type": source.type,
+                "title": source.title,
+                "path": source.path,
+                "section": rel.relationship,
+            }
+        )
     incoming.sort(key=lambda e: (e["path"], e["section"]))
     return incoming
 
@@ -193,15 +186,24 @@ def build_server(root: str, budget: int = DEFAULT_BUDGET) -> FastMCP:
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
     def get_related(id: str) -> str:
-        result = _resolve(root, id)
+        # One corpus walk feeds resolution, outgoing, and incoming, so the whole
+        # response reflects a single atomic snapshot of the repository (ADR-032):
+        # there is no window in which the relationship view drifts mid-call.
+        # Caching across calls remains forbidden — the snapshot lives and dies
+        # inside this call.
+        entries = list(walk_corpus(root, recursive=True))
+        index = index_from_corpus(root, entries, recursive=True).artifacts
+        result = resolve_in_index(index, id)
         if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
             return serialize(errors.from_resolution(result), budget)
         artifact = result.artifact
+        relationships = relationships_from_corpus(entries)
+        by_path = {entry.path: entry for entry in index}
         payload = {
             "schema_version": "1",
             **artifact.to_dict(),
-            "outgoing": _outgoing_for(root, artifact.path),
-            "incoming": _incoming_for(root, artifact.path),
+            "outgoing": _outgoing_from(relationships, artifact.path),
+            "incoming": _incoming_from(relationships, by_path, artifact.path),
         }
         return serialize(payload, budget)
 
