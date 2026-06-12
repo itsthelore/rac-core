@@ -690,36 +690,65 @@ rac migrate metadata rac/ --json
 
 ## skill
 
-Install the bundled Claude Code agent skill (`rac-artifacts`) into a project.
-The skill content ships with the distribution as a package resource, so
+Install or list the bundled Claude Code agent skills. Three skills are
+bundled: `rac-artifacts` (author and maintain artifacts), `rac-review`
+(corpus review and triage), and `rac-ingest` (legacy document conversion).
+Skill content ships with the distribution as package resources, so
 installation works from an installed wheel without this repository, network
-access, or AI involvement. Exactly one skill is bundled; a skill-name argument
-is introduced only when a second skill exists.
+access, or AI involvement.
 
-- **Input:** `rac skill install`
+- **Input:** `rac skill install [name]` — with no name, every bundled skill;
+  with a name, exactly that skill. `rac skill list` — enumerate the bundle.
 - **Options:** `--dir PATH` (target project directory; default: current
-  directory) · `--json`
-- **Exit codes:** `0` installed · `1` the skill file already exists (never
-  overwritten), or the packaged skill resource is missing (broken
-  installation) · `2` `--dir` is not a directory
+  directory; install only) · `--json`
+- **Exit codes:** `0` installed / listed · `1` a target skill file already
+  exists (never overwritten), or a packaged skill resource is missing
+  (broken installation) · `2` `--dir` is not a directory, or an unknown
+  skill name (the available skills are listed)
 
-`rac skill install` writes `.claude/skills/rac-artifacts/SKILL.md` under the
-target directory — the documented Claude Code project-level discovery path —
-creating parent directories as needed. An existing skill file is never
-overwritten: the command refuses, reports the path, and leaves the file
-untouched.
+`rac skill install` writes each skill to
+`.claude/skills/<name>/SKILL.md` under the target directory — the documented
+Claude Code project-level discovery path — creating parent directories as
+needed. An existing skill file is never overwritten. The no-name form is
+all-or-nothing: every target path is checked first, and if any exists the
+command refuses with exit `1`, reports the existing path(s), and writes
+nothing. To add a single missing skill alongside ones already installed,
+name it: `rac skill install rac-review`.
 
 ```bash
-rac skill install                  # into the current project
-rac skill install --dir ../app     # into another project
-rac skill install --json
+rac skill install                       # all bundled skills, current project
+rac skill install rac-review            # one skill by name
+rac skill install --dir ../app --json   # into another project
+rac skill list                          # what is bundled
 ```
+
+```text
+Bundled agent skills:
+
+- rac-artifacts  Author and maintain RAC Markdown artifacts with the rac CLI.
+- rac-review     Review a RAC corpus and work findings worst-first.
+- rac-ingest     Convert legacy documents into valid, linked RAC artifacts.
+```
+
+The install `--json` form reports one entry per installed skill:
 
 ```json
 {
   "schema_version": "1",
   "installed": true,
-  "skill": "rac-artifacts",
-  "path": ".claude/skills/rac-artifacts/SKILL.md"
+  "skills": [
+    {
+      "skill": "rac-artifacts",
+      "path": ".claude/skills/rac-artifacts/SKILL.md"
+    },
+    {
+      "skill": "rac-review",
+      "path": ".claude/skills/rac-review/SKILL.md"
+    },
+    {
+      "skill": "rac-ingest",
+      "path": ".claude/skills/rac-ingest/SKILL.md"
+    }
+  ]
 }
 ```
