@@ -100,10 +100,23 @@ Description (verbatim):
 > matching artifact IDs, types, titles, and paths; use get_artifact to read
 > a match.
 
-Search uses the exact semantics of `rac find`: case-insensitive substring
-matching over identifiers, title, and path, ordered by match-field priority
-with sorted path as tiebreak. v1 adds no semantics beyond what
-`find_artifacts` does today.
+Search uses the exact semantics of `rac find`: token-boundary matching over
+identifiers, title, path, section headings, and body text, ordered by
+match-field priority with sorted path as tiebreak (ADR-037, ADR-038). One
+Core implementation serves `rac find` and `search_artifacts` identically.
+
+Tokenization splits matchable text on non-alphanumeric boundaries and on
+lowercase-to-uppercase (camelCase) transitions; comparison is casefolded. A
+query term matches a token by equality or prefix — `relation` matches
+`relationships`, `lore` matches `Lore` but not `Explorer`. Queries tokenize
+by the same rules, so `soft-delete` becomes the terms `soft` and `delete`.
+Multi-term queries require every term to match somewhere in the artifact's
+matchable fields (AND); the artifact ranks by the best field any term hit.
+
+The ranking ladder is five tiers: identifier, then title, then path, then
+section heading, then body — ties broken by sorted path. Heading and body
+text reach search through the corpus snapshot the walk already produces; no
+second walk and no re-read of files.
 
 Response (`SearchResult.to_dict`):
 
@@ -118,6 +131,32 @@ Response (`SearchResult.to_dict`):
   ]
 }
 ```
+
+Identifier-, title-, and path-matched entries carry exactly the four fields
+above — byte-identical to v1. A heading- or body-matched entry additionally
+carries two pinned, additive snippet fields (ADR-007):
+
+```json
+{
+  "id": "...",
+  "type": "...",
+  "title": "...",
+  "path": "...",
+  "section": "...",
+  "snippet": "..."
+}
+```
+
+- `section` is the matched section heading text, exactly as stored in the
+  document (the `##` heading of the section the hit falls under).
+- `snippet` is the matching line's text, a whole stored line — never a
+  fragment. For an artifact with several heading/body hits, the snippet is
+  the first matching line in document order (deterministic).
+
+Snippet fields appear only on heading/body matches; they are absent (not
+null) on metadata matches. They ride inside their match entry, so the
+whole-item truncation of the response budget (ADR-033) drops a snippet only
+by dropping its entire entry.
 
 ### get_related
 
@@ -307,9 +346,6 @@ Description text is written for the deciding agent:
 
 ## Open Questions
 
-- Whether `search_artifacts` should also match body text in a later version;
-  v1 deliberately pins metadata-field matching (id, title, path) as
-  `find_artifacts` does today.
 - Whether `get_artifact` content should offer a metadata-only mode once
   budgets meet very large artifacts.
 - Whether error text should embed the follow-up suggestion or leave it to
@@ -327,6 +363,8 @@ Description text is written for the deciding agent:
 - ADR-033
 - ADR-007
 - ADR-026
+- ADR-037
+- ADR-038
 
 ## Related Roadmaps
 
