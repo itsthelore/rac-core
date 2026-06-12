@@ -1,4 +1,4 @@
-# Requirements as Code
+# Lore
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="rac/assets/images/lore-header-dark.png">
@@ -6,180 +6,118 @@
   <img alt="Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing." src="rac/assets/images/lore-header-light.png">
 </picture>
 
-[![CI](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml/badge.svg)](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/)
+[![CI](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml/badge.svg)](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/)
 
-> **Treat product knowledge like source code.**
+> **Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.**
 
-RAC is a command-line tool for managing requirements, decisions, roadmaps, prompts,
-and design artifacts as plain Markdown, right inside your Git repository.
+Your agent reintroduces an approach you rejected months ago. It rebuilds something you deliberately removed. The decision was written down — in an ADR nobody, human or agent, ever reopened.
+
+Lore stores your requirements, decisions, designs, and roadmaps as typed Markdown in your repo, and serves them to Claude Code, Cursor, and Claude Desktop over MCP. The agent cites your decisions instead of violating them.
+
+No AI in the core. No inference. No guessing. Just your team's recorded knowledge, in your Git, handed to the agent that needs it.
+
+Lore is built on **RAC — Requirements as Code** — the open-source engine underneath. For now the package, CLI, and MCP server all ship under the `rac` name:
+
+```bash
+pip install requirements-as-code
+```
+
+> 📺 **[90-second demo](#)** — watch an agent violate a decision, then respect it. *(link on launch)*
+
+## Grounding your agent (start here)
+
+Lore ships a read-only MCP server. Point your agent at your repo and it can search, retrieve, and traverse your recorded knowledge mid-task.
+
+**1. Install**
 
 ```bash
 pip install requirements-as-code
 ```
 
-## What is RAC?
+**2. Connect your agent**
 
-The code is structured, the tests are automated, the infrastructure is versioned —
-but the *reasoning* behind what you build is scattered across documents, tickets,
-chats, and AI conversations. RAC brings that knowledge back into the repository.
-
-You write product thinking in Markdown; RAC validates it, inspects it, and connects
-it — so it stays durable, reviewable, and usable as context for both humans and AI.
-No proprietary formats, no hosted platform, no lock-in.
-
-## Who is it for?
-
-- **Software and product teams** who want the *why* behind their software versioned
-  alongside the code.
-- **AI-native teams** who need structured, durable context instead of more scattered
-  chat history.
-
-## Install
-
-Requires Python 3.11+.
+Claude Code (from your repo root):
 
 ```bash
-pip install requirements-as-code
-# or
-uv tool install requirements-as-code
+claude mcp add rac-guide -- rac mcp
 ```
 
-## Quick Start
+Claude Desktop / Cursor (`mcpServers` in the client config):
+
+```json
+{
+  "mcpServers": {
+    "rac-guide": { "command": "rac", "args": ["mcp", "--root", "/absolute/path/to/your/repo"] }
+  }
+}
+```
+
+**3. Ask, and watch it ground**
+
+> *"Should I add a hard delete to the user model?"*
+
+The agent calls Lore, finds your soft-delete decision, cites it by ID, and proposes the compliant change — instead of reintroducing the thing you removed on purpose.
+
+The server exposes four read-only tools: `get_artifact`, `search_artifacts`, `get_related`, `get_summary`. It never writes to your repo.
+
+▶ **Full walkthrough + runnable example: [examples/guide/](https://github.com/tcballard/requirements-as-code/tree/main/examples/guide)**
+
+## Why this works
+
+The code is structured, the tests are automated, the infrastructure is versioned — but the *reasoning* behind what you build is scattered across tickets, chats, and dead docs. Agents can't act on what they can't read, so they re-litigate settled decisions.
+
+Lore puts that reasoning back in the repo as typed, connected artifacts, then serves it to the agent through a deterministic interface. You write the decision once, in Markdown; RAC validates it, links it, and makes it retrievable — durable context for both humans and AI, with no proprietary format and no hosted platform.
+
+## Who it's for
+
+- **Teams running coding agents heavily** (Claude Code, Cursor) who are tired of the agent ignoring decisions the team already made.
+- **Teams who already write ADRs** and want those decisions to actually shape what the agent does.
+- **Anyone who wants the *why* behind their software versioned alongside the code.**
+
+## Authoring artifacts (the RAC CLI)
+
+The MCP server is only as good as what it serves. RAC's CLI is how you write and maintain that knowledge — and how you enforce it in CI.
 
 ```bash
-rac validate requirement.md   # check one artifact
-rac validate rac/             # check every artifact in a directory
-rac inspect requirement.md    # see its type and completeness
-rac stats rac/                # summarize a directory of artifacts
-rac review rac/               # full repository review, worst problems first
+rac validate rac/          # check every artifact in a directory
+rac inspect requirement.md # see its type and completeness
+rac review rac/            # full repository review, worst problems first
 ```
 
-New to RAC? Walk through your first artifact in five minutes:
-**[docs/quickstart.md](docs/quickstart.md)**.
+New to Lore? Author your first artifact in five minutes: **[docs/quickstart.md](https://github.com/tcballard/requirements-as-code/blob/main/docs/quickstart.md)**.
 
-## Supported Artifact Types
+### Supported artifact types
 
 - **Requirements** — what needs to exist
 - **Decisions** — why choices were made (ADRs)
+- **Designs** — product experience thinking
 - **Roadmaps** — where the product is heading
 - **Prompts** — reusable AI collaboration patterns
-- **Designs** — product experience thinking
 
-Everything stays plain Markdown — see **[docs/artifacts.md](docs/artifacts.md)**.
+Everything stays plain Markdown — see **[docs/artifacts.md](https://github.com/tcballard/requirements-as-code/blob/main/docs/artifacts.md)**.
+
+## How Lore earns trust
+
+Lore asks you to trust it with your product knowledge, so it holds itself to the same standard it applies to your repository:
+
+- **The MCP server is read-only by construction.** It cannot create, modify, or delete files in your repo — enforced in code and verified by tests, not by convention.
+- **No AI in the core.** Retrieval is deterministic: the same repo state and the same query always return the same result. The reasoning is your agent's job; Lore's job is to hand it the facts.
+- **It dogfoods itself.** Lore's own planning corpus under [`rac/`](https://github.com/tcballard/requirements-as-code/tree/main/rac) is validated by RAC in CI — if the tool's rules break the tool's own artifacts, the build fails.
+- **Output is a contract.** Golden tests pin CLI and MCP output; any change to what the tools return is reviewed as a product change.
 
 ## Documentation
 
-- [Quickstart](docs/quickstart.md) — install and try RAC in five minutes
-- [CLI reference](docs/cli.md) — every command, flag, and exit code
-- [Artifact types](docs/artifacts.md) — the five types and their sections
-- [Relationships](docs/relationships.md) — link artifacts and validate the links
-- [Repository workflow](docs/repo-workflow.md) — organize a repo with RAC
-- [Guide (MCP server)](docs/mcp.md) — connect coding agents to your repository
-- [Testing & contributing](docs/testing.md) — local setup and verification
-- [Examples](docs/examples.md) — small, realistic artifacts
+- [Quickstart](https://github.com/tcballard/requirements-as-code/blob/main/docs/quickstart.md) — install and author your first artifact
+- [MCP server](https://github.com/tcballard/requirements-as-code/blob/main/docs/mcp.md) — tools, client configuration, examples
+- [CLI reference](https://github.com/tcballard/requirements-as-code/blob/main/docs/cli.md) — every command, flag, and exit code
+- [Artifact types](https://github.com/tcballard/requirements-as-code/blob/main/docs/artifacts.md) — the five types and their sections
+- [Relationships](https://github.com/tcballard/requirements-as-code/blob/main/docs/relationships.md) — link artifacts and validate the links
 
-## RAC Guide — MCP server for coding agents
+Requires Python 3.11+. `uv tool install requirements-as-code` also works.
 
-RAC Guide is an MCP server that serves your repository's requirements,
-decisions, designs, and roadmaps to coding agents as callable tools, so
-recorded decisions are respected instead of rediscovered. A single
-`pip install` is all that is needed — no separate package, no extra flag.
+## Project status
 
-```bash
-rac mcp                   # serve the current directory
-rac mcp --root path/to/repo
-```
-
-### Configure your client
-
-**Claude Code**
-
-```bash
-claude mcp add rac-guide -- rac mcp --root /path/to/your/repo
-```
-
-Or add to `.mcp.json` in your project root:
-
-```json
-{
-  "mcpServers": {
-    "rac-guide": {
-      "command": "rac",
-      "args": ["mcp", "--root", "/path/to/your/repo"]
-    }
-  }
-}
-```
-
-<!-- TODO: verify against Claude Code <version> before release -->
-
-**Claude Desktop** — add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "rac-guide": {
-      "command": "rac",
-      "args": ["mcp", "--root", "/path/to/your/repo"]
-    }
-  }
-}
-```
-
-<!-- TODO: verify against Claude Desktop <version> before release -->
-
-**Cursor** — add to `.cursor/mcp.json` in your project:
-
-```json
-{
-  "mcpServers": {
-    "rac-guide": {
-      "command": "rac",
-      "args": ["mcp", "--root", "/path/to/your/repo"]
-    }
-  }
-}
-```
-
-<!-- TODO: verify against Cursor <version> before release -->
-
-Want to try Guide against a ready-made corpus before pointing it at your own
-repository? See **[examples/guide/](examples/guide/)**.
-
-Full onboarding path, troubleshooting, and first-question walkthrough:
-**[docs/mcp.md](docs/mcp.md)**.
-
-## How RAC earns trust
-
-RAC asks you to trust it with your product knowledge, so it holds itself to the
-same standard it applies to your repository:
-
-- **It dogfoods itself.** RAC's own planning corpus under [`rac/`](rac/) is
-  validated by RAC in CI (`rac validate rac/`, `rac relationships rac/ --validate`,
-  `rac review rac/`) — if the tool's rules break the tool's own artifacts, the
-  build fails.
-- **Output is a contract.** Golden tests pin the CLI's human and JSON output
-  byte-for-byte; any change to what RAC prints is reviewed as a product change.
-- **JSON is versioned.** Machine-readable output carries a `schema_version` and
-  only changes additively.
-
-## Project Status
-
-RAC is early and evolving quickly. A terminal Explorer ships alongside the
-CLI — browse the artifact tree, read documents with their references as
-navigable links, assess repository health, and reach anything from the `/`
-command palette:
-
-![RAC Explorer reading an artifact: the sidebar, tabbed context panel, and status line under the rac-lantern theme](docs/images/explorer-hero.svg)
-
-```bash
-pip install 'requirements-as-code[explorer]'
-rac explorer
-```
-
-Contributions, ideas, and experiments are welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Lore is early and evolving quickly. The MCP server ships today; feedback from teams running agents in anger is exactly what shapes what comes next. Contributions, ideas, and experiments welcome — see [CONTRIBUTING.md](https://github.com/tcballard/requirements-as-code/blob/main/CONTRIBUTING.md).
 
 ## License
 
