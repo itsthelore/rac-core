@@ -103,6 +103,8 @@ jobs:
             paths: "tests/test_skill.py"
           - name: stats
             paths: "tests/test_stats.py"
+          - name: watchkeeper
+            paths: "tests/test_watchkeeper.py"
           # Trust gates (v0.7.9): dogfood validates RAC's own rac/ corpus,
           # golden pins CLI stdout byte-for-byte against committed files.
           - name: dogfood

@@ -223,5 +223,34 @@
         "adr-001"
       ]
     }
-  ]
+  ],
+  "review": {
+    "recommended": true,
+    "reasons": [
+      {
+        "code": "validation_regression",
+        "reason": "One or more artifacts became invalid."
+      },
+      {
+        "code": "broken_relationship",
+        "reason": "One or more relationship references broke."
+      },
+      {
+        "code": "acceptance_criteria_removed",
+        "reason": "An acceptance criteria section was removed."
+      },
+      {
+        "code": "constraint_removed",
+        "reason": "A requirement with mandatory wording was removed."
+      },
+      {
+        "code": "constraint_weakened",
+        "reason": "A mandatory requirement was weakened."
+      },
+      {
+        "code": "specificity_regression",
+        "reason": "A measurable requirement became vague."
+      }
+    ]
+  }
 }

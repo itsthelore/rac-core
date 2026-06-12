@@ -58,7 +58,7 @@ CASES = [
             "--base",
             "tests/fixtures/watchkeeper/base",
         ],
-        0,
+        1,
     ),
     (
         "watchkeeper_json",
@@ -69,7 +69,21 @@ CASES = [
             "tests/fixtures/watchkeeper/base",
             "--json",
         ],
-        0,
+        1,
+    ),
+    # Golden output captures stdout only; the github annotations stream to
+    # stderr by design and are pinned by tests/test_watchkeeper.py instead.
+    (
+        "watchkeeper_github",
+        [
+            "watchkeeper",
+            "tests/fixtures/watchkeeper/head",
+            "--base",
+            "tests/fixtures/watchkeeper/base",
+            "--format",
+            "github",
+        ],
+        1,
     ),
     ("templates_human", ["templates"], 0),
     ("templates_json", ["templates", "--json"], 0),

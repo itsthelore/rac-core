@@ -74,3 +74,17 @@ Findings (8)
   · [relationship_impact] requirements/legacy-upload.md
       Removed artifact is referenced by 1 artifact(s).
       adr-001
+
+Review
+------
+
+  Review recommended.
+
+  Reasons:
+
+    · One or more artifacts became invalid.  [validation_regression]
+    · One or more relationship references broke.  [broken_relationship]
+    · An acceptance criteria section was removed.  [acceptance_criteria_removed]
+    · A requirement with mandatory wording was removed.  [constraint_removed]
+    · A mandatory requirement was weakened.  [constraint_weakened]
+    · A measurable requirement became vague.  [specificity_regression]
