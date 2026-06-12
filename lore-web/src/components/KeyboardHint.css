@@ -1,0 +1,16 @@
+.lore-kbd {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.lore-kbd__key {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  background: var(--bg-element);
+  border: var(--line);
+  border-radius: var(--radius-key);
+  padding: 0 var(--space-2);
+  line-height: 1.5;
+}

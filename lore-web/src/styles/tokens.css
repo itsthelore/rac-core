@@ -1,0 +1,113 @@
+/*
+ * Lore design tokens — the single source of truth for colour, spacing,
+ * type and chrome. No hex value may appear anywhere else in src/.
+ *
+ * Five rules (see DESIGN.md):
+ *   1. Three surfaces, warm near-black, never pure black.
+ *   2. One hue dominates: the lantern amber. Teal/green carry semantic
+ *      meaning only — never decoration.
+ *   3. Dashed borders = container chrome. Solid borders = interactive.
+ *   4. Mono everywhere.
+ *   5. Pixel art renders at integer scale only.
+ */
+
+/* ---- fonts ----------------------------------------------------------- */
+/* JetBrains Mono, self-hosted, weights 400/700 only. font-display: swap
+ * with a size-adjusted local fallback so loading causes no layout shift. */
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Metric-compatible fallback: JetBrains Mono's advance width is 600/1000
+ * em. Courier New (the most widely available local mono) is also 600/1000,
+ * so horizontal metrics already match; size-adjust trues up the remaining
+ * vertical difference closely enough that swap causes no visible shift. */
+@font-face {
+  font-family: 'JetBrains Mono Fallback';
+  src: local('Courier New'), local('Liberation Mono'), local('Courier');
+  size-adjust: 100%;
+  ascent-override: 102%;
+  descent-override: 30%;
+  line-gap-override: 0%;
+}
+
+:root {
+  /* ---- colour -------------------------------------------------------- */
+
+  /* surfaces — three levels, warm near-black, none pure black */
+  --bg:            #121212;
+  --bg-panel:      #1a1a18;
+  --bg-element:    #242420;
+
+  /* text — dimmed, not pure white */
+  --text:          #d6d4cc;
+  --text-muted:    #8f8d84;
+
+  /* borders — dashed for container chrome only, solid for interactive */
+  --border-subtle: #2a2a26;
+  --border:        #3d3b34;
+  --border-active: #a8762a;
+
+  /* accent — the lantern. ONE hue dominates. */
+  --accent:        #f5a623;
+  --accent-bright: #ffb84d;   /* headings/hover only */
+  --accent-muted:  #3d2f14;   /* fills, selected rows — never text */
+
+  /* semantic — teal/green ONLY for semantic meaning
+   * (links/commands = teal, pass/check = green), never decorative.
+   * --error adjusted from the ruling's #cb6f6f (lightness 62% -> 64%,
+   * hue/saturation unchanged): the original measured 4.48:1 on
+   * --bg-element, just under WCAG AA. See DESIGN.md. */
+  --info:          #4ec9b0;
+  --success:       #57c97a;
+  --warning:       #d9a85f;
+  --error:         #ce7878;
+
+  /* ---- type ---------------------------------------------------------- */
+  --font-mono: 'JetBrains Mono', 'JetBrains Mono Fallback', ui-monospace,
+               'Courier New', monospace;
+  --font-size-sm: 0.8125rem;   /* 13px */
+  --font-size:    0.875rem;    /* 14px */
+  --font-size-md: 1rem;        /* 16px */
+  --font-size-lg: 1.25rem;     /* 20px */
+  --font-size-xl: 1.5rem;      /* 24px */
+  --line-height: 1.6;
+
+  /* ---- spacing — 4px base -------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* ---- radii — sharp corners are part of the look --------------------- */
+  --radius: 0;
+  --radius-key: 2px;          /* key caps and small interactive chips only */
+
+  /* ---- chrome -------------------------------------------------------- */
+  /* the signature dashed-border container treatments */
+  --dash: 1px dashed var(--border);
+  --dash-subtle: 1px dashed var(--border-subtle);
+  /* solid borders signal interactivity */
+  --line: 1px solid var(--border);
+  --line-active: 1px solid var(--border-active);
+
+  /* focus ring for keyboard navigation */
+  --focus-ring: 2px solid var(--accent);
+}
