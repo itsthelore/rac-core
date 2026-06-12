@@ -1,0 +1,6 @@
+{"schema_version": "1", "ts": "2026-06-10T09:12:01.100Z", "session": "11aa22bb", "tool": "get_summary", "outcome": "ok", "duration_ms": 14, "truncated": false}
+{"schema_version": "1", "ts": "2026-06-10T09:12:05.480Z", "session": "11aa22bb", "tool": "search_artifacts", "outcome": "ok", "duration_ms": 11, "truncated": false}
+{"schema_version": "1", "ts": "2026-06-10T09:12:09.302Z", "session": "11aa22bb", "tool": "get_artifact", "outcome": "error", "error": "not-found", "duration_ms": 7, "truncated": false}
+this line is not valid json and must be skipped, not raised over
+{"schema_version": "1", "ts": "2026-06-11T15:40:18.951Z", "session": "33cc44dd", "tool": "get_artifact", "outcome": "ok", "duration_ms": 9, "truncated": true}
+{"schema_version": "1", "ts": "2026-06-11T15:40:25.007Z", "session": "33cc44dd", "tool": "get_related", "outcome": "ok", "duration_ms": 16, "truncated": false}

@@ -84,7 +84,7 @@ jobs:
           - name: explorer
             paths: "tests/test_explorer_adapter.py tests/test_explorer_app.py tests/test_explorer_cli.py tests/test_explorer_commands.py tests/test_explorer_editor.py tests/test_explorer_isolation.py tests/test_explorer_workspace.py"
           - name: mcp
-            paths: "tests/test_mcp_server.py tests/test_mcp_tools.py tests/test_mcp_isolation.py"
+            paths: "tests/test_mcp_server.py tests/test_mcp_tools.py tests/test_mcp_isolation.py tests/test_mcp_telemetry.py"
           - name: relationships
             paths: "tests/test_relationships.py tests/test_relationships_cmd.py tests/test_relationship_validation.py"
           - name: resolve

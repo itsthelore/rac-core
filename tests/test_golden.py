@@ -67,6 +67,9 @@ CASES = [
         ["migrate", "metadata", "tests/fixtures/migrate", "--dry-run", "--json"],
         0,
     ),
+    ("mcp_stats_human", ["mcp-stats"], 0),
+    ("mcp_stats_json", ["mcp-stats", "--json"], 0),
+    ("mcp_stats_share", ["mcp-stats", "--share"], 0),
 ]
 
 
@@ -82,6 +85,9 @@ def test_golden(name, argv, expected_rc, capsys, monkeypatch):
         "rac.services.migrate._DEFAULT_ID_GENERATOR",
         lambda key: f"{key}-00000000TEST",
     )
+    # A relative state home keeps the mcp-stats log path machine-independent
+    # in golden output; only the mcp-stats cases read it.
+    monkeypatch.setenv("XDG_STATE_HOME", "tests/fixtures/telemetry/state")
 
     rc = main(argv)
     out = capsys.readouterr().out

@@ -1,0 +1,18 @@
+Guide Telemetry
+===============
+
+Log: tests/fixtures/telemetry/state/rac/guide-telemetry.jsonl
+Events: 5
+Sessions: 2
+First Event: 2026-06-10T09:12:01.100Z
+Last Event: 2026-06-11T15:40:25.007Z
+
+Tool Usage
+==========
+
+  get_artifact: 2 call(s), 1 error(s), 1 truncated, avg 8 ms
+  get_related: 1 call(s), 0 error(s), 0 truncated, avg 16 ms
+  get_summary: 1 call(s), 0 error(s), 0 truncated, avg 14 ms
+  search_artifacts: 1 call(s), 0 error(s), 0 truncated, avg 11 ms
+
+Skipped Unreadable Lines: 1

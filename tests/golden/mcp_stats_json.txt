@@ -1,0 +1,39 @@
+{
+  "schema_version": "1",
+  "path": "tests/fixtures/telemetry/state/rac/guide-telemetry.jsonl",
+  "event_count": 5,
+  "session_count": 2,
+  "first_ts": "2026-06-10T09:12:01.100Z",
+  "last_ts": "2026-06-11T15:40:25.007Z",
+  "skipped_lines": 1,
+  "tools": [
+    {
+      "tool": "get_artifact",
+      "calls": 2,
+      "errors": 1,
+      "truncated": 1,
+      "avg_duration_ms": 8
+    },
+    {
+      "tool": "get_related",
+      "calls": 1,
+      "errors": 0,
+      "truncated": 0,
+      "avg_duration_ms": 16
+    },
+    {
+      "tool": "get_summary",
+      "calls": 1,
+      "errors": 0,
+      "truncated": 0,
+      "avg_duration_ms": 14
+    },
+    {
+      "tool": "search_artifacts",
+      "calls": 1,
+      "errors": 0,
+      "truncated": 0,
+      "avg_duration_ms": 11
+    }
+  ]
+}
