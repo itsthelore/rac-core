@@ -358,14 +358,48 @@ as removed plus added. A base revision that predates the corpus directory
 compares against an empty base — a brand-new corpus is a valid
 "everything added" review.
 
+The report ends with deterministic **intent findings** (v0.12.1) — changes
+that reduce product clarity, flagged for human attention without judging
+correctness:
+
+| Code | Fires when | Severity |
+| --- | --- | --- |
+| `specificity_regression` | a measurable requirement loses its numbers | warning |
+| `ambiguity_introduced` | an ambiguous term (easy, intuitive, simple, seamless, user-friendly, scalable, fast, quickly, robust, flexible) newly appears in a requirement | warning |
+| `constraint_weakened` | mandatory wording (must, shall) becomes hedged (should, may, could) | warning |
+| `constraint_removed` | a requirement with mandatory wording is removed | warning |
+| `acceptance_criteria_removed` | a filled Acceptance Criteria section disappears or empties | warning |
+| `success_measures_removed` | a filled Success Measures/Metrics section disappears or empties | warning |
+| `unlinked_scope` | a new artifact declares no relationships and nothing references it | warning |
+| `relationship_impact` | a modified or removed artifact is referenced by others | info |
+
+Every check is token-boundary, casefolded, and explainable: each finding
+carries a one-sentence `detail` and the triggering text as diff-style
+`evidence`.
+
+```text
+Findings (2)
+--------
+
+  ! [specificity_regression] requirements/checkout.md
+      Measurable requirement REQ-001 became vague.
+      - Payment confirmation must complete within 2 seconds
+      + Payment confirmation should complete quickly
+
+  · [relationship_impact] requirements/checkout.md
+      Modified artifact is referenced by 1 artifact(s).
+      adr-001
+```
+
 The `--json` form is a stable contract (`schema_version: "1"`) with `base`,
 `head`, `directory`, `changes[]` (each with `change`, `type`, `id`, `title`,
 `path`, `base_status`, `head_status`, and a requirement-level `diff` for
 modified artifacts), `validation` (per-side counts plus `newly_invalid` /
 `newly_valid`), `relationships` (per-side summaries plus `new_issues` /
-`resolved_issues`), and `stats` (per-type and total counts for both sides).
-Intent findings and review recommendations arrive later in the v0.12.x
-series.
+`resolved_issues`), `stats` (per-type and total counts for both sides), and
+`findings[]` (each with `code`, `severity`, `path`, `identifier`, `detail`,
+`evidence`; additive in v0.12.1). Review recommendations arrive later in
+the v0.12.x series.
 
 ---
 

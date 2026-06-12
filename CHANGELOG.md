@@ -8,6 +8,16 @@ details, release history over commit history.
 
 ### Added
 
+- Watchkeeper intent analysis (v0.12.1): the `rac watchkeeper` report now
+  ends with deterministic intent findings — specificity regressions
+  (numbers vanishing from requirements), ambiguous wording arriving,
+  mandatory language weakening or disappearing, acceptance criteria or
+  success measures being removed, new scope with no relationships, and
+  the relationship impact of modified or removed artifacts. Every check
+  is token-boundary text matching or parsed-section comparison — no
+  semantic scoring — and each finding carries a one-sentence detail plus
+  diff-style evidence. JSON gains an additive `findings[]` array.
+
 - Watchkeeper repository comparison (v0.12.0): `rac watchkeeper [directory]
   --base REF [--head REF] [--json]` reviews product knowledge changes
   between two repository states — added/modified/removed artifacts (with
