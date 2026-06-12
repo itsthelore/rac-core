@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "installed": true,
+  "skill": "rac-artifacts",
+  "path": ".claude/skills/rac-artifacts/SKILL.md"
+}

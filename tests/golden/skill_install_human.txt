@@ -1,0 +1,3 @@
+Installed rac-artifacts skill: .claude/skills/rac-artifacts/SKILL.md
+
+Claude Code discovers it automatically from .claude/skills/ in the project.
