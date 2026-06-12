@@ -6,12 +6,12 @@
     "url": "https://github.com/tcballard/requirements-as-code",
     "source": "github"
   },
-  "version": "0.10.5",
+  "version": "0.11.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "requirements-as-code",
-      "version": "0.10.5",
+      "version": "0.11.0",
       "transport": {
         "type": "stdio"
       }
