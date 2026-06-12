@@ -46,6 +46,10 @@ MARKER_HINT = "hint"
 HINT_SEARCH = "Narrow the query or request a specific artifact ID."
 HINT_RELATED = "Request the artifact directly, or narrow what you are changing."
 HINT_CONTENT = "Request a more specific artifact, or read the file directly for the full content."
+HINT_SUMMARY = (
+    "The repository summary exceeds the response budget; raise the server "
+    "budget to see the full overview."
+)
 
 
 def _length(payload: dict) -> int:
@@ -102,7 +106,7 @@ def _truncate(payload: dict, budget: int) -> dict:
     marked = dict(payload)
     marked[MARKER_TRUNCATED] = True
     marked[MARKER_OMITTED] = 0
-    marked[MARKER_HINT] = HINT_CONTENT
+    marked[MARKER_HINT] = HINT_SUMMARY
     return marked
 
 
@@ -141,8 +145,8 @@ def _truncate_content(payload: dict, budget: int) -> dict:
 
     The content tail is the truncatable item: characters are dropped from the
     end so the kept head is identical for identical input. ``omitted`` is the
-    number of characters removed. The search is a deterministic shrink (no
-    binary-search non-determinism) capped to keep at least an empty string.
+    number of characters removed. The search is a deterministic binary search
+    for the largest fitting prefix, capped to keep at least an empty string.
     """
     content = payload["content"]
     total = len(content)
