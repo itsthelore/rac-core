@@ -227,6 +227,53 @@ and timestamps only — and submit it with your own account. RAC never sends
 anything anywhere; building a URL is string formatting, and transmission
 belongs to you and your browser. Submitted reports are public issues.
 
+### Share anonymously (optional)
+
+If you'd rather contribute a signal without writing anything, opt in to an
+anonymous daily ping:
+
+```bash
+rac telemetry on       # opt in (rac init also asks once, on a real terminal)
+rac telemetry status   # exactly what is shared, and whether sending is possible
+rac telemetry off      # stop; nothing else changes
+```
+
+With consent on, `rac mcp` sends at most one ping per 24 hours. This is the
+entire transmission — adding a field requires a new recorded decision
+(ADR-041):
+
+```json
+{
+  "api_key": "<public project write key>",
+  "event": "lore-daily-ping",
+  "timestamp": "<ISO 8601 UTC>",
+  "properties": {
+    "distinct_id": "<random install id>",
+    "$process_person_profile": false,
+    "schema_version": "1",
+    "rac_version": "<version>",
+    "active_repos": 2
+  }
+}
+```
+
+What the fields are: the install id is a random token minted when you opt in
+(derived from nothing, so it identifies nothing); `$process_person_profile:
+false` tells PostHog to create no person profile, so the event stays
+anonymous on the receiving side as well; `active_repos` counts the
+distinct repositories Guide served in the last 30 days, tracked locally as
+salted digests in `~/.local/state/rac/active-repos.json` — the salt never
+leaves your machine and only the count is sent. The last-ping marker lives at
+`~/.local/state/rac/last-ping`; your consent record at
+`~/.config/rac/telemetry.json`.
+
+Sharing is independent of `--telemetry` — each is its own opt-in. When
+sharing is on, the server announces it on stderr at startup; it is never
+silent. The sender is one readable module (`rac/mcp/ping.py`, the only
+network code in RAC): failures are dropped without retries, the socket
+timeout is three seconds, and a build with no endpoint key configured sends
+nothing at all — `rac telemetry status` will say so.
+
 ## 8. Troubleshooting
 
 ### Server not listed in the client
