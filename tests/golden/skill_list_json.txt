@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "skills": [
+    {
+      "skill": "rac-artifacts",
+      "description": "Author and maintain RAC Markdown artifacts with the rac CLI."
+    },
+    {
+      "skill": "rac-review",
+      "description": "Review a RAC corpus and work findings worst-first."
+    },
+    {
+      "skill": "rac-ingest",
+      "description": "Convert legacy documents into valid, linked RAC artifacts."
+    }
+  ]
+}

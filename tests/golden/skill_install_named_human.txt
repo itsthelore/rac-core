@@ -1,5 +1,3 @@
-Installed rac-artifacts skill: .claude/skills/rac-artifacts/SKILL.md
 Installed rac-review skill: .claude/skills/rac-review/SKILL.md
-Installed rac-ingest skill: .claude/skills/rac-ingest/SKILL.md
 
 Claude Code discovers skills automatically from .claude/skills/ in the project.

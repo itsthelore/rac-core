@@ -1,6 +1,18 @@
 {
   "schema_version": "1",
   "installed": true,
-  "skill": "rac-artifacts",
-  "path": ".claude/skills/rac-artifacts/SKILL.md"
+  "skills": [
+    {
+      "skill": "rac-artifacts",
+      "path": ".claude/skills/rac-artifacts/SKILL.md"
+    },
+    {
+      "skill": "rac-review",
+      "path": ".claude/skills/rac-review/SKILL.md"
+    },
+    {
+      "skill": "rac-ingest",
+      "path": ".claude/skills/rac-ingest/SKILL.md"
+    }
+  ]
 }

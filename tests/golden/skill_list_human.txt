@@ -1,0 +1,5 @@
+Bundled agent skills:
+
+- rac-artifacts  Author and maintain RAC Markdown artifacts with the rac CLI.
+- rac-review     Review a RAC corpus and work findings worst-first.
+- rac-ingest     Convert legacy documents into valid, linked RAC artifacts.
