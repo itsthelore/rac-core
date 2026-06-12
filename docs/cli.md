@@ -300,9 +300,13 @@ answers "what changed, and how did it move the repository?".
 - **Input:** `rac watchkeeper [directory]` — the corpus to compare (default:
   `rac/` when present, else the current directory). The working tree is the
   head state.
-- **Options:** `--base REF` (default `main`) · `--head REF` · `--json`
-- **Exit codes:** `0` comparison produced (informational in v0.12.0) ·
-  `2` not a directory, unknown revision, or not inside a git repository
+- **Options:** `--base REF` (default `main`) · `--head REF` ·
+  `--format human|json|github` · `--json` (alias for `--format json`) ·
+  `--fail-on error|warning|none` (default `error`) · `--no-annotate`
+- **Exit codes:** `0` nothing requiring attention under the chosen policy
+  (always, with `--fail-on none`) · `1` review recommended (`--fail-on
+  error`) or any warning finding (`--fail-on warning`) · `2` not a
+  directory, unknown revision, or not inside a git repository
 
 `--base` and `--head` each accept a git revision (`main`,
 `origin/some-branch`, a commit SHA) **or** an existing directory path —
@@ -391,15 +395,37 @@ Findings (2)
       adr-001
 ```
 
+The report ends with a deterministic **review verdict** (v0.12.2). Review
+is recommended when artifacts become invalid, relationship references
+break, or a clarity-regression finding fires (`specificity_regression`,
+`constraint_weakened`, `constraint_removed`, `acceptance_criteria_removed`,
+`success_measures_removed`). Ambiguity, unlinked scope, and relationship
+impact inform but never recommend on their own. `--fail-on` turns the
+verdict into CI policy: `error` (default) fails when review is recommended,
+`warning` also fails on any warning finding, `none` never fails but still
+prints the full report.
+
+`--format github` renders for GitHub workflows with no GitHub API
+dependency: **stdout** is a Markdown report for `$GITHUB_STEP_SUMMARY`
+(change table, delta tables, findings, verdict); **stderr** carries
+workflow-command annotations (`::error` for recommendation triggers,
+`::warning` / `::notice` for the rest) with repository-relative file paths,
+which the runner turns into inline annotations. `--no-annotate` suppresses
+the stderr stream:
+
+```bash
+rac watchkeeper rac --base "origin/$GITHUB_BASE_REF" --format github > "$GITHUB_STEP_SUMMARY"
+```
+
 The `--json` form is a stable contract (`schema_version: "1"`) with `base`,
 `head`, `directory`, `changes[]` (each with `change`, `type`, `id`, `title`,
 `path`, `base_status`, `head_status`, and a requirement-level `diff` for
 modified artifacts), `validation` (per-side counts plus `newly_invalid` /
 `newly_valid`), `relationships` (per-side summaries plus `new_issues` /
-`resolved_issues`), `stats` (per-type and total counts for both sides), and
+`resolved_issues`), `stats` (per-type and total counts for both sides),
 `findings[]` (each with `code`, `severity`, `path`, `identifier`, `detail`,
-`evidence`; additive in v0.12.1). Review recommendations arrive later in
-the v0.12.x series.
+`evidence`; additive in v0.12.1), and `review` (`recommended` plus
+`reasons[]` with `code` and `reason`; additive in v0.12.2).
 
 ---
 

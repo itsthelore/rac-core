@@ -8,6 +8,16 @@ details, release history over commit history.
 
 ### Added
 
+- Watchkeeper review verdict, GitHub format, and CI policy (v0.12.2):
+  `rac watchkeeper` now ends with a deterministic review recommendation —
+  validation regressions, broken relationships, and clarity-regression
+  findings recommend human review with Core-owned reasons; ambiguity and
+  unlinked scope inform but never recommend alone. `--fail-on
+  error|warning|none` turns the verdict into CI policy, and `--format
+  github` writes a Markdown step-summary report to stdout and
+  workflow-command annotations (with repository-relative paths) to stderr
+  — no GitHub API involved. JSON gains an additive `review` block.
+
 - Watchkeeper intent analysis (v0.12.1): the `rac watchkeeper` report now
   ends with deterministic intent findings — specificity regressions
   (numbers vanishing from requirements), ambiguous wording arriving,
