@@ -15,6 +15,7 @@ Commands:
     rac explorer [directory] [--top-level]
     rac mcp [--root PATH] [--telemetry]
     rac mcp-stats [--json | --share]
+    rac telemetry [on | off | status]
     rac new <artifact-type> <output-path> [--json]
     rac templates [--json]
     rac init [directory] [--key KEY] [--json]
@@ -31,7 +32,9 @@ Exit codes:
        matches; migration or dry run completed, even with nothing to migrate;
        explorer session quit by the user; mcp server shutdown on client
        disconnect; skill(s) installed; skills listed; mcp-stats summary
-       produced, even from an empty or missing telemetry log)
+       produced, even from an empty or missing telemetry log; telemetry
+       consent shown or changed, including when no endpoint key is
+       configured)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
@@ -55,6 +58,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from rac import consent
 from rac import output as outputs
 from rac.core.classification import score_artifacts
 from rac.core.markdown import parse, parse_file
@@ -560,6 +564,60 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(outputs.render_init_json(result))
     else:
         print(outputs.render_init_human(result))
+        _maybe_ask_usage_sharing()
+    return EXIT_OK
+
+
+def _maybe_ask_usage_sharing() -> None:
+    """Ask the one-time usage-sharing question after a successful init (ADR-041).
+
+    The CLI's only interactive prompt, deliberately narrow: a real TTY on both
+    ends, no ``--json`` (the caller gates that), and no prior answer — either
+    answer is persisted, so the question is asked at most once per machine.
+    Empty input and EOF mean No; CI and pipes never reach ``input()``.
+    """
+    if not (sys.stdin.isatty() and sys.stdout.isatty()) or consent.consent_recorded():
+        return
+    try:
+        answer = input("\nShare anonymous usage to help shape Lore? [y/N] ")
+    except EOFError:
+        answer = ""
+    if answer.strip().lower() in ("y", "yes"):
+        consent.opt_in()
+        print(
+            "Sharing on — one anonymous daily ping. 'rac telemetry status' "
+            "shows exactly what; 'rac telemetry off' stops it."
+        )
+    else:
+        consent.decline()
+
+
+def cmd_telemetry(args: argparse.Namespace) -> int:
+    if args.action == "on":
+        record = consent.opt_in()
+        print(f"Sharing on. Install id: {record.install_id}")
+        print(
+            "One anonymous daily ping: install id, rac version, active-repo "
+            "count. Never paths, queries, or content (ADR-041)."
+        )
+        if not consent.POSTHOG_API_KEY:
+            print("Note: this build has no PostHog key configured; nothing will be sent.")
+    elif args.action == "off":
+        consent.opt_out()
+        print("Sharing off. Nothing will be sent.")
+    else:  # status
+        status = consent.consent_status()
+        print(f"Sharing: {'on' if status.sharing else 'off'}")
+        print(f"Install id: {status.install_id or '(none)'}")
+        print(f"Consented at: {status.consented_at or '(never)'}")
+        print(f"Consent file: {status.path}")
+        if status.sharing:
+            print(
+                "Shared daily: install id, rac version, active-repo count. "
+                "Never paths, queries, or content (ADR-041)."
+            )
+        if not status.endpoint_configured:
+            print("Endpoint key: not configured — nothing is sent.")
     return EXIT_OK
 
 
@@ -919,6 +977,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_mcp_stats.set_defaults(func=cmd_mcp_stats)
+
+    p_telemetry = sub.add_parser(
+        "telemetry",
+        help="Show or change anonymous usage-sharing consent (ADR-041).",
+        parents=[version_parent],
+    )
+    p_telemetry.add_argument(
+        "action",
+        nargs="?",
+        default="status",
+        choices=["on", "off", "status"],
+        help="on: opt in; off: opt out; status: show consent and what is shared (default).",
+    )
+    p_telemetry.set_defaults(func=cmd_telemetry)
 
     p_new = sub.add_parser(
         "new",

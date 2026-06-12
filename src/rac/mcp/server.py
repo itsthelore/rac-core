@@ -26,6 +26,12 @@ classifies the structured payload, and returns it unchanged — tool responses
 are byte-identical with telemetry on and off, and the log is never an input
 to a response. Default is off; nothing is recorded without ``--telemetry``.
 
+Anonymous usage sharing (v0.10.6, ADR-041): with consent recorded via
+``rac telemetry on`` (or the ``rac init`` prompt), ``run_server`` starts the
+daily-ping daemon thread (:mod:`rac.mcp.ping`) — at most one pinned,
+content-free ping per 24 hours, independent of ``--telemetry``, announced on
+stderr. Without consent or without a configured key, nothing sends.
+
 Startup diagnostics (v0.10.1): ``run_server`` writes a one-line notice to
 stderr when the repository root contains no recognized artifacts, so the first
 run against a misconfigured or empty root fails helpfully rather than silently.
@@ -39,8 +45,9 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+from rac import consent as consent_record
 from rac.core.corpus import walk_corpus
-from rac.mcp import errors, telemetry
+from rac.mcp import errors, ping, telemetry
 from rac.mcp.budget import DEFAULT_BUDGET, serialize
 from rac.mcp.telemetry import TelemetryRecorder
 from rac.services.index import build_repository_index, index_from_corpus
@@ -276,6 +283,33 @@ def _check_corpus(root: str) -> None:
         pass
 
 
+def _maybe_start_sharing(root: str) -> None:
+    """Start the consented daily ping; absence of consent costs nothing (ADR-041).
+
+    Independent of ``--telemetry`` — each is its own opt-in. stdout belongs to
+    the MCP protocol; the enablement notice goes to stderr, so sharing is
+    announced, never silent.
+    """
+    consent = consent_record.load_consent()
+    if not consent.share_usage:
+        return
+    ping.record_active_repo(root, consent.salt)
+    thread = ping.start_ping_thread(consent)
+    if thread is not None:
+        print(
+            "rac mcp: anonymous usage sharing on — at most one daily ping "
+            "(random install id, rac version, active-repo count; never paths, "
+            "queries, or content). Disable with 'rac telemetry off' (ADR-041).",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "rac mcp: usage sharing is enabled but this build has no "
+            "PostHog key configured; nothing will be sent.",
+            file=sys.stderr,
+        )
+
+
 def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool = False) -> int:
     """Run the Guide server over stdio until the client disconnects.
 
@@ -296,5 +330,6 @@ def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool 
             f"(no arguments, no content) to {recorder.path}",
             file=sys.stderr,
         )
+    _maybe_start_sharing(root)
     build_server(root, budget=budget, recorder=recorder).run(transport="stdio")
     return 0

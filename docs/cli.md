@@ -1,6 +1,6 @@
 # CLI Reference
 
-RAC ships a single command, `rac`, with twenty-one subcommands. This page documents each
+RAC ships a single command, `rac`, with twenty-two subcommands. This page documents each
 one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
@@ -507,6 +507,27 @@ RAC sends nothing itself. `--json` and `--share` are mutually exclusive.
 
 ---
 
+## telemetry
+
+Show or change anonymous usage-sharing consent (ADR-041). With consent on,
+`rac mcp` sends at most one anonymous daily ping — a random install id, the
+version, and an active-repo count; never paths, queries, or repository
+content. Sharing is independent of the local `rac mcp --telemetry` flag.
+
+```bash
+rac telemetry           # status (default): what is shared, and whether sending is possible
+rac telemetry on        # opt in; mints a random install id
+rac telemetry off       # opt out; nothing else changes
+```
+
+`status` also reports when the build has no endpoint key configured — in
+that state nothing is sent even with consent. Consent lives at
+`~/.config/rac/telemetry.json`.
+
+- **Exit codes:** `0` consent shown or changed · `2` invalid action
+
+---
+
 ## new
 
 Create a new artifact from its canonical bundled template, with a
@@ -593,6 +614,11 @@ configuration, not artifact meaning — it never dictates folder structure.
 - **Exit codes:** `0` initialized, or already initialized with the same key
   (idempotent) · `1` a different key is already established (never silently
   rewritten) · `2` invalid key or not a directory
+
+After a successful init on a real terminal, `rac init` asks one one-time
+question — "Share anonymous usage to help shape Lore? [y/N]" — defaulting to
+No. Either answer is persisted, so it is asked at most once per machine; it
+never appears with `--json`, in pipes, or in CI. See `rac telemetry`.
 
 ```bash
 rac init

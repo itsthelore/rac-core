@@ -142,7 +142,7 @@ Lore asks you to trust it with your product knowledge, so it holds itself to the
 - **No AI in the core.** Retrieval is deterministic: the same repo state and the same query always return the same result. The reasoning is your agent's job; Lore's job is to hand it the facts.
 - **It dogfoods itself.** Lore's own planning corpus under [`rac/`](https://github.com/tcballard/requirements-as-code/tree/main/rac) is validated by RAC in CI — if the tool's rules break the tool's own artifacts, the build fails.
 - **Output is a contract.** Golden tests pin CLI and MCP output; any change to what the tools return is reviewed as a product change.
-- **Telemetry is opt-in, local-only, and content-free.** Nothing is recorded without an explicit flag, events never include your arguments or repository content, and nothing leaves your machine unless you submit a report yourself — Lore contains no network code.
+- **Telemetry is opt-in twice over.** Local recording needs an explicit `--telemetry` flag and never includes your arguments or repository content. Remote sharing is a separate, explicit consent (`rac telemetry on`, or one honest question at `rac init`): one anonymous daily ping — a random install id, the version, and an active-repo count — never paths, queries, or content. `rac telemetry status` shows exactly what is shared, the network surface is a single readable module, and ADR-041 records the decision.
 
 ## Documentation
 

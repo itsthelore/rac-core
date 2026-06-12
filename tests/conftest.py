@@ -16,3 +16,17 @@ def fixtures_dir() -> Path:
 
 def fixture_path(*parts: str) -> str:
     return str(FIXTURES.joinpath(*parts))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_xdg(tmp_path_factory, monkeypatch):
+    """Point XDG config/state at a temp dir for every test.
+
+    No test may read or write real user state — and with a live PostHog key
+    in source (ADR-041), no test run may ever find a developer's consent
+    record and phone home. Tests that need specific locations still override
+    these variables locally.
+    """
+    base = tmp_path_factory.mktemp("xdg")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(base / "config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(base / "state"))

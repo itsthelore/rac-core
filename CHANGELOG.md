@@ -8,6 +8,14 @@ details, release history over commit history.
 
 ### Added
 
+- Anonymous usage sharing (v0.10.6, opt-in): `rac telemetry on|off|status`
+  and a one-time, TTY-only consent question at `rac init` (default No).
+  With consent, `rac mcp` sends at most one anonymous daily ping — a random
+  install id, the RAC version, and a 30-day active-repo count; never paths,
+  queries, or repository content. The payload is pinned by ADR-041, the
+  network surface is a single module enforced by tests, and a build without
+  an endpoint key sends nothing at all.
+
 - Bundled agent skills (v0.10.5): the package now carries three
   Claude Code skills as resources — `rac-artifacts` (author and maintain
   artifacts with the CLI), `rac-review` (work `rac review` findings

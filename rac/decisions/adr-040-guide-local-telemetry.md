@@ -149,6 +149,9 @@ Opt-in local recording with user-driven sharing is selected.
   structured error code the tools already return.
 - ADR-013 (Git as the state store): the telemetry log is user-machine
   state, not repository state; it never enters the corpus.
+- ADR-041 (anonymous usage ping): amends this decision's "RAC contains
+  no network code" clause — a consented, pinned daily ping ships in
+  v0.10.6; local recording and the user-driven share flow are unchanged.
 
 ## Success Measures
 

@@ -74,3 +74,17 @@ def test_only_the_server_package_imports_the_mcp_sdk():
     other = [f for f in SRC.rglob("*.py") if "mcp" not in f.relative_to(SRC).parts]
     assert other
     assert _violations(other, ("mcp",)) == []
+
+
+# Network client modules; the ping module is RAC's entire network surface
+# (ADR-041). ``urllib.parse`` (string formatting for the share URL) is
+# deliberately not in this list.
+NETWORK_MODULES: tuple[str, ...] = ("urllib.request", "http.client")
+
+
+def test_only_the_ping_module_imports_network_modules():
+    # The strongest trust statement in the codebase: "what does RAC phone
+    # home" is answerable by reading one file.
+    files = [f for f in SRC.rglob("*.py") if f != SRC / "mcp" / "ping.py"]
+    assert files
+    assert _violations(files, NETWORK_MODULES) == []
