@@ -8,6 +8,29 @@ details, release history over commit history.
 
 ### Added
 
+- Bundled agent skills (v0.10.4, v0.10.5): the package now carries three
+  Claude Code skills as resources — `rac-artifacts` (author and maintain
+  artifacts with the CLI), `rac-review` (work `rac review` findings
+  worst-first until validation passes), and `rac-ingest` (convert DOCX,
+  PDF, HTML, PPTX, XLSX, or Markdown documents into valid, linked
+  artifacts). `rac skill install` drops all three into a project's
+  `.claude/skills/` discovery path in one command — all-or-nothing, never
+  overwriting; `rac skill install` with a skill name adds just that one,
+  and `rac skill list` shows what is bundled. Installation works from the
+  installed wheel alone: no repository checkout, no network, no AI. Human
+  and `--json` output are pinned by golden tests, and each packaged skill
+  is kept byte-identical to the repository's own dogfood copy by test.
+
+- Growth programme corpus and comparison (growth-programme): the
+  repository's own growth plan now lives in the corpus as seven
+  requirements, two designs, and an umbrella roadmap — including the
+  spec-driven-development comparison that backs the README's new "How
+  this relates to spec-driven development" section (GitHub Spec Kit and
+  OpenSpec, every claim cited to the tool's own documentation), a
+  `docs/ecosystem.md` seed list, and a consolidated traceability gap
+  report written from real authoring friction
+  (`.agent-context/GAPS_TRACEABILITY.md`).
+
 - Review impact and the first-run editor (v0.8.11): every `rac review`
   finding now carries an `impact` sentence — why it matters — owned by Core
   and present in the JSON contract (additive field; `schema_version`
