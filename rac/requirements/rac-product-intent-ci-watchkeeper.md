@@ -7,12 +7,11 @@ type: requirement
 
 ## Status
 
-Deferred
+Proposed
 
-Deferred behind RAC Guide (the v0.10.x series). The agent context surface
-ships first; Watchkeeper, when built, consumes the same Core services and
-stable output contracts Guide consumes. The capability definition below
-stands unchanged.
+Previously deferred behind RAC Guide (the v0.10.x series), which has
+shipped through v0.10.6. The capability now proceeds as the v0.12.x
+watchkeeper series. The capability definition below stands unchanged.
 
 ## Problem
 
@@ -527,7 +526,21 @@ Watchkeeper succeeds when:
 
 - rac-agent-context-guide
 
+## Related Roadmaps
+
+- v0.12.0-repository-review
+
+- v0.12.1-intent-analysis
+
+- v0.12.2-watchkeeper
+
+- v0.12.3-watchkeeper-action
+
 ## Future Considerations
+
+Configurable review policies (the `watchkeeper:` block above) are not
+implemented by the v0.12.x series; the `--fail-on` flag covers CI
+policy until a policy block earns its own milestone.
 
 Future versions may add:
 

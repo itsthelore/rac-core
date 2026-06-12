@@ -19,6 +19,6 @@ to the corpus artifact and they load through the imports below.
 
 ## Working corpus
 
-- Current series: `rac/roadmaps/v0.11.x-portal/` (next up: v0.11.0)
-- Previous series: `rac/roadmaps/v0.10.x-guide/` (complete through v0.10.5; v0.10.7 docs site in flight on PR #78)
+- Current series: `rac/roadmaps/v0.12.x-watchkeeper/` (next up: v0.12.0)
+- Previous series: `rac/roadmaps/v0.11.x-portal/` (complete through v0.11.0)
 - Decisions (ADRs): `rac/decisions/`
