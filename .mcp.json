@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "rac-guide": {
+    "lore": {
       "command": "rac",
       "args": ["mcp", "--root", "."]
     }

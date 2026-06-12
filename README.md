@@ -1,5 +1,7 @@
 # Lore
 
+<!-- mcp-name: io.github.tcballard/lore -->
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/tcballard/requirements-as-code/main/rac/assets/images/lore-header-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/tcballard/requirements-as-code/main/rac/assets/images/lore-header-light.png">
@@ -39,7 +41,7 @@ pip install requirements-as-code
 Claude Code (from your repo root):
 
 ```bash
-claude mcp add rac-guide -- rac mcp
+claude mcp add lore -- rac mcp
 ```
 
 Claude Desktop / Cursor (`mcpServers` in the client config):
@@ -47,7 +49,7 @@ Claude Desktop / Cursor (`mcpServers` in the client config):
 ```json
 {
   "mcpServers": {
-    "rac-guide": { "command": "rac", "args": ["mcp", "--root", "/absolute/path/to/your/repo"] }
+    "lore": { "command": "rac", "args": ["mcp", "--root", "/absolute/path/to/your/repo"] }
   }
 }
 ```

@@ -23,7 +23,7 @@ Before coding:
 
 Do not implement until I approve the plan.
 
-Grounding (when the `rac-guide` MCP tools are available in your session):
+Grounding (when the `lore` MCP tools are available in your session):
 - Call `get_summary` once at session start to learn what recorded
   knowledge exists.
 - Call `search_artifacts` before designing or implementing; recorded

@@ -26,7 +26,7 @@ path you would pass to `rac validate`.
 **Command form** (adds the server to your Claude Code session):
 
 ```bash
-claude mcp add rac-guide -- rac mcp --root /path/to/your/repo
+claude mcp add lore -- rac mcp --root /path/to/your/repo
 ```
 
 **`.mcp.json` form** — create or edit `.mcp.json` in your project root:
@@ -34,7 +34,7 @@ claude mcp add rac-guide -- rac mcp --root /path/to/your/repo
 ```json
 {
   "mcpServers": {
-    "rac-guide": {
+    "lore": {
       "command": "rac",
       "args": ["mcp", "--root", "/path/to/your/repo"]
     }
@@ -51,7 +51,7 @@ Open `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/
 ```json
 {
   "mcpServers": {
-    "rac-guide": {
+    "lore": {
       "command": "rac",
       "args": ["mcp", "--root", "/path/to/your/repo"]
     }
@@ -70,7 +70,7 @@ Create or edit `.cursor/mcp.json` in your project root:
 ```json
 {
   "mcpServers": {
-    "rac-guide": {
+    "lore": {
       "command": "rac",
       "args": ["mcp", "--root", "/path/to/your/repo"]
     }

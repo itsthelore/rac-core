@@ -53,13 +53,13 @@ obvious thing, not a trap.
 If you have previously added it, remove it for this run:
 
 ```bash
-claude mcp remove rac-guide
+claude mcp remove lore
 ```
 
 Confirm it is gone:
 
 ```bash
-claude mcp list        # rac-guide must not appear
+claude mcp list        # lore must not appear
 ```
 
 **Run.** From `examples/guide/task/`, start Claude Code and paste the task
@@ -91,7 +91,7 @@ changes to the demo corpus.
 **Command form:**
 
 ```bash
-claude mcp add rac-guide -- rac mcp --root /absolute/path/to/examples/guide
+claude mcp add lore -- rac mcp --root /absolute/path/to/examples/guide
 ```
 
 **`.mcp.json` form** (in the project root):
@@ -99,7 +99,7 @@ claude mcp add rac-guide -- rac mcp --root /absolute/path/to/examples/guide
 ```json
 {
   "mcpServers": {
-    "rac-guide": {
+    "lore": {
       "command": "rac",
       "args": ["mcp", "--root", "/absolute/path/to/examples/guide"]
     }
@@ -110,17 +110,17 @@ claude mcp add rac-guide -- rac mcp --root /absolute/path/to/examples/guide
 Confirm the server is connected before Run 2:
 
 ```bash
-claude mcp list        # rac-guide must appear
+claude mcp list        # lore must appear
 ```
 
-In a Claude Code session, `/mcp` should list `rac-guide` with its four tools:
+In a Claude Code session, `/mcp` should list `lore` with its four tools:
 `get_summary`, `search_artifacts`, `get_artifact`, `get_related`.
 
 ---
 
 ## Run 2 — grounded (RAC Guide connected)
 
-**Setup.** A fresh Claude Code session with `rac-guide` connected (above),
+**Setup.** A fresh Claude Code session with `lore` connected (above),
 started from `examples/guide/task/`.
 
 **Run.** Paste the **same** task prompt. Do not change a word; do not mention
@@ -233,7 +233,7 @@ visible. Shot order per `rac/designs/guide-grounding-demo.md`:
 2. **Ungrounded violation (compressed)** — Run 1: the agent produces the hard
    `DELETE FROM users`. Trim the agent's thinking; keep the resulting diff
    visible.
-3. **The config block** — show adding `rac-guide` (the `claude mcp add` line or
+3. **The config block** — show adding `lore` (the `claude mcp add` line or
    the `.mcp.json` block), then `/mcp` listing the four tools.
 4. **Grounded run** — Run 2: show the `search_artifacts` tool call and its
    result, and the agent's response **citing `ADR-001` / `GUIDE-KTW9YBDWDBFM`**.

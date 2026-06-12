@@ -46,7 +46,7 @@ from rac.services.resolve import (
     search_index,
 )
 
-SERVER_NAME = "rac-guide"
+SERVER_NAME = "lore"
 
 # --- Verbatim tool descriptions (pinned by guide-tool-surface; ADR-030) ------
 #
