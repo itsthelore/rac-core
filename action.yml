@@ -1,0 +1,122 @@
+# RAC Watchkeeper composite action (v0.12.3).
+#
+# A thin wrapper: install RAC, resolve the base revision, run one
+# `rac watchkeeper --format github` invocation, and route its outputs —
+# stdout to the step summary, stderr (workflow-command annotations) to the
+# step log. All analysis, rendering, and failure policy live in the Python
+# package (ADR-015); the action never reinterprets exit codes.
+name: "RAC Watchkeeper"
+description: >-
+  Review product knowledge changes (requirements, decisions, roadmaps,
+  designs, prompts) on pull requests: changed artifacts, validation and
+  relationship deltas, deterministic intent findings, and a review verdict.
+author: "Tom Ballard"
+
+branding:
+  icon: "eye"
+  color: "purple"
+
+inputs:
+  path:
+    description: >-
+      Corpus directory to compare (passed to `rac watchkeeper`).
+    required: false
+    default: "rac"
+  base:
+    description: >-
+      Base state: a git revision or a directory. Empty (the default)
+      resolves to `origin/<pull request base branch>`.
+    required: false
+    default: ""
+  fail-on:
+    description: >-
+      Failure policy forwarded to `rac watchkeeper --fail-on`:
+      `error` (fail when review is recommended), `warning` (also fail on
+      any warning finding), or `none` (never fail, still report).
+    required: false
+    default: "error"
+  annotate:
+    description: >-
+      Emit inline annotations via workflow commands (`true` or `false`).
+    required: false
+    default: "true"
+  rac-version:
+    description: >-
+      Exact requirements-as-code version to install from PyPI. Empty
+      installs the latest release. Ignored when `install-from` is `source`.
+    required: false
+    default: ""
+  install-from:
+    description: >-
+      Where to install RAC from: `pypi` (the default for consumers) or
+      `source` (the action checkout itself — used by this repository's own
+      dogfood job; requires `uses: ./` on a full checkout).
+    required: false
+    default: "pypi"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install RAC
+      shell: bash
+      env:
+        INSTALL_FROM: ${{ inputs.install-from }}
+        RAC_VERSION: ${{ inputs.rac-version }}
+      run: |
+        python -m pip install --quiet --upgrade pip
+        if [ "$INSTALL_FROM" = "source" ]; then
+          # The action checkout itself; setuptools-scm needs git metadata,
+          # so this path requires `uses: ./` on a real checkout.
+          python -m pip install --quiet "$GITHUB_ACTION_PATH"
+        elif [ -n "$RAC_VERSION" ]; then
+          python -m pip install --quiet "requirements-as-code==$RAC_VERSION"
+        else
+          python -m pip install --quiet requirements-as-code
+        fi
+
+    - name: Resolve base revision
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        PR_BASE_REF: ${{ github.base_ref }}
+      run: |
+        BASE="$INPUT_BASE"
+        if [ -z "$BASE" ]; then
+          BASE="origin/$PR_BASE_REF"
+        fi
+        # Make sure the base ref exists locally; harmless when it already
+        # does, best-effort when the base is a directory or a plain SHA
+        # (rac fails with exit 2 and a clear message if it cannot resolve).
+        case "$BASE" in
+          origin/*)
+            REF="${BASE#origin/}"
+            git fetch --quiet --no-tags origin \
+              "+refs/heads/$REF:refs/remotes/origin/$REF" || true
+            ;;
+        esac
+        echo "WATCHKEEPER_BASE=$BASE" >> "$GITHUB_ENV"
+
+    - name: Run watchkeeper
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        ANNOTATE: ${{ inputs.annotate }}
+      run: |
+        ANNOTATE_FLAG=""
+        if [ "$ANNOTATE" != "true" ]; then
+          ANNOTATE_FLAG="--no-annotate"
+        fi
+        # stdout becomes the job's step summary; stderr stays in the live
+        # step log where the runner parses the annotation commands. The
+        # exit code propagates unchanged — policy lives in --fail-on.
+        rac watchkeeper "$INPUT_PATH" \
+          --base "$WATCHKEEPER_BASE" \
+          --format github \
+          --fail-on "$FAIL_ON" \
+          $ANNOTATE_FLAG \
+          > "$GITHUB_STEP_SUMMARY"
