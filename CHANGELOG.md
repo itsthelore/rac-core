@@ -8,6 +8,18 @@ details, release history over commit history.
 
 ### Added
 
+- Watchkeeper repository comparison (v0.12.0): `rac watchkeeper [directory]
+  --base REF [--head REF] [--json]` reviews product knowledge changes
+  between two repository states — added/modified/removed artifacts (with
+  requirement-level diffs), validation deltas (including newly invalid
+  artifacts), relationship deltas (including references broken purely by a
+  removal elsewhere), and per-type artifact count deltas. Base and head
+  each accept a git revision or a plain directory; revisions are
+  materialized read-only via `git archive` (ADR-043) and nothing ever
+  mutates the repository. JSON output is a stable contract
+  (`schema_version: "1"`) that grows additively across the v0.12.x series
+  (intent findings and review recommendations follow).
+
 - Portal export (v0.11.0): `rac export` turns a repository's corpus
   into shareable artifacts. The default mode prints a deterministic
   JSON payload to stdout — artifacts with stable ids, aliases, type,
