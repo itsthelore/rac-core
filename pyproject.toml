@@ -77,7 +77,9 @@ where = ["src"]
 [tool.setuptools.package-data]
 # Canonical artifact templates ship with the distribution (v0.7.10, ADR-021):
 # `rac new` loads them via importlib.resources, never from the repository.
-"rac.templates" = ["*.md"]
+# The vendored Portal shell and its provenance manifest ship the same way
+# (v0.11.0): `rac export --html` loads them via importlib.resources.
+"rac.templates" = ["*.md", "portal/*.html", "portal/*.json"]
 # The Explorer stylesheet ships with the distribution (v0.8.7): the app loads
 # it via CSS_PATH, resolved relative to the installed package.
 "rac.explorer" = ["*.tcss"]
