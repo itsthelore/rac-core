@@ -393,9 +393,11 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   keyboard, scrolls with `j`/`k`/PgUp/PgDn, and artifact references inside
   the text open in place, so the corpus reads like a wiki), **Inspection**
   (status, completeness, and the artifact's validation diagnostics — the
-  same issues `rac validate` reports), **Links** (relationships, impact,
-  lineage; connected artifacts open on Enter, so the graph traverses one hop
-  at a time and `Esc` unwinds), and **Findings** (the artifact's
+  same issues `rac validate` reports), **Links** (the knowledge graph as
+  text — a dependency chain to what the artifact relates to, an Impact
+  Analysis block naming what a change may affect, and a lineage chain;
+  connected artifacts open on Enter, so the graph traverses one hop at a
+  time and `Esc` unwinds), and **Findings** (the artifact's
   recommendations, plus an Improvement group from the improve service —
   one suggestion per missing section, with the schema's guidance question
   as the action). Inspection, Links, and Findings carry count badges; `g`
