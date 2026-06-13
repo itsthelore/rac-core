@@ -6,6 +6,7 @@ logic. Renderers are re-exported here so callers can use ``rac.output.render_*``
 without depending on the internal split between human/json/templates.
 """
 
+from .github import render_watchkeeper_github, watchkeeper_annotations
 from .human import (
     render_diff_human,
     render_dir_inspect_human,
@@ -32,6 +33,7 @@ from .human import (
     render_unknown_schema,
     render_validate_dir_human,
     render_validation_human,
+    render_watchkeeper_human,
 )
 from .json import (
     render_diff_json,
@@ -59,6 +61,7 @@ from .json import (
     render_templates_json,
     render_validate_dir_json,
     render_validation_json,
+    render_watchkeeper_json,
 )
 from .portal import render_export_html
 from .templates import render_improve_template, render_schema_template
@@ -117,4 +120,8 @@ __all__ = [
     "render_validate_dir_json",
     "render_validation_human",
     "render_validation_json",
+    "render_watchkeeper_github",
+    "render_watchkeeper_human",
+    "render_watchkeeper_json",
+    "watchkeeper_annotations",
 ]

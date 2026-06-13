@@ -290,6 +290,148 @@ one-screen summary and `review` when you want the prioritized worklist.
 
 ---
 
+## watchkeeper
+
+Review product knowledge *changes* between two repository states: what was
+added, modified, or removed, and how validation, relationships, and repository
+statistics moved. `review` answers "what needs attention now?"; `watchkeeper`
+answers "what changed, and how did it move the repository?".
+
+- **Input:** `rac watchkeeper [directory]` — the corpus to compare (default:
+  `rac/` when present, else the current directory). The working tree is the
+  head state.
+- **Options:** `--base REF` (default `main`) · `--head REF` ·
+  `--format human|json|github` · `--json` (alias for `--format json`) ·
+  `--fail-on error|warning|none` (default `error`) · `--no-annotate`
+- **Exit codes:** `0` nothing requiring attention under the chosen policy
+  (always, with `--fail-on none`) · `1` review recommended (`--fail-on
+  error`) or any warning finding (`--fail-on warning`) · `2` not a
+  directory, unknown revision, or not inside a git repository
+
+`--base` and `--head` each accept a git revision (`main`,
+`origin/some-branch`, a commit SHA) **or** an existing directory path —
+directories are compared as-is, with no git involved. Revisions are
+materialized read-only via `git archive` (ADR-043): nothing mutates your
+repository, and only the corpus subpath is extracted.
+
+```bash
+rac watchkeeper rac --base main
+```
+
+```text
+RAC Watchkeeper
+===============
+
+Directory:  rac
+Comparing:  main → rac
+
+Changed Artifacts
+-----------------
+
+  + requirements/billing.md  (requirement)
+  ~ requirements/checkout.md  (requirement)
+  - requirements/legacy-upload.md  (requirement)
+
+Validation
+----------
+
+  Valid:    5 → 4
+  Invalid:  0 → 1
+
+  Newly invalid:
+    ✗ requirements/payouts.md
+
+Relationships
+-------------
+
+  Total:    3 → 3
+  Broken:   0 → 1
+
+  New issues:
+    ! decisions/adr-001-payment-provider.md — Related Requirements reference 'legacy-upload' (relationship-target-not-found)
+
+Repository Changes
+------------------
+
+  Requirement    3 → 3
+  Total          5 → 5
+```
+
+Artifacts are matched by corpus-relative path, so a renamed artifact reports
+as removed plus added. A base revision that predates the corpus directory
+compares against an empty base — a brand-new corpus is a valid
+"everything added" review.
+
+The report ends with deterministic **intent findings** (v0.12.1) — changes
+that reduce product clarity, flagged for human attention without judging
+correctness:
+
+| Code | Fires when | Severity |
+| --- | --- | --- |
+| `specificity_regression` | a measurable requirement loses its numbers | warning |
+| `ambiguity_introduced` | an ambiguous term (easy, intuitive, simple, seamless, user-friendly, scalable, fast, quickly, robust, flexible) newly appears in a requirement | warning |
+| `constraint_weakened` | mandatory wording (must, shall) becomes hedged (should, may, could) | warning |
+| `constraint_removed` | a requirement with mandatory wording is removed | warning |
+| `acceptance_criteria_removed` | a filled Acceptance Criteria section disappears or empties | warning |
+| `success_measures_removed` | a filled Success Measures/Metrics section disappears or empties | warning |
+| `unlinked_scope` | a new artifact declares no relationships and nothing references it | warning |
+| `relationship_impact` | a modified or removed artifact is referenced by others | info |
+
+Every check is token-boundary, casefolded, and explainable: each finding
+carries a one-sentence `detail` and the triggering text as diff-style
+`evidence`.
+
+```text
+Findings (2)
+--------
+
+  ! [specificity_regression] requirements/checkout.md
+      Measurable requirement REQ-001 became vague.
+      - Payment confirmation must complete within 2 seconds
+      + Payment confirmation should complete quickly
+
+  · [relationship_impact] requirements/checkout.md
+      Modified artifact is referenced by 1 artifact(s).
+      adr-001
+```
+
+The report ends with a deterministic **review verdict** (v0.12.2). Review
+is recommended when artifacts become invalid, relationship references
+break, or a clarity-regression finding fires (`specificity_regression`,
+`constraint_weakened`, `constraint_removed`, `acceptance_criteria_removed`,
+`success_measures_removed`). Ambiguity, unlinked scope, and relationship
+impact inform but never recommend on their own. `--fail-on` turns the
+verdict into CI policy: `error` (default) fails when review is recommended,
+`warning` also fails on any warning finding, `none` never fails but still
+prints the full report.
+
+`--format github` renders for GitHub workflows with no GitHub API
+dependency: **stdout** is a Markdown report for `$GITHUB_STEP_SUMMARY`
+(change table, delta tables, findings, verdict); **stderr** carries
+workflow-command annotations (`::error` for recommendation triggers,
+`::warning` / `::notice` for the rest) with repository-relative file paths,
+which the runner turns into inline annotations. `--no-annotate` suppresses
+the stderr stream:
+
+```bash
+rac watchkeeper rac --base "origin/$GITHUB_BASE_REF" --format github > "$GITHUB_STEP_SUMMARY"
+```
+
+The `--json` form is a stable contract (`schema_version: "1"`) with `base`,
+`head`, `directory`, `changes[]` (each with `change`, `type`, `id`, `title`,
+`path`, `base_status`, `head_status`, and a requirement-level `diff` for
+modified artifacts), `validation` (per-side counts plus `newly_invalid` /
+`newly_valid`), `relationships` (per-side summaries plus `new_issues` /
+`resolved_issues`), `stats` (per-type and total counts for both sides),
+`findings[]` (each with `code`, `severity`, `path`, `identifier`, `detail`,
+`evidence`; additive in v0.12.1), and `review` (`recommended` plus
+`reasons[]` with `code` and `reason`; additive in v0.12.2).
+
+To run Watchkeeper on pull requests with the bundled GitHub Action and
+reusable workflow, see **[watchkeeper.md](watchkeeper.md)**.
+
+---
+
 ## portfolio
 
 A one-screen repository intelligence summary: artifact counts by type, validity,

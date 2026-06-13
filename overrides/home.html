@@ -1,0 +1,63 @@
+{% extends "main.html" %}
+
+{#
+  Custom splash home for the Lore docs site. OpenSpec-style structure
+  (full-bleed hero, install card, CTA row) rendered in the lore-web visual
+  identity (amber on warm near-black, JetBrains Mono, dashed terminal
+  chrome). The below-the-fold marketing sections stay in docs/index.md and
+  render through {{ page.content }} so they remain plain Markdown.
+#}
+
+{% block content %}
+<section class="lore-splash" markdown="0">
+  <div class="lore-splash__lead">
+    <img
+      class="lore-splash__mascot"
+      src="{{ 'images/lamplighter.png' | url }}"
+      alt="The Lore lamplighter, lantern raised"
+      width="200" height="158">
+    <div class="lore-splash__intro">
+      <h1 class="lore-splash__title">Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.</h1>
+      <p class="lore-splash__sub">Agents that know why.</p>
+    </div>
+  </div>
+
+  <div class="lore-splash__actions">
+    <div class="lore-install">
+      <span class="lore-install__prompt">$</span>
+      <code id="lore-install-cmd">pip install requirements-as-code</code>
+      <button class="lore-install__copy" type="button" data-clipboard-target="#lore-install-cmd" aria-label="Copy install command">copy</button>
+    </div>
+    <p class="lore-splash__note">Requires Python 3.11+ &middot; <code>uv tool install requirements-as-code</code> also works.</p>
+
+    <nav class="lore-cta" aria-label="Get started">
+      <a class="lore-btn lore-btn--primary" href="{{ 'quickstart/' | url }}">Quickstart</a>
+      <a class="lore-btn" href="{{ 'mcp/' | url }}">MCP Server</a>
+      <a class="lore-btn" href="{{ 'cli/' | url }}">CLI Reference</a>
+      <a class="lore-btn lore-btn--ghost" href="{{ config.repo_url }}">GitHub</a>
+    </nav>
+  </div>
+</section>
+
+<div class="lore-below">
+  {{ page.content }}
+</div>
+
+<script>
+  document.querySelectorAll(".lore-install__copy").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var target = document.querySelector(button.dataset.clipboardTarget);
+      if (!target) return;
+      navigator.clipboard.writeText(target.innerText).then(function () {
+        var original = button.textContent;
+        button.textContent = "copied";
+        button.classList.add("is-copied");
+        setTimeout(function () {
+          button.textContent = original;
+          button.classList.remove("is-copied");
+        }, 1500);
+      });
+    });
+  });
+</script>
+{% endblock %}

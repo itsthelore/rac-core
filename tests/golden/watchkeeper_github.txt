@@ -1,0 +1,54 @@
+# RAC Watchkeeper
+
+Comparing `tests/fixtures/watchkeeper/base` → `tests/fixtures/watchkeeper/head` in `tests/fixtures/watchkeeper/head`.
+
+## Changed artifacts
+
+| Change | Artifact | Type |
+| --- | --- | --- |
+| Added | `requirements/billing.md` | requirement |
+| Modified | `requirements/checkout.md` | requirement |
+| Modified | `requirements/payouts.md` | requirement |
+| Removed | `requirements/legacy-upload.md` | requirement |
+
+## Repository deltas
+
+| Measure | Base | Head |
+| --- | --- | --- |
+| Valid artifacts | 5 | 4 |
+| Invalid artifacts | 0 | 1 |
+| Relationships | 3 | 3 |
+| Broken relationships | 0 | 1 |
+| Artifacts | 5 | 5 |
+
+Newly invalid:
+
+- `requirements/payouts.md`
+
+New relationship issues:
+
+- `decisions/adr-001-payment-provider.md` — `legacy-upload` (relationship-target-not-found)
+
+## Findings (8)
+
+- ⚠️ **acceptance_criteria_removed** — `requirements/checkout.md`: Acceptance criteria section removed.
+- ⚠️ **ambiguity_introduced** — `requirements/checkout.md`: Ambiguous wording introduced in REQ-001: 'quickly'.
+- ⚠️ **constraint_removed** — `requirements/legacy-upload.md`: Requirement REQ-001 with mandatory wording removed.
+- ⚠️ **constraint_weakened** — `requirements/checkout.md`: Mandatory requirement REQ-001 weakened to hedged wording.
+- ⚠️ **specificity_regression** — `requirements/checkout.md`: Measurable requirement REQ-001 became vague.
+- ⚠️ **unlinked_scope** — `requirements/billing.md`: New artifact declares no relationships and nothing references it.
+- ℹ️ **relationship_impact** — `requirements/checkout.md`: Modified artifact is referenced by 1 artifact(s).
+- ℹ️ **relationship_impact** — `requirements/legacy-upload.md`: Removed artifact is referenced by 1 artifact(s).
+
+## Verdict
+
+**Review recommended.**
+
+Reasons:
+
+- One or more artifacts became invalid. (`validation_regression`)
+- One or more relationship references broke. (`broken_relationship`)
+- An acceptance criteria section was removed. (`acceptance_criteria_removed`)
+- A requirement with mandatory wording was removed. (`constraint_removed`)
+- A mandatory requirement was weakened. (`constraint_weakened`)
+- A measurable requirement became vague. (`specificity_regression`)

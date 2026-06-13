@@ -26,7 +26,7 @@ easy to read.
 ### Three documentation layers
 
 RAC's own repository separates concerns into three layers
-([ADR-022](../rac/decisions/adr-022-documentation-boundaries.md)):
+([ADR-022](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-022-documentation-boundaries.md)):
 
 - **`README.md`** — the front door: what RAC is and how to try it.
 - **`docs/`** — user-facing guides (this directory).

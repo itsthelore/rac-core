@@ -49,6 +49,42 @@ CASES = [
     ("schema_requirement_template", ["schema", "requirement", "--template"], 0),
     ("review_human", ["review", "tests/fixtures/portfolio"], 1),
     ("review_json", ["review", "tests/fixtures/portfolio", "--json"], 1),
+    # Directory-to-directory comparison: goldens never depend on git state.
+    (
+        "watchkeeper_human",
+        [
+            "watchkeeper",
+            "tests/fixtures/watchkeeper/head",
+            "--base",
+            "tests/fixtures/watchkeeper/base",
+        ],
+        1,
+    ),
+    (
+        "watchkeeper_json",
+        [
+            "watchkeeper",
+            "tests/fixtures/watchkeeper/head",
+            "--base",
+            "tests/fixtures/watchkeeper/base",
+            "--json",
+        ],
+        1,
+    ),
+    # Golden output captures stdout only; the github annotations stream to
+    # stderr by design and are pinned by tests/test_watchkeeper.py instead.
+    (
+        "watchkeeper_github",
+        [
+            "watchkeeper",
+            "tests/fixtures/watchkeeper/head",
+            "--base",
+            "tests/fixtures/watchkeeper/base",
+            "--format",
+            "github",
+        ],
+        1,
+    ),
     ("templates_human", ["templates"], 0),
     ("templates_json", ["templates", "--json"], 0),
     ("resolve_human", ["resolve", "RAC-01JY4M8X2QZ7", "tests/fixtures/resolve"], 0),

@@ -8,27 +8,50 @@ details, release history over commit history.
 
 ### Added
 
-- Explorer knowledge-graph grammar (v0.8.13): the Explorer's **Links** tab
-  now renders relationships in the designed terminal grammar — a vertical
-  dependency chain from the artifact to what it relates to (each `↓` carrying
-  the relationship kind), an **Impact Analysis** block that frames a change
-  ("Changing: … / May affect: …"), and a `↓`-joined lineage chain for
-  supersession. The relationships are unchanged — only their presentation —
-  so "why does this exist?", "what depends on this?", and "what happens if
-  this changes?" read directly. Presentation only; no Core, adapter, or
-  state change.
+- Watchkeeper GitHub Action and reusable workflow (v0.12.3): a composite
+  `action.yml` at the repository root (`uses:
+  tcballard/requirements-as-code@<tag>`) and a callable
+  `.github/workflows/watchkeeper.yml` bring product knowledge review to
+  pull requests — failed check per the `fail-on` policy, inline
+  annotations on the artifacts needing attention, and a step-summary
+  report. The action is logic-free (install RAC, resolve the base ref,
+  run one `rac watchkeeper --format github`, propagate the exit code) and
+  this repository's own PR checks run it from source as the live
+  end-to-end test. Pin exact release tags; no moving major tag is
+  published (setuptools-scm derives versions from git tags). See
+  `docs/watchkeeper.md`.
 
-- Explorer mascot interaction (v0.8.12): selecting the mascot in the
-  Explorer — a click, or keyboard focus then Enter — returns a small
-  response beneath the figure: a default acknowledgement, occasional
-  reminders of why product knowledge is worth keeping, gentle guidance
-  toward existing commands, and one rare line on repeated selection.
-  Responses appear inline with no popup, dialog, or notification, and
-  nothing is hidden behind them — the mascot surfaces functionality, it
-  does not contain it. A new `mascot_interaction` preference (default on,
-  cycled in `/settings`) turns it off independently of the mascot and
-  animation toggles, and selection works with animations off. No Core or
-  service changes.
+- Watchkeeper review verdict, GitHub format, and CI policy (v0.12.2):
+  `rac watchkeeper` now ends with a deterministic review recommendation —
+  validation regressions, broken relationships, and clarity-regression
+  findings recommend human review with Core-owned reasons; ambiguity and
+  unlinked scope inform but never recommend alone. `--fail-on
+  error|warning|none` turns the verdict into CI policy, and `--format
+  github` writes a Markdown step-summary report to stdout and
+  workflow-command annotations (with repository-relative paths) to stderr
+  — no GitHub API involved. JSON gains an additive `review` block.
+
+- Watchkeeper intent analysis (v0.12.1): the `rac watchkeeper` report now
+  ends with deterministic intent findings — specificity regressions
+  (numbers vanishing from requirements), ambiguous wording arriving,
+  mandatory language weakening or disappearing, acceptance criteria or
+  success measures being removed, new scope with no relationships, and
+  the relationship impact of modified or removed artifacts. Every check
+  is token-boundary text matching or parsed-section comparison — no
+  semantic scoring — and each finding carries a one-sentence detail plus
+  diff-style evidence. JSON gains an additive `findings[]` array.
+
+- Watchkeeper repository comparison (v0.12.0): `rac watchkeeper [directory]
+  --base REF [--head REF] [--json]` reviews product knowledge changes
+  between two repository states — added/modified/removed artifacts (with
+  requirement-level diffs), validation deltas (including newly invalid
+  artifacts), relationship deltas (including references broken purely by a
+  removal elsewhere), and per-type artifact count deltas. Base and head
+  each accept a git revision or a plain directory; revisions are
+  materialized read-only via `git archive` (ADR-043) and nothing ever
+  mutates the repository. JSON output is a stable contract
+  (`schema_version: "1"`) that grows additively across the v0.12.x series
+  (intent findings and review recommendations follow).
 
 - Portal export (v0.11.0): `rac export` turns a repository's corpus
   into shareable artifacts. The default mode prints a deterministic
@@ -85,6 +108,28 @@ details, release history over commit history.
   new `rac mcp-stats` command summarizes the log (`--json` is the shareable
   export; `--share` prints a prefilled GitHub usage-report issue URL you
   review and submit yourself — RAC contains no network code).
+
+- Explorer knowledge-graph grammar (v0.8.13): the Explorer's **Links** tab
+  now renders relationships in the designed terminal grammar — a vertical
+  dependency chain from the artifact to what it relates to (each `↓` carrying
+  the relationship kind), an **Impact Analysis** block that frames a change
+  ("Changing: … / May affect: …"), and a `↓`-joined lineage chain for
+  supersession. The relationships are unchanged — only their presentation —
+  so "why does this exist?", "what depends on this?", and "what happens if
+  this changes?" read directly. Presentation only; no Core, adapter, or
+  state change.
+
+- Explorer mascot interaction (v0.8.12): selecting the mascot in the
+  Explorer — a click, or keyboard focus then Enter — returns a small
+  response beneath the figure: a default acknowledgement, occasional
+  reminders of why product knowledge is worth keeping, gentle guidance
+  toward existing commands, and one rare line on repeated selection.
+  Responses appear inline with no popup, dialog, or notification, and
+  nothing is hidden behind them — the mascot surfaces functionality, it
+  does not contain it. A new `mascot_interaction` preference (default on,
+  cycled in `/settings`) turns it off independently of the mascot and
+  animation toggles, and selection works with animations off. No Core or
+  service changes.
 
 - Review impact and the first-run editor (v0.8.11): every `rac review`
   finding now carries an `impact` sentence — why it matters — owned by Core

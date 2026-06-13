@@ -29,6 +29,7 @@ from rac.services.review import ReviewReport
 from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
 from rac.services.validate import DirectoryValidation
+from rac.services.watchkeeper import WatchkeeperReport
 
 if TYPE_CHECKING:
     from rac.mcp.telemetry import TelemetrySummary as MCPTelemetrySummary
@@ -340,3 +341,11 @@ def render_mcp_stats_json(summary: MCPTelemetrySummary) -> str:
     (minus the local log path) into a prefilled usage-report issue.
     """
     return json.dumps(summary.to_dict(), indent=2)
+
+
+# --- watchkeeper --------------------------------------------------------------
+
+
+def render_watchkeeper_json(report: WatchkeeperReport) -> str:
+    """JSON `rac watchkeeper` output (stable contract, ADR-007)."""
+    return json.dumps(report.to_dict(), indent=2)

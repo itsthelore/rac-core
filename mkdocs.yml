@@ -1,0 +1,40 @@
+site_name: Lore
+site_description: >-
+  Give your coding agent the decisions your team already made — typed
+  Markdown artifacts in your repo, served over MCP.
+site_url: https://tcballard.github.io/requirements-as-code/
+repo_url: https://github.com/tcballard/requirements-as-code
+repo_name: tcballard/requirements-as-code
+
+theme:
+  name: material
+  custom_dir: overrides
+  font: false
+  language: en
+  favicon: images/favicon.png
+  logo: images/favicon.png
+  palette:
+    scheme: slate
+  features:
+    - content.code.copy
+    - navigation.top
+    - navigation.footer
+
+extra_css:
+  - stylesheets/extra.css
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - MCP Server: mcp.md
+  - CLI Reference: cli.md
+  - Watchkeeper: watchkeeper.md
+  - Artifacts: artifacts.md
+  - Relationships: relationships.md
+  - Repository Workflow: repo-workflow.md
+  - Examples: examples.md
+  - Ecosystem: ecosystem.md
+  - Testing & Contributing: testing.md

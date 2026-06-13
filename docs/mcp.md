@@ -322,4 +322,4 @@ the repository has not been initialized. See the troubleshooting steps above.
 - [CLI reference](cli.md) — every `rac` command including `rac mcp`
 - [Artifact types](artifacts.md) — what requirements, decisions, designs, roadmaps, and prompts look like
 - [Repository workflow](repo-workflow.md) — how to organize a RAC repository
-- [Examples corpus](../examples/guide/) — the ready-made guide corpus
+- [Examples corpus](https://github.com/tcballard/requirements-as-code/tree/main/examples/guide/) — the ready-made guide corpus
