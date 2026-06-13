@@ -1037,6 +1037,81 @@ async def test_mascot_searches_while_loading(fresh_first_run):
         assert mascot.label(mascot.SEARCHING) in str(art.content)
 
 
+def test_mascot_interaction_message_is_deterministic():
+    # DESIGN-mascot-interaction: a pure, testable mapping from selection count
+    # to response — acknowledgement first, rare line at exactly RARE_AT,
+    # guidance on a cadence, discovery messages rotating otherwise.
+    assert mascot.interaction_message(1) == mascot.ACK
+    assert mascot.interaction_message(0) == mascot.ACK  # never negative-indexes
+    assert mascot.interaction_message(2) == mascot.DISCOVERY_MESSAGES[0]
+    assert mascot.interaction_message(3) == mascot.DISCOVERY_MESSAGES[1]
+    assert mascot.interaction_message(4) == mascot.GUIDANCE
+    assert mascot.interaction_message(mascot.RARE_AT) == mascot.RARE
+    # The rare line wins even though its position is otherwise a discovery slot.
+    assert mascot.RARE not in {mascot.interaction_message(n) for n in range(1, mascot.RARE_AT)}
+    # Deterministic and total over a wide range; every response is real text.
+    for count in range(0, 60):
+        first = mascot.interaction_message(count)
+        assert first == mascot.interaction_message(count)
+        assert first.strip()
+
+
+@pytest.mark.asyncio
+async def test_mascot_selection_appends_response(fresh_first_run):
+    from rac.explorer.widgets.views import MascotArt
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        art = app.screen.query_one("#mascot", MascotArt)
+        assert art.can_focus  # selectable by default (DESIGN-mascot-interaction)
+        figure_only = str(art.content)
+        assert mascot.ACK not in figure_only  # no response until selected
+
+        art.focus()
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert mascot.ACK in str(art.content)  # inline, no popup
+
+        # Repeated selection rotates through discovery and reaches the rare line.
+        for _ in range(mascot.RARE_AT - 1):
+            await pilot.press("enter")
+            await pilot.pause()
+        assert mascot.RARE in str(art.content)
+
+
+@pytest.mark.asyncio
+async def test_mascot_click_selects(fresh_first_run):
+    from rac.explorer.widgets.views import MascotArt
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        await pilot.click("#mascot")
+        await pilot.pause()
+        art = app.screen.query_one("#mascot", MascotArt)
+        assert mascot.ACK in str(art.content)
+
+
+@pytest.mark.asyncio
+async def test_mascot_interaction_can_be_disabled(fresh_first_run, tmp_path, monkeypatch):
+    from rac.explorer.preferences import Preferences, save_preferences
+    from rac.explorer.widgets.views import MascotArt
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    save_preferences(Preferences(mascot_interaction=False))
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        text = await _settled_panel_text(app, pilot)
+        art = app.screen.query_one("#mascot", MascotArt)
+        assert art.display  # mascot still present (its own toggle is on)
+        assert not art.can_focus  # but inert
+        art.activate()  # selecting it does nothing
+        assert mascot.ACK not in str(art.content)
+        assert "Repository found" in text  # and the Explorer is unaffected
+
+
 # --- health and recommendations ----------------------------------------------------
 
 
