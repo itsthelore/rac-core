@@ -152,22 +152,39 @@ def render_context(context: ContextState) -> str:
 
 
 def render_sections(view: RelationshipsView) -> str:
-    """Outgoing / Impact / Lineage as terminal-readable text."""
-    lines = [view.title or view.id, "", "Relationships"]
+    """Relationships / Impact / Lineage in the knowledge-graph grammar.
+
+    DESIGN-knowledge-graph: a vertical dependency chain (``A ↓ B ↓ C``), an
+    Impact Analysis block ("Changing: X / May affect: …"), and a lineage
+    chain. Terminal readability over graphical complexity; the relationships
+    come from Core (ADR-015), this only renders them.
+    """
+    root = view.id
+
+    # Relationships — a chain rooted at the artifact; the ↓ carries the kind,
+    # fanning out vertically when several edges are declared.
+    lines = [view.title or view.id, "", "Relationships", "", f"  {root}"]
     if view.outgoing:
-        lines.extend(f"  {link.kind} → {link.label}" for link in view.outgoing)
+        for link in view.outgoing:
+            lines.append(f"      ↓ {link.kind}")
+            lines.append(f"  {link.label}")
     else:
         lines.append("  none declared")
 
-    lines.extend(["", "Impact (what depends on this)"])
+    # Impact Analysis — framing a change to this artifact.
+    lines.extend(["", "Impact Analysis", "", "Changing:", f"  {root}", "", "May affect:"])
     if view.impact:
-        lines.extend(f"  ← {link.label} ({link.kind})" for link in view.impact)
+        lines.extend(f"  {link.label} ({link.kind})" for link in view.impact)
     else:
         lines.append("  nothing depends on this artifact")
 
-    lines.extend(["", "Lineage"])
+    # Lineage — supersession steps joined into a vertical chain.
+    lines.extend(["", "Lineage", ""])
     if view.lineage:
-        lines.extend(f"  {line}" for line in view.lineage)
+        for index, line in enumerate(view.lineage):
+            if index:
+                lines.append("      ↓")
+            lines.append(f"  {line}")
     else:
         lines.append("  no recorded supersession")
     return "\n".join(lines)
