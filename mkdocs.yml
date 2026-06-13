@@ -8,17 +8,20 @@ repo_name: tcballard/requirements-as-code
 
 theme:
   name: material
+  custom_dir: overrides
+  font: false
+  language: en
+  favicon: images/favicon.png
+  logo: images/favicon.png
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+    scheme: slate
+  features:
+    - content.code.copy
+    - navigation.top
+    - navigation.footer
+
+extra_css:
+  - stylesheets/extra.css
 
 plugins:
   - search

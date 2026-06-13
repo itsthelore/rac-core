@@ -1,19 +1,9 @@
-![Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing.](images/lore-header-light.png#only-light)
-![Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing.](images/lore-header-dark.png#only-dark)
-
-# Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.
-
-## Install
-
-```bash
-pip install requirements-as-code
-```
-
-Requires Python 3.11+. `uv tool install requirements-as-code` also works.
-
-## Get started
-
-**[Quickstart](quickstart.md)** · **[MCP server](mcp.md)** · **[CLI reference](cli.md)**
+---
+template: home.html
+hide:
+  - navigation
+  - toc
+---
 
 ## What it is
 
