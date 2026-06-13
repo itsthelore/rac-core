@@ -1,4 +1,5 @@
-"""The Explorer mascot — a lantern-carrying guide (v0.8.6, animated v0.8.8).
+"""The Explorer mascot — a lantern-carrying guide (v0.8.6, animated v0.8.8,
+interactive v0.8.12).
 
 A small explorer with a lantern: navigation that illuminates hidden product
 knowledge (DESIGN-mascot). The mascot is identity, never a feature — it gates
@@ -9,7 +10,13 @@ equal-height blocks of terminal art cycled on a slow timer by the widget that
 shows them. Artwork is data — replacing the strings in :data:`FRAMES` changes
 the animation and nothing else. Every state carries equivalent text, so
 disabling animations (first frame only) or the mascot entirely (text only)
-loses no information (ADR-028). This module never imports Textual.
+loses no information (ADR-028).
+
+Selecting the mascot returns a small response (DESIGN-mascot-interaction):
+:func:`interaction_message` maps the Nth selection to an acknowledgement,
+rotating discovery messages, occasional workflow guidance, and one rare line.
+Responses are data and the mapping is pure, so they surface existing
+functionality without containing any. This module never imports Textual.
 """
 
 from __future__ import annotations
@@ -88,3 +95,51 @@ def figure(state: str, frame: int = 0, *, animations: bool = True) -> str:
     sequence = frames(state)
     art = sequence[frame % len(sequence)] if animations else sequence[0]
     return f"{art}\n  guide · {label(state)}"
+
+
+# --- interaction (DESIGN-mascot-interaction) ---------------------------------
+#
+# Selecting the mascot rewards curiosity without interrupting work: a small
+# acknowledgement, occasional discovery messages, gentle guidance toward
+# existing commands, and one rare line. None of these unlock features or touch
+# the repository — the mascot surfaces functionality, it does not contain it.
+
+#: The default acknowledgement for a single selection.
+ACK = "Still exploring."
+
+#: Occasional reminders of why product knowledge is worth keeping.
+DISCOVERY_MESSAGES = (
+    "Context preserved.",
+    "Future teams will thank you.",
+    "Remember why it changed.",
+)
+
+#: Guidance that points at existing Explorer commands (it names them; it is
+#: not a way to run them).
+GUIDANCE = "Try:  /inspect  /relationships  /health"
+
+#: The rare response, reached only on repeated selection.
+RARE = "You found the lantern."
+
+#: The selection count at which the rare response appears.
+RARE_AT = 7
+
+#: Guidance appears on every Nth selection.
+_GUIDANCE_EVERY = 4
+
+
+def interaction_message(count: int) -> str:
+    """The response for the ``count``-th mascot selection (1-based).
+
+    Deterministic, so the whole interaction is testable without a terminal:
+    the acknowledgement comes first, the rare line lands at exactly
+    :data:`RARE_AT`, guidance recurs on a fixed cadence, and the discovery
+    messages rotate otherwise. No randomness, no Textual.
+    """
+    if count <= 1:
+        return ACK
+    if count == RARE_AT:
+        return RARE
+    if count % _GUIDANCE_EVERY == 0:
+        return GUIDANCE
+    return DISCOVERY_MESSAGES[(count - 2) % len(DISCOVERY_MESSAGES)]
