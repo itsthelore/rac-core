@@ -75,6 +75,11 @@ ADR-022's model changes.
   can flip.
 - Site URLs become public API of a sort: renaming a `docs/` page later
   breaks inbound links, a cost that did not exist for blob URLs.
+- The landing page adopts the lore-web visual identity, which is the
+  pre-launch Lore brand held behind GATE-1 (nothing public until
+  external-communications review). Publishing — enabling Pages — is
+  therefore gated on that same review; merging the work publishes nothing.
+  This couples the docs-site go-live to the lore-web launch sequence.
 
 ## Alternatives Considered
 

@@ -20,7 +20,7 @@ out of user documentation.
 
 ## Requirements
 
-- [REQ-001] The site MUST be built with MkDocs and the Material theme. The `mkdocs` and `mkdocs-material` versions MUST be pinned, and no dependencies or plugins beyond those two packages, their transitive dependencies, and MkDocs' built-in search plugin may be introduced.
+- [REQ-001] The site MUST be built with MkDocs and the Material theme. The `mkdocs` and `mkdocs-material` versions MUST be pinned, and no dependencies or plugins beyond those two packages, their transitive dependencies, and MkDocs' built-in search plugin may be introduced. A custom theme directory (`custom_dir`), a single extra stylesheet, and self-hosted fonts are permitted, as they add neither plugins nor Python dependencies.
 
 - [REQ-002] `mkdocs.yml` MUST declare an explicit nav in exactly this order: Home, Quickstart, MCP Server, CLI Reference, Artifacts, Relationships, Repository Workflow, Examples, Ecosystem, Testing & Contributing.
 
@@ -36,6 +36,8 @@ out of user documentation.
 
 - [REQ-008] The site MUST NOT publish content from `rac/` — the corpus stays behind the ADR-022 boundary.
 
+- [REQ-009] The site MUST present the lore-web visual identity: a single dark scheme driven by the lore-web tokens (warm near-black surfaces, amber accent, teal for commands/links), JetBrains Mono self-hosted under `docs/fonts/` with `theme.font: false`, and no external font or CDN requests.
+
 ## Acceptance Criteria
 
 - `mkdocs build --strict` exits 0 with no warnings.
@@ -44,6 +46,9 @@ out of user documentation.
   lines named in REQ-004 and nothing else.
 - Searching "validate" and "MCP" on the built site each return at least
   one result from the docs pages.
+- The built site uses the single dark scheme with JetBrains Mono, and the
+  rendered pages issue no external font/CDN requests (`theme.font: false`,
+  fonts served from `docs/fonts/`).
 - The built `site/` output contains no page generated from a source file
   outside `docs/`.
 - `pip install` of the pinned versions plus `mkdocs build` succeeds from a

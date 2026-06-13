@@ -207,7 +207,18 @@ The requirement artifacts expected from this scope, for the Phase 2 agent
 ## Constraints
 
 - MkDocs + Material only; no other generators, plugins beyond the built-in
-  search, or dependencies beyond `mkdocs` and `mkdocs-material` (pinned).
+  search, or Python dependencies beyond `mkdocs` and `mkdocs-material`
+  (pinned). A custom home template (`overrides/`), one theme stylesheet, and
+  self-hosted fonts are permitted — they add no plugins or pip dependencies.
+- The landing page adopts the **lore-web visual identity** (amber on warm
+  near-black, JetBrains Mono, dashed terminal chrome, lamplighter mascot),
+  rendered in an OpenSpec-style hero. The site ships a single dark scheme;
+  the identity defines no light palette. (Maintainer decision, 2026-06-13,
+  superseding the original "stock Material" cap.)
+- **GATE-1 publish sequencing:** that identity is the pre-launch Lore brand,
+  shared with the `lore-web` surface held behind GATE-1 (nothing public until
+  external-communications review). Enabling Pages is the go-public gate and
+  MUST wait for that review; merging the work publishes nothing on its own.
 - Existing `docs/` pages are not rewritten; the only permitted edits are the
   seven link conversions the strict build requires.
 - One landing page and one docs section. No blog, versioned docs, analytics,
@@ -242,21 +253,30 @@ The requirement artifacts expected from this scope, for the Phase 2 agent
   or copying `rac/` content into `docs/`): keeps the strict build green
   without violating either the no-rewrite constraint or the ADR-022 boundary
   that the corpus is not user documentation.
-- **Copying the header images into `docs/images/`** rather than pointing the
-  site at raw GitHub URLs: site assets should build from the docs dir so the
-  build is self-contained and strict mode can verify them. The duplication
-  risk is accepted — header art changes rarely, and both copies change in
-  the same PR when it does.
+- **Vendoring brand assets into `docs/`** (mascot, fonts) rather than
+  pointing the site at raw GitHub URLs or a CDN: site assets build from the
+  docs dir so the build is self-contained, strict mode can verify them, and
+  the page makes no external requests — consistent with the product's
+  no-network ethos. The fonts ship with their OFL license under `docs/fonts/`.
+- **Adopting the lore-web identity over a neutral Material look:** the repo
+  already has a WCAG-AA-checked design system (`lore-web/`); reusing its
+  tokens keeps the docs site consistent with the eventual public surface
+  instead of inventing a parallel palette. The cost is GATE-1 exposure,
+  resolved by the publish-sequencing constraint above.
 
 ## Alternatives
 
 - **Brief-literal minimal README** (badges, one paragraph, install, link):
   rejected — conflicts with ADR-022 and REQ-Documentation-Structure;
   maintainer ruled for the recorded decision.
-- **Custom HTML/CSS landing page** mimicking openspec.dev closely: rejected
-  as the default — stock Material home first; custom overrides only if a
-  Phase 2 acceptance criterion is unreachable without them, kept to one
-  override file.
+- **Stock Material landing page** (the original plan): rejected after review
+  — the default article layout rendered flat. Chosen instead: an
+  OpenSpec-style splash (custom home template + one stylesheet) in the
+  lore-web identity. Custom code stays bounded to `overrides/home.html` and
+  `docs/stylesheets/extra.css`; no plugins or pip dependencies are added.
+- **Neutral / amber-only identity without the pre-launch brand:** considered
+  to avoid GATE-1 exposure, rejected by the maintainer in favour of full
+  lore-web consistency, with publishing gated on the comms review instead.
 - **`mkdocs gh-deploy` / `gh-pages` branch deployment:** rejected — the
   official Pages actions deploy from a build artifact, need no long-lived
   branch, and match GitHub's current recommended model.
@@ -266,22 +286,26 @@ The requirement artifacts expected from this scope, for the Phase 2 agent
 
 ## Accessibility
 
-- Hero images carry the existing descriptive alt text; the install command
-  and tagline are real text, never baked into images.
-- Light and dark header variants follow the Material palette toggle so
-  contrast holds in both schemes; otherwise stock Material palettes (which
-  meet contrast defaults) — no custom colors in scope.
-- Search and nav are Material built-ins and remain keyboard-operable;
-  nothing in scope adds custom interactive elements.
+- The mascot carries descriptive alt text; the install command and tagline
+  are real text, never baked into images.
+- The lore-web palette is WCAG-AA-checked (every text/surface pair ≥ 4.5:1,
+  verified by `lore-web/scripts/contrast-report.mjs`); the docs theme reuses
+  those exact token values, so contrast holds on the single dark scheme.
+- The install card's copy button is keyboard-operable and labelled; search
+  and nav remain Material built-ins.
 
 ## Style Guidance
 
 - Per ADR-036: the landing page leads with **Lore**; docs pages keep their
   existing RAC voice and titles unedited. The site title is "Lore"; the
   repository link makes the `rac` package identity visible.
-- Stock Material look: default typography and components; the only brand
-  elements are the existing header art and tagline. No mascot, no custom
-  fonts, no palette beyond light/dark.
+- The lore-web identity governs the look, from `lore-web/src/styles/tokens.css`
+  and `lore-web/DESIGN.md`: three warm-near-black surfaces (`#121212` /
+  `#1a1a18` / `#242420`), amber as the only decorative hue (`#f5a623`,
+  bright `#ffb84d`), teal `#4ec9b0` for commands/links, JetBrains Mono
+  (weights 400/700), dashed borders for container chrome, sharp corners.
+  The hero shows the lamplighter mascot; the headline is the tagline and the
+  subhead is the brand line "Agents that know why."
 - Copy relocated from the README moves verbatim; the landing page is
   assembled from existing sentences, not rewritten marketing.
 
@@ -296,7 +320,11 @@ The requirement artifacts expected from this scope, for the Phase 2 agent
    landing page), or do they stay dormant? Default if unanswered: dormant.
 3. **Repo settings** (not a design question, but a maintainer-only step):
    enabling GitHub Pages with "GitHub Actions" as the source cannot be done
-   from a PR and must be performed manually before first deploy.
+   from a PR and must be performed manually before first deploy — and, per
+   the GATE-1 constraint, not before the lore-web comms review clears.
+
+Resolved since first draft: the light/dark question — the site ships a
+single dark scheme (the lore-web identity defines no light palette).
 
 ## Deferred Items
 

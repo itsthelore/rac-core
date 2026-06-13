@@ -31,6 +31,8 @@ navigation or links must never reach production.
 
 - [REQ-006] Enabling GitHub Pages with "GitHub Actions" as the source is a repository setting only the maintainer can change; the implementation MUST document it as a manual step and MUST NOT attempt to automate it.
 
+- [REQ-007] Because the landing page carries the pre-launch Lore brand identity (shared with the `lore-web` surface held behind GATE-1 pending external-communications review), enabling Pages MUST NOT occur before that review clears. The manual enable-Pages step is the go-public gate; merging the implementation publishes nothing on its own.
+
 ## Acceptance Criteria
 
 - `.github/workflows/docs.yml` exists, parses as valid workflow YAML, and

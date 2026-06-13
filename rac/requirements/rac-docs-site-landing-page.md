@@ -23,7 +23,7 @@ front door; this artifact governs that page.
 
 - [REQ-001] The site MUST serve a landing page at the site root, sourced from `docs/index.md`.
 
-- [REQ-002] The landing page MUST render the Lore header art with light and dark variants served from `docs/images/lore-header-light.png` and `docs/images/lore-header-dark.png`, switching with the active Material color scheme, and MUST carry the existing alt text ("Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing.").
+- [REQ-002] The hero MUST render the lamplighter mascot, served from `docs/images/lamplighter.png`, with descriptive alt text. The site ships a single dark scheme (the lore-web identity defines no light palette), so there is no light/dark art swap.
 
 - [REQ-003] The hero headline MUST be the existing tagline verbatim: "Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out."
 
@@ -35,21 +35,24 @@ front door; this artifact governs that page.
 
 - [REQ-007] Below the fold, the page MUST contain, in this order: "Why this works"; the spec-driven-development positioning paragraph with the Lore / GitHub Spec Kit / OpenSpec comparison table and its sources comment; "How Lore earns trust"; "Sharing the corpus (the Portal)" (added to the README by the v0.11.0 portal-export release and absorbed here under the same drift policy); and footer links (GitHub repository, project status one-liner, CONTRIBUTING, MIT license) — each relocated verbatim from the README.
 
-- [REQ-008] The page MUST be built with stock Material theme capabilities; custom HTML/CSS MAY be used only where a requirement in this artifact is unreachable without it, and any such code MUST be confined to a single override file.
+- [REQ-008] The page MUST adopt the lore-web visual identity (amber on warm near-black, JetBrains Mono, dashed terminal chrome) via a single custom home template (`overrides/home.html`) and a single theme stylesheet (`docs/stylesheets/extra.css`), with JetBrains Mono self-hosted under `docs/fonts/` (shipping its OFL license). It MUST NOT introduce MkDocs plugins or Python dependencies beyond `mkdocs` and `mkdocs-material`, and MUST NOT make external font/CDN requests.
+- [REQ-009] The hero MUST present an OpenSpec-style structure: mascot, the tagline as headline, the brand subhead "Agents that know why.", the install command in a copyable card, and a call-to-action row linking Quickstart, MCP Server, and CLI Reference plus the GitHub repository.
 
 ## Acceptance Criteria
 
-- At a 1280×800 viewport, the hero image, the install command, and the
-  three documentation links are visible without scrolling (verified with a
-  rendered-page screenshot recorded in the implementation PR).
-- Toggling the Material color scheme switches the header art between the
-  light and dark variants.
-- The page's section order matches REQ-004 then REQ-006 then REQ-007
-  exactly; no sections beyond those listed are present.
+- At a 1280×800 viewport, the mascot, the install command, and the three
+  documentation-link CTA buttons are visible without scrolling (verified
+  with a rendered-page screenshot recorded in the implementation PR).
+- The hero renders the lamplighter mascot; the site ships a single dark
+  scheme with no light/dark toggle.
+- The below-the-fold section order matches REQ-006 then REQ-007 exactly;
+  no sections beyond those listed are present.
 - A diff of each relocated section against its README source shows no prose
   changes (formatting adjustments for MkDocs rendering excepted).
-- The repository contains at most one theme-override file, and only if at
-  least one requirement above is demonstrably unreachable without it.
+- Custom code is confined to `overrides/home.html` and
+  `docs/stylesheets/extra.css`; no MkDocs plugins or Python dependencies
+  beyond `mkdocs` and `mkdocs-material` are added, and the built page makes
+  no external font/CDN requests.
 - `mkdocs build --strict` exits 0 with `docs/index.md` mapped to the Home
   nav position.
 
@@ -69,8 +72,8 @@ front door; this artifact governs that page.
 
 ## Assumptions
 
-- The header art files in `rac/assets/images/` are current brand assets and
-  may be copied into `docs/images/` unchanged.
+- The lore-web design tokens, mascot, and fonts (`lore-web/`) are current
+  brand assets and may be vendored into `docs/` unchanged.
 - The README's tagline and value-proposition copy remain stable while this
   work is in flight; if the README changes first, the relocated copy
   follows the README at implementation time.
