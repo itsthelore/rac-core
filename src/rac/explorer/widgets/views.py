@@ -224,6 +224,67 @@ def render_preview(preview: ImportPreview) -> str:
 # --- views -------------------------------------------------------------------
 
 
+class MascotArt(Static):
+    """The mascot figure, optionally selectable (DESIGN-mascot-interaction).
+
+    Renders the current frame and, when interaction is enabled, takes focus so
+    Enter or a click appends the next response beneath the figure — inline,
+    never a popup. It owns no functionality and reveals no hidden features; the
+    response only names existing commands. Selection works with animations off
+    (reduced motion) and the response is plain text (screen readers, ADR-028).
+    """
+
+    def __init__(self, *, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self._state: str | None = None
+        self._frame = 0
+        self._animations = True
+        self._interactive = False
+        self._selections = 0
+        self._message: str | None = None
+
+    def set_state(self, state: str, *, animations: bool, interactive: bool) -> None:
+        """Show ``state`` from its first frame, clearing any prior response."""
+        self._state = state
+        self._frame = 0
+        self._animations = animations
+        self._interactive = interactive
+        self._message = None
+        self.can_focus = interactive
+        self._redraw()
+
+    def advance(self) -> None:
+        """Cycle to the next animation frame, preserving any response."""
+        if self._state is None or not self._animations:
+            return
+        self._frame += 1
+        self._redraw()
+
+    def activate(self) -> None:
+        """Select the mascot: surface the next response (no-op when inert)."""
+        if self._state is None or not self._interactive:
+            return
+        self._selections += 1
+        self._message = mascot.interaction_message(self._selections)
+        self._redraw()
+
+    def _redraw(self) -> None:
+        if self._state is None:
+            return
+        body = mascot.figure(self._state, self._frame, animations=self._animations)
+        if self._message is not None:
+            body = f"{body}\n\n  {self._message}"
+        self.update(body)
+
+    def on_click(self) -> None:
+        self.activate()
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.stop()
+            self.activate()
+
+
 class HomeView(Vertical):
     """The repository summary: loading → summary/onboarding → error.
 
@@ -245,10 +306,9 @@ class HomeView(Vertical):
         # The optional editor step between welcome and summary (v0.8.11).
         self._prompting_editor = False
         self._mascot_state: str | None = None
-        self._mascot_frame = 0
 
     def compose(self) -> ComposeResult:
-        art = Static(id="mascot")
+        art = MascotArt(id="mascot")
         art.display = False
         yield art
         yield RepositoryPanel(id="repository-panel")
@@ -273,25 +333,22 @@ class HomeView(Vertical):
     # --- the mascot -----------------------------------------------------------
 
     def show_mascot(self, state: str) -> None:
-        if not self.adapter.preferences.mascot:
+        prefs = self.adapter.preferences
+        if not prefs.mascot:
             return
         self._mascot_state = state
-        self._mascot_frame = 0
-        art = self.query_one("#mascot", Static)
+        art = self.query_one("#mascot", MascotArt)
         art.display = True
-        art.update(mascot.figure(state, 0, animations=self.adapter.preferences.animations))
+        art.set_state(state, animations=prefs.animations, interactive=prefs.mascot_interaction)
 
     def hide_mascot(self) -> None:
         self._mascot_state = None
-        self.query_one("#mascot", Static).display = False
+        self.query_one("#mascot", MascotArt).display = False
 
     def _tick_mascot(self) -> None:
         if self._mascot_state is None or not self.adapter.preferences.animations:
             return
-        self._mascot_frame += 1
-        self.query_one("#mascot", Static).update(
-            mascot.figure(self._mascot_state, self._mascot_frame)
-        )
+        self.query_one("#mascot", MascotArt).advance()
 
     # --- load states ------------------------------------------------------------
 
@@ -801,6 +858,7 @@ class SettingsView(Vertical):
             ("theme", prefs.theme),
             ("mascot", "on" if prefs.mascot else "off"),
             ("animations", "on" if prefs.animations else "off"),
+            ("mascot_interaction", "on" if prefs.mascot_interaction else "off"),
             ("artifact_grouping", prefs.artifact_grouping),
             ("editor", prefs.editor or "(from $VISUAL / $EDITOR)"),
         )
@@ -830,6 +888,8 @@ class SettingsView(Vertical):
             updated = replace(prefs, mascot=not prefs.mascot)
         elif key == "animations":
             updated = replace(prefs, animations=not prefs.animations)
+        elif key == "mascot_interaction":
+            updated = replace(prefs, mascot_interaction=not prefs.mascot_interaction)
         elif key == "artifact_grouping":
             # folders → type → flat → folders (the canonical order, v0.8.10).
             current = GROUPINGS.index(prefs.artifact_grouping)

@@ -788,7 +788,14 @@ async def test_slash_settings_opens_interactive_view():
         assert app.screen.current_view == "view-settings"
         listing = app.screen.query_one("#settings-list", OptionList)
         keys = [listing.get_option_at_index(i).id for i in range(listing.option_count)]
-        assert keys == ["theme", "mascot", "animations", "artifact_grouping", "editor"]
+        assert keys == [
+            "theme",
+            "mascot",
+            "animations",
+            "mascot_interaction",
+            "artifact_grouping",
+            "editor",
+        ]
         footer = str(app.screen.query_one("#settings-footer", Static).content)
         assert "explorer.json" in footer
 
@@ -842,7 +849,7 @@ async def test_settings_editor_row_takes_typed_input():
     async with app.run_test() as pilot:
         await _settled_panel_text(app, pilot)
         await _open_settings(app, pilot)
-        await pilot.press("down", "down", "down", "down", "enter")  # editor row
+        await pilot.press("down", "down", "down", "down", "down", "enter")  # editor row
         await pilot.pause()
         field = app.screen.query_one("#settings-editor-input", Input)
         assert field.display and app.focused is field
@@ -869,7 +876,7 @@ async def test_settings_grouping_cycles_three_values_and_rebuilds_sidebar():
         await _open_settings(app, pilot)
         sidebar = app.screen.query_one(NavigationSidebar)
 
-        await pilot.press("down", "down", "down", "enter")  # folders → type
+        await pilot.press("down", "down", "down", "down", "enter")  # folders → type
         await pilot.pause()
         assert load_preferences().artifact_grouping == "type"
         assert all((node.data or "").startswith("group:") for node in sidebar.root.children)

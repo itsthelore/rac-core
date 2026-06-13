@@ -30,6 +30,10 @@ class Preferences:
     theme: str = "rac-lantern"
     mascot: bool = True
     animations: bool = True
+    # Selecting the mascot returns a small response (v0.8.12); independent of
+    # `mascot` and `animations` so any combination can be disabled
+    # (DESIGN-mascot-interaction).
+    mascot_interaction: bool = True
     artifact_grouping: str = GROUPING_FOLDERS
     # The default Markdown editor command (v0.8.8); empty falls back to
     # $VISUAL / $EDITOR (DESIGN-editor-integration).
@@ -58,6 +62,7 @@ def load_preferences() -> Preferences:
         theme=str(data.get("theme", defaults.theme)),
         mascot=bool(data.get("mascot", defaults.mascot)),
         animations=bool(data.get("animations", defaults.animations)),
+        mascot_interaction=bool(data.get("mascot_interaction", defaults.mascot_interaction)),
         artifact_grouping=grouping,
         editor=str(data.get("editor", defaults.editor)),
     )
