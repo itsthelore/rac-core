@@ -20,5 +20,5 @@ to the corpus artifact and they load through the imports below.
 ## Working corpus
 
 - Current series: `rac/roadmaps/v0.12.x-watchkeeper/` (next up: v0.12.0)
-- Previous series: `rac/roadmaps/v0.11.x-portal/` (complete through v0.11.0)
+- Previous series: `rac/roadmaps/v0.11.x-portal/` (complete through v0.11.1)
 - Decisions (ADRs): `rac/decisions/`

@@ -53,7 +53,8 @@ drift-prevention policy defined here.
 Roadmap placement: the corpus convention is one roadmap artifact per release
 in `rac/roadmaps/v0.10.x-guide/`. Slots v0.10.4–v0.10.6 are taken (the
 "next up: v0.10.4" note in CLAUDE.md is stale), so Phase 2 should target
-**v0.10.7** for this work.
+**v0.11.1** for this work (in the `v0.11.x-portal` series; v0.10.7 was the
+original slot before the v0.11.0 portal release renumbered it).
 
 ## User Need
 
@@ -143,7 +144,7 @@ Every file created or modified:
 | `docs/mcp.md` | modified (link only) | One `../examples/guide/` link becomes an absolute GitHub URL. |
 | `docs/repo-workflow.md` | modified (link only) | One `../rac/decisions/adr-022...` link becomes an absolute GitHub URL. |
 | `docs/testing.md` | modified (links only) | Two `../rac/...` links become absolute GitHub URLs. |
-| `rac/` (Phase 2) | new artifacts | Requirements, relationships, v0.10.7 roadmap entry, and the ADR-022 amendment — scoped in Phase 2, listed here only for traceability. |
+| `rac/` (Phase 2) | new artifacts | Requirements, relationships, v0.11.1 roadmap entry, and the ADR-022 amendment — scoped in Phase 2, listed here only for traceability. |
 
 The seven link conversions across four docs files are the only edits to
 existing docs content, and they change link targets, not prose. No other
