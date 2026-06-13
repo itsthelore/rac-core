@@ -7,9 +7,9 @@ planned or placeholder entries.
 
 | Name | What it is | Where |
 | --- | --- | --- |
-| RAC dogfood corpus | This repository's own product knowledge — requirements, decisions, roadmaps, prompts, designs — validated in CI by the engine it specifies | [`rac/`](../rac/) |
-| `rac-artifacts` Claude Code skill | A project-level agent skill that teaches Claude Code to create, validate, and update RAC artifacts using the `rac` CLI | [`.claude/skills/rac-artifacts/`](../.claude/skills/rac-artifacts/SKILL.md) |
-| MCP grounding example | A runnable demo showing an agent connected to RAC Guide over MCP respecting a recorded decision that an unconnected agent violates | [`examples/guide/`](../examples/guide/demo.md) |
+| RAC dogfood corpus | This repository's own product knowledge — requirements, decisions, roadmaps, prompts, designs — validated in CI by the engine it specifies | [`rac/`](https://github.com/tcballard/requirements-as-code/tree/main/rac/) |
+| `rac-artifacts` Claude Code skill | A project-level agent skill that teaches Claude Code to create, validate, and update RAC artifacts using the `rac` CLI | [`.claude/skills/rac-artifacts/`](https://github.com/tcballard/requirements-as-code/blob/main/.claude/skills/rac-artifacts/SKILL.md) |
+| MCP grounding example | A runnable demo showing an agent connected to RAC Guide over MCP respecting a recorded decision that an unconnected agent violates | [`examples/guide/`](https://github.com/tcballard/requirements-as-code/blob/main/examples/guide/demo.md) |
 
 ## Adding an entry
 

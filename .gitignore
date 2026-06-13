@@ -17,3 +17,6 @@ dist/
 .coverage
 .coverage.*
 htmlcov/
+
+# MkDocs build output (deployed from CI, never committed)
+site/

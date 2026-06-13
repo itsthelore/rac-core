@@ -73,7 +73,7 @@ Coverage is reported (not gated) in CI; the same view locally:
 ## Source layout
 
 The package uses a `src/` layout. The import package `rac` is organized into layers
-([ADR-023](../rac/decisions/adr-023-clean-break-internal-refactors.md)):
+([ADR-023](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-023-clean-break-internal-refactors.md)):
 
 ```text
 src/rac/
@@ -110,5 +110,5 @@ src/rac/
    result here will be a red build.
 
 3. **Follow the commit conventions** in
-   [`rac/prompts/rac-agent-commit-guidelines.md`](../rac/prompts/rac-agent-commit-guidelines.md):
+   [`rac/prompts/rac-agent-commit-guidelines.md`](https://github.com/tcballard/requirements-as-code/blob/main/rac/prompts/rac-agent-commit-guidelines.md):
    `<type>(<area>): <summary> [reference]`.
