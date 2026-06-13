@@ -1046,10 +1046,19 @@ async def test_mascot_animates_only_with_animations_on(fresh_first_run):
         await _settled_panel_text(app, pilot)
         home = app.screen.query_one(HomeView)
         art = app.screen.query_one("#mascot", Static)
-        before = str(art.content)
-        home._tick_mascot()  # advance a frame deterministically
+
+        # Animations on: cycling the frames moves the lantern. Sample across
+        # full cycles rather than asserting a single tick — a background timer
+        # also advances the frame and some sequences repeat one (the DISCOVERY
+        # pulse is ✶ ✦ ✶), so a lone tick can land on an identical frame.
+        home.show_mascot(mascot.SEARCHING)
         await pilot.pause()
-        assert str(art.content) != before  # the lantern moved
+        seen = set()
+        for _ in range(len(mascot.frames(mascot.SEARCHING)) * 2):
+            seen.add(str(art.content))
+            home._tick_mascot()
+            await pilot.pause()
+        assert len(seen) > 1  # the lantern moved through distinct frames
 
         # With animations off the figure holds its first frame.
         from dataclasses import replace
