@@ -98,9 +98,9 @@ body,
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
-  max-width: 58rem;
+  max-width: 46rem;
   margin: 0 auto;
-  padding: 3rem 1rem 2rem;
+  padding: 2.5rem 0 2rem;
   text-align: left;
 }
 
@@ -255,20 +255,22 @@ body,
   max-width: 46rem;
   margin: 1.5rem auto 0;
 }
-.lore-below > .md-typeset > h2:first-child {
-  margin-top: 1rem;
-}
 /* Each H2 section reads as a panel divider in the lore chrome. */
-.lore-below .md-typeset h2 {
+.lore-below h2 {
   border-top: 1px dashed var(--lore-border-subtle);
   padding-top: 1.5rem;
   margin-top: 2rem;
 }
-.lore-below .md-typeset blockquote {
+.lore-below > h2:first-child {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+.lore-below blockquote {
   border-left: 2px solid var(--lore-accent);
   color: var(--lore-text-muted);
 }
-.lore-below .md-typeset table {
+.lore-below table {
   font-size: 0.8rem;
 }
 
