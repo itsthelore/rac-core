@@ -562,7 +562,11 @@ async def test_links_tab_traverses_to_a_connected_artifact():
         await pilot.pause()
         assert app.screen.query_one(TabbedContent).active == "tab-links"
         panel = str(app.screen.query_one("#relationship-panel", Static).content)
-        assert "Relationships" in panel and "Impact" in panel and "Lineage" in panel
+        # The knowledge-graph grammar: a Relationships chain, an Impact
+        # Analysis block, and a Lineage section (DESIGN-knowledge-graph).
+        assert "Relationships" in panel and "Lineage" in panel
+        assert "Impact Analysis" in panel
+        assert "Changing:" in panel and "May affect:" in panel
 
         await pilot.press("enter")  # open the first connected artifact
         await pilot.pause()
@@ -573,6 +577,44 @@ async def test_links_tab_traverses_to_a_connected_artifact():
         await pilot.pause()
         title = str(app.screen.query_one("#context-region").border_title)
         assert "adr-001" in title
+
+
+def test_render_sections_uses_knowledge_graph_grammar():
+    # DESIGN-knowledge-graph: dependency chain, Impact Analysis block, lineage
+    # chain — a pure render over RelationshipsView, no fixtures needed.
+    from rac.explorer.state import RelationshipLink, RelationshipsView
+    from rac.explorer.widgets.views import render_sections
+
+    view = RelationshipsView(
+        id="REQ-004",
+        title="Payment Retry",
+        path="rac/requirements/req-004.md",
+        outgoing=(RelationshipLink("Related Decisions", "ADR-012 (Provider)", "p.md", True),),
+        impact=(RelationshipLink("Superseded By", "PROMPT-007", "q.md", True),),
+        lineage=("Supersedes → ADR-001", "Superseded By ← ADR-020"),
+    )
+    out = render_sections(view)
+
+    # Relationships render as a chain whose ↓ carries the edge kind.
+    assert "REQ-004" in out
+    assert "↓ Related Decisions" in out
+    assert "ADR-012 (Provider)" in out
+    # Impact Analysis frames the change.
+    assert "Impact Analysis" in out
+    assert "Changing:" in out and "May affect:" in out
+    assert "PROMPT-007 (Superseded By)" in out
+    # Lineage steps join into a vertical chain (one ↓ between two steps).
+    lineage = out.split("Lineage", 1)[1]
+    assert lineage.count("↓") == 1
+    assert "Supersedes → ADR-001" in lineage and "Superseded By ← ADR-020" in lineage
+
+    # Empty sections keep plain-language fallbacks.
+    bare = render_sections(
+        RelationshipsView(id="X", title=None, path="x.md", outgoing=(), impact=(), lineage=())
+    )
+    assert "none declared" in bare
+    assert "nothing depends on this artifact" in bare
+    assert "no recorded supersession" in bare
 
 
 @pytest.mark.asyncio
