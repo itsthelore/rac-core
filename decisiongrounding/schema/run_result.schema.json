@@ -15,6 +15,7 @@
     "grounding",
     "proposed_change",
     "score",
+    "retrieval",
     "harness_version"
   ],
   "properties": {
@@ -49,7 +50,10 @@
       "properties": {
         "name": { "type": "string" },
         "version": { "type": "string" },
-        "temperature": { "type": "number" },
+        "temperature": {
+          "type": ["number", "null"],
+          "description": "null when the pinned model exposes no temperature knob (e.g. Claude Opus 4.8 rejects temperature/top_p/seed). Determinism is then approximated by the fixed model id + scaffold + structured output, and run-to-run variance is reported as a metric."
+        },
         "seed": { "type": "integer" }
       },
       "description": "The held-constant answering model, pinned identically across arms."
@@ -131,6 +135,17 @@
         "governing_decision_matched": {
           "type": "boolean",
           "description": "True if the cited decision matches the gold governing decision."
+        }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["governing_decision_retrieved"],
+      "properties": {
+        "governing_decision_retrieved": {
+          "type": ["boolean", "null"],
+          "description": "Did this arm's grounding actually contain the gold governing decision? null when no decision governs (negative control). This is the retrieval-recall diagnostic that explains WHY adherence rises or falls — the analog of MemoryBench's Hit@K."
         }
       }
     },

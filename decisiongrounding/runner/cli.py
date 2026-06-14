@@ -24,7 +24,14 @@ from pathlib import Path
 # Make the package root importable when run as `python -m runner.cli` or directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from providers import ARMS, REAL_ARMS, ScriptedAnsweringModel  # noqa: E402
+from providers import (  # noqa: E402
+    ARMS,
+    REAL_ARMS,
+    ClaudeAnsweringModel,
+    NaiveRagProvider,
+    ScriptedAnsweringModel,
+    make_embedder,
+)
 from providers.base import ProposedChange  # noqa: E402
 from scenarios.loader import Scenario, load_scenarios  # noqa: E402
 from scoring import aggregate, score  # noqa: E402
@@ -38,10 +45,20 @@ _DEFAULT_RESULTS = _ROOT / "results"
 def _answering_model(name: str, seed: int):
     if name == "offline-stub":
         return ScriptedAnsweringModel(seed=seed)
+    if name == "claude":
+        # Real, pinned answering model (Claude Opus 4.8). Requires the [real]
+        # extra + ANTHROPIC_API_KEY; not runnable in the offline demo.
+        return ClaudeAnsweringModel(seed=seed)
     raise SystemExit(
-        f"answering model {name!r} is not wired in the scaffold; use 'offline-stub'. "
-        "The pinned Claude answering model lives behind the [real] extra (stub)."
+        f"unknown answering model {name!r}; use 'offline-stub' or 'claude'."
     )
+
+
+def _provider(arm: str, model, embedder_spec: str):
+    """Instantiate an arm, wiring a real embedder into naive_rag when asked."""
+    if arm == "naive_rag":
+        return NaiveRagProvider(model, embedder=make_embedder(embedder_spec))
+    return ARMS[arm](model)
 
 
 def _pc_to_dict(pc: ProposedChange) -> dict:
@@ -54,12 +71,14 @@ def _pc_to_dict(pc: ProposedChange) -> dict:
     }
 
 
-def run_one(arm: str, scenario: Scenario, model, seed: int) -> dict:
-    provider = ARMS[arm](model)
+def run_one(arm: str, scenario: Scenario, model, seed: int, embedder: str = "local-hash") -> dict:
+    provider = _provider(arm, model, embedder)
     provider.prepare(list(scenario.corpus))
     pc = provider.respond(scenario.task)
     sc = score(scenario, pc)
     g = provider.grounding
+    gov = scenario.gold_label.governing_decision
+    governing_retrieved = None if gov is None else (gov in g.artifacts_supplied)
     return {
         "run_id": str(uuid.uuid4()),
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -79,6 +98,7 @@ def run_one(arm: str, scenario: Scenario, model, seed: int) -> dict:
         },
         "proposed_change": _pc_to_dict(pc),
         "score": sc.as_dict(),
+        "retrieval": {"governing_decision_retrieved": governing_retrieved},
         "harness_version": HARNESS_VERSION,
     }
 
@@ -96,7 +116,9 @@ def _write_report(results: list[dict], out_dir: Path, label: str) -> Path:
 
     metrics = {
         arm: aggregate(
-            arm, [Score(**r["score"]) for r in rs]
+            arm,
+            [Score(**r["score"]) for r in rs],
+            [r["retrieval"]["governing_decision_retrieved"] for r in rs],
         ).as_dict()
         for arm, rs in by_arm.items()
     }
@@ -117,19 +139,24 @@ def _print_metrics(results: list[dict]) -> None:
         by_arm.setdefault(r["arm"], []).append(r)
     from scoring.scorer import Score
 
-    print(f"{'arm':<16}{'adhere':>8}{'stale':>8}{'f-permit':>10}{'f-prohibit':>12}")
+    print(f"{'arm':<16}{'adhere':>8}{'stale':>8}{'f-permit':>10}{'f-prohibit':>12}{'gov-recall':>12}")
     for arm, rs in by_arm.items():
-        m = aggregate(arm, [Score(**r["score"]) for r in rs])
+        m = aggregate(
+            arm,
+            [Score(**r["score"]) for r in rs],
+            [r["retrieval"]["governing_decision_retrieved"] for r in rs],
+        )
+        recall = "  n/a" if m.governing_recall_rate is None else f"{m.governing_recall_rate:.2f}"
         print(
             f"{arm:<16}{m.adherence_rate:>8.2f}{m.stale_decision_rate:>8.2f}"
-            f"{m.false_permit_rate:>10.2f}{m.false_prohibit_rate:>12.2f}"
+            f"{m.false_permit_rate:>10.2f}{m.false_prohibit_rate:>12.2f}{recall:>12}"
         )
 
 
 def cmd_run(args) -> int:
     scenarios = load_scenarios(args.scenarios)
     model = _answering_model(args.answering, args.seed)
-    results = [run_one(args.arm, sc, model, args.seed) for sc in scenarios]
+    results = [run_one(args.arm, sc, model, args.seed, args.embedder) for sc in scenarios]
     _print_metrics(results)
     path = _write_report(results, Path(args.out), args.arm)
     print(f"\nwrote {path}")
@@ -143,7 +170,7 @@ def cmd_compare(args) -> int:
     results: list[dict] = []
     for arm in arms:
         for sc in scenarios:
-            results.append(run_one(arm, sc, model, args.seed))
+            results.append(run_one(arm, sc, model, args.seed, args.embedder))
     _print_metrics(results)
     path = _write_report(results, Path(args.out), "compare-" + "-".join(arms))
     print(f"\nwrote {path}")
@@ -158,7 +185,7 @@ def cmd_demo(args) -> int:
     results: list[dict] = []
     for arm in arms:
         for sc in scenarios:
-            results.append(run_one(arm, sc, model, args.seed))
+            results.append(run_one(arm, sc, model, args.seed, args.embedder))
     _print_metrics(results)
     report = _write_report(results, Path(args.out), "demo")
 
@@ -167,6 +194,14 @@ def cmd_demo(args) -> int:
     for arm in arms:
         row = " ".join(f"N={p['N']}:{p['adherence_rate']:.2f}" for p in dataset["arms"][arm])
         print(f"{arm:<16}{row}")
+    print("\n== governing-decision recall vs corpus size (why adherence moves) ==")
+    for arm in arms:
+        row = " ".join(
+            f"N={p['N']}:{'n/a' if p['governing_recall'] is None else format(p['governing_recall'], '.2f')}"
+            for p in dataset["arms"][arm]
+        )
+        print(f"{arm:<16}{row}")
+
     print("\n== per-scenario adherence (where the average comes from) ==")
     for arm in arms:
         for sid, series in dataset["per_scenario"][arm].items():
@@ -191,7 +226,14 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("--scenarios", default=str(_ROOT / "scenarios"))
         sp.add_argument("--out", default=str(_DEFAULT_RESULTS))
         sp.add_argument("--seed", type=int, default=0)
-        sp.add_argument("--answering", default="offline-stub")
+        sp.add_argument(
+            "--answering", default="offline-stub", choices=["offline-stub", "claude"]
+        )
+        sp.add_argument(
+            "--embedder",
+            default="local-hash",
+            help="naive_rag embedder: local-hash (offline) | voyage[:model] | st[:model]",
+        )
         if name == "run":
             sp.add_argument("--arm", required=True, choices=sorted(ARMS))
         if name == "compare":

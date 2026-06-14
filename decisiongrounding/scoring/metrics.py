@@ -23,6 +23,7 @@ class ArmMetrics:
     stale_decision_rate: float
     false_permit_rate: float
     false_prohibit_rate: float
+    governing_recall_rate: float | None
 
     def as_dict(self) -> dict:
         return {
@@ -32,11 +33,22 @@ class ArmMetrics:
             "stale_decision_rate": self.stale_decision_rate,
             "false_permit_rate": self.false_permit_rate,
             "false_prohibit_rate": self.false_prohibit_rate,
+            "governing_recall_rate": self.governing_recall_rate,
         }
 
 
-def aggregate(arm: str, scores: list) -> ArmMetrics:
-    """Aggregate a list of Score objects for one arm."""
+def recall_rate(retrieved_flags: list) -> float | None:
+    """Fraction of governed scenarios whose governing decision was retrieved.
+
+    `retrieved_flags` entries are True/False, or None where no decision governs
+    (negative control) — None is excluded. Returns None when nothing is governed.
+    """
+    governed = [f for f in retrieved_flags if f is not None]
+    return _rate(governed) if governed else None
+
+
+def aggregate(arm: str, scores: list, retrieved_flags: list | None = None) -> ArmMetrics:
+    """Aggregate Score objects (and optional retrieval flags) for one arm."""
     return ArmMetrics(
         arm=arm,
         n_runs=len(scores),
@@ -44,6 +56,7 @@ def aggregate(arm: str, scores: list) -> ArmMetrics:
         stale_decision_rate=_rate([s.stale_decision_followed for s in scores]),
         false_permit_rate=_rate([s.false_permit for s in scores]),
         false_prohibit_rate=_rate([s.false_prohibit for s in scores]),
+        governing_recall_rate=recall_rate(retrieved_flags) if retrieved_flags is not None else None,
     )
 
 

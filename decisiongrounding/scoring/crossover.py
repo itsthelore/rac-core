@@ -85,7 +85,9 @@ def _run_arm_on_corpus(arm_name: str, corpus, scenario, seed: int):
     provider = ARMS[arm_name](ScriptedAnsweringModel(seed=seed))
     provider.prepare(list(corpus))
     pc = provider.respond(scenario.task)
-    return score(scenario, pc), provider.grounding
+    gov = scenario.gold_label.governing_decision
+    retrieved = None if gov is None else (gov in provider.grounding.artifacts_supplied)
+    return score(scenario, pc), retrieved
 
 
 def build_dataset(
@@ -106,20 +108,27 @@ def build_dataset(
         density = (n - min(ns)) / (n_max - min(ns)) if n_max != min(ns) else 0.0
         for arm in arms:
             adhered = 0
+            retrieved_flags: list = []
             for sc in discriminating:
                 filler = make_filler_notes(max(0, n - len(sc.corpus)), sc, seed, density)
                 corpus = list(sc.corpus) + filler
-                sc_score, _ = _run_arm_on_corpus(arm, corpus, sc, seed)
+                sc_score, gov_retrieved = _run_arm_on_corpus(arm, corpus, sc, seed)
                 adhered += 1 if sc_score.adherent else 0
+                retrieved_flags.append(gov_retrieved)
                 per_scenario[arm][sc.scenario_id].append(
                     {
                         "N": n,
                         "adherent": sc_score.adherent,
                         "stale_decision_followed": sc_score.stale_decision_followed,
+                        "governing_decision_retrieved": gov_retrieved,
                     }
                 )
             rate = adhered / len(discriminating) if discriminating else 0.0
-            points[arm].append({"N": n, "adherence_rate": rate})
+            governed = [f for f in retrieved_flags if f is not None]
+            recall = (sum(1 for f in governed if f) / len(governed)) if governed else None
+            points[arm].append(
+                {"N": n, "adherence_rate": rate, "governing_recall": recall}
+            )
     return {
         "metric": "decision_adherence_rate",
         "scenarios_included": [s.scenario_id for s in discriminating],

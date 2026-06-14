@@ -63,3 +63,9 @@ def test_crossover_shows_naive_rag_degrading_and_context_dump_holding():
     assert sup[0]["adherent"] is True       # tie at small N
     assert sup[-1]["adherent"] is False     # severed at large N
     assert sup[-1]["stale_decision_followed"] is True
+    # Recall is the mechanistic explanation: the governing decision is retrieved
+    # at small N and crowded out at large N.
+    assert sup[0]["governing_decision_retrieved"] is True
+    assert sup[-1]["governing_decision_retrieved"] is False
+    # context_dump always supplies the governing decision → recall stays 1.0.
+    assert all(p["governing_recall"] == 1.0 for p in ds["arms"]["context_dump"])
