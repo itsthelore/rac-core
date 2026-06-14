@@ -20,6 +20,8 @@ from pathlib import Path
 
 import yaml
 
+from rac.core.overrides import EMPTY, RULE_VALUES, TYPE_VALUES, SeverityOverrides
+
 # Repository key contract (v0.7.11): uppercase alphanumeric, leading letter,
 # 2-10 characters. The key is the human-recognizable ID prefix, e.g. RAC.
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
@@ -109,14 +111,74 @@ def _read_config(config_path: Path) -> RepositoryConfig:
     return RepositoryConfig(repository_key=key, config_path=str(config_path))
 
 
-def load_repository_config(start_dir: str) -> RepositoryConfig | None:
-    """The nearest ``.rac/config.yaml`` at or above ``start_dir``, or None."""
+def find_config_file(start_dir: str) -> Path | None:
+    """The nearest ``.rac/config.yaml`` at or above ``start_dir``, or None.
+
+    The shared discovery walk: identity (``load_repository_config``) and the
+    validation overrides loader both resolve the same file from any
+    subdirectory of an initialized repository.
+    """
     current = Path(start_dir).resolve()
     for directory in (current, *current.parents):
         config_path = directory / CONFIG_DIR / CONFIG_FILE
         if config_path.is_file():
-            return _read_config(config_path)
+            return config_path
     return None
+
+
+def load_repository_config(start_dir: str) -> RepositoryConfig | None:
+    """The nearest ``.rac/config.yaml`` at or above ``start_dir``, or None."""
+    config_path = find_config_file(start_dir)
+    return _read_config(config_path) if config_path is not None else None
+
+
+def load_overrides(start_dir: str) -> SeverityOverrides:
+    """Read the ``validation`` severity overrides from the nearest config (ADR-053).
+
+    Returns :data:`~rac.core.overrides.EMPTY` when there is no config file or no
+    ``validation`` section. Malformed shapes or unknown severity values raise
+    :class:`MalformedRepositoryConfig` — overrides are never silently ignored.
+    """
+    config_path = find_config_file(start_dir)
+    if config_path is None:
+        return EMPTY
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    section = data.get("validation") if isinstance(data, dict) else None
+    if section is None:
+        return EMPTY
+    if not isinstance(section, dict):
+        raise MalformedRepositoryConfig(str(config_path), "'validation' must be a mapping")
+    rules = _parse_severity_map(config_path, section.get("rules"), "validation.rules", RULE_VALUES)
+    types = _parse_severity_map(config_path, section.get("types"), "validation.types", TYPE_VALUES)
+    return SeverityOverrides(rules=rules, types=types)
+
+
+def _parse_severity_map(
+    config_path: Path, value: object, where: str, allowed: tuple[str, ...]
+) -> dict[str, str]:
+    """Validate one ``{name: severity}`` mapping, or empty when absent."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise MalformedRepositoryConfig(str(config_path), f"'{where}' must be a mapping")
+    parsed: dict[str, str] = {}
+    for name, sev in value.items():
+        # YAML 1.1 resolves the bare word ``off`` to ``False`` (likewise on/yes/no
+        # to booleans). ``off`` is the natural suppression keyword, so coerce a
+        # bool back to text rather than forcing users to quote it; the membership
+        # check below rejects ``on``/``yes`` (True) where they are not allowed.
+        if isinstance(sev, bool):
+            sev = "off" if sev is False else "on"
+        if not isinstance(name, str) or not isinstance(sev, str) or sev not in allowed:
+            raise MalformedRepositoryConfig(
+                str(config_path),
+                f"'{where}.{name}' must map a name to one of {', '.join(allowed)}",
+            )
+        parsed[name] = sev
+    return parsed
 
 
 def init_repository(directory: str, key: str = DEFAULT_KEY) -> InitResult:

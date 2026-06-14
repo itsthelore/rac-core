@@ -28,6 +28,7 @@ from dataclasses import asdict, dataclass
 from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusEntry
 from rac.core.okf import OKF_TYPE, RESERVED_FILENAMES
+from rac.core.overrides import EMPTY, SeverityOverrides, resolve_severity
 
 # Stable finding codes (part of the JSON contract, ADR-007).
 CODE_UNMAPPED_TYPE = "okf-unmapped-type"
@@ -36,11 +37,17 @@ CODE_RESERVED_FILENAME = "okf-reserved-filename-collision"
 
 @dataclass
 class OkfFinding:
-    """One OKF conformance finding, file-named for actionable diagnostics."""
+    """One OKF conformance finding, file-named for actionable diagnostics.
+
+    ``severity`` defaults to ``error`` but is subject to the repository's
+    severity overrides (ADR-053), so a team can downgrade a conformance code or a
+    type during onboarding.
+    """
 
     code: str
     path: str
     message: str
+    severity: str = "error"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -57,7 +64,9 @@ class OkfConformanceReport:
 
     @property
     def ok(self) -> bool:
-        return not self.findings
+        # Conformant when no finding remains at error severity (overrides may
+        # downgrade findings to warning, or suppress them, during onboarding).
+        return not any(f.severity == "error" for f in self.findings)
 
     def to_dict(self) -> dict:
         return {
@@ -68,13 +77,17 @@ class OkfConformanceReport:
 
 
 def check_okf_conformance(
-    directory: str, entries: list[CorpusEntry], recursive: bool = True
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    overrides: SeverityOverrides = EMPTY,
 ) -> OkfConformanceReport:
     """Check OKF v0.1 conformance over an already-walked corpus snapshot.
 
     Deterministic: entries arrive in sorted path order, so findings do too. Only
     typed artifacts are checked; untyped documents are excluded (ADR-010), which
-    also exempts untyped ``index.md``/``log.md`` reserved entry points.
+    also exempts untyped ``index.md``/``log.md`` reserved entry points. Severity
+    overrides (ADR-053) may downgrade or suppress a finding by code or type.
     """
     findings: list[OkfFinding] = []
     checked = 0
@@ -85,24 +98,26 @@ def check_okf_conformance(
         checked += 1
         path = str(entry.path)
         if artifact_type not in OKF_TYPE:
-            findings.append(
-                OkfFinding(
-                    CODE_UNMAPPED_TYPE,
-                    path,
-                    f"artifact type {artifact_type!r} has no OKF type mapping; add "
-                    f"it to rac.core.okf.OKF_TYPE so the artifact is carried in the "
-                    f"OKF bundle (ADR-048)",
-                )
+            _add(
+                findings,
+                CODE_UNMAPPED_TYPE,
+                path,
+                f"artifact type {artifact_type!r} has no OKF type mapping; add "
+                f"it to rac.core.okf.OKF_TYPE so the artifact is carried in the "
+                f"OKF bundle (ADR-048)",
+                artifact_type,
+                overrides,
             )
         if entry.path.name in RESERVED_FILENAMES:
-            findings.append(
-                OkfFinding(
-                    CODE_RESERVED_FILENAME,
-                    path,
-                    f"a typed artifact named {entry.path.name!r} collides with the "
-                    f"generated OKF bundle entry point; rename the file — OKF "
-                    f"reserves index.md and log.md (ADR-048)",
-                )
+            _add(
+                findings,
+                CODE_RESERVED_FILENAME,
+                path,
+                f"a typed artifact named {entry.path.name!r} collides with the "
+                f"generated OKF bundle entry point; rename the file — OKF "
+                f"reserves index.md and log.md (ADR-048)",
+                artifact_type,
+                overrides,
             )
     return OkfConformanceReport(
         directory=directory,
@@ -110,3 +125,18 @@ def check_okf_conformance(
         artifacts_checked=checked,
         findings=findings,
     )
+
+
+def _add(
+    findings: list[OkfFinding],
+    code: str,
+    path: str,
+    message: str,
+    artifact_type: str,
+    overrides: SeverityOverrides,
+) -> None:
+    """Append a finding at its overridden severity; ``off`` suppresses it."""
+    severity = resolve_severity("error", code, artifact_type, overrides)
+    if severity == "off":
+        return
+    findings.append(OkfFinding(code, path, message, severity=severity))
