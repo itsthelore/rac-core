@@ -27,6 +27,14 @@ It emits one Markdown file per typed artifact (front matter projecting the OKF
 The bundle is a derived build artifact, parallel to `rac export --json` and
 `--html`; it never feeds back into RAC.
 
+Each bundle artifact also carries OKF's descriptive fields where RAC has them
+(ADR-050): `tags` projected from the source frontmatter (a RAC artifact MAY
+declare `tags: [...]`), and `created`/`updated` derived from git history — first
+and last commit. Timestamps are never stored in the source frontmatter; recency
+is git-derived (ADR-045), so the source stays date-free while the bundle is fully
+timestamped. RAC does not project a frontmatter `title` (it derives from the H1)
+or a `description`.
+
 ## Type mapping (normative)
 
 Every RAC artifact carries a `type` in its front matter. In the OKF bundle view
