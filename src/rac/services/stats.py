@@ -255,6 +255,23 @@ class PortfolioStats:
     def unrecognized_count(self) -> int:
         return len(self.unrecognized)
 
+    # --- corpus-level emptiness (v0.13.1) ---
+    @property
+    def total_artifacts(self) -> int:
+        """Recognized artifacts across all families (excludes unrecognized)."""
+        return (
+            self.files_found
+            + self.decision_count
+            + self.roadmap_count
+            + self.prompt_count
+            + self.design_count
+        )
+
+    @property
+    def is_empty(self) -> bool:
+        """True on a day-one corpus: no recognized or unrecognized artifacts."""
+        return self.total_artifacts == 0 and self.unrecognized_count == 0
+
 
 def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict[str, int]:
     """Count ``decisions`` by ``attr`` in the artifact spec's declared order."""

@@ -204,7 +204,11 @@ def cmd_stats(args: argparse.Namespace) -> int:
         or stats.valid_prompts > 0
         or stats.valid_designs > 0
     )
-    return EXIT_OK if has_content else EXIT_VALIDATION_FAILED
+    # An empty corpus is a valid day-one state, not a failure (v0.13.1): it
+    # exits 0, matching validate/review/portfolio. The "files exist but none are
+    # valid known artifacts" failure is preserved for a non-empty corpus, and
+    # will move behind a future --strict flag.
+    return EXIT_OK if (has_content or stats.is_empty) else EXIT_VALIDATION_FAILED
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:

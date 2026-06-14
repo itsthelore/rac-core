@@ -90,6 +90,11 @@ def _loc(file: str, line: int | None) -> str:
     return f"{file}:{line}" if line is not None else file
 
 
+# Day-one next step shown when a corpus has no recognized artifacts yet
+# (v0.13.1): turn "nothing here" into "here is how to start".
+EMPTY_CORPUS_HINT = "No artifacts yet — create your first with: rac quickstart"
+
+
 # --- validate ---------------------------------------------------------------
 
 
@@ -144,6 +149,8 @@ def render_validate_dir_human(result: DirectoryValidation) -> str:
         f"{result.checked} artifact(s) checked: "
         f"{result.valid} valid, {result.invalid} invalid{skipped}."
     )
+    if result.checked == 0 and result.skipped == 0:
+        lines += ["", EMPTY_CORPUS_HINT]
     return "\n".join(lines)
 
 
@@ -341,6 +348,9 @@ def render_stats_human(s: PortfolioStats) -> str:
         lines += ["", _bold("Relationships"), "=============", ""]
         for section, count in s.relationship_counts.items():
             lines.append(f"Artifacts with {section.title()}: {count}")
+
+    if s.is_empty:
+        lines += ["", EMPTY_CORPUS_HINT]
 
     return "\n".join(lines)
 
@@ -663,6 +673,9 @@ def render_portfolio_human(s: PortfolioSummary) -> str:
         f"  {score_color(str(score))} / 100",
     ]
 
+    if s.total_artifacts == 0:
+        lines += ["", EMPTY_CORPUS_HINT]
+
     return "\n".join(lines)
 
 
@@ -744,6 +757,8 @@ def render_review_human(r: ReviewReport) -> str:
         "",
         f"  {score_color(str(score))} / 100",
     ]
+    if p.total_artifacts == 0:
+        lines += ["", EMPTY_CORPUS_HINT]
     return "\n".join(lines)
 
 

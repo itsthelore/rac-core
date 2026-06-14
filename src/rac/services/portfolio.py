@@ -120,6 +120,8 @@ class PortfolioSummary:
             "schema_version": "1",
             "directory": self.directory,
             "recursive": self.recursive,
+            # Additive in v0.13.1 (ADR-007): a day-one empty-corpus marker.
+            "empty": self.total_artifacts == 0,
             "artifacts": {
                 "total": self.total_artifacts,
                 "by_type": self.by_type,

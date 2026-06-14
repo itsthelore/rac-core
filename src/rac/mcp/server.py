@@ -220,7 +220,18 @@ def _get_related(root: str, artifact_id: str, budget: int) -> str:
 
 def _get_summary(root: str, budget: int) -> str:
     summary = build_portfolio_summary(root, recursive=True)
-    return serialize(summary.to_dict(), budget)
+    payload = summary.to_dict()
+    # Additive empty-state pointer (v0.13.1, ADR-007): a cold agent session
+    # against a fresh repository is told how the user begins authoring, rather
+    # than just seeing zeros.
+    if summary.total_artifacts == 0:
+        payload["guidance"] = (
+            "This repository has no RAC artifacts yet. The user can create the "
+            "first one with `rac quickstart`, or with `rac init` then "
+            "`rac new <type> <path>`. Once artifacts exist, search_artifacts "
+            "and get_artifact will return them."
+        )
+    return serialize(payload, budget)
 
 
 def build_server(

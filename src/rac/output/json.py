@@ -88,6 +88,8 @@ def render_stats_json(s: PortfolioStats) -> str:
     largest = s.largest_feature
     payload = {
         "directory": s.directory,
+        # Additive in v0.13.1 (ADR-007): a day-one empty-corpus marker.
+        "empty": s.is_empty,
         "features": s.files_found,
         "valid_features": s.valid_features,
         "invalid_features": s.invalid_features,

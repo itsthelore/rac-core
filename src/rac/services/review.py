@@ -136,6 +136,8 @@ class ReviewReport:
             "directory": self.directory,
             "recursive": self.recursive,
             "ok": self.ok,
+            # Additive in v0.13.1 (ADR-007): a day-one empty-corpus marker.
+            "empty": p.total_artifacts == 0,
             "artifacts": {
                 "total": p.total_artifacts,
                 "by_type": p.by_type,
