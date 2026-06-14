@@ -26,19 +26,14 @@ from __future__ import annotations
 import os
 
 from rac.core.frontmatter import split_frontmatter
+from rac.core.okf import OKF_TYPE
 from rac.services.export import CorpusExport, ExportArtifact
 from rac.services.recency import RecencyReport
 
-# RAC ``type`` → OKF ``type`` (ADR-048; docs/okf-profile.md is the normative
-# statement). The five enumerated RAC types map one-to-one; nothing else can
-# appear here because Unknown-type files are excluded from the export.
-OKF_TYPE = {
-    "requirement": "Requirement",
-    "decision": "ADR",
-    "design": "Design",
-    "roadmap": "Roadmap",
-    "prompt": "Prompt",
-}
+# RAC ``type`` → OKF ``type`` is defined once in ``rac.core.okf`` (ADR-048) and
+# re-exported here for the bundle renderer and its existing importers. Unknown-
+# type files are excluded from the export, so every ``art.type`` resolves.
+__all__ = ["OKF_TYPE", "render_okf_bundle"]
 
 # Human plural headings for the index, in a fixed disclosure order.
 _INDEX_SECTIONS: tuple[tuple[str, str], ...] = (

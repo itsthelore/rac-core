@@ -19,6 +19,8 @@ from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.models import Issue
 from rac.core.validation import has_errors, validate
 
+from .okf_conformance import OkfConformanceReport, check_okf_conformance
+
 # Stable per-file statuses (part of the JSON contract, ADR-007).
 STATUS_VALID = "valid"
 STATUS_INVALID = "invalid"
@@ -54,6 +56,9 @@ class DirectoryValidation:
     directory: str
     recursive: bool
     files: list[FileValidation]
+    # OKF v0.1 conformance over the same snapshot (ADR-048, Layer 0). Additive
+    # (ADR-007): optional so other constructors stay valid; folded into ``ok``.
+    okf: OkfConformanceReport | None = None
 
     @property
     def checked(self) -> int:
@@ -73,10 +78,13 @@ class DirectoryValidation:
 
     @property
     def ok(self) -> bool:
-        return self.invalid == 0
+        # A run passes only when every artifact validates *and* the corpus is OKF
+        # v0.1 conformant (ADR-048). Conformance is treated as ok when not
+        # computed, so single-purpose constructions are unaffected.
+        return self.invalid == 0 and (self.okf is None or self.okf.ok)
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "schema_version": "1",
             "directory": self.directory,
             "recursive": self.recursive,
@@ -90,6 +98,10 @@ class DirectoryValidation:
             "valid": self.ok,
             "files": [f.to_dict() for f in self.files],
         }
+        # Additive (ADR-007): OKF v0.1 conformance, present when computed.
+        if self.okf is not None:
+            payload["okf"] = self.okf.to_dict()
+        return payload
 
 
 def validate_directory(directory: str, recursive: bool = True) -> DirectoryValidation:
@@ -135,4 +147,5 @@ def validate_corpus(
                 issues=issues,
             )
         )
-    return DirectoryValidation(directory=directory, recursive=recursive, files=files)
+    okf = check_okf_conformance(directory, entries, recursive=recursive)
+    return DirectoryValidation(directory=directory, recursive=recursive, files=files, okf=okf)

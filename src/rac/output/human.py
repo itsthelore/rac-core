@@ -147,13 +147,30 @@ def render_validate_dir_human(result: DirectoryValidation) -> str:
             lines.append(f"          {issue.message}")
         lines.append("")
 
+    # OKF v0.1 conformance findings (ADR-048): listed like invalid artifacts so a
+    # conformance-only failure is just as actionable as a per-file one.
+    okf = result.okf
+    if okf is not None and okf.findings:
+        for finding in okf.findings:
+            lines.append(_red(_bold(f"FAIL  {finding.path}")) + "  (OKF conformance)")
+            lines.append(f"  {_red('error')}   [{finding.code}] {finding.path}")
+            lines.append(f"          {finding.message}")
+            lines.append("")
+
     skipped = f", {result.skipped} skipped (unknown type)" if result.skipped else ""
     verdict = _green("PASS") if result.ok else _red("FAIL")
-    lines.append(
+    summary = (
         f"{verdict}  {result.directory} — "
         f"{result.checked} artifact(s) checked: "
         f"{result.valid} valid, {result.invalid} invalid{skipped}."
     )
+    if okf is not None:
+        summary += (
+            " OKF v0.1: conformant."
+            if okf.ok
+            else f" OKF v0.1: {len(okf.findings)} conformance issue(s)."
+        )
+    lines.append(summary)
     if result.checked == 0 and result.skipped == 0:
         lines += ["", EMPTY_CORPUS_HINT]
     return "\n".join(lines)
