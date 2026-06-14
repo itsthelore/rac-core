@@ -98,7 +98,7 @@ jobs:
           - name: resolve
             paths: "tests/test_resolve.py"
           - name: review
-            paths: "tests/test_review.py"
+            paths: "tests/test_review.py tests/test_cadence.py"
           - name: revisions
             paths: "tests/test_revisions.py"
           - name: recency
