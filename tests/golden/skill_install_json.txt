@@ -13,6 +13,10 @@
     {
       "skill": "rac-ingest",
       "path": ".claude/skills/rac-ingest/SKILL.md"
+    },
+    {
+      "skill": "rac-import",
+      "path": ".claude/skills/rac-import/SKILL.md"
     }
   ]
 }

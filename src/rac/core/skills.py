@@ -43,6 +43,10 @@ BUNDLED_SKILLS = (
         name="rac-ingest",
         description="Convert legacy documents into valid, linked RAC artifacts.",
     ),
+    SkillSpec(
+        name="rac-import",
+        description="Reformat one document into one valid RAC artifact, with human review.",
+    ),
 )
 
 

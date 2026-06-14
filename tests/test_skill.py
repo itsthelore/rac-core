@@ -32,7 +32,7 @@ from rac.services.skill import SkillFileExists, install_skills
 REPO_ROOT = Path(__file__).parent.parent
 GOLDEN_DIR = Path(__file__).parent / "golden"
 
-SKILL_NAMES = ["rac-artifacts", "rac-review", "rac-ingest"]
+SKILL_NAMES = ["rac-artifacts", "rac-review", "rac-ingest", "rac-import"]
 
 
 def dogfood_path(name: str) -> Path:
