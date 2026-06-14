@@ -79,6 +79,7 @@ traceability work from real corpus usage.
 - rac-growth-essay-bridge
 - rac-growth-extensibility
 - rac-growth-ecosystem-list
+- rac-traceability-self-relationships
 
 ## Related Designs
 
