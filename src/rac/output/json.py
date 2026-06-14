@@ -23,6 +23,7 @@ from rac.services.init import InitResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.migrate import MigrationReport
 from rac.services.portfolio import PortfolioSummary
+from rac.services.quickstart import QuickstartResult
 from rac.services.relationships import RelationshipReport, RelationshipValidation
 from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
@@ -290,6 +291,11 @@ def render_new_json(created: CreatedArtifact) -> str:
 
 def render_init_json(result: InitResult) -> str:
     """JSON `rac init` output (stable contract, ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)
+
+
+def render_quickstart_json(result: QuickstartResult) -> str:
+    """JSON `rac quickstart` output (stable contract, ADR-007)."""
     return json.dumps(result.to_dict(), indent=2)
 
 

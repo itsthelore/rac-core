@@ -23,6 +23,7 @@ Commands:
     rac new <artifact-type> <output-path> [--json]
     rac templates [--json]
     rac init [directory] [--key KEY] [--json]
+    rac quickstart [directory] [--key KEY] [--type TYPE] [--json]
     rac resolve <ID> [directory] [--json]
     rac find <query> [directory] [--type TYPE] [--json]
     rac migrate metadata <directory> [--dry-run] [--json]
@@ -105,6 +106,7 @@ from rac.services.init import (
 from rac.services.inspect import build_inspection, inspect_directory
 from rac.services.migrate import migrate_metadata
 from rac.services.portfolio import build_portfolio_summary
+from rac.services.quickstart import DEFAULT_TYPE, CorpusNotEmpty, quickstart
 from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
@@ -648,6 +650,43 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(outputs.render_init_json(result))
     else:
         print(outputs.render_init_human(result))
+        _maybe_ask_usage_sharing()
+    return EXIT_OK
+
+
+def cmd_quickstart(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    try:
+        result = quickstart(args.directory, key=args.key, artifact_type=args.type)
+    except TemplateNotFound as exc:  # unsupported type → usage error
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    except InvalidRepositoryKey as exc:  # bad key syntax → usage error
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    except OutputDirectoryMissing as exc:  # parent missing → usage error
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    except (
+        CorpusNotEmpty,  # corpus already has artifacts → refused
+        RepositoryKeyConflict,  # established key differs → refused
+        OutputPathExists,  # starter path already taken → refused (never overwrite)
+    ) as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    except (
+        MalformedRepositoryConfig,  # unreadable .rac/config.yaml
+        TemplateResourceMissing,  # broken installation
+        IdGenerationExhausted,  # broken entropy source
+    ) as exc:  # operational errors
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if args.json:
+        print(outputs.render_quickstart_json(result))
+    else:
+        print(outputs.render_quickstart_human(result))
         _maybe_ask_usage_sharing()
     return EXIT_OK
 
@@ -1208,6 +1247,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_init.set_defaults(func=cmd_init)
+
+    p_quickstart = sub.add_parser(
+        "quickstart",
+        help="Guided first run: establish identity and scaffold a first artifact in one step.",
+        parents=[version_parent],
+    )
+    p_quickstart.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Repository root to set up (default: current directory).",
+    )
+    p_quickstart.add_argument(
+        "--key",
+        default=DEFAULT_KEY,
+        help="Repository key used as the artifact ID prefix (default: RAC; "
+        "2-10 uppercase alphanumeric characters starting with a letter).",
+    )
+    p_quickstart.add_argument(
+        "--type",
+        default=DEFAULT_TYPE,
+        help="Starter artifact type (default: requirement). One of the "
+        "canonical templates from `rac templates`.",
+    )
+    p_quickstart.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_quickstart.set_defaults(func=cmd_quickstart)
 
     p_resolve = sub.add_parser(
         "resolve",

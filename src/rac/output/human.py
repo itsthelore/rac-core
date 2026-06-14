@@ -32,6 +32,7 @@ from rac.services.migrate import (
     MigrationReport,
 )
 from rac.services.portfolio import PortfolioSummary
+from rac.services.quickstart import QuickstartResult
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_SELF_REFERENCE,
@@ -797,6 +798,19 @@ def render_init_human(result: InitResult) -> str:
     """Human `rac init` output: the established identity namespace."""
     verb = "Initialized" if result.created else "Already initialized:"
     return f"{verb} repository key {result.repository_key}\nConfig: {result.config_path}"
+
+
+def render_quickstart_human(result: QuickstartResult) -> str:
+    """Human `rac quickstart` output: identity, first artifact, next step."""
+    verb = "Initialized" if result.created else "Using"
+    artifact = result.artifact
+    return (
+        f"{verb} repository key {result.repository_key}\n"
+        f"Created {artifact.artifact_type} artifact: {artifact.path}\n"
+        f"ID: {artifact.id}\n"
+        f"\n"
+        f"Next: edit the TODO placeholders, then run: rac validate {artifact.path}"
+    )
 
 
 # --- resolve / find (v0.7.12) -------------------------------------------------
