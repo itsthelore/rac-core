@@ -37,6 +37,7 @@ from rac.services.portfolio import PortfolioSummary
 from rac.services.quickstart import QuickstartResult
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
+    ISSUE_EDGE_UNSUPPORTED,
     ISSUE_SELF_REFERENCE,
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
@@ -586,7 +587,12 @@ def render_relationship_validation_human(report: RelationshipValidation) -> str:
     ]
 
     duplicates = [i for i in report.issues if i.code == ISSUE_DUPLICATE_IDENTIFIER]
-    references = [i for i in report.issues if i.code != ISSUE_DUPLICATE_IDENTIFIER]
+    unsupported = [i for i in report.issues if i.code == ISSUE_EDGE_UNSUPPORTED]
+    references = [
+        i
+        for i in report.issues
+        if i.code not in (ISSUE_DUPLICATE_IDENTIFIER, ISSUE_EDGE_UNSUPPORTED)
+    ]
 
     if duplicates:
         lines += ["", _bold("Duplicate Identifiers")]
@@ -594,6 +600,16 @@ def render_relationship_validation_human(report: RelationshipValidation) -> str:
             count = len(issue.paths or [])
             lines.append(_red(f"✗ {issue.identifier} ({count} files)"))
             lines.extend(f"  - {p}" for p in issue.paths or [])
+
+    if unsupported:
+        lines += ["", _bold("Unsupported Relationships")]
+        current_source = None
+        for issue in unsupported:
+            if issue.source_path != current_source:
+                current_source = issue.source_path
+                lines += ["", issue.source_path or "<input>"]
+            label = _relationship_label(issue.relationship or "")
+            lines.append(_red(f"  ✗ {label} not supported for this artifact type"))
 
     if references:
         lines += ["", _bold("Broken Relationships")]

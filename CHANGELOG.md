@@ -8,6 +8,14 @@ details, release history over commit history.
 
 ### Added
 
+- Edge-legality validation (v0.14.0): `rac relationships --validate` now reports a
+  `## Related <Type>` (or `## Supersedes`) section that the artifact's type does
+  not support, instead of silently dropping it. Such a section produces no graph
+  edge today; the new `relationship-edge-unsupported` issue surfaces it (and fails
+  the validate exit code) so authors learn the link did nothing. Opens the
+  enforcement series that makes deterministic cross-artifact validation RAC's core
+  (ADR-049). Existing relationship issue codes are unchanged.
+
 - OKF bundle export (v0.13.6): `rac export <dir> --okf [--out <dir>]` writes a
   derived Open Knowledge Format (OKF v0.1) bundle — one Markdown file per typed
   artifact with its OKF `type` projected (decision→ADR, requirement→Requirement,

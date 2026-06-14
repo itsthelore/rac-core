@@ -130,6 +130,25 @@ def present_relationship_sections(product: Product, spec: ArtifactSpec) -> list[
     return present
 
 
+def unsupported_relationship_sections(product: Product, spec: ArtifactSpec) -> list[str]:
+    """Relationship sections ``product`` declares that its type does not support.
+
+    A ``## Related <Type>`` / ``## Supersedes`` section present with at least one
+    reference whose name is *not* in this type's ``spec.optional`` produces no edge
+    today and is silently dropped (ADR-049 edge-legality;
+    ``rac-cross-artifact-enforcement`` REQ-004). Returns the canonical section
+    names in :data:`RELATIONSHIP_SECTIONS` order so the finding is deterministic.
+    """
+    unsupported: list[str] = []
+    for section in RELATIONSHIP_SECTIONS:
+        if section in spec.optional:
+            continue
+        body = product.sections.get(section)
+        if body and parse_references(body):
+            unsupported.append(section)
+    return unsupported
+
+
 # --- Repository-level relationship inspection (v0.7.1) -----------------------
 #
 # `rac relationships <path>` discovers the explicit relationships declared across
@@ -290,6 +309,9 @@ ISSUE_DUPLICATE_IDENTIFIER = "duplicate-artifact-identifier"
 ISSUE_TARGET_NOT_FOUND = "relationship-target-not-found"
 ISSUE_TARGET_AMBIGUOUS = "relationship-target-ambiguous"
 ISSUE_SELF_REFERENCE = "relationship-self-reference"
+# Edge-legality (v0.14.0, ADR-049): a relationship section the artifact's type
+# does not declare produces no edge and is reported, not silently dropped.
+ISSUE_EDGE_UNSUPPORTED = "relationship-edge-unsupported"
 
 
 @dataclass
@@ -313,6 +335,12 @@ class RelationshipIssue:
             return {
                 "identifier": self.identifier,
                 "paths": self.paths,
+                "code": self.code,
+            }
+        if self.code == ISSUE_EDGE_UNSUPPORTED:
+            return {
+                "source_path": self.source_path,
+                "relationship": self.relationship,
                 "code": self.code,
             }
         return {
@@ -463,6 +491,19 @@ def _validate(
         issues.append(
             RelationshipIssue(code=ISSUE_DUPLICATE_IDENTIFIER, identifier=display, paths=dup_paths)
         )
+
+    # Edge-legality (v0.14.0, ADR-049): report relationship sections an artifact's
+    # type does not declare instead of silently dropping them. Deterministic —
+    # items in sorted-path order, sections in canonical RELATIONSHIP_SECTIONS order.
+    for path, product, spec in items:
+        if spec is None:
+            continue
+        for section in unsupported_relationship_sections(product, spec):
+            issues.append(
+                RelationshipIssue(
+                    code=ISSUE_EDGE_UNSUPPORTED, source_path=path, relationship=_snake(section)
+                )
+            )
 
     checked, ref_issues, _ = _resolve_references(items, _build_resolution_index(items))
     issues.extend(ref_issues)
