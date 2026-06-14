@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decisiongrounding"
+version = "0.1.0"
+description = "A reproducible benchmark for decision-grounding: does a deterministic grounding layer make a coding agent adhere to prior decisions better than context-dump, naive RAG, or a memory layer — and at what corpus size?"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+# Core spine is stdlib-only so the demo runs offline with no install.
+dependencies = []
+
+[project.optional-dependencies]
+# Strict JSON Schema (Draft 2020-12) validation. Without it the loader falls
+# back to a built-in required-key check.
+schema = ["jsonschema>=4.20"]
+# PNG crossover chart. Without it the chart renders as a pure-Python SVG.
+chart = ["matplotlib>=3.7"]
+# Real benchmark backends (pinned in config): the answering model + embeddings.
+# Replaces the offline stubs. TODO: pin exact versions before publishing runs.
+real = ["anthropic>=0.40"]
+# Test runner.
+dev = ["pytest>=7"]
+
+[project.scripts]
+decisiongrounding = "runner.cli:main"
+
+[tool.setuptools]
+packages = ["providers", "scenarios", "scoring", "runner"]
