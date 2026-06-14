@@ -155,17 +155,13 @@ decision spelling where a value is shared (`Proposed`, `Accepted`, `Superseded`,
 
 ## Open Questions
 
-- **Roadmap lifecycle vs ADR-017 — the crux.** A roadmap is inherently about
-  intended work, so even `Planned` leans delivery-ward. Is `Planned → Superseded /
-  Abandoned` a defensible *knowledge* lifecycle, or should roadmaps be excluded
-  from status generalisation and rely on the `archive/` directory convention
-  instead? This question most needs a decision.
+Resolved by ADR-051: roadmaps are **in** the model (`Planned → Superseded /
+Abandoned` as a knowledge lifecycle, delivery states excluded), and the
+"status is knowledge lifecycle, never work status" boundary is ratified by that
+ADR rather than left to this design. Remaining:
+
 - **Do requirements/designs need a "delivered/met" state?** It is the most useful
   and the most ADR-017-dangerous addition; the table above omits it deliberately.
-- **Should generalising status be ratified by an ADR?** It touches the artifact
-  model and the ADR-017 boundary, so an ADR (not just this design) likely should
-  record the "status is knowledge lifecycle, never work status" rule before
-  implementation.
 - **Backfill now or lazily?** And should the four templates gain a seeded
   `## Status` section?
 - **Version fence.** Which release carries this (a v0.14.2 enforcement follow-on,
@@ -177,6 +173,7 @@ decision spelling where a value is shared (`Proposed`, `Accepted`, `Superseded`,
 
 ## Related Decisions
 
+- adr-051
 - adr-049
 - adr-017
 - adr-025
