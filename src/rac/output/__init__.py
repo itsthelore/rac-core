@@ -69,6 +69,7 @@ from .json import (
     render_validation_json,
     render_watchkeeper_json,
 )
+from .okf import render_okf_bundle
 from .portal import render_export_html
 from .templates import render_improve_template, render_schema_template
 
@@ -102,6 +103,7 @@ __all__ = [
     "render_migrate_json",
     "render_new_human",
     "render_new_json",
+    "render_okf_bundle",
     "render_portfolio_human",
     "render_portfolio_json",
     "render_quickstart_human",
