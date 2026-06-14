@@ -21,11 +21,17 @@ from .base import (
     Task,
 )
 from .context_dump import ContextDumpProvider
-from .embedding import Embedder, LocalDeterministicEmbedder
+from .embedding import (
+    Embedder,
+    LocalDeterministicEmbedder,
+    SentenceTransformerEmbedder,
+    VoyageEmbedder,
+    make_embedder,
+)
 from .memory_provider import MemoryProviderArm
 from .naive_rag import NaiveRagProvider
 from .no_grounding import NoGroundingProvider
-from .rac import RacProvider
+from .rac import RacProvider, resolve_supersedes
 
 # Arm registry. Real, runnable arms this pass: context_dump, naive_rag.
 # The rest are typed stubs (raise NotImplementedError on use).
@@ -53,9 +59,13 @@ __all__ = [
     "ClaudeAnsweringModel",
     "Embedder",
     "LocalDeterministicEmbedder",
+    "VoyageEmbedder",
+    "SentenceTransformerEmbedder",
+    "make_embedder",
     "ContextDumpProvider",
     "NaiveRagProvider",
     "NoGroundingProvider",
     "RacProvider",
+    "resolve_supersedes",
     "MemoryProviderArm",
 ]

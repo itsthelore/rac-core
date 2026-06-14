@@ -18,9 +18,15 @@ dependencies = []
 schema = ["jsonschema>=4.20"]
 # PNG crossover chart. Without it the chart renders as a pure-Python SVG.
 chart = ["matplotlib>=3.7"]
-# Real benchmark backends (pinned in config): the answering model + embeddings.
-# Replaces the offline stubs. TODO: pin exact versions before publishing runs.
-real = ["anthropic>=0.40"]
+# Real benchmark backends: the pinned Claude answering model (anthropic) and
+# Voyage embeddings (Anthropic's recommended embedding provider — Anthropic has
+# no embeddings endpoint). Replaces the offline stubs.
+# TODO: pin exact package versions before publishing runs.
+real = ["anthropic>=0.40", "voyageai>=0.2"]
+# Local, offline-capable embeddings alternative to Voyage.
+local-embeddings = ["sentence-transformers>=2.2"]
+# The rac arm additionally needs the `rac` CLI on PATH (or RAC_BIN) — it is an
+# external tool, not a Python dependency (ADR-0001), so it is not listed here.
 # Test runner.
 dev = ["pytest>=7"]
 

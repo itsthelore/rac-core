@@ -63,7 +63,7 @@ def _content_tokens(text: str) -> set[str]:
 class AnsweringModel(ABC):
     name: str = "base"
     version: str = "0"
-    temperature: float = 0.0
+    temperature: float | None = 0.0  # None when the pinned model exposes no knob
     seed: int = 0
 
     @abstractmethod
@@ -151,28 +151,102 @@ class ScriptedAnsweringModel(AnsweringModel):
         )
 
 
+# JSON Schema the answering model must return — mirrors providers.base.ProposedChange.
+_PROPOSED_CHANGE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "summary": {"type": "string"},
+        "actions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "kind": {"type": "string"},
+                    "target": {"type": "string"},
+                    "detail": {"type": "string"},
+                },
+                "required": ["kind", "target", "detail"],
+            },
+        },
+        "cites_decisions": {"type": "array", "items": {"type": "string"}},
+        "asserts_prohibition": {"type": "boolean"},
+        "asserts_permission": {"type": "boolean"},
+    },
+    "required": [
+        "summary",
+        "actions",
+        "cites_decisions",
+        "asserts_prohibition",
+        "asserts_permission",
+    ],
+}
+
+
 class ClaudeAnsweringModel(AnsweringModel):
-    """Real pinned answering model. STUB — wired behind the `[real]` extra."""
+    """Real pinned answering model (Claude Opus 4.8), wired behind `[real]`.
 
-    # Pin the exact model + version used for every published run. Held identical
-    # across arms; the only thing that varies between arms is the grounding.
+    Held identical across arms; only the grounding varies. Note: Opus 4.8
+    rejects `temperature`/`top_p`/`seed` (400), so there is no temperature/seed
+    knob to pin — determinism is approximated by the fixed model id + scaffold +
+    structured JSON output, and run-to-run variance is reported as a metric.
+    `temperature` is recorded as None and `seed` is bookkeeping only.
+    """
+
     name = "claude"
-    version = "PINNED-MODEL-ID-AND-DATE"  # e.g. a dated Claude model snapshot
-    temperature = 0.0
+    version = "claude-opus-4-8"  # pinned model id
+    temperature = None
 
-    def __init__(self, seed: int = 0) -> None:
+    def __init__(self, seed: int = 0, effort: str = "low") -> None:
         self.seed = seed
+        self.effort = effort  # low keeps the constrained decision task cheap/stable
+        self._client = None
+
+    def _ensure_client(self):
+        if self._client is None:
+            import anthropic  # type: ignore  # provided by the [real] extra
+
+            self._client = anthropic.Anthropic()
+        return self._client
 
     def respond(
         self, scaffold: str, grounding: GroundingContext, task: Task
     ) -> ProposedChange:
-        # TODO(real-answering): render `scaffold + grounding.text + task` into a
-        # single prompt, call the pinned Claude model at temperature 0 with this
-        # seed via the `anthropic` SDK (the `[real]` extra), and parse the
-        # returned structured JSON into a ProposedChange. Keep the scaffold and
-        # model id byte-identical across every arm so only grounding varies.
-        raise NotImplementedError(
-            "ClaudeAnsweringModel is a stub. Install the [real] extra and pin "
-            "the model id to run real benchmarks; use ScriptedAnsweringModel "
-            "for the offline demo."
+        client = self._ensure_client()
+        user = (
+            f"GROUNDING (use only this):\n{grounding.text}\n\n"
+            f"TASK: {task.prompt}\n"
+            f"PROPOSED ACTION: {task.proposed_action}\n\n"
+            "Return a ProposedChange. Set asserts_prohibition=true and refrain "
+            "(no prohibited action in `actions`) if a governing decision forbids "
+            "the action; set asserts_permission=true and proceed otherwise. Cite "
+            "the decision id(s) you relied on. Do not invent constraints absent "
+            "from the grounding."
+        )
+        # No temperature / seed: Opus 4.8 rejects them. Thinking omitted (off) and
+        # effort pinned for stability across arms; structured output forces shape.
+        resp = client.messages.create(
+            model=self.version,
+            max_tokens=2048,
+            system=scaffold,
+            messages=[{"role": "user", "content": user}],
+            output_config={
+                "effort": self.effort,
+                "format": {"type": "json_schema", "schema": _PROPOSED_CHANGE_SCHEMA},
+            },
+        )
+        if getattr(resp, "stop_reason", None) == "refusal":
+            # Treat a safety refusal as a non-answer: assert nothing, cite nothing.
+            return ProposedChange(summary="model refused", actions=[])
+        import json
+
+        text = next(b.text for b in resp.content if b.type == "text")
+        data = json.loads(text)
+        return ProposedChange(
+            summary=data["summary"],
+            actions=[Action(a["kind"], a["target"], a["detail"]) for a in data["actions"]],
+            cites_decisions=list(data["cites_decisions"]),
+            asserts_prohibition=bool(data["asserts_prohibition"]),
+            asserts_permission=bool(data["asserts_permission"]),
         )

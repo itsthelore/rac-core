@@ -62,8 +62,79 @@ def cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
-# TODO(real-embeddings): add a pinned hosted/local embedder behind the `[real]`
-# extra, e.g. an Anthropic/OpenAI embedding endpoint or a pinned
-# sentence-transformers model. Pin model id + revision in runner config so runs
-# reproduce. Keep the `Embedder` interface; do not let arms import a concrete
-# backend directly.
+def _l2_normalize(vec: list[float]) -> list[float]:
+    norm = math.sqrt(sum(v * v for v in vec))
+    return vec if norm == 0.0 else [v / norm for v in vec]
+
+
+class VoyageEmbedder(Embedder):
+    """Pinned Voyage AI embeddings (Anthropic's recommended embedding provider).
+
+    Real, reproducible retrieval for benchmark runs. Pin the model id; results
+    are deterministic for a fixed model + input. Requires the `[real]` extra
+    (`voyageai`) and a VOYAGE_API_KEY. Lazily imported so the offline spine
+    keeps importing without the dependency.
+    """
+
+    def __init__(self, model: str = "voyage-3") -> None:
+        self.model = model
+        self.name = f"voyage:{model}"
+        self._client = None
+
+    def _ensure_client(self):
+        if self._client is None:
+            import voyageai  # type: ignore  # provided by the [real] extra
+
+            self._client = voyageai.Client()
+            # Probe dimensionality once so cosine() comparisons are well-defined.
+            probe = self._client.embed(["."], model=self.model).embeddings[0]
+            self.dim = len(probe)
+        return self._client
+
+    def embed(self, text: str) -> list[float]:
+        client = self._ensure_client()
+        vec = client.embed([text], model=self.model).embeddings[0]
+        return _l2_normalize(list(vec))
+
+
+class SentenceTransformerEmbedder(Embedder):
+    """Pinned local sentence-transformers model. Offline-capable once downloaded.
+
+    A reproducible alternative to a hosted embedder. Requires the
+    `[local-embeddings]` extra (`sentence-transformers`). Lazily imported.
+    """
+
+    def __init__(self, model: str = "all-MiniLM-L6-v2") -> None:
+        self.model = model
+        self.name = f"st:{model}"
+        self._model = None
+
+    def _ensure_model(self):
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer  # type: ignore
+
+            self._model = SentenceTransformer(self.model)
+            self.dim = self._model.get_sentence_embedding_dimension()
+        return self._model
+
+    def embed(self, text: str) -> list[float]:
+        model = self._ensure_model()
+        vec = model.encode(text, normalize_embeddings=True)
+        return [float(x) for x in vec]
+
+
+def make_embedder(spec: str) -> Embedder:
+    """Build an embedder from a spec string.
+
+    `local-hash` (offline default) | `voyage[:model]` | `st[:model]`.
+    Real benchmark runs pin a real backend; the offline demo uses `local-hash`.
+    """
+    if spec in ("", "local-hash"):
+        return LocalDeterministicEmbedder()
+    if spec.startswith("voyage"):
+        _, _, model = spec.partition(":")
+        return VoyageEmbedder(model or "voyage-3")
+    if spec.startswith("st"):
+        _, _, model = spec.partition(":")
+        return SentenceTransformerEmbedder(model or "all-MiniLM-L6-v2")
+    raise ValueError(f"unknown embedder spec: {spec!r}")
