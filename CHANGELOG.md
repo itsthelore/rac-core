@@ -8,12 +8,22 @@ details, release history over commit history.
 
 ### Added
 
+- OKF bundle export (v0.13.6): `rac export <dir> --okf [--out <dir>]` writes a
+  derived Open Knowledge Format (OKF v0.1) bundle — one Markdown file per typed
+  artifact with its OKF `type` projected (decision→ADR, requirement→Requirement,
+  and so on), plus a generated `index.md` (progressive disclosure) and `log.md`
+  (git-derived, date-grouped). Resolved relationships render as `# Citations`
+  body links so they survive for permissive OKF consumers, while the typed front
+  matter and `## Related` sections stay authoritative. Parallel to `--json` and
+  `--html`; existing exports and validation are unchanged. See
+  `docs/okf-profile.md`.
+
 - OKF carrier profile recorded (ADR-048 + `rac-okf-carrier-profile`): RAC
   adopts Google's Open Knowledge Format (OKF v0.1 Draft) as an informative
   carrier profile and a derived export target — never a foundation. RAC repos
   are conformant OKF bundles (RAC `type` maps to OKF `type`: decision→ADR,
-  requirement→Requirement, and so on), and a future derived OKF bundle view
-  joins the JSON/Portal export. RAC's normativity is unchanged — `rac validate`
+  requirement→Requirement, and so on), and the derived OKF bundle view
+  (`rac export --okf`, above) joins the JSON/Portal export. RAC's normativity is unchanged — `rac validate`
   and `rac relationships --validate` keep rejecting what they reject today. The
   profile is documented in `docs/okf-profile.md`; the dependency is informative
   and pinned to OKF v0.1, with no code or package dependency on OKF tooling.

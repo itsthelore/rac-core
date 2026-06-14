@@ -93,3 +93,7 @@ derived export (REQ-002, REQ-003) follows at the derived-contract band.
 ## Related Requirements
 
 - rac-portal-citation-links
+
+## Related Roadmaps
+
+- v0.13.6-okf-bundle-export

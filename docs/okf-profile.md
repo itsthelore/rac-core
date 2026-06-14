@@ -14,6 +14,19 @@ scoped by the `rac-okf-carrier-profile` requirement.
 > described in BCP 14 (RFC 2119, RFC 8174) when, and only when, they appear in
 > all capitals.
 
+## Producing a bundle
+
+`rac export <dir> --okf` writes the bundle described here:
+
+```bash
+rac export rac/ --okf --out okf-bundle/
+```
+
+It emits one Markdown file per typed artifact (front matter projecting the OKF
+`type`), plus a generated `index.md` and `log.md`, mirroring the corpus layout.
+The bundle is a derived build artifact, parallel to `rac export --json` and
+`--html`; it never feeds back into RAC.
+
 ## Type mapping (normative)
 
 Every RAC artifact carries a `type` in its front matter. In the OKF bundle view
