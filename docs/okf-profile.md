@@ -7,7 +7,7 @@ does — a Git tree of Markdown files with YAML front matter. This page is RAC's
 presents itself as a conformant OKF bundle. It is a derived, interoperability
 view; RAC Core and `rac validate` remain the source of truth, and adopting this
 profile loosens none of RAC's guarantees. The decision behind it is
-[ADR-046](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-046-okf-carrier-profile.md),
+[ADR-048](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-048-okf-carrier-profile.md),
 scoped by the `rac-okf-carrier-profile` requirement.
 
 > The key words MUST, SHOULD, and MAY in this document are to be interpreted as
@@ -40,7 +40,7 @@ schema_version: 1
 id: RAC-KV2KWK55FC49
 type: decision
 ---
-# ADR-046: OKF as an Informative Carrier Profile
+# ADR-048: OKF as an Informative Carrier Profile
 ```
 
 presents, in the OKF bundle view, as `type: ADR` — the same file, the same body,
@@ -62,7 +62,7 @@ the front door for a human or agent that has never seen the bundle.
 # Knowledge Index
 
 ## Decisions
-- [ADR-046: OKF as an Informative Carrier Profile](rac/decisions/adr-046-okf-carrier-profile.md)
+- [ADR-048: OKF as an Informative Carrier Profile](rac/decisions/adr-048-okf-carrier-profile.md)
   — RAC adopts OKF as an informative carrier profile and derived export target.
 
 ## Requirements
@@ -81,7 +81,7 @@ matter), so it never drifts from reality.
 # Log
 
 ## 2026-06-14
-- Added ADR-046 (OKF as an informative carrier profile).
+- Added ADR-048 (OKF as an informative carrier profile).
 - Added REQ-OKF-Carrier-Profile (conformance, profile, and bundle export).
 ```
 

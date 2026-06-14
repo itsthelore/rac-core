@@ -22,7 +22,7 @@ bundle already. The gap is small but real: OKF requires every artifact to carry 
 non-empty `type`, and RAC's `type` is currently optional in front matter. Without
 a guaranteed `type` and a derived bundle view, RAC forfeits free
 interoperability and an independent, external validation of its carrier — for the
-cost of a single field. ADR-046 decides RAC adopts OKF as an informative carrier
+cost of a single field. ADR-048 decides RAC adopts OKF as an informative carrier
 profile and derived export target; this requirement scopes that adoption as
 checkable behaviour without loosening any RAC guarantee.
 
@@ -61,7 +61,7 @@ checkable behaviour without loosening any RAC guarantee.
 
 - OKF is a pre-1.0, single-vendor draft; its conventions may change. Mitigated by
   keeping the dependency informative and pinned, and reassessing at OKF 1.0 via a
-  new ADR (ADR-046, decision point 5).
+  new ADR (ADR-048, decision point 5).
 - Treating the OKF bundle as a frozen contract would extend RAC's stability
   obligations (ADR-007). Mitigated by keeping the OKF view a derived contract and
   routing any promotion to a frozen contract through a new ADR.
@@ -84,7 +84,7 @@ derived export (REQ-002, REQ-003) follows at the derived-contract band.
 
 ## Related Decisions
 
-- ADR-046
+- ADR-048
 - ADR-004
 - ADR-016
 - ADR-007

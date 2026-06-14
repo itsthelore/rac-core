@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KV2KWK55FC49
 type: decision
 ---
-# ADR-046: OKF as an Informative Carrier Profile
+# ADR-048: OKF as an Informative Carrier Profile
 
 ## Status
 

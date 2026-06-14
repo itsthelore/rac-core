@@ -8,7 +8,7 @@ details, release history over commit history.
 
 ### Added
 
-- OKF carrier profile recorded (ADR-046 + `rac-okf-carrier-profile`): RAC
+- OKF carrier profile recorded (ADR-048 + `rac-okf-carrier-profile`): RAC
   adopts Google's Open Knowledge Format (OKF v0.1 Draft) as an informative
   carrier profile and a derived export target — never a foundation. RAC repos
   are conformant OKF bundles (RAC `type` maps to OKF `type`: decision→ADR,
