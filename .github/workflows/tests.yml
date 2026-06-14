@@ -94,7 +94,7 @@ jobs:
           - name: mcp
             paths: "tests/test_mcp_server.py tests/test_mcp_tools.py tests/test_mcp_isolation.py tests/test_mcp_telemetry.py tests/test_mcp_ping.py"
           - name: relationships
-            paths: "tests/test_relationships.py tests/test_relationships_cmd.py tests/test_relationship_validation.py"
+            paths: "tests/test_relationships.py tests/test_relationships_cmd.py tests/test_relationship_validation.py tests/test_relationship_graph.py tests/test_lifecycle_status.py"
           - name: resolve
             paths: "tests/test_resolve.py"
           - name: review

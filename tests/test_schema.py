@@ -103,7 +103,8 @@ def test_schema_json_requirement_shape(capsys):
     ]
     assert "success_metrics" in payload["descriptions"]
     assert "success_metrics" in payload["guidance"]
-    assert payload["metadata"] == {}
+    # ADR-051: requirements gained an optional lifecycle status field.
+    assert payload["metadata"] == {"status": ["Proposed", "Accepted", "Superseded", "Deprecated"]}
 
 
 def test_schema_json_decision_metadata_values(capsys):

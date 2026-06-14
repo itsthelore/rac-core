@@ -80,10 +80,12 @@ def test_ai_themed_requirement_stays_requirement():
     assert classify(parse(text)).type == "requirement"
 
 
-def test_prompt_carries_no_metadata():
+def test_prompt_carries_lifecycle_status():
+    # ADR-051: prompts use Active (live) / Deprecated (retired).
     spec = spec_for("prompt")
     assert spec is not None
-    assert spec.metadata == {}
+    assert spec.metadata == {"status": ("Active", "Deprecated")}
+    assert spec.retired_status == ("Deprecated",)
 
 
 # --- synonyms (artifact-scoped) ---------------------------------------------

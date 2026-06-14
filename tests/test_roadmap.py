@@ -50,11 +50,13 @@ def test_requirement_does_not_classify_as_roadmap():
     assert inspect_file(fixture_path("valid", "feature.md")).type == "requirement"
 
 
-def test_roadmap_carries_no_metadata():
-    # Roadmap manages knowledge, not work: no status/category/supersedes fields.
+def test_roadmap_carries_lifecycle_status():
+    # ADR-051: status is a knowledge lifecycle (Planned/Superseded/Abandoned),
+    # never work/delivery state; no category or supersedes metadata.
     spec = spec_for("roadmap")
     assert spec is not None
-    assert spec.metadata == {}
+    assert spec.metadata == {"status": ("Planned", "Superseded", "Abandoned")}
+    assert spec.retired_status == ("Superseded", "Abandoned")
 
 
 # --- validation -------------------------------------------------------------

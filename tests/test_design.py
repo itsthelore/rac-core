@@ -80,10 +80,13 @@ def test_ui_design_themed_titles_do_not_drive_classification():
     assert classify(parse(requirement_about_ui)).type == "requirement"
 
 
-def test_design_carries_no_metadata():
+def test_design_carries_lifecycle_status():
+    # ADR-051: designs share the decision spine (Proposed/Accepted/Superseded/
+    # Deprecated).
     spec = spec_for("design")
     assert spec is not None
-    assert spec.metadata == {}
+    assert spec.metadata == {"status": ("Proposed", "Accepted", "Superseded", "Deprecated")}
+    assert spec.retired_status == ("Superseded", "Deprecated")
 
 
 # --- validation -------------------------------------------------------------

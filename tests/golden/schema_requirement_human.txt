@@ -40,3 +40,6 @@ Optional Sections:
       Description: Design artifacts this artifact references
   - Related Requirements
       Description: Requirement artifacts this artifact references
+
+Metadata Fields:
+  - Status: Proposed | Accepted | Superseded | Deprecated
