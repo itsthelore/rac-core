@@ -1,5 +1,6 @@
 {
   "directory": "tests/fixtures/valid",
+  "empty": false,
   "features": 4,
   "valid_features": 4,
   "invalid_features": 0,
