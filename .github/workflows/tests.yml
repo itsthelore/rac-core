@@ -77,6 +77,8 @@ jobs:
             paths: "tests/test_ingest.py"
           - name: init
             paths: "tests/test_init.py"
+          - name: quickstart
+            paths: "tests/test_quickstart.py"
           - name: inspect
             paths: "tests/test_inspect.py"
           - name: intent
