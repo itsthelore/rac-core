@@ -11,11 +11,13 @@ import json
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
+from rac.core.hooks import HookSpec
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
 from rac.services.create import CreatedArtifact
 from rac.services.export import CorpusExport
+from rac.services.hook import InstalledHook
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
 from rac.services.ingest import IngestResult
@@ -335,6 +337,20 @@ def render_skill_list_json(specs: list[SkillSpec]) -> str:
     payload = {
         "schema_version": "1",
         "skills": [{"skill": spec.name, "description": spec.description} for spec in specs],
+    }
+    return json.dumps(payload, indent=2)
+
+
+def render_hook_install_json(installation: InstalledHook) -> str:
+    """JSON `rac hook install` output (stable contract, ADR-007)."""
+    return json.dumps(installation.to_dict(), indent=2)
+
+
+def render_hook_list_json(specs: list[HookSpec]) -> str:
+    """JSON `rac hook list` output (stable contract, ADR-007)."""
+    payload = {
+        "schema_version": "1",
+        "hooks": [{"style": spec.style, "description": spec.description} for spec in specs],
     }
     return json.dumps(payload, indent=2)
 

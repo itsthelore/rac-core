@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import CONFIDENCE_THRESHOLD, TypeScore
+from rac.core.hooks import HookSpec
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
@@ -22,6 +23,7 @@ from rac.services.compare import (
     RelationshipIssueRef,
 )
 from rac.services.create import CreatedArtifact
+from rac.services.hook import InstalledHook
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
 from rac.services.init import InitResult
@@ -918,6 +920,24 @@ def render_skill_list_human(specs: list[SkillSpec]) -> str:
     lines = [_bold("Bundled agent skills:"), ""]
     name_w = max(len(spec.name) for spec in specs)
     lines.extend(f"- {spec.name:<{name_w}}  {spec.description}" for spec in specs)
+    return "\n".join(lines)
+
+
+def render_hook_install_human(installation: InstalledHook) -> str:
+    """Human `rac hook install` output: what was installed and where."""
+    h = installation
+    return (
+        f"Installed {h.style} git hook: {h.path}\n"
+        f"\n"
+        f"Git runs it automatically on each commit. Remove the file to stop it."
+    )
+
+
+def render_hook_list_human(specs: list[HookSpec]) -> str:
+    """Human `rac hook list` output: the bundled hook set."""
+    lines = [_bold("Bundled git hooks:"), ""]
+    style_w = max(len(spec.style) for spec in specs)
+    lines.extend(f"- {spec.style:<{style_w}}  {spec.description}" for spec in specs)
     return "\n".join(lines)
 
 

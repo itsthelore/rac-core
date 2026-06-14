@@ -29,6 +29,8 @@ Commands:
     rac migrate metadata <directory> [--dry-run] [--json]
     rac skill install [name] [--dir PATH] [--json]
     rac skill list [--json]
+    rac hook install [--style post-commit|pre-commit] [--dir PATH] [--json]
+    rac hook list [--json]
 
 Exit codes:
     0  success (incl. inspect/improve reporting Unknown; relationships found or
@@ -73,6 +75,13 @@ from pathlib import Path
 from rac import consent
 from rac import output as outputs
 from rac.core.classification import score_artifacts
+from rac.core.hooks import (
+    DEFAULT_STYLE,
+    HookNotFound,
+    HookResourceMissing,
+    available_hooks,
+    hook_specs,
+)
 from rac.core.markdown import parse, parse_file
 from rac.core.models import Product
 from rac.core.schema import available_schemas, schema_reference
@@ -93,6 +102,7 @@ from rac.services.create import (
 )
 from rac.services.diff import diff as diff_asts
 from rac.services.export import build_corpus_export
+from rac.services.hook import HookFileExists, NotAGitWorkTree, install_hook
 from rac.services.improve import improve_product
 from rac.services.index import build_repository_index
 from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
@@ -786,6 +796,36 @@ def cmd_skill(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_hook(args: argparse.Namespace) -> int:
+    if args.action == "list":
+        specs = hook_specs()
+        if args.json:
+            print(outputs.render_hook_list_json(specs))
+        else:
+            print(outputs.render_hook_list_human(specs))
+        return EXIT_OK
+
+    if not Path(args.dir).is_dir():
+        print(f"rac: not a directory: {args.dir}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    try:
+        installation = install_hook(args.dir, args.style)
+    except (HookNotFound, NotAGitWorkTree) as exc:  # usage errors → exit 2
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    except HookFileExists as exc:  # refused; existing hook untouched
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    except HookResourceMissing as exc:  # broken installation
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if args.json:
+        print(outputs.render_hook_install_json(installation))
+    else:
+        print(outputs.render_hook_install_human(installation))
+    return EXIT_OK
+
+
 def cmd_templates(args: argparse.Namespace) -> int:
     names = available_templates()
     if args.json:
@@ -1417,6 +1457,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_skill.set_defaults(func=cmd_skill)
+
+    p_hook = sub.add_parser(
+        "hook",
+        help="Install or list the bundled git hooks (commit-time cadence nudge).",
+        parents=[version_parent],
+    )
+    p_hook.add_argument(
+        "action",
+        choices=["install", "list"],
+        help="What to do: install a bundled hook, or list them.",
+    )
+    p_hook.add_argument(
+        "--style",
+        choices=available_hooks(),
+        default=DEFAULT_STYLE,
+        help=(
+            "Which hook to install (default: post-commit, an advisory cadence "
+            "nudge that never blocks; pre-commit validates staged artifacts)."
+        ),
+    )
+    p_hook.add_argument(
+        "--dir",
+        default=".",
+        help="Target git repository directory (default: current directory).",
+    )
+    p_hook.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_hook.set_defaults(func=cmd_hook)
 
     return parser
 

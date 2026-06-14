@@ -87,6 +87,9 @@ where = ["src"]
 # `rac skill install` loads it via importlib.resources, never from the
 # repository. A test pins it byte-for-byte to the dogfood copy (REQ-007).
 "rac.skills" = ["*/SKILL.md"]
+# Bundled git hook scripts ship with the distribution (v0.13.4): `rac hook
+# install` loads them via importlib.resources, never from the repository.
+"rac.hooks" = ["*.sh"]
 
 [tool.setuptools_scm]
 # Defaults are fine: version comes from the latest `vX.Y.Z` git tag.
