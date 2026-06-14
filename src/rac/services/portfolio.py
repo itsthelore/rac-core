@@ -38,6 +38,7 @@ from .relationships import (
     ISSUE_TARGET_NOT_FOUND,
     RelationshipSummary,
     summary_from_corpus,
+    validation_from_corpus,
 )
 
 # Stable attention codes (part of the JSON contract, ADR-007).
@@ -94,6 +95,11 @@ class PortfolioSummary:
     # ``by_type`` but neither validated nor completeness-scored, so consumers
     # like ``rac review`` need the paths to surface them without a second walk.
     unknown_paths: list[str] = field(default_factory=list)
+    # Full relationship-validation gate result (v0.16.0, additive): whether every
+    # referential, edge-legality, range, status-consistency, and acyclicity check
+    # passes. Distinct from ``relationships.broken`` (referential resolution only),
+    # so the summary can report the same verdict as `rac relationships --validate`.
+    relationships_ok: bool = True
 
     @property
     def total_artifacts(self) -> int:
@@ -147,6 +153,15 @@ class PortfolioSummary:
             "attention": [item.to_dict() for item in self.attention],
             "health": {
                 "score": self.health_score,
+            },
+            # Additive (v0.16.0, ADR-007): the repository validation gate, so an
+            # agent over MCP (`get_summary`) can read pass/fail without a second
+            # tool. ``relationships_ok`` reflects the full relationship-validation
+            # gate (referential + edge-legality + range + status + acyclicity).
+            "validation_status": {
+                "artifacts_ok": self.invalid_artifacts == 0,
+                "relationships_ok": self.relationships_ok,
+                "ok": self.invalid_artifacts == 0 and self.relationships_ok,
             },
         }
 
@@ -236,6 +251,9 @@ def portfolio_from_corpus(
     # Reuses the snapshot (no second walk); per-reference issues become
     # attention items so broken references are surfaced, not just counted.
     rel_summary = summary_from_corpus(entries)
+    # The full relationship-validation gate (additive, v0.16.0): same verdict as
+    # `rac relationships --validate`, over the same snapshot (no extra walk).
+    relationships_ok = validation_from_corpus(directory, entries, recursive=recursive).ok
     for issue in rel_summary.issues:
         source = issue.source_path or ""
         label = (issue.relationship or "").replace("_", " ").title()
@@ -265,4 +283,5 @@ def portfolio_from_corpus(
         relationships=rel_summary,
         attention=attention,
         unknown_paths=unknown_paths,
+        relationships_ok=relationships_ok,
     )
