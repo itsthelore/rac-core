@@ -22,6 +22,7 @@ Priority order (REQ-Repository-Review-Mode, "Repository Health Summary"):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .portfolio import (
@@ -31,14 +32,22 @@ from .portfolio import (
     PortfolioSummary,
     build_portfolio_summary,
 )
+from .recency import artifact_recency
 
 # Stable priority levels and the unknown-artifact code (JSON contract, ADR-007).
 PRIORITY_INVALID_ARTIFACT = 1
 PRIORITY_BROKEN_RELATIONSHIP = 2
 PRIORITY_UNKNOWN_ARTIFACT = 3
 PRIORITY_MISSING_RECOMMENDED = 4
+# Write-cadence nudge (v0.13.3): below every other finding, never fails review.
+PRIORITY_STALE_CORPUS = 5
 
 REVIEW_UNKNOWN_ARTIFACT = "unknown-artifact"
+REVIEW_STALE_CORPUS = "stale-corpus"
+
+# Default cadence window when `--stale-after` is given without a value: two
+# weeks (v0.13.3).
+DEFAULT_STALE_AFTER_DAYS = 14
 
 # Attention code -> review priority for findings inherited from the portfolio.
 _ATTENTION_PRIORITY = {
@@ -61,6 +70,9 @@ _IMPACT = {
         "Recommended sections are empty, weakening the artifact's completeness."
     ),
     REVIEW_UNKNOWN_ARTIFACT: "No schema matched, so required structure cannot be checked.",
+    REVIEW_STALE_CORPUS: (
+        "The write habit has stalled; product knowledge stops reflecting the work."
+    ),
 }
 
 
@@ -162,10 +174,65 @@ class ReviewReport:
         }
 
 
-def build_review(directory: str, recursive: bool = True) -> ReviewReport:
-    """Review ``directory`` and return the prioritized repository report."""
+def build_review(
+    directory: str,
+    recursive: bool = True,
+    *,
+    stale_after_days: int | None = None,
+    now: datetime | None = None,
+) -> ReviewReport:
+    """Review ``directory`` and return the prioritized repository report.
+
+    With ``stale_after_days`` set, an advisory write-cadence finding is added
+    when the corpus has had no new or updated artifact within the window
+    (v0.13.3). It is informational and never changes the review's exit status.
+    ``now`` is injectable for deterministic tests.
+    """
     portfolio = build_portfolio_summary(directory, recursive=recursive)
-    return review_from_portfolio(directory, portfolio, recursive=recursive)
+    report = review_from_portfolio(directory, portfolio, recursive=recursive)
+    if stale_after_days is not None:
+        finding = _cadence_finding(directory, recursive, stale_after_days, now=now)
+        if finding is not None:
+            report.issues.append(finding)
+            report.issues.sort(key=lambda i: (i.priority, i.path, i.code))
+    return report
+
+
+def _cadence_finding(
+    directory: str,
+    recursive: bool,
+    window_days: int,
+    *,
+    now: datetime | None = None,
+) -> ReviewIssue | None:
+    """The write-cadence nudge, or ``None`` when it should not fire.
+
+    Fires only when recency is known (inside git, with committed artifacts)
+    and the newest artifact is older than ``window_days``. An empty corpus or
+    unknown recency is suppressed — the v0.13.1 empty-corpus hint covers the
+    day-one case, and a nudge on missing data would be noise.
+    """
+    recency = artifact_recency(directory, recursive=recursive)
+    most_recent = recency.most_recent
+    if most_recent is None:
+        return None
+    moment = now or datetime.now(UTC)
+    age = moment - most_recent
+    if age <= timedelta(days=window_days):
+        return None
+    return ReviewIssue(
+        priority=PRIORITY_STALE_CORPUS,
+        severity="info",
+        path=directory,
+        identifier="corpus",
+        code=REVIEW_STALE_CORPUS,
+        message=(
+            f"No product knowledge recorded in the last {window_days} days "
+            f"(newest artifact is {age.days} days old)."
+        ),
+        action="Run: rac new decision rac/decisions/<name>.md",
+        impact=impact_for(REVIEW_STALE_CORPUS),
+    )
 
 
 def review_from_portfolio(

@@ -46,6 +46,7 @@ from rac.services.review import (
     PRIORITY_BROKEN_RELATIONSHIP,
     PRIORITY_INVALID_ARTIFACT,
     PRIORITY_MISSING_RECOMMENDED,
+    PRIORITY_STALE_CORPUS,
     PRIORITY_UNKNOWN_ARTIFACT,
     ReviewReport,
 )
@@ -686,6 +687,7 @@ _PRIORITY_LABELS = {
     PRIORITY_BROKEN_RELATIONSHIP: "Broken relationships",
     PRIORITY_UNKNOWN_ARTIFACT: "Unrecognized artifacts",
     PRIORITY_MISSING_RECOMMENDED: "Missing recommended information",
+    PRIORITY_STALE_CORPUS: "Write cadence",
 }
 
 

@@ -119,7 +119,7 @@ from rac.services.resolve import (
     find_artifacts,
     resolve_artifact,
 )
-from rac.services.review import build_review
+from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
 from rac.services.revisions import NotAGitRepository, RevisionNotFound
 from rac.services.skill import SkillFileExists, install_skills
 from rac.services.stats import collect_stats
@@ -392,7 +392,12 @@ def cmd_review(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
-    report = build_review(args.directory, recursive=not args.top_level)
+    if args.stale_after is not None and args.stale_after < 0:
+        print("rac: --stale-after must be a non-negative number of days", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    report = build_review(
+        args.directory, recursive=not args.top_level, stale_after_days=args.stale_after
+    )
     if args.json:
         print(outputs.render_review_json(report))
     else:
@@ -993,6 +998,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--recursive",
         action="store_true",
         help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_review.add_argument(
+        "--stale-after",
+        dest="stale_after",
+        nargs="?",
+        type=int,
+        const=DEFAULT_STALE_AFTER_DAYS,
+        default=None,
+        metavar="DAYS",
+        help=(
+            "Add an advisory write-cadence finding when no artifact has been "
+            f"committed within DAYS (default {DEFAULT_STALE_AFTER_DAYS} when given "
+            "without a value). Informational; never fails the review. Needs git "
+            "history."
+        ),
     )
     p_review.set_defaults(func=cmd_review)
 
