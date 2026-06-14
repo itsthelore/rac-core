@@ -786,6 +786,48 @@ rac init docs/ --json
 
 ---
 
+## quickstart
+
+Guided first run: establish the repository identity **and** scaffold a first
+artifact in one step. It is `rac init` followed by `rac new`, collapsed into a
+single command, so a new user reaches a validatable artifact without assembling
+the sequence. It writes one starter artifact (the canonical template, with a
+system-assigned id) under `rac/<family>/`, and only into an empty corpus — a
+corpus that already holds an artifact is refused, untouched (ADR-044).
+
+- **Input:** `rac quickstart [directory]` — defaults to the current directory.
+- **Options:** `--key KEY` (default `RAC`) · `--type TYPE` (default
+  `requirement`; any name from `rac templates`) · `--json`
+- **Exit codes:** `0` identity established and starter artifact created · `1`
+  the corpus already has artifacts, or a different key is established (nothing
+  written) · `2` invalid key, unknown type, or not a directory
+
+Like `rac init`, on a real terminal it asks the one-time usage-sharing question
+(never with `--json`, in pipes, or in CI).
+
+```bash
+rac quickstart
+rac quickstart --type decision
+rac quickstart docs/ --key PROJ --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "repository_key": "RAC",
+  "config_path": "./.rac/config.yaml",
+  "created": true,
+  "artifact": {
+    "type": "requirement",
+    "path": "rac/requirements/first-requirement.md",
+    "id": "RAC-..."
+  }
+}
+```
+
+
+---
+
 ## resolve
 
 Resolve an artifact ID to its type, title, and path. Matching is

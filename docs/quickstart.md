@@ -26,8 +26,24 @@ rac --version
 
 ## 2. Create your first artifact
 
-RAC works on plain Markdown files. The fastest way to start a well-formed artifact
-is to scaffold one from a schema template:
+The fastest path is one command. From your repository root:
+
+```bash
+rac quickstart
+```
+
+That establishes your repository identity (`.rac/config.yaml`) and scaffolds a
+first requirement under `rac/requirements/first-requirement.md`, then prints the
+single next step — `rac validate <path>`. Edit the `TODO` placeholders and you
+have a valid artifact. Use `--type decision` (or any name from `rac templates`)
+to start with a different artifact type.
+
+> Prefer the steps explicitly? `rac init` establishes the identity namespace and
+> `rac new <type> <path>` scaffolds one artifact; `rac quickstart` just does both
+> at once for an empty corpus. See [cli.md](cli.md).
+
+If you would rather hand-author the file, scaffold the body from a schema
+template instead:
 
 ```bash
 rac schema requirement --template > login-flow.md
@@ -56,8 +72,9 @@ first-class authentication flow, so access control is inconsistent across the ap
 - Authentication-related support tickets drop by half within one quarter.
 ```
 
-> RAC classifies artifacts by their `##` section headings — there is no `init`
-> command and no front matter to memorize. See [artifacts.md](artifacts.md).
+> RAC classifies artifacts by their `##` section headings — no front matter to
+> memorize. (Identity ids in frontmatter are assigned for you by `rac new` and
+> `rac quickstart`.) See [artifacts.md](artifacts.md).
 
 ## 3. Validate it
 

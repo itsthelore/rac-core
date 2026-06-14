@@ -43,6 +43,7 @@ Claude Desktop / Cursor (`mcpServers` in the client config):
 ## Author and enforce artifacts
 
 ```bash
+rac quickstart             # one command: set up identity + scaffold your first artifact
 rac validate rac/          # check every artifact in a directory
 rac inspect requirement.md # see its type and completeness
 rac review rac/            # full repository review, worst problems first
