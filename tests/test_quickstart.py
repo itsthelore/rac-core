@@ -169,3 +169,87 @@ def test_cli_quickstart_missing_directory_exit_2(tmp_path):
     with pytest.raises(SystemExit) as exc:
         main(["quickstart", str(tmp_path / "nope")])
     assert exc.value.code == 2
+
+
+# --- usage-sharing prompt parity with `rac init` (ADR-041) --------------------
+#
+# quickstart is the new first-run entry point, so it carries the same one-time
+# consent question as `rac init`: TTY-gated, default No, never with --json,
+# asked at most once per machine.
+
+
+def _tty(monkeypatch, stdin: bool, stdout: bool) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: stdin)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: stdout)
+
+
+@pytest.fixture()
+def _consent_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    return tmp_path
+
+
+def test_quickstart_prompt_yes_records_consent(tmp_path, _consent_home, monkeypatch, capsys):
+    from rac import consent
+
+    (tmp_path / "repo").mkdir()
+    _tty(monkeypatch, True, True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    assert main(["quickstart", str(tmp_path / "repo")]) == 0
+    record = consent.load_consent()
+    assert record.share_usage is True
+    assert "rac telemetry status" in capsys.readouterr().out
+
+
+def test_quickstart_prompt_default_no_is_persisted_and_asked_once(
+    tmp_path, _consent_home, monkeypatch
+):
+    from rac import consent
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    _tty(monkeypatch, True, True)
+    asked: list[str] = []
+
+    def _input(prompt: str) -> str:
+        asked.append(prompt)
+        return ""
+
+    monkeypatch.setattr("builtins.input", _input)
+    assert main(["quickstart", str(tmp_path / "a")]) == 0
+    assert len(asked) == 1
+    assert "[y/N]" in asked[0]
+    assert consent.consent_recorded() is True
+    assert consent.load_consent().share_usage is False
+    # The question is never asked twice on the same machine.
+    assert main(["quickstart", str(tmp_path / "b")]) == 0
+    assert len(asked) == 1
+
+
+def test_quickstart_never_prompts_without_a_tty(tmp_path, _consent_home, monkeypatch):
+    from rac import consent
+
+    (tmp_path / "repo").mkdir()
+    _tty(monkeypatch, False, False)
+
+    def _forbidden(prompt: str) -> str:  # pragma: no cover - must not run
+        raise AssertionError("input() must not be called without a TTY")
+
+    monkeypatch.setattr("builtins.input", _forbidden)
+    assert main(["quickstart", str(tmp_path / "repo")]) == 0
+    assert consent.consent_recorded() is False
+
+
+def test_quickstart_json_never_prompts(tmp_path, _consent_home, monkeypatch, capsys):
+    from rac import consent
+
+    (tmp_path / "repo").mkdir()
+    _tty(monkeypatch, True, True)
+
+    def _forbidden(prompt: str) -> str:  # pragma: no cover - must not run
+        raise AssertionError("input() must not be called with --json")
+
+    monkeypatch.setattr("builtins.input", _forbidden)
+    assert main(["quickstart", str(tmp_path / "repo"), "--json"]) == 0
+    json.loads(capsys.readouterr().out)  # machine output stays pure JSON
+    assert consent.consent_recorded() is False
