@@ -34,6 +34,7 @@ nav:
   - Watchkeeper: watchkeeper.md
   - Artifacts: artifacts.md
   - Relationships: relationships.md
+  - OKF Profile: okf-profile.md
   - Repository Workflow: repo-workflow.md
   - Examples: examples.md
   - Ecosystem: ecosystem.md

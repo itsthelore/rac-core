@@ -8,6 +8,16 @@ details, release history over commit history.
 
 ### Added
 
+- OKF carrier profile recorded (ADR-046 + `rac-okf-carrier-profile`): RAC
+  adopts Google's Open Knowledge Format (OKF v0.1 Draft) as an informative
+  carrier profile and a derived export target — never a foundation. RAC repos
+  are conformant OKF bundles (RAC `type` maps to OKF `type`: decision→ADR,
+  requirement→Requirement, and so on), and a future derived OKF bundle view
+  joins the JSON/Portal export. RAC's normativity is unchanged — `rac validate`
+  and `rac relationships --validate` keep rejecting what they reject today. The
+  profile is documented in `docs/okf-profile.md`; the dependency is informative
+  and pinned to OKF v0.1, with no code or package dependency on OKF tooling.
+
 - Watchkeeper GitHub Action and reusable workflow (v0.12.3): a composite
   `action.yml` at the repository root (`uses:
   tcballard/requirements-as-code@<tag>`) and a callable

@@ -1,0 +1,116 @@
+# OKF Profile
+
+RAC stores product knowledge the same way [Google Cloud's Open Knowledge Format
+(OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+does — a Git tree of Markdown files with YAML front matter. This page is RAC's
+**informative profile** of OKF **v0.1 Draft**: it defines how a RAC repository
+presents itself as a conformant OKF bundle. It is a derived, interoperability
+view; RAC Core and `rac validate` remain the source of truth, and adopting this
+profile loosens none of RAC's guarantees. The decision behind it is
+[ADR-046](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-046-okf-carrier-profile.md),
+scoped by the `rac-okf-carrier-profile` requirement.
+
+> The key words MUST, SHOULD, and MAY in this document are to be interpreted as
+> described in BCP 14 (RFC 2119, RFC 8174) when, and only when, they appear in
+> all capitals.
+
+## Type mapping (normative)
+
+Every RAC artifact carries a `type` in its front matter. In the OKF bundle view
+each artifact MUST present a non-empty OKF `type`, mapped from its RAC `type`:
+
+| RAC `type`    | OKF `type`    |
+| ------------- | ------------- |
+| `requirement` | `Requirement` |
+| `decision`    | `ADR`         |
+| `roadmap`     | `Roadmap`     |
+| `prompt`      | `Prompt`      |
+| `design`      | `Design`      |
+
+The RAC `type` is authoritative; the OKF `type` is derived from it. A RAC
+artifact MUST NOT present an empty or unmapped OKF `type`.
+
+### Worked example
+
+A RAC decision artifact:
+
+```yaml
+---
+schema_version: 1
+id: RAC-KV2KWK55FC49
+type: decision
+---
+# ADR-046: OKF as an Informative Carrier Profile
+```
+
+presents, in the OKF bundle view, as `type: ADR` — the same file, the same body,
+a derived front-matter projection.
+
+## Conventions (recommended)
+
+Where RAC has gaps, a RAC repository SHOULD adopt the following OKF conventions.
+Each is a derived output generated from the corpus, never a hand-maintained
+source file.
+
+### `index.md` — progressive disclosure
+
+An OKF bundle SHOULD ship an `index.md` entry point that discloses the corpus in
+layers: an overview, then the artifact types, then individual artifacts. It is
+the front door for a human or agent that has never seen the bundle.
+
+```markdown
+# Knowledge Index
+
+## Decisions
+- [ADR-046: OKF as an Informative Carrier Profile](rac/decisions/adr-046-okf-carrier-profile.md)
+  — RAC adopts OKF as an informative carrier profile and derived export target.
+
+## Requirements
+- [REQ-OKF-Carrier-Profile](rac/requirements/rac-okf-carrier-profile.md)
+  — conformance, derived bundle export, and the no-loosening invariant.
+```
+
+### `log.md` — date-grouped history
+
+An OKF bundle SHOULD ship a `log.md` recording how the corpus evolved, grouped
+by date, newest-first. RAC derives this from Git history of the `rac/` tree
+(consistent with ADR-045: recency is derived from Git, not stored in front
+matter), so it never drifts from reality.
+
+```markdown
+# Log
+
+## 2026-06-14
+- Added ADR-046 (OKF as an informative carrier profile).
+- Added REQ-OKF-Carrier-Profile (conformance, profile, and bundle export).
+```
+
+### `# Citations` — body references
+
+Where a RAC artifact wants a human-facing list of what it draws on, it SHOULD use
+a `# Citations` body section. This complements — and never replaces — RAC's typed
+`## Related <Type>` structural references, which remain the machine-resolved,
+validated edges (see [relationships](relationships.md) and ADR-016). In the
+derived OKF view, each resolved structural relationship also appears as a body
+link, so the relationship survives for permissive OKF consumers.
+
+```markdown
+# Citations
+
+- [ADR-016: Relationships as Explicit Structural References](rac/decisions/adr-016-relationships-as-structural-references.md)
+- [ADR-007: JSON Contract Stability](rac/decisions/adr-007-json-contract-stability.md)
+```
+
+## Status of this profile
+
+The dependency on OKF is **informative and pinned to OKF v0.1**. RAC takes no
+code, package, or network dependency on OKF or Google tooling. OKF is a pre-1.0,
+single-vendor draft; if it diverges materially at 1.0, RAC can re-pin or drop the
+profile without touching Core. Promoting the OKF bundle to a frozen RAC contract
+(alongside the JSON/Portal export) would extend RAC's stability obligations and
+is therefore a future, separately recorded ADR — not a change to this page.
+
+## See also
+
+- [relationships.md](relationships.md) — how RAC's typed structural references work.
+- [artifacts.md](artifacts.md) — artifact types and identity.
