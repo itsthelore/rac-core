@@ -67,6 +67,10 @@ Comparison sources, verified 2026-06-12:
 - Lore / RAC cells: this repository (README, docs/, rac/).
 -->
 
+## How this relates to OKF
+
+Google's Open Knowledge Format (OKF) standardises the *carrier* — a Git tree of Markdown with YAML front matter — and is deliberately permissive: consumers must not reject a bundle for missing fields, unknown types, or broken links. OKF says *"if you can `cat` it, you can read it."* RAC says *"and CI guarantees the file is well-formed, the decision is consistent, and nothing points at a superseded artifact."* OKF is read-time interchange; RAC is **write-time enforcement** — deterministic, cross-artifact validation (referential integrity, status-consistency, illegal-edge detection) that fails your build before bad knowledge lands. A RAC repo *is* a conformant OKF bundle (`rac export --okf`), so you get the interchange for free and keep the enforcement OKF leaves out (ADR-048, ADR-049).
+
 ## How Lore earns trust
 
 Lore asks you to trust it with your product knowledge, so it holds itself to the same standard it applies to your repository:
