@@ -38,6 +38,8 @@ code.claude.com/docs/en/skills). RAC should ship one.
 
 - [REQ-008] Every bundled skill is installable by name (`rac skill install <name>`), all bundled skills install together when no name is given (refusing all-or-nothing if any target exists), `rac skill list` enumerates them, and each skill carries its own packaged-resource/dogfood byte-equality test.
 
+- [REQ-009] A bundled single-document import skill (`rac-import`) reshapes one existing document into one valid RAC artifact: it reads the real schema with `rac schema`, drafts only from source content (flagging required sections the source does not cover, never fabricating), requires explicit human confirmation of the artifact type, title, and any relationships before any file is written, scaffolds with `rac new` (which mints the id), and closes on `rac validate`. It is single-document by scope (refusing batch/directory/wiki import and pointing to `rac-ingest`), proposes relationships only from links the source itself names, and adds no AI to RAC core.
+
 ## Success Metrics
 
 - The skill file exists at the documented path and is valid per the
@@ -72,6 +74,7 @@ code.claude.com/docs/en/skills). RAC should ship one.
 - v1.4-claude-skills
 - v0.10.5-bundled-agent-skill
 - v0.10.5-review-and-ingest-skills
+- v0.17.0-single-document-import-skill
 
 ## Related Requirements
 
