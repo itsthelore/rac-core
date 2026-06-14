@@ -1026,3 +1026,48 @@ The install `--json` form reports one entry per installed skill:
   ]
 }
 ```
+
+---
+
+## hook
+
+Install or list the bundled git hooks. Two hooks are bundled: `post-commit`
+(an advisory write-cadence nudge that prints when the corpus has gone quiet and
+**never blocks** a commit) and `pre-commit` (validates staged Markdown
+artifacts and blocks the commit on errors). Hook scripts ship with the
+distribution as package resources, so installation works from an installed
+wheel without this repository.
+
+- **Input:** `rac hook install` — install one hook. `rac hook list` —
+  enumerate the bundle.
+- **Options:** `--style post-commit|pre-commit` (default: `post-commit`;
+  install only) · `--dir PATH` (target git repository; default: current
+  directory) · `--json`
+- **Exit codes:** `0` installed / listed · `1` the target hook file already
+  exists (never overwritten), or a packaged hook resource is missing (broken
+  installation) · `2` `--dir` is not a directory, has no `.git`, or an unknown
+  `--style`
+
+`rac hook install` writes the script to `<dir>/.git/hooks/<style>` and makes it
+executable. An existing hook file is never overwritten. The default
+`post-commit` hook is non-blocking by design — the nudge builds the write habit
+without punishing it; choose `--style pre-commit` only when you want validation
+enforced at commit time. Because `.git/hooks` is not version-controlled, run the
+install once per clone (or manage `core.hooksPath` yourself).
+
+```bash
+rac hook install                       # post-commit advisory nudge
+rac hook install --style pre-commit    # blocking artifact validation
+rac hook list                          # what is bundled
+```
+
+```json
+{
+  "schema_version": "1",
+  "installed": true,
+  "hook": {
+    "style": "post-commit",
+    "path": ".git/hooks/post-commit"
+  }
+}
+```
