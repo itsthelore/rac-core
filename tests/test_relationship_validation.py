@@ -41,6 +41,36 @@ def test_identifier_matching_is_case_insensitive():
     assert report.ok  # references use ADR-004 / REQ-001 against adr-004.md / req-001.md
 
 
+# --- self-type relationships (v0.13.5) --------------------------------------
+
+_ROADMAP = "# {t}\n\n## Outcomes\n\no\n\n## Initiatives\n\ni\n"
+_DECISION = "# {t}\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n"
+
+
+def test_self_type_relationships_resolve(tmp_path):
+    (tmp_path / "v1.md").write_text(_ROADMAP.format(t="One"), encoding="utf-8")
+    (tmp_path / "v2.md").write_text(
+        _ROADMAP.format(t="Two") + "\n## Related Roadmaps\n\n- v1\n", encoding="utf-8"
+    )
+    (tmp_path / "adr-001.md").write_text(_DECISION.format(t="A1"), encoding="utf-8")
+    (tmp_path / "adr-002.md").write_text(
+        _DECISION.format(t="A2") + "\n## Related Decisions\n\n- adr-001\n", encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.relationships_checked == 2  # one roadmap->roadmap, one decision->decision
+    assert report.validation_issues == 0
+    assert report.ok
+
+
+def test_self_type_broken_reference_is_reported(tmp_path):
+    (tmp_path / "v2.md").write_text(
+        _ROADMAP.format(t="Two") + "\n## Related Roadmaps\n\n- v-missing\n", encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert not report.ok
+    assert report.validation_issues == 1
+
+
 # --- resolved repository (REQ-003 / REQ-005) --------------------------------
 
 

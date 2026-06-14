@@ -88,8 +88,10 @@ def test_legacy_references_resolve_after_frontmatter_adoption(tmp_path):
     # Migration alias (Initiative 7): adopting a canonical ID must not break
     # existing human-readable references to the legacy identity.
     (tmp_path / "adr-015-explorer.md").write_text(FRONTMATTER + DECISION_BODY, encoding="utf-8")
+    # A bare legacy alias (ADR-016: the whole line is the reference), matched
+    # case-insensitively to the filename-derived identity "adr-015".
     (tmp_path / "consumer.md").write_text(
-        DECISION_BODY + "\n## Related Decisions\n\n- ADR-015: Explorer\n",
+        DECISION_BODY + "\n## Related Decisions\n\n- ADR-015\n",
         encoding="utf-8",
     )
     report = validate_relationships(str(tmp_path))

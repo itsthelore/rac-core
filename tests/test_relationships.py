@@ -92,6 +92,33 @@ def test_inspect_extracts_multiple_references():
     assert result.relationships["related_decisions"] == ["ADR-004", "ADR-012"]
 
 
+# --- self-type relationships (v0.13.5): roadmap->roadmap, decision->decision --
+
+_ROADMAP_WITH_ROADMAP_LINK = (
+    "# Series Roadmap\n\n## Outcomes\n\no\n\n## Initiatives\n\ni\n\n"
+    "## Related Roadmaps\n\n- v0.13.0-guided-first-run\n"
+)
+_DECISION_WITH_DECISION_LINK = (
+    "# Some Decision\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n\n"
+    "## Related Decisions\n\n- adr-016\n"
+)
+
+
+def test_roadmap_exposes_related_roadmaps():
+    # Before v0.13.5 a roadmap's `## Related Roadmaps` was silently dropped: the
+    # section was not in the roadmap schema. It is now a first-class edge.
+    result = inspect_text(_ROADMAP_WITH_ROADMAP_LINK)
+    assert result.type == "roadmap"
+    assert result.relationships["related_roadmaps"] == ["v0.13.0-guided-first-run"]
+
+
+def test_decision_exposes_related_decisions():
+    # Likewise a decision's `## Related Decisions`, distinct from `## Supersedes`.
+    result = inspect_text(_DECISION_WITH_DECISION_LINK)
+    assert result.type == "decision"
+    assert result.relationships["related_decisions"] == ["adr-016"]
+
+
 def test_inspect_json_includes_relationships(capsys):
     rc = main(["inspect", fixture_path("relationships", "requirement_with_links.md"), "--json"])
     assert rc == 0
