@@ -71,6 +71,7 @@ from .json import (
 )
 from .okf import render_okf_bundle
 from .portal import render_export_html
+from .sarif import render_validate_sarif
 from .templates import render_improve_template, render_schema_template
 
 __all__ = [
@@ -132,6 +133,7 @@ __all__ = [
     "render_unknown_schema",
     "render_validate_dir_human",
     "render_validate_dir_json",
+    "render_validate_sarif",
     "render_validation_human",
     "render_validation_json",
     "render_watchkeeper_github",
