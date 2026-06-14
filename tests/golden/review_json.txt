@@ -3,6 +3,7 @@
   "directory": "tests/fixtures/portfolio",
   "recursive": true,
   "ok": false,
+  "empty": false,
   "artifacts": {
     "total": 4,
     "by_type": {

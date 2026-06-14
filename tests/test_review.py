@@ -168,6 +168,7 @@ def test_cli_json_contract(capsys):
         "directory",
         "recursive",
         "ok",
+        "empty",
         "artifacts",
         "validation",
         "relationships",
@@ -175,6 +176,7 @@ def test_cli_json_contract(capsys):
         "issues",
         "actions",
     }
+    assert payload["empty"] is False
     assert payload["artifacts"]["total"] == 6
     assert payload["artifacts"]["by_type"]["unknown"] == 1
     assert len(payload["artifacts"]["unknown_paths"]) == 1
