@@ -15,7 +15,7 @@ Commands:
                     [--no-annotate]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
-    rac export [directory] [--json | --html] [--out PATH]
+    rac export [directory] [--json | --html | --okf] [--out PATH]
     rac explorer [directory] [--top-level]
     rac mcp [--root PATH] [--telemetry]
     rac mcp-stats [--json | --share]
@@ -42,7 +42,8 @@ Exit codes:
        produced, even from an empty or missing telemetry log; telemetry
        consent shown or changed, including when no endpoint key is
        configured; export payload produced — JSON to stdout, or the
-       --html Portal file written, an empty corpus included; watchkeeper
+       --html Portal file or --okf bundle written, an empty corpus
+       included; watchkeeper
        comparison with nothing requiring attention under the chosen
        --fail-on policy, always with --fail-on none)
     1  validate: errors found; stats: no valid known artifacts; ingest:
@@ -61,7 +62,7 @@ Exit codes:
        refuse-to-overwrite, missing output directory, repository not
        initialized, invalid repository key, explorer extra not installed,
        mcp --root not a directory, skill --dir not a directory, unknown
-       skill name, export --out without --html or unwritable, missing or
+       skill name, export --out without --html/--okf or unwritable, missing or
        corrupt vendored portal shell, watchkeeper revision unknown or
        directory not inside a git repository)
 """
@@ -117,6 +118,7 @@ from rac.services.inspect import build_inspection, inspect_directory
 from rac.services.migrate import migrate_metadata
 from rac.services.portfolio import build_portfolio_summary
 from rac.services.quickstart import DEFAULT_TYPE, CorpusNotEmpty, quickstart
+from rac.services.recency import artifact_recency
 from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
@@ -484,11 +486,28 @@ def cmd_export(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
-    if args.out is not None and not args.html:
-        print("rac: --out requires --html (--json writes to stdout)", file=sys.stderr)
+    if args.out is not None and not (args.html or args.okf):
+        print("rac: --out requires --html or --okf (--json writes to stdout)", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
 
     export = build_corpus_export(args.directory)
+
+    # OKF bundle (ADR-048): a derived tree of Markdown files written to a
+    # directory, parallel to the JSON/HTML views. Recency feeds log.md (ADR-045).
+    if args.okf:
+        bundle = outputs.render_okf_bundle(export, artifact_recency(args.directory), args.directory)
+        out = args.out if args.out is not None else "okf-bundle"
+        try:
+            for rel, content in sorted(bundle.items()):
+                dest = Path(out) / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            print(f"rac: cannot write {out}: {exc}", file=sys.stderr)
+            raise SystemExit(EXIT_USAGE) from None
+        edges = len(export.relationships)
+        print(f"wrote {out}/ — {export.artifact_count} artifact(s), {edges} relationship(s)")
+        return EXIT_OK
 
     # JSON is the default mode (unlike sibling commands): the payload *is* the
     # product, and stdout keeps it pipeable. --json is an explicit no-op.
@@ -1178,11 +1197,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inject the payload into the vendored Portal shell and write one "
         "self-contained HTML file.",
     )
+    export_mode.add_argument(
+        "--okf",
+        action="store_true",
+        help="Write a derived OKF v0.1 bundle (one Markdown file per artifact, "
+        "plus index.md and log.md) to a directory.",
+    )
     p_export.add_argument(
         "--out",
         default=None,
-        help="Where --html writes the Portal (default: lore-export.html). "
-        "Exports are build artifacts: an existing file is overwritten.",
+        help="Where --html writes the Portal (default: lore-export.html) or "
+        "--okf writes the bundle directory (default: okf-bundle). "
+        "Exports are build artifacts: existing output is overwritten.",
     )
     p_export.set_defaults(func=cmd_export)
 
