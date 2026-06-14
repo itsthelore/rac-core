@@ -196,8 +196,8 @@ This is outside the purpose of Requirements-as-Code and would significantly incr
 
 ## Related Decisions
 
-* ADR-002 — AI Optional
-* ADR-013 — Git as System of Record
-* ADR-014 — Viewer Agnostic
-* ADR-015 — Repository Intelligence
-* ADR-016 — Knowledge Graph Deferred
+* ADR-002
+* ADR-013
+* ADR-014
+* ADR-015
+* ADR-016

@@ -190,7 +190,6 @@ RAC Explorer may provide asset previews while continuing to treat assets as supp
 
 ## Related Decisions
 
-- ADR-001 Markdown First
-- ADR-014 Viewer-Agnostic Knowledge Artifacts
-- ADR-015 Explorer as Consumer
-```
+- ADR-001
+- ADR-014
+- ADR-015
