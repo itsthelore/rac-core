@@ -74,7 +74,7 @@ outcome, duration — never argv, paths, or content) into a separate local
 log, gated by the existing `rac telemetry` consent rather than a
 per-invocation flag, with the same never-raise, write-only posture as the
 Guide recorder. This is a new instrumentation surface and a new opt-in
-anchor, so it carries its own decision, ADR-044 — chiefly because the
+anchor, so it carries its own decision, ADR-046 — chiefly because the
 Guide's visible per-invocation `--telemetry` flag cannot sensibly gate
 one-shot commands, and ADR-040 rejected silent config/env enablement.
 
@@ -88,7 +88,7 @@ string-only, user-submits flow.
 
 ## Constraints
 
-- Content-free (ADR-040, ADR-044): no argv, artifact IDs, query strings,
+- Content-free (ADR-040, ADR-046): no argv, artifact IDs, query strings,
   paths, or repository content in any recorded event; the absent fields
   are tests, not comments.
 - Determinism (ADR-032): recording is write-only observability; command
@@ -134,7 +134,7 @@ string-only, user-submits flow.
   as considered, not scheduled.
 - Coupling CLI recording to the ADR-041 consent record surprises a user
   who wanted only the remote ping. Mitigation: `rac telemetry status`
-  states plainly what consent enables (see ADR-044).
+  states plainly what consent enables (see ADR-046).
 
 ## Related Decisions
 
@@ -142,7 +142,7 @@ string-only, user-submits flow.
 - ADR-035
 - ADR-040
 - ADR-041
-- ADR-044
+- ADR-046
 
 ## Related Requirements
 

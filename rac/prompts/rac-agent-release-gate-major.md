@@ -185,4 +185,4 @@ Give a short checklist of the next changes to make.
 
 ## Related Decisions
 
-- ADR-045
+- ADR-047

@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KV2J0GYNCAJF
 type: decision
 ---
-# ADR-045: Agent Operating-Guidance Documents Are Prompt Artifacts
+# ADR-047: Agent Operating-Guidance Documents Are Prompt Artifacts
 
 ## Status
 
@@ -64,7 +64,7 @@ mapping is the canonical reading for any future guidance prompt:
   illustrations, and how to tell adherence succeeded, where the document
   carries them.
 
-Each guidance prompt declares `Related Decisions: ADR-045` so the link
+Each guidance prompt declares `Related Decisions: ADR-047` so the link
 between the convention and the artifacts is traceable. Relationship
 sections must contain resolvable artifact references only; prose
 "requirements" or "decisions" are folded into the body rather than left in

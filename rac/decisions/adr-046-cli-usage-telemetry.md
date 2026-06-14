@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KV2E9HYHVV8G
 type: decision
 ---
-# ADR-044: CLI Usage Telemetry
+# ADR-046: CLI Usage Telemetry
 
 ## Status
 

@@ -40,4 +40,4 @@ session.
 
 ## Related Decisions
 
-- ADR-045
+- ADR-047

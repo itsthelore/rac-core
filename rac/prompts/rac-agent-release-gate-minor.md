@@ -48,4 +48,4 @@ resolved before the release proceeds.
 
 ## Related Decisions
 
-- ADR-045
+- ADR-047

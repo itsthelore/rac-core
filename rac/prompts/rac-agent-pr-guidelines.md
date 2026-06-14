@@ -162,4 +162,4 @@ the decisions behind it without the original planning conversation.
 
 ## Related Decisions
 
-- ADR-045
+- ADR-047

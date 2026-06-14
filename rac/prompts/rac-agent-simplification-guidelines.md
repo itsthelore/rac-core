@@ -87,4 +87,4 @@ Use step-based commits, not per-file commits:
 
 ## Related Decisions
 
-- ADR-045
+- ADR-047

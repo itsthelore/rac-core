@@ -91,7 +91,7 @@ write-only posture as `TelemetryRecorder`. Opt-in is the existing
 Guide's visible `--telemetry` flag cannot sensibly gate one-shot commands
 and ADR-040 rejected silent config/env enablement. This is a new
 instrumentation surface and a new opt-in anchor, so it carries its own
-decision, ADR-044. Touch points: a recorder hook around dispatch in
+decision, ADR-046. Touch points: a recorder hook around dispatch in
 `src/rac/cli.py` (`main` calling `args.func(args)`); consent gating via
 `src/rac/consent.py`; aggregation alongside `summarize`.
 
@@ -105,7 +105,7 @@ flow.
 
 ## Constraints
 
-- Content-free (ADR-040, ADR-044): no argv, artifact IDs, query strings,
+- Content-free (ADR-040, ADR-046): no argv, artifact IDs, query strings,
   paths, or repository content in any recorded event; the absent fields are
   asserted by test, not comment.
 - Determinism (ADR-032): recording is write-only observability; command and
@@ -128,7 +128,7 @@ view earns return visits before paying for broader instrumentation. Layer B
 is justified only if the Guide-MCP-only signal proves too narrow to be
 interesting. Anchoring CLI opt-in to the existing consent record, rather
 than inventing a third mechanism, keeps the user reasoning about "share my
-usage" once; the coupling cost is recorded in ADR-044.
+usage" once; the coupling cost is recorded in ADR-046.
 
 ## Alternatives
 
@@ -136,7 +136,7 @@ usage" once; the coupling cost is recorded in ADR-044.
   taken (corpus summary) and most of the read-back already exists in
   `rac mcp-stats`; the work is enhancement, not greenfield.
 - Per-invocation `--telemetry` flag for CLI usage: rejected — nobody types
-  it on every command, so it records nothing; see ADR-044.
+  it on every command, so it records nothing; see ADR-046.
 - A silent env var or config flag for CLI telemetry: rejected — reintroduces
   the "persistent invisible state" ADR-040 refused.
 - Recording richer signal (which artifacts/queries agents reach for):
@@ -164,7 +164,7 @@ before submitting.
 
 - The retention window N for the recent-activity trend (Layer A).
 - Whether to split consent so a user can take the remote ping without local
-  CLI recording, or keep one consent for both (ADR-044 keeps one for now).
+  CLI recording, or keep one consent for both (ADR-046 keeps one for now).
 - The final name and version of the unified read-back command, settled when
   the series is scheduled.
 
@@ -179,7 +179,7 @@ before submitting.
 - ADR-035
 - ADR-040
 - ADR-041
-- ADR-044
+- ADR-046
 
 ## Related Roadmaps
 

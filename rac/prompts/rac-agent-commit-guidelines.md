@@ -241,4 +241,4 @@ external context.
 
 ## Related Decisions
 
-- ADR-045
+- ADR-047
