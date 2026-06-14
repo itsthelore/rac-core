@@ -50,6 +50,25 @@ rac review rac/            # full repository review, worst problems first
 rac export rac/ --html --out lore-export.html    # the Portal, one file
 ```
 
+## Importing an existing decision
+
+Already have decisions in Confluence, Notion, or loose Markdown? The `rac-import`
+agent skill turns **one** existing document into **one** valid RAC artifact, with
+a human-review step before anything is written.
+
+```bash
+rac skill install rac-import   # installs into .claude/skills/ (Claude Code / Cursor auto-discover)
+```
+
+Then ask your agent, in plain language: *"import this decision doc into RAC"*
+(paste the text or give a path). The skill reads the real schema with
+`rac schema`, drafts the artifact from **only** what your document says, and
+shows you the proposed **type, title, and any relationships to confirm or
+correct** before it writes a file. It scaffolds with `rac new` (which mints the
+id), then closes on `rac validate` — and offers fixes if validation fails, so it
+never leaves an invalid artifact behind. It is single-document by design; for
+multi-format or bulk conversion use the `rac-ingest` skill.
+
 ## Who it's for
 
 - **Teams running coding agents heavily** (Claude Code, Cursor) who are tired of the agent ignoring decisions the team already made.
