@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from .artifacts import spec_for
+from .artifacts import ArtifactSpec, spec_for
 from .classification import classify
 from .identity import identity_conflict
 from .models import Issue, Product
@@ -47,7 +47,35 @@ def validate(product: Product) -> list[Issue]:
         return issues + _validate_prompt(product)
     if artifact_type == "design":
         return issues + _validate_design(product)
+    if artifact_type == "requirement":
+        spec = spec_for("requirement")
+        assert spec is not None  # the requirement spec always exists
+        return issues + _validate_requirement(product) + _validate_status_metadata(product, spec)
+    # Unknown/legacy fallback: requirement rules only, no constrained metadata.
     return issues + _validate_requirement(product)
+
+
+def _validate_status_metadata(product: Product, spec: ArtifactSpec) -> list[Issue]:
+    """Constrained metadata: a present value must be in the type's allowed set.
+
+    Generalised across all artifact types (ADR-051): a missing section is fine —
+    metadata is optional. The issue code is per-type (``invalid-<type>-<field>``)
+    so ``invalid-decision-status`` is unchanged (ADR-007) and other types gain
+    their own codes.
+    """
+    issues: list[Issue] = []
+    for field_name, allowed in spec.metadata.items():
+        body = product.sections.get(field_name, "")
+        value = _first_value(body)
+        if value and not any(value.casefold() == a.casefold() for a in allowed):
+            issues.append(
+                Issue(
+                    "error",
+                    f"invalid-{spec.name}-{field_name}",
+                    f"## {field_name.title()} value {value!r} is not one of: {', '.join(allowed)}.",
+                )
+            )
+    return issues
 
 
 def _validate_metadata(product: Product) -> list[Issue]:
@@ -118,19 +146,9 @@ def _validate_decision(product: Product) -> list[Issue]:
                 )
             )
 
-    # Constrained metadata: a present value must be in the allowed set. A missing
-    # section is fine — metadata is optional (REQ-007).
-    for field_name, allowed in spec.metadata.items():
-        body = product.sections.get(field_name, "")
-        value = _first_value(body)
-        if value and not any(value.casefold() == a.casefold() for a in allowed):
-            issues.append(
-                Issue(
-                    "error",
-                    f"invalid-decision-{field_name}",
-                    f"## {field_name.title()} value {value!r} is not one of: {', '.join(allowed)}.",
-                )
-            )
+    # Constrained metadata (status, category): a present value must be in the
+    # allowed set. A missing section is fine — metadata is optional (REQ-007).
+    issues += _validate_status_metadata(product, spec)
 
     return issues
 
@@ -139,8 +157,9 @@ def _validate_roadmap(product: Product) -> list[Issue]:
     """Validate a Roadmap artifact (REQ-003).
 
     Required sections (Outcomes, Initiatives) must be present; missing recommended
-    sections never fail. Roadmaps carry no constrained metadata (no owners, dates,
-    or status — ADR-017: RAC manages knowledge, not work).
+    sections never fail. Status is an optional, validated lifecycle field
+    (ADR-051: Planned/Superseded/Abandoned) — knowledge currency, never work or
+    delivery state (ADR-017).
     """
     spec = spec_for("roadmap")
     assert spec is not None  # the roadmap spec always exists
@@ -169,6 +188,7 @@ def _validate_roadmap(product: Product) -> list[Issue]:
                 )
             )
 
+    issues += _validate_status_metadata(product, spec)
     return issues
 
 
@@ -176,8 +196,9 @@ def _validate_prompt(product: Product) -> list[Issue]:
     """Validate a Prompt artifact (REQ-006).
 
     Required sections (Objective, Input, Instructions, Output) must be present;
-    missing recommended/optional sections never fail or warn. Prompts carry no
-    metadata and are never executed (REQ-011) — RAC treats them as knowledge.
+    missing recommended/optional sections never fail or warn. Status is an
+    optional, validated lifecycle field (ADR-051: Active/Deprecated); prompts are
+    never executed (REQ-011) — RAC treats them as knowledge.
 
     Section presence is checked against the raw headings, consistent with the
     Decision and Roadmap validators; the Prompt spec's synonyms are a
@@ -210,6 +231,7 @@ def _validate_prompt(product: Product) -> list[Issue]:
                 )
             )
 
+    issues += _validate_status_metadata(product, spec)
     return issues
 
 
@@ -217,8 +239,9 @@ def _validate_design(product: Product) -> list[Issue]:
     """Validate a Design artifact (v0.6.3).
 
     Required sections (Context, User Need, Design, Constraints) must be present;
-    missing recommended/optional sections never fail or warn. Designs carry no
-    metadata and are knowledge artifacts, not UI renderings or component systems.
+    missing recommended/optional sections never fail or warn. Status is an
+    optional, validated lifecycle field (ADR-051); designs are knowledge
+    artifacts, not UI renderings or component systems.
     """
     spec = spec_for("design")
     assert spec is not None  # the design spec always exists
@@ -247,6 +270,7 @@ def _validate_design(product: Product) -> list[Issue]:
                 )
             )
 
+    issues += _validate_status_metadata(product, spec)
     return issues
 
 

@@ -7,7 +7,9 @@ type: requirement
 
 ## Status
 
-Proposed — drafted to open the discussion; nothing here is scheduled.
+Proposed
+
+Drafted to open the discussion; nothing here is scheduled.
 
 ## Problem
 

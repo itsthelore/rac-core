@@ -37,6 +37,11 @@ class ArtifactSpec:
     # A value present in one of these sections that is not in its allowed set is
     # a validation error; a missing section is not (metadata stays optional).
     metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Lifecycle status values that mark an artifact as retired (ADR-051): a subset
+    # of ``metadata["status"]``. The single, declarative source of truth the
+    # status-consistency rule reads to decide a target is no longer live. Empty
+    # when the type declares no status enum.
+    retired_status: tuple[str, ...] = ()
     # Short authoring hints per normalized section name, surfaced by `rac improve
     # --template` as guidance comments. Optional; sections without a hint render
     # without one.
@@ -115,6 +120,10 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related requirements",
         ),
+        # Lifecycle status (ADR-051): optional, validated-if-present. Status stays
+        # a knowledge lifecycle (current vs replaced), never work/delivery state.
+        metadata={"status": ("Proposed", "Accepted", "Superseded", "Deprecated")},
+        retired_status=("Superseded", "Deprecated"),
         descriptions={
             "problem": "The user or business problem this addresses",
             "requirements": "Numbered requirement statements, e.g. [REQ-001] ...",
@@ -176,6 +185,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
             "category": ("Architecture", "Product", "Process", "Technical", "Other"),
         },
+        retired_status=("Superseded", "Deprecated"),
         descriptions=_relationship_descriptions(
             "supersedes",
             "related requirements",
@@ -224,6 +234,11 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related roadmaps",
         ),
+        # Lifecycle status (ADR-051): Planned is the live state; Superseded /
+        # Abandoned mark replaced or dropped *intent* — knowledge states, not
+        # delivery tracking (ADR-017). Per-milestone progress stays out.
+        metadata={"status": ("Planned", "Superseded", "Abandoned")},
+        retired_status=("Superseded", "Abandoned"),
         descriptions={
             "outcomes": "The user, business, or operational outcomes this roadmap pursues",
             "initiatives": "The major bodies of work that support those outcomes",
@@ -275,6 +290,9 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related roadmaps",
             "related designs",
         ),
+        # Lifecycle status (ADR-051): Active is the live state, Deprecated retired.
+        metadata={"status": ("Active", "Deprecated")},
+        retired_status=("Deprecated",),
         descriptions={
             "objective": "What this prompt is intended to achieve",
             "input": "The information, context, or source material the prompt expects",
@@ -348,6 +366,9 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related roadmaps",
             "related prompts",
         ),
+        # Lifecycle status (ADR-051): same spine as decisions/requirements.
+        metadata={"status": ("Proposed", "Accepted", "Superseded", "Deprecated")},
+        retired_status=("Superseded", "Deprecated"),
         descriptions={
             "context": "The product area, situation, or experience this design addresses",
             "user need": "The user, audience, task, pain point, or goal this design supports",

@@ -7,7 +7,9 @@ type: roadmap
 
 ## Status
 
-Considered (unscheduled)
+Planned
+
+Unscheduled — captured as future intent, not yet on a release.
 
 ## Context
 
