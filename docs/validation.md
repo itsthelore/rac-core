@@ -69,6 +69,11 @@ rac validate rac/ --sarif > rac.sarif
 The exit code is unchanged by the output format: `rac validate` still exits `1`
 when an error-severity finding remains after overrides, and `0` otherwise.
 
+A worked example of the output is checked in at
+[`docs/examples/rac-validate.sarif.json`](examples/rac-validate.sarif.json): one
+`error` (an out-of-enum decision status), two recommended-section `warning`s, and
+a line-anchored `ambiguous-verb` finding (note the `region.startLine`).
+
 ## See also
 
 - [CLI Reference](cli.md) — all `rac validate` flags and exit codes.
