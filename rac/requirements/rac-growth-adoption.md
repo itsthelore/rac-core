@@ -28,7 +28,7 @@ should make first value fast, observable, and repeatable.
 
 - [REQ-004] The README carries a demo GIF of at most 20 seconds showing the init → author → validate loop (`rac init`, `rac new`, edit, `rac validate`), produced from the shot list in the `growth-demo-gif` design; the GIF complements the existing "90-second demo (link on launch)" placeholder and does not replace it.
 
-- [REQ-005] (Proposed, requires RAC core change) `rac init` offers an optional guided first-run path that scaffolds a `rac/` directory and a first requirement in one step, reducing the cold-start command count; recorded for prioritisation, not implemented as part of this requirement.
+- [REQ-005] `rac quickstart` offers a guided first-run path that establishes the repository identity and scaffolds a first artifact in one step, reducing the cold-start command count from three (`rac init`, `rac new`, `rac validate`) to one before the validation check; it writes a single starter artifact only into an empty corpus and refuses otherwise (ADR-044). Delivered by the v0.13.0 roadmap.
 
 ## Success Metrics
 
@@ -62,3 +62,7 @@ should make first value fast, observable, and repeatable.
 ## Related Designs
 
 - growth-demo-gif
+
+## Related Roadmaps
+
+- v0.13.0-guided-first-run
