@@ -20,6 +20,7 @@ from rac.core.classification import classify
 from rac.core.markdown import parse_file
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
+    ISSUE_EDGE_UNSUPPORTED,
     ISSUE_SELF_REFERENCE,
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
@@ -264,3 +265,68 @@ def test_non_validate_inspection_still_works(capsys):
     out = capsys.readouterr().out
     assert "Files Inspected:" in out
     assert "Validation Issues" not in out
+
+
+# --- edge-legality / no silent drop (v0.14.0, ADR-049) ----------------------
+
+_DESIGN = "# {t}\n\n## Context\n\nc\n\n## User Need\n\nn\n\n## Design\n\nd\n\n## Constraints\n\nk\n"
+
+
+def test_unsupported_relationship_section_is_reported(tmp_path):
+    # A design's schema does not declare `related designs`; today that section
+    # is silently dropped. v0.14.0 surfaces it as a finding.
+    (tmp_path / "a.md").write_text(_DESIGN.format(t="A"), encoding="utf-8")
+    (tmp_path / "b.md").write_text(
+        _DESIGN.format(t="B") + "\n## Related Designs\n\n- a\n", encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert not report.ok
+    codes = [i.code for i in report.issues]
+    assert codes.count(ISSUE_EDGE_UNSUPPORTED) == 1
+    issue = next(i for i in report.issues if i.code == ISSUE_EDGE_UNSUPPORTED)
+    assert issue.source_path.endswith("b.md")
+    assert issue.relationship == "related_designs"
+    # It is not counted as a resolved/broken reference — it produces no edge.
+    assert report.relationships_checked == 0
+
+
+def test_supersedes_on_non_decision_is_unsupported(tmp_path):
+    # `supersedes` is decision-only; a roadmap declaring it is an illegal edge.
+    (tmp_path / "v2.md").write_text(
+        _ROADMAP.format(t="Two") + "\n## Supersedes\n\n- v1\n", encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert [i.code for i in report.issues] == [ISSUE_EDGE_UNSUPPORTED]
+
+
+def test_supported_relationship_section_is_not_flagged(tmp_path):
+    # A decision MAY declare `related decisions`; it must not be edge-unsupported.
+    (tmp_path / "adr-001.md").write_text(_DECISION.format(t="A1"), encoding="utf-8")
+    (tmp_path / "adr-002.md").write_text(
+        _DECISION.format(t="A2") + "\n## Related Decisions\n\n- adr-001\n", encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    assert ISSUE_EDGE_UNSUPPORTED not in [i.code for i in report.issues]
+
+
+def test_unsupported_section_fails_cli(tmp_path):
+    (tmp_path / "b.md").write_text(
+        _DESIGN.format(t="B") + "\n## Related Designs\n\n- a\n", encoding="utf-8"
+    )
+    assert main(["relationships", str(tmp_path), "--validate"]) == 1
+
+
+def test_unsupported_section_in_json_output(tmp_path, capsys):
+    (tmp_path / "b.md").write_text(
+        _DESIGN.format(t="B") + "\n## Related Designs\n\n- a\n", encoding="utf-8"
+    )
+    main(["relationships", str(tmp_path), "--validate", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    issue = next(i for i in payload["issues"] if i["code"] == ISSUE_EDGE_UNSUPPORTED)
+    assert issue == {
+        "source_path": issue["source_path"],
+        "relationship": "related_designs",
+        "code": ISSUE_EDGE_UNSUPPORTED,
+    }
+    assert "target" not in issue  # no resolved target for a structural finding
