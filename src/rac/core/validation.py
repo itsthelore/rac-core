@@ -22,6 +22,16 @@ MAX_REQUIREMENTS = 50
 AMBIGUOUS_VERBS = ("support", "handle", "allow", "enable")
 _AMBIGUOUS_RE = re.compile(r"\b(" + "|".join(AMBIGUOUS_VERBS) + r")\b", re.IGNORECASE)
 
+# Requirements quality standards (v0.17.1, ADR-056). The normative requirement
+# verbs RAC disciplines; per RFC 8174 only their ALL-CAPS form carries normative
+# weight, so a non-uppercase occurrence inside a requirement line is ambiguous.
+_NORMATIVE_RE = re.compile(r"\b(shall|must|should)\b", re.IGNORECASE)
+_EARS_IF_RE = re.compile(r"^\s*if\b", re.IGNORECASE)
+_THEN_RE = re.compile(r"\bthen\b", re.IGNORECASE)
+# Roadmap horizon (ADR-056): now/next/later or a calendar quarter (e.g. Q3 2026).
+_HORIZON_VALUES = ("now", "next", "later")
+_QUARTER_RE = re.compile(r"^Q[1-4]\s+\d{4}$")
+
 
 def has_errors(issues: list[Issue]) -> bool:
     """True if any issue is error-severity."""
@@ -50,9 +60,79 @@ def validate(product: Product) -> list[Issue]:
     if artifact_type == "requirement":
         spec = spec_for("requirement")
         assert spec is not None  # the requirement spec always exists
-        return issues + _validate_requirement(product) + _validate_status_metadata(product, spec)
-    # Unknown/legacy fallback: requirement rules only, no constrained metadata.
+        return (
+            issues
+            + _validate_requirement(product)
+            + _validate_status_metadata(product, spec)
+            + _validate_requirement_standards(product)
+        )
+    # Unknown/legacy fallback: requirement rules only, no constrained metadata or
+    # per-type standards (an Unknown document is not linted as a requirement).
     return issues + _validate_requirement(product)
+
+
+def _validate_requirement_standards(product: Product) -> list[Issue]:
+    """Per-line requirement quality checks: BCP-14, 29148 singular, EARS (ADR-056).
+
+    Deterministic and decidable by parsing — no prose judgement (ADR-002). BCP-14
+    keyword discipline is an error inside ``requirement`` artifacts; the 29148/EARS
+    checks are warnings (legacy requirements will not comply), all overridable per
+    ADR-053. Each diagnostic names the standard and the fix.
+    """
+    issues: list[Issue] = []
+    for r in product.requirements:
+        keywords = _NORMATIVE_RE.findall(r.text)
+
+        # BCP-14: only ALL-CAPS normative keywords carry weight (RFC 8174); a
+        # lowercase/mixed-case shall/must/should is ambiguous normative language.
+        ambiguous = sorted({k for k in keywords if k != k.upper()})
+        if ambiguous:
+            issues.append(
+                Issue(
+                    "error",
+                    "requirement-normative-keyword",
+                    f"{r.id} uses non-normative {', '.join(ambiguous)!r}; only "
+                    "uppercase MUST/SHALL/SHOULD/MAY carry normative weight (BCP 14).",
+                    r.line,
+                )
+            )
+
+        # 29148 well-formed: a requirement should be singular — one normative
+        # statement per line.
+        if len(keywords) > 1:
+            issues.append(
+                Issue(
+                    "warning",
+                    "requirement-not-singular",
+                    f"{r.id} has {len(keywords)} normative keywords; a requirement "
+                    "should be singular (ISO/IEC/IEEE 29148).",
+                    r.line,
+                )
+            )
+
+        # EARS: a requirement must state a normative response; a sentence-initial
+        # "If" (unwanted-behaviour pattern) needs a "then" response clause.
+        if not keywords:
+            issues.append(
+                Issue(
+                    "warning",
+                    "requirement-non-ears",
+                    f"{r.id} has no normative keyword (SHALL/SHOULD/MAY); it does not "
+                    "state a testable requirement (EARS).",
+                    r.line,
+                )
+            )
+        elif _EARS_IF_RE.search(r.text) and not _THEN_RE.search(r.text):
+            issues.append(
+                Issue(
+                    "warning",
+                    "requirement-ears-clause",
+                    f"{r.id} opens with 'If' but has no 'then' response clause "
+                    "(EARS unwanted-behaviour pattern: If <condition> then <system> SHALL …).",
+                    r.line,
+                )
+            )
+    return issues
 
 
 def _validate_status_metadata(product: Product, spec: ArtifactSpec) -> list[Issue]:
@@ -187,6 +267,33 @@ def _validate_roadmap(product: Product) -> list[Issue]:
                     f"Roadmap is missing a ## {section.title()} section.",
                 )
             )
+
+    # Horizon (v0.17.1, ADR-056): optional, validated when present — now/next/later
+    # or a calendar quarter. Absent is fine (no horizon is forced on a roadmap).
+    horizon = _first_value(product.sections.get("horizon", ""))
+    if horizon and horizon.casefold() not in _HORIZON_VALUES and not _QUARTER_RE.match(horizon):
+        issues.append(
+            Issue(
+                "error",
+                "invalid-roadmap-horizon",
+                f"## Horizon value {horizon!r} is not one of: now, next, later, "
+                "or a quarter (e.g. Q3 2026).",
+            )
+        )
+
+    # Linkage (warning): a roadmap should advance at least one requirement or
+    # decision it links to (the edge into the graph is the roadmap's value).
+    if (
+        "related requirements" not in product.sections
+        and "related decisions" not in product.sections
+    ):
+        issues.append(
+            Issue(
+                "warning",
+                "roadmap-no-advancement-link",
+                "Roadmap links no ## Related Requirements or ## Related Decisions it advances.",
+            )
+        )
 
     issues += _validate_status_metadata(product, spec)
     return issues
