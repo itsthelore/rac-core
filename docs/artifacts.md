@@ -69,7 +69,7 @@ are Decisions written in ADR format**, not a separate type.
 
 - **Required:** Context · Decision · Consequences
 - **Recommended:** Status · Category · Alternatives Considered
-- **Optional:** Supersedes · Related Requirements · Related Roadmaps · Related Designs
+- **Optional:** Supersedes · Related Requirements · Related Roadmaps · Related Designs · Related Decisions
 - **Metadata values (validated when present):**
   - `Status`: `Proposed` | `Accepted` | `Superseded` | `Deprecated`
   - `Category`: `Architecture` | `Product` | `Process` | `Technical` | `Other`
@@ -82,7 +82,7 @@ Where the product is heading — outcomes and the work that supports them.
 
 - **Required:** Outcomes · Initiatives
 - **Recommended:** Success Measures · Assumptions · Risks
-- **Optional:** Related Decisions · Related Requirements · Related Prompts · Related Designs
+- **Optional:** Related Decisions · Related Requirements · Related Prompts · Related Designs · Related Roadmaps
 - **Naming:** `vX.Y.Z-slug.md` (e.g. `v0.7.6-document-structure.md`), which gives the
   id `v0.7.6`.
 

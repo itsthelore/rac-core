@@ -7,7 +7,12 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
+
+<!-- Delivered by the v0.13.5 roadmap: the roadmap and decision schemas now
+carry `related roadmaps` / `related decisions`, so REQ-001, REQ-002, and
+REQ-003 are satisfied. The record is retained as the audit entry. -->
+
 
 ## Problem
 
@@ -93,6 +98,7 @@ edge:
 ## Related Roadmaps
 
 - growth-programme
+- v0.13.5-self-type-relationships
 
 ## Related Decisions
 
