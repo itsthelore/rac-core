@@ -64,8 +64,11 @@ as "this layer will fix adherence in production" overstates what was measured.
 - **Headline artifact:** an adherence-vs-corpus-size curve over
   N ∈ {10, 50, 150, 300} with rising conflict density — the story is the
   crossover point.
-- Also reported: stale-decision rate, false-permit / false-prohibit rate, and
-  per-arm run-to-run variance. There is deliberately **no** composite score.
+- Also reported: stale-decision rate, false-permit / false-prohibit rate,
+  per-arm run-to-run variance, and **governing-decision recall** — did the arm's
+  grounding actually contain the binding decision? Recall is the mechanistic
+  explanation for why adherence moves (the analog of MemoryBench's Hit@K). There
+  is deliberately **no** composite score.
 
 ## Run it (offline, no credentials)
 
@@ -85,6 +88,24 @@ append-only report under `results/`, and emits the crossover chart
 > embedding backend (`pip install -e .[real]`) on real/public-derived corpora.
 > See `decisions/ADR-0001-harness-foundation.md`.
 
+### Run it for real (pinned model + real retrieval)
+
+```bash
+pip install -e ".[real,schema,chart]"
+export ANTHROPIC_API_KEY=...        # pinned answering model: claude-opus-4-8
+export VOYAGE_API_KEY=...           # real embeddings for naive_rag
+
+# rac arm additionally needs the `rac` CLI on PATH (or set RAC_BIN)
+python -m runner.cli compare \
+  --arms context_dump,naive_rag,rac \
+  --answering claude \
+  --embedder voyage:voyage-3 \
+  --scenarios scenarios/ --seed 0
+```
+
+This is where the thesis is actually tested. Until it runs on real/public-derived
+corpora, the offline crossover is plumbing, not evidence.
+
 Tests:
 
 ```bash
@@ -102,10 +123,19 @@ make test
 | Deterministic scorer + metrics + crossover chart | ✅ real |
 | Runner CLI (`run` / `compare` / `demo`), append-only reports | ✅ real |
 | Four worked scenarios (incl. negative control) | ✅ real, synthetic |
-| `no_grounding`, `rac`, `memory_provider` arms | ⏳ typed stubs + TODO |
-| Pinned Claude answering model, real embeddings | ⏳ stub behind `[real]` |
+| Governing-decision recall diagnostic | ✅ real |
+| Pinned Claude answering model (`--answering claude`, Opus 4.8) | ✅ implemented; needs `[real]` + `ANTHROPIC_API_KEY` |
+| Real embeddings (`--embedder voyage:…` / `st:…`) | ✅ implemented; needs `[real]` / `[local-embeddings]` |
+| `rac` arm (typed retrieval, follows `supersedes`) | ✅ implemented; needs the `rac` CLI on PATH |
+| `no_grounding`, `memory_provider` arms | ⏳ typed stubs + TODO |
 | LLM-judge fallback | ⏳ disclosed, not built |
 | `conflicting_scoped` worked scenario, full N=300 corpus | ⏳ next increment |
+
+> **Pinned model caveat:** the answering model is `claude-opus-4-8`, which
+> rejects `temperature`/`top_p`/`seed` (the API 400s on them). There is no
+> temperature/seed knob to pin; the held-constant guarantee rests on the fixed
+> model id + scaffold + structured JSON output, and run-to-run variance is
+> reported as a metric. `temperature` is recorded as `null`.
 
 ## Repository layout
 

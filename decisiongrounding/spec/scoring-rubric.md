@@ -32,8 +32,12 @@ Per scenario type:
 - **Headline artifact:** the adherence-vs-corpus-size crossover curve over
   N ∈ {10, 50, 150, 300}.
 - Also reported: **stale-decision rate**, **false-permit rate**,
-  **false-prohibit rate**, and **per-arm run-to-run variance** (an arm that is
-  correct-but-unstable is reported as such, not smoothed).
+  **false-prohibit rate**, **per-arm run-to-run variance** (an arm that is
+  correct-but-unstable is reported as such, not smoothed), and
+  **governing-decision recall** — whether the arm's grounding actually contained
+  the binding decision. Recall is a *diagnostic*, not the headline: it explains
+  why adherence rises or falls (the analog of MemoryBench's Hit@K) and is `null`
+  for negative controls, where no decision governs.
 - **No composite.** There is deliberately no MemScore-style single number. The
   headline stays a legible rate.
 
