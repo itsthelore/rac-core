@@ -1,52 +1,58 @@
-````markdown
-# Pull Request Documentation Generator
-
-## Context
-
-RAC development follows a roadmap-contract workflow.
-
-Features are planned through explicit Roadmap artifacts, architectural decisions are captured through ADRs, and implementation happens through small scoped changes.
-
-Pull requests act as durable repository memory after implementation conversations, AI sessions, and local context disappear.
-
-A PR should preserve:
-
-- what changed
-- why decisions were made
-- what was intentionally excluded
-- what user-facing contract was introduced
-- how correctness was verified
-
-The PR is not a commit message.
-
-Commits describe individual changes.
-
-Pull requests document the accepted product and architecture contract.
-
-## User Need
-
-As a maintainer reviewing RAC changes,
-I need pull requests to capture implementation scope, decisions, verification evidence, and release traceability,
-so that future contributors can understand why the system behaves the way it does without needing the original planning conversation.
-
-## Prompt
-
-Generate a pull request description for a RAC change.
-
-Use the implementation details, roadmap item, ADRs, commits, and code changes provided.
-
-Structure the PR as a release-contract record.
-
-Use the following format:
-
 ---
+schema_version: 1
+id: RAC-KV2J3433M7NF
+type: prompt
+---
+# RAC Pull Request Documentation Generator
 
+## Objective
+
+Generate a pull request description that acts as durable repository memory
+after implementation conversations, AI sessions, and local context
+disappear.
+
+RAC development follows a roadmap-contract workflow: features are planned
+through explicit Roadmap artifacts, architectural decisions are captured
+through ADRs, and implementation happens through small scoped changes. A PR
+should preserve what changed, why decisions were made, what was
+intentionally excluded, what user-facing contract was introduced, and how
+correctness was verified.
+
+The PR is not a commit message. Commits describe individual changes; pull
+requests document the accepted product and architecture contract. As a
+maintainer reviewing RAC changes, the need is for pull requests to capture
+implementation scope, decisions, verification evidence, and release
+traceability, so future contributors understand why the system behaves the
+way it does without the original planning conversation.
+
+## Input
+
+The implementation details, roadmap item, ADRs, commits, and code changes
+for the RAC change being documented.
+
+## Instructions
+
+Generate a pull request description for a RAC change. Use the implementation
+details, roadmap item, ADRs, commits, and code changes provided. Structure
+the PR as a release-contract record, using the format in Output.
+
+Be aggressive about documenting exclusions: prefer stating what RAC does now
+and what RAC deliberately does not do yet. Document accepted implementation
+decisions (naming, schema, JSON contract, validation behavior, exit-code
+behavior, architecture boundaries). Preserve verification evidence rather
+than asserting "tests pass". Explain the implementation story through the
+suggested review order.
+
+## Output
+
+A pull request body in this format:
+
+```markdown
 # Summary
 
 Implements `<roadmap item / issue>`.
 
 Adds:
-
 - `<user-visible behavior>`
 - `<CLI/API/schema behavior>`
 - `<tests, fixtures, documentation included>`
@@ -54,186 +60,106 @@ Adds:
 # Roadmap / ADR Trace
 
 Roadmap:
-
-- `rac/roadmap/vX.Y.Z-<name>.md`
+- `rac/roadmaps/vX.Y.Z-<name>.md`
 
 Relevant ADRs:
-
-- `rac/adr/<adr-file>.md`
-- `rac/adr/<adr-file>.md`
+- `rac/decisions/<adr-file>.md`
 
 # Scope
 
 ## Included
-
 - `<specific behavior shipped>`
 - `<specific command/output/schema/test coverage>`
 
 ## Excluded
-
 - `<explicitly deferred behavior>`
 - `<nearby tempting capability intentionally avoided>`
 - `<future roadmap boundary>`
 
-Be aggressive about documenting exclusions.
-
-Prefer:
-
-- what RAC does now
-- what RAC deliberately does not do yet
-
 # Product / Architecture Decisions
 
-Document accepted implementation decisions.
-
-Include:
-
-- naming decisions
-- schema decisions
-- JSON contract decisions
-- validation behavior
-- exit-code behavior
-- architecture boundaries
-
-Example:
-
-- Chose `validation_issues` instead of `broken_relationships` because validation now covers multiple failure modes beyond missing links.
+Document accepted implementation decisions: naming, schema, JSON contract,
+validation behavior, exit-code behavior, architecture boundaries. Example:
+- Chose `validation_issues` instead of `broken_relationships` because
+  validation now covers multiple failure modes beyond missing links.
 
 # User-Facing Contract
 
 ## CLI
-
-Commands added or changed:
-
-```bash
-<command example>
-````
+Commands added or changed, with examples.
 
 ## Human Output
-
-Describe visible terminal behavior:
-
-* `<output summary>`
+Visible terminal behavior.
 
 ## JSON Output
-
-Document fields or shape changes:
-
-```json
-{
-  "<field>": "<meaning>"
-}
-```
+Fields or shape changes.
 
 ## Exit Codes
-
-* `0`: `<meaning>`
-* `1`: `<meaning>`
-* `2`: `<meaning>`
+- `0`: <meaning>
+- `1`: <meaning>
+- `2`: <meaning>
 
 # Verification
 
 ## Ran
-
-Include exact verification commands.
-
-Examples:
-
-```bash
-pytest
-rac <command>
-rac <command> --json
-```
+Exact verification commands (for example: pytest, rac <command>,
+rac <command> --json).
 
 ## Covered
-
-Document tested scenarios:
-
-* `<positive case>`
-* `<negative case>`
-* `<boundary case>`
-
-Avoid:
-
-"Tests pass."
-
-Preserve the evidence.
+Tested scenarios: positive, negative, boundary. Avoid "tests pass";
+preserve the evidence.
 
 # Review Path
 
-Suggested review order:
-
-1. `<core implementation files>`
-2. `<schema / artifact changes>`
-3. `<CLI interface changes>`
-4. `<tests and fixtures>`
-5. `<documentation>`
-
-Explain the implementation story through the review order.
+Suggested review order: core implementation, schema/artifact changes, CLI
+interface changes, tests and fixtures, documentation.
 
 # Notes For Reviewer
 
-Include:
-
-* files worth extra attention
-* known limitations
-* deferred follow-ups
-
-Do not repeat commit history.
+Files worth extra attention, known limitations, deferred follow-ups. Do not
+repeat commit history.
 
 # Implementation Process (Optional)
 
-If relevant:
-
-Implemented with AI assistance under the roadmap contract.
-
-Final scope, review, and acceptance decisions were made by the maintainer.
-
+If relevant: implemented with AI assistance under the roadmap contract;
+final scope, review, and acceptance decisions were made by the maintainer.
 This section is the only sanctioned AI disclosure in a pull request.
+```
 
 ## Constraints
 
-* Do not create generic release notes.
-* Do not summarize only commits.
-* Do not omit intentional exclusions.
-* Do not replace verification evidence with "tests pass".
-* Do not introduce scope that was not accepted in the roadmap.
-* Do not invent ADRs or decisions.
-* Keep implementation rationale in the PR, not individual commits.
-* Keep commit messages concise and separate from PR documentation.
-* Prioritize future maintainability over marketing language.
-* Do not include tool attribution: no "Generated by ..." footers, no
+- Do not create generic release notes.
+- Do not summarize only commits.
+- Do not omit intentional exclusions.
+- Do not replace verification evidence with "tests pass".
+- Do not introduce scope that was not accepted in the roadmap.
+- Do not invent ADRs or decisions.
+- Keep implementation rationale in the PR, not individual commits.
+- Keep commit messages concise and separate from PR documentation.
+- Prioritize future maintainability over marketing language.
+- Do not include tool attribution: no "Generated by ..." footers, no
   AI-tool signatures, no session links. Agent platforms commonly append
-  these to the PR body on creation or update — after every create or
-  edit, re-read the stored body and strip anything appended below your
-  final section. The same applies to angle-bracket placeholders: GitHub's
+  these to the PR body on creation or update — after every create or edit,
+  re-read the stored body and strip anything appended below your final
+  section. The same applies to angle-bracket placeholders: GitHub's
   sanitizer silently deletes them, so verify the stored body matches what
-  you submitted. The Implementation Process section above is the only
-  sanctioned AI disclosure (mirrors the commit identity and footer rules
-  in `rac-agent-commit-guidelines.md`).
+  you submitted. The Implementation Process section is the only sanctioned
+  AI disclosure (mirrors the commit identity and footer rules in
+  `rac-agent-commit-guidelines.md`).
 
-## Related Requirements
-
-* Pull requests must preserve architectural decisions after implementation context is lost.
-* Pull requests must provide enough information for future contributors to understand behavioral contracts.
-
-## Related Decisions
-
-* Markdown remains the canonical artifact format.
-* Roadmaps define implementation contracts before code changes.
-* ADRs capture long-lived architecture decisions.
-
-## Style Guidance
+## Evaluation
 
 Write like a maintainer documenting a system contract.
 
-Prefer:
+Prefer: "Relationship failures are reported as validation issues because
+validation covers duplicate identifiers, ambiguous targets, and missing
+references."
 
-"Relationship failures are reported as validation issues because validation covers duplicate identifiers, ambiguous targets, and missing references."
+Avoid: "Added relationship validation. Tests pass."
 
-Avoid:
+A good PR lets a future contributor understand the behavioral contract and
+the decisions behind it without the original planning conversation.
 
-"Added relationship validation. Tests pass."
+## Related Decisions
 
-```
-```
+- ADR-047

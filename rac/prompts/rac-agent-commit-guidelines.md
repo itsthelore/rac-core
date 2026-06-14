@@ -1,44 +1,37 @@
-# Prompt: Standardize RAC Commit Messages
+---
+schema_version: 1
+id: RAC-KV2J331NH44T
+type: prompt
+---
+# RAC Commit Message Standard
 
-## Status
+## Objective
 
-Approved
+Produce commit messages that make RAC's history tell the product story.
 
-## Context
+RAC development follows a roadmap-driven workflow: roadmap artifact → scoped
+implementation → branch → commit → pull request → release. A reader should
+be able to scan `git log --oneline` and understand what changed, where it
+changed, why the change exists, and how the release evolved. Unstructured
+commits make the repository harder to inspect, automate, review, and
+maintain.
 
-RAC development follows a roadmap-driven workflow:
-
-Roadmap artifact → scoped implementation → branch → commit → pull request → release.
-
-Commit history should tell the product story of RAC.
-
-A reader should be able to scan:
-
-```bash
-git log --oneline
-```
-
-and understand:
-
-- what changed
-- where it changed
-- why the change exists
-- how the release evolved
-
-Unstructured commits make the repository harder to inspect, automate, review, and maintain.
-
-## Goal
-
-Create commit messages that provide:
+Commit messages should provide:
 
 - consistent change classification
 - clear ownership areas
 - roadmap-level traceability
 - readable release history
 
-Commits should become a lightweight historical record of RAC's evolution.
+## Input
 
-## Commit Format
+- The change being committed.
+- Its reference: the roadmap item, issue, or release it belongs to.
+- The RAC capability area it landed in.
+
+## Instructions
+
+### Commit format
 
 Use:
 
@@ -52,13 +45,10 @@ Example:
 feat(relationships): add validation CLI [roadmap:v0.7.2]
 ```
 
-This provides:
+This provides type (what kind of change happened), area (where the change
+landed), and reference (why the change exists).
 
-- type — what kind of change happened
-- area — where the change landed
-- reference — why the change exists
-
-## Allowed Types
+### Allowed types
 
 Use only:
 
@@ -73,26 +63,11 @@ Use only:
 
 Avoid adding new types unless necessary.
 
-## RAC Areas
+### RAC areas
 
-Prefer capability areas rather than file names.
-
-Recommended:
-
-- validate
-- inspect
-- stats
-- ingest
-- improve
-- schema
-- relationships
-- artifacts
-- roadmap
-- design
-- prompt
-- release
-
-Examples:
+Prefer capability areas rather than file names. Recommended: validate,
+inspect, stats, ingest, improve, schema, relationships, artifacts, roadmap,
+design, prompt, release.
 
 ```text
 feat(schema): add template output [roadmap:v0.5.2]
@@ -102,11 +77,10 @@ fix(relationships): preserve invalid references [roadmap:v0.7.2]
 docs(readme): clarify installation workflow [roadmap:v0.7.3]
 ```
 
-## Roadmap Implementation Commit Sequence
+### Roadmap implementation commit sequence
 
-For roadmap-driven releases, prefer commits that mirror the lifecycle of the work.
-
-Default sequence:
+For roadmap-driven releases, prefer commits that mirror the lifecycle of the
+work. Default sequence:
 
 ```text
 docs(roadmap): refine vX.Y.Z implementation contract [roadmap:vX.Y.Z]
@@ -122,18 +96,12 @@ docs(command): update user-facing usage notes [roadmap:vX.Y.Z]
 chore(release): prepare vX.Y.Z branch for PR [roadmap:vX.Y.Z]
 ```
 
-This reflects the preferred RAC delivery flow:
+This reflects the preferred RAC delivery flow: define the contract, build
+the capability, expose the interface, validate behavior, document usage,
+prepare release.
 
-1. Define the contract
-2. Build the capability
-3. Expose the interface
-4. Validate behavior
-5. Document usage
-6. Prepare release
-
-Not every roadmap item requires every commit type.
-
-Small releases may only need:
+Not every roadmap item requires every commit type. Small releases may only
+need:
 
 ```text
 docs(roadmap): define v0.7.3 scope [roadmap:v0.7.3]
@@ -145,21 +113,11 @@ test(relationships): cover validation output contract [roadmap:v0.7.3]
 chore(release): prepare v0.7.3 release [roadmap:v0.7.3]
 ```
 
-The goal is not commit quantity.
+The goal is not commit quantity; it is preserving the implementation story.
 
-The goal is preserving the implementation story.
+### References
 
-## References
-
-### Roadmap Work
-
-Use:
-
-```text
-[roadmap:vX.Y.Z]
-```
-
-Example:
+Roadmap work — use `[roadmap:vX.Y.Z]`:
 
 ```text
 feat(relationships): add validation command [roadmap:v0.7.2]
@@ -177,66 +135,31 @@ Adds:
 - ambiguous target detection
 ```
 
-### Issue Work
-
-Use:
-
-```text
-[issue:#number]
-```
-
-Example:
+Issue work — use `[issue:#number]`:
 
 ```text
 fix(release): align package metadata version [issue:#12]
 ```
 
-### Release Maintenance
-
-Use:
-
-```text
-[release:vX.Y.Z]
-```
-
-Example:
+Release maintenance — use `[release:vX.Y.Z]`:
 
 ```text
 chore(release): publish v0.7.2 package [release:v0.7.2]
 ```
 
-## Commit Summary Rules
+### Commit summary rules
 
-Commit summaries should:
+Commit summaries should use imperative language, describe the change
+introduced, remain specific, and avoid implementation noise.
 
-- use imperative language
-- describe the change introduced
-- remain specific
-- avoid implementation noise
+## Output
 
-Good:
+A commit, or a series of commits, conforming to the format above, with the
+maintainer identity on both author and committer and no tool attribution.
 
-```text
-feat(relationships): add target validation service [roadmap:v0.7.2]
-```
+## Constraints
 
-Bad:
-
-```text
-relationship work
-
-fix stuff
-
-updates
-
-final changes
-```
-
-## AI Contribution Rules
-
-When commits are produced with AI assistance:
-
-Do:
+When commits are produced with AI assistance, do:
 
 - follow the same commit standard
 - describe the actual product change
@@ -253,25 +176,15 @@ Do not add:
   (for example `https://claude.ai/code/...` URLs)
 
 Agent harnesses commonly append these by default. Strip them before
-committing — the standard overrides any harness default.
+committing — the standard overrides any harness default. The commit belongs
+to the project history, not the tool used to create it.
 
-The commit belongs to the project history, not the tool used to create it.
-
-### Commit Identity
-
-Author and committer must both be the maintainer identity used on `main`,
-never a tool identity.
-
-Bad:
+Commit identity: author and committer must both be the maintainer identity
+used on `main`, never a tool identity.
 
 ```text
-Author: Claude <noreply@anthropic.com>
-```
-
-Good:
-
-```text
-Author: Tom Ballard <tom@armytage.co>
+Bad:  Author: Claude <noreply@anthropic.com>
+Good: Author: Tom Ballard <tom@armytage.co>
 ```
 
 Agents must set both fields before committing (`--author` plus
@@ -285,7 +198,27 @@ git log -1 --format='%an <%ae> / %cn <%ce>'
 If either field is wrong, amend and re-push before the work is considered
 delivered.
 
-## Success Criteria
+## Examples
+
+Good summary:
+
+```text
+feat(relationships): add target validation service [roadmap:v0.7.2]
+```
+
+Bad summaries:
+
+```text
+relationship work
+
+fix stuff
+
+updates
+
+final changes
+```
+
+## Evaluation
 
 A healthy RAC commit history should read like:
 
@@ -303,4 +236,9 @@ docs(relationships): document validation workflow [roadmap:v0.7.2]
 chore(release): prepare v0.7.2 branch for PR [roadmap:v0.7.2]
 ```
 
-A future maintainer should understand the release journey without needing external context.
+A future maintainer should understand the release journey without needing
+external context.
+
+## Related Decisions
+
+- ADR-047
