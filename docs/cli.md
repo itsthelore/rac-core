@@ -112,7 +112,13 @@ Summarize a directory of artifacts: counts, quality signals, and per-type breakd
 
 - **Input:** `rac stats <directory>` — scanned recursively for `*.md`.
 - **Options:** `--json`
-- **Exit codes:** `0` analyzable content found · `1` no valid artifacts · `2` not a directory
+- **Exit codes:** `0` analyzable content found, or an empty corpus (day-one is
+  not a failure) · `1` files exist but none are valid known artifacts · `2` not
+  a directory
+
+On an empty corpus, `stats` (like `validate`, `review`, and `portfolio`) exits 0
+and prints a next-step line pointing at `rac quickstart`. The summary JSON
+carries an additive `empty` boolean.
 
 ```bash
 rac stats rac/
