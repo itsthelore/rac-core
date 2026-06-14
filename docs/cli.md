@@ -244,13 +244,22 @@ Review an entire repository in one command: validate every artifact, check
 every relationship, and report what needs attention — worst problems first.
 
 - **Input:** `rac review <directory>` — scanned recursively for `*.md`.
-- **Options:** `--json` · `--top-level` · `--recursive`
+- **Options:** `--json` · `--top-level` · `--recursive` · `--stale-after [DAYS]`
 - **Exit codes:** `0` no blocking issues · `1` invalid artifacts or broken
   relationships found · `2` not a directory
 
 ```bash
 rac review rac/
+rac review rac/ --stale-after        # nudge if nothing written in 14 days
+rac review rac/ --stale-after 30     # custom window
 ```
+
+`--stale-after [DAYS]` adds an advisory **write-cadence** finding when no
+artifact has been committed within the window (default 14 days when the flag is
+given without a value). It is informational and **never** changes the exit code,
+so it is safe in CI; it needs git history and is silent outside a git repository
+or on an empty corpus. The framing is capture cadence, not work tracking
+(ADR-017).
 
 ```text
 Repository Review
