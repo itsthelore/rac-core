@@ -56,7 +56,7 @@ jobs:
         # enforced by tests/test_ci_batteries.py in the core battery.
         battery:
           - name: core
-            paths: "tests/test_validate.py tests/test_parser.py tests/test_schema.py tests/test_identity.py tests/test_frontmatter.py tests/test_metadata_identity.py tests/test_idgen.py tests/test_ci_batteries.py tests/test_corpus.py tests/test_operations.py"
+            paths: "tests/test_validate.py tests/test_okf_conformance.py tests/test_parser.py tests/test_schema.py tests/test_identity.py tests/test_frontmatter.py tests/test_metadata_identity.py tests/test_idgen.py tests/test_ci_batteries.py tests/test_corpus.py tests/test_operations.py"
           - name: cli
             paths: "tests/test_cli.py"
           - name: compare

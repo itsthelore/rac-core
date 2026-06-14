@@ -80,5 +80,10 @@
         }
       ]
     }
-  ]
+  ],
+  "okf": {
+    "conformant": true,
+    "artifacts_checked": 4,
+    "findings": []
+  }
 }
