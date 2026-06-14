@@ -105,6 +105,8 @@ jobs:
             paths: "tests/test_recency.py"
           - name: skill
             paths: "tests/test_skill.py"
+          - name: hook
+            paths: "tests/test_hook.py"
           - name: stats
             paths: "tests/test_stats.py"
           - name: watchkeeper
