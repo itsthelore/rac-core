@@ -24,6 +24,7 @@ from rac.services.relationships import (
     ISSUE_SELF_REFERENCE,
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
+    ISSUE_TARGET_SUPERSEDED,
     validate_relationships,
     validate_relationships_file,
 )
@@ -330,3 +331,78 @@ def test_unsupported_section_in_json_output(tmp_path, capsys):
         "code": ISSUE_EDGE_UNSUPPORTED,
     }
     assert "target" not in issue  # no resolved target for a structural finding
+
+
+# --- status consistency / superseded targets (v0.14.1, ADR-049) -------------
+
+
+def _decision(title, status, extra=""):
+    return _DECISION.format(t=title) + f"\n## Status\n\n{status}\n" + extra
+
+
+def test_reference_to_superseded_decision_is_reported(tmp_path):
+    (tmp_path / "adr-001.md").write_text(_decision("Old", "Superseded"), encoding="utf-8")
+    (tmp_path / "req-001.md").write_text(
+        "# R\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] x\n\n"
+        "## Related Decisions\n\n- adr-001\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert not report.ok
+    issue = next(i for i in report.issues if i.code == ISSUE_TARGET_SUPERSEDED)
+    assert issue.source_path.endswith("req-001.md")
+    assert issue.relationship == "related_decisions"
+    assert issue.target == "adr-001"
+
+
+def test_supersedes_edge_to_superseded_decision_is_allowed(tmp_path):
+    # The replacing decision points at the one it supersedes — that is the one
+    # edge allowed to reference a Superseded decision.
+    (tmp_path / "adr-001.md").write_text(_decision("Old", "Superseded"), encoding="utf-8")
+    (tmp_path / "adr-002.md").write_text(
+        _decision("New", "Accepted", "\n## Supersedes\n\n- adr-001\n"), encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    assert ISSUE_TARGET_SUPERSEDED not in [i.code for i in report.issues]
+
+
+def test_deprecated_target_is_reported(tmp_path):
+    (tmp_path / "adr-001.md").write_text(_decision("Old", "Deprecated"), encoding="utf-8")
+    (tmp_path / "adr-002.md").write_text(
+        _decision("Live", "Accepted", "\n## Related Decisions\n\n- adr-001\n"), encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert [i.code for i in report.issues] == [ISSUE_TARGET_SUPERSEDED]
+
+
+def test_retired_source_reference_is_exempt(tmp_path):
+    # A retired decision referencing another retired decision is a historical
+    # chain, not live knowledge pointing at dead knowledge — not flagged.
+    (tmp_path / "adr-001.md").write_text(_decision("Old", "Superseded"), encoding="utf-8")
+    (tmp_path / "adr-002.md").write_text(
+        _decision("Older", "Superseded", "\n## Related Decisions\n\n- adr-001\n"),
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+
+
+def test_accepted_target_is_not_flagged(tmp_path):
+    (tmp_path / "adr-001.md").write_text(_decision("Live", "Accepted"), encoding="utf-8")
+    (tmp_path / "adr-002.md").write_text(
+        _decision("Also", "Accepted", "\n## Related Decisions\n\n- adr-001\n"), encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+
+
+def test_superseded_target_fails_cli_with_suffix(tmp_path, capsys):
+    (tmp_path / "adr-001.md").write_text(_decision("Old", "Superseded"), encoding="utf-8")
+    (tmp_path / "req-001.md").write_text(
+        "# R\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] x\n\n"
+        "## Related Decisions\n\n- adr-001\n",
+        encoding="utf-8",
+    )
+    assert main(["relationships", str(tmp_path), "--validate"]) == 1
+    assert "✗ adr-001 superseded" in capsys.readouterr().out
