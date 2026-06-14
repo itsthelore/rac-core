@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KTYB8944G7TN
 type: requirement
 ---
-# Growth Positioning: Relating Lore/RAC to Spec-Driven Development Tools
+# Growth Positioning: Relating Lore/RAC to Spec-Driven Development Tools and OKF
 
 ## Status
 
@@ -25,6 +25,16 @@ RAC manages the *requirements* as a durable, versioned, governed corpus
 that persists across changes. RAC is the layer above SDD tools, not a
 competitor to them.
 
+A second category now needs the same treatment. Google's Open Knowledge
+Format (OKF) standardises the *carrier* RAC already writes — a Git tree
+of Markdown with YAML front matter — and is deliberately permissive,
+where RAC is enforcing. Without a recorded answer, evaluators may read
+RAC as redundant with a hyperscaler-blessed format, missing that the two
+sit at different layers: OKF is read-time interchange; RAC adds
+deterministic write-time enforcement in CI and exports a conformant OKF
+bundle. That relationship is complementary and must be stated as such
+(ADR-048, ADR-049).
+
 ## Requirements
 
 - [REQ-001] The README shall contain a single `##` section, placed below the fold (after the "Who it's for" section and never above the Lore lead), that relates Lore/RAC to spec-driven development tools and states the layer-above thesis: SDD tools manage the change and treat requirements as ephemeral inputs; RAC manages requirements as a durable, versioned corpus that persists across changes, a layer above SDD tools rather than a competitor to them.
@@ -32,6 +42,8 @@ competitor to them.
 - [REQ-003] The section shall contain a comparison table whose rows are capability dimensions (requirement persistence, change management, traceability, tool coupling, install footprint), restricted to rows for which every column's claim has been verified.
 - [REQ-004] Every claim in the comparison table shall be verifiable from the named tool's own repository or documentation, with the source URLs recorded in an HTML comment adjacent to the table.
 - [REQ-005] The section shall frame the relationship as complementary — Lore/RAC owns a different layer — and shall contain no claim that Lore or RAC is better than any named tool, and no claim that cannot be verified.
+- [REQ-006] The README shall contain a single `##` section, below the fold, that relates Lore/RAC to Google's Open Knowledge Format (OKF), naming OKF explicitly and stating the complementary thesis: OKF standardises the read-time carrier and is permissive, while RAC adds deterministic write-time enforcement in CI, and a RAC repository exports a conformant OKF bundle via `rac export --okf`.
+- [REQ-007] The OKF section shall frame the relationship as complementary (the two compose rather than compete), contain no claim that Lore or RAC is better than OKF, and make only verifiable claims — OKF's permissive consumption model traceable to its spec, and RAC's enforcement traceable to `rac validate` / `rac relationships --validate` behaviour.
 
 ## Success Metrics
 
@@ -70,3 +82,5 @@ competitor to them.
 ## Related Decisions
 
 - adr-036
+- adr-048
+- adr-049

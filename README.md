@@ -56,6 +56,10 @@ rac export rac/ --html --out lore-export.html    # the Portal, one file
 - **Teams who already write ADRs** and want those decisions to actually shape what the agent does.
 - **Anyone who wants the *why* behind their software versioned alongside the code.**
 
+## How it relates to OKF
+
+Google's Open Knowledge Format (OKF) standardises the *carrier* — a Git tree of Markdown with YAML front matter — and is deliberately permissive: an OKF consumer must not reject a bundle for missing fields, unknown types, or broken links. RAC writes that same carrier and adds what OKF leaves to the consumer: **write-time enforcement** in CI. `rac validate` and `rac relationships --validate` reject malformed artifacts, broken or ambiguous links, references to superseded decisions, and relationship edges a type does not support — deterministically, before the knowledge lands. OKF is read-optimised interchange; RAC is write-time enforcement, and `rac export --okf` turns any RAC repo into a conformant OKF bundle — so the two compose rather than compete.
+
 ## Documentation
 
 **Full documentation: <https://tcballard.github.io/requirements-as-code/>**
