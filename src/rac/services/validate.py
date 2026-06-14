@@ -17,8 +17,10 @@ from dataclasses import asdict, dataclass
 from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.models import Issue
+from rac.core.overrides import EMPTY, SeverityOverrides, apply_overrides
 from rac.core.validation import has_errors, validate
 
+from .init import load_overrides
 from .okf_conformance import OkfConformanceReport, check_okf_conformance
 
 # Stable per-file statuses (part of the JSON contract, ADR-007).
@@ -111,16 +113,25 @@ def validate_directory(directory: str, recursive: bool = True) -> DirectoryValid
     result — and everything rendered from it — is deterministic.
     """
     entries = list(walk_corpus(directory, recursive=recursive))
-    return validate_corpus(directory, entries, recursive=recursive)
+    overrides = load_overrides(directory)
+    return validate_corpus(directory, entries, recursive=recursive, overrides=overrides)
 
 
 def validate_corpus(
-    directory: str, entries: list[CorpusEntry], recursive: bool = True
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    overrides: SeverityOverrides = EMPTY,
 ) -> DirectoryValidation:
     """Validate an already-walked corpus snapshot (v0.8.0).
 
     Same result as :func:`validate_directory`; the snapshot lets one walk
     feed several analyses (repository model, future incremental refresh).
+    Severity overrides (ADR-053) default to :data:`~rac.core.overrides.EMPTY` so
+    consumers that hold their own snapshot (the repository model behind review /
+    watchkeeper / portfolio) are unchanged; ``validate_directory`` loads the
+    repository's overrides and passes them. Overrides are applied before status
+    and exit code are computed, so a downgraded type or rule keeps the run green.
     """
     files: list[FileValidation] = []
     for entry in entries:
@@ -138,7 +149,7 @@ def validate_corpus(
                 )
             )
             continue
-        issues = validate(product)
+        issues = apply_overrides(validate(product), artifact_type, overrides)
         files.append(
             FileValidation(
                 path=str(path),
@@ -147,5 +158,5 @@ def validate_corpus(
                 issues=issues,
             )
         )
-    okf = check_okf_conformance(directory, entries, recursive=recursive)
+    okf = check_okf_conformance(directory, entries, recursive=recursive, overrides=overrides)
     return DirectoryValidation(directory=directory, recursive=recursive, files=files, okf=okf)

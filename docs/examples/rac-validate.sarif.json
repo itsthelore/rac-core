@@ -1,0 +1,98 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "rac",
+          "informationUri": "https://github.com/tcballard/requirements-as-code",
+          "version": "0.15.2",
+          "rules": [
+            {
+              "id": "ambiguous-verb"
+            },
+            {
+              "id": "invalid-decision-status"
+            },
+            {
+              "id": "missing-risks"
+            },
+            {
+              "id": "missing-success-metrics"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "invalid-decision-status",
+          "level": "error",
+          "message": {
+            "text": "## Status value 'Draft' is not one of: Proposed, Accepted, Superseded, Deprecated."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "rac/decisions/adr-bad-status.md"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "missing-risks",
+          "level": "warning",
+          "message": {
+            "text": "No ## Risks section (optional, but recommended)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "rac/requirements/feature.md"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "missing-success-metrics",
+          "level": "warning",
+          "message": {
+            "text": "No ## Success Metrics section (optional, but recommended)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "rac/requirements/feature.md"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "ambiguous-verb",
+          "level": "warning",
+          "message": {
+            "text": "REQ-001 uses ambiguous verb(s) (support); be more specific."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "rac/requirements/feature.md"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

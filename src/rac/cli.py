@@ -1,7 +1,7 @@
 """Command-line interface for RAC.
 
 Commands:
-    rac validate <file.md | dir | -> [--json] [--top-level]
+    rac validate <file.md | dir | -> [--json | --sarif] [--top-level]
     rac diff <old.md> <new.md> [--json]
     rac stats <directory> [--json]
     rac ingest <file> [-o OUT | --stdout] [--force] [--json]
@@ -75,7 +75,7 @@ from pathlib import Path
 
 from rac import consent
 from rac import output as outputs
-from rac.core.classification import score_artifacts
+from rac.core.classification import classify, score_artifacts
 from rac.core.hooks import (
     DEFAULT_STYLE,
     HookNotFound,
@@ -85,6 +85,7 @@ from rac.core.hooks import (
 )
 from rac.core.markdown import parse, parse_file
 from rac.core.models import Product
+from rac.core.overrides import apply_overrides
 from rac.core.schema import available_schemas, schema_reference
 from rac.core.skills import SkillNotFound, SkillResourceMissing, skill_specs
 from rac.core.templates import (
@@ -113,6 +114,7 @@ from rac.services.init import (
     MalformedRepositoryConfig,
     RepositoryKeyConflict,
     init_repository,
+    load_overrides,
 )
 from rac.services.inspect import build_inspection, inspect_directory
 from rac.services.migrate import migrate_metadata
@@ -170,14 +172,23 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # legacy requirement fallback applies only to explicit single-file input.
     if args.file != "-" and Path(args.file).is_dir():
         result = validate_directory(args.file, recursive=not args.top_level)
-        if args.json:
+        if args.sarif:
+            print(outputs.render_validate_sarif(result))
+        elif args.json:
             print(outputs.render_validate_dir_json(result))
         else:
             print(outputs.render_validate_dir_human(result))
         return EXIT_OK if result.ok else EXIT_VALIDATION_FAILED
 
+    if args.sarif:
+        # SARIF is a repository-scan artifact for CI code scanning (ADR-054);
+        # there is no single-file SARIF surface.
+        print("rac: --sarif applies to directory validation", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
     product = _read_validate_input(args.file)
-    issues = validate(product)
+    start = "." if args.file == "-" else str(Path(args.file).parent)
+    issues = apply_overrides(validate(product), classify(product).type, load_overrides(start))
     if args.json:
         print(outputs.render_validation_json(product, issues))
     else:
@@ -879,8 +890,14 @@ def build_parser() -> argparse.ArgumentParser:
         "file",
         help="A Markdown artifact file, a directory, or '-' to read from stdin.",
     )
-    p_validate.add_argument(
+    p_validate_format = p_validate.add_mutually_exclusive_group()
+    p_validate_format.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_validate_format.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Emit SARIF 2.1.0 for GitHub Code Scanning (directory validation only).",
     )
     p_validate.add_argument(
         "--top-level",

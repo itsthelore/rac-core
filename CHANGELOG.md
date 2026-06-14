@@ -8,6 +8,18 @@ details, release history over commit history.
 
 ### Added
 
+- Validation severity overrides + SARIF output (v0.15.2): a repository may declare
+  an optional `validation` section in its committed `.rac/config.yaml` to downgrade
+  or silence findings — per rule code (`error|warning|off`) and per artifact type
+  (`error|warning` ceiling), with the per-rule entry winning over the type ceiling.
+  This makes warnings-first onboarding possible: a team can point `rac validate` at
+  a legacy repo, keep CI green, and tighten the gate over time. Overrides apply to
+  `rac validate` only (review/watchkeeper/portfolio are unchanged); an absent
+  section is a no-op, so the default gate stays strict. Also adds
+  `rac validate <dir> --sarif`, emitting a deterministic, offline SARIF 2.1.0
+  document (core validation + OKF conformance findings) for GitHub Code Scanning;
+  `--sarif` is mutually exclusive with `--json` and applies to directory validation.
+
 - OKF v0.1 conformance check (v0.15.1): `rac validate <dir>` now enforces OKF
   conformance as a write-time gate, not just on export. It reports, per typed
   artifact, `okf-unmapped-type` (a `type` with no OKF mapping) and
