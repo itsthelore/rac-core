@@ -76,9 +76,24 @@ def test_make_embedder_offline_default():
 
 def test_make_embedder_constructs_real_backends_lazily():
     # Constructing must not require the optional dependency (import is lazy).
-    e = make_embedder("voyage:voyage-3")
+    e = make_embedder("voyage:voyage-4-large")
     assert isinstance(e, VoyageEmbedder)
-    assert e.name == "voyage:voyage-3"
+    assert e.name == "voyage:voyage-4-large"
+
+
+def test_make_embedder_voyage_defaults_to_flagship():
+    # `voyage` with no model pins the current flagship.
+    e = make_embedder("voyage")
+    assert isinstance(e, VoyageEmbedder)
+    assert e.name == "voyage:voyage-4-large"
+
+
+def test_input_type_is_backward_compatible_offline():
+    # The retrieval-role argument must be accepted and ignored by backends that
+    # have no query/document distinction, so offline runs are unchanged.
+    e = LocalDeterministicEmbedder()
+    assert e.embed("hello world", input_type="query") == e.embed("hello world")
+    assert e.embed("hello world", input_type="document") == e.embed("hello world")
 
 
 def test_claude_answering_model_is_pinned():
