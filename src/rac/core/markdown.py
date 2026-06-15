@@ -18,6 +18,15 @@ from markdown_it import MarkdownIt
 from .frontmatter import parse_frontmatter, split_frontmatter
 from .models import Issue, MalformedRequirement, Product, Requirement, SearchSection
 
+# A single shared parser, built once and reused for every ``parse`` call.
+# Constructing a ``MarkdownIt`` is expensive — it compiles the linkify regexes
+# and introspects its rule chains on every instantiation — whereas ``parse`` is
+# stateless across calls (each call builds its own parse state). Parsing is the
+# engine's dominant cost (every corpus walk, validation, portfolio summary,
+# relationship analysis, and MCP tool call flows through it), so reusing the
+# parser roughly halves that cost while producing byte-identical tokens.
+_PARSER = MarkdownIt("commonmark")
+
 # A requirement line: a leading ``[...]`` ID token followed by description text.
 # We capture anything inside the brackets so we can distinguish a *malformed* ID
 # from a missing one, then validate the ID shape separately.
@@ -92,7 +101,7 @@ def parse(text: str, source_path: str = "") -> Product:
             )
         )
 
-    tokens = MarkdownIt("commonmark").parse(split.body)
+    tokens = _PARSER.parse(split.body)
 
     title: str | None = None
     extra_title_lines: list[int] = []
