@@ -433,11 +433,18 @@ async function newArtifact(): Promise<void> {
     placeHolder: "Artifact type",
   });
   if (!type) return;
-  const relPath = await vscode.window.showInputBox({
-    prompt: `Path for the new ${type}`,
-    value: `rac/${type}s/new-${type}.md`,
+
+  // Suggest an existing folder — `rac new` won't create missing parents, so
+  // steering to a folder that already holds this type avoids a needless error.
+  const dir = await pickArtifactFolder(folder, type);
+  if (dir === undefined) return;
+
+  const name = await vscode.window.showInputBox({
+    prompt: `File name for the new ${type}`,
+    value: `new-${type}.md`,
   });
-  if (!relPath) return;
+  if (!name) return;
+  const relPath = `${dir}/${name}`;
 
   try {
     const result = await clientFor(folder).createArtifact(type, relPath);
@@ -457,6 +464,31 @@ async function newArtifact(): Promise<void> {
 
 function titleCase(value: string): string {
   return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+// Offer the workspace-relative folders that already hold artifacts of this type
+// (from the cached export). One match is auto-selected; none falls back to the
+// conventional `rac/<type>s`. All offered folders exist, so `rac new` succeeds.
+async function pickArtifactFolder(
+  folder: vscode.WorkspaceFolder,
+  type: string,
+): Promise<string | undefined> {
+  const corpus = await corpusExport(folder);
+  const dirs = new Set<string>();
+  for (const artifact of corpus?.artifacts ?? []) {
+    if (artifact.type !== type) continue;
+    // export paths are absolute (the extension passes an absolute dir); make
+    // them workspace-relative with forward slashes.
+    const rel = vscode.workspace.asRelativePath(vscode.Uri.file(artifact.path), false);
+    const slash = rel.lastIndexOf("/");
+    if (slash > 0) dirs.add(rel.slice(0, slash));
+  }
+  const choices = [...dirs].sort();
+  if (choices.length === 0) return `rac/${type}s`;
+  if (choices.length === 1) return choices[0];
+  return vscode.window.showQuickPick(choices, {
+    placeHolder: `Folder for the new ${type}`,
+  });
 }
 
 // --- hover & go-to-definition ----------------------------------------------
