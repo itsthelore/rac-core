@@ -8,23 +8,28 @@ and validation findings appear as diagnostics — the same findings `rac validat
 reports on the command line, because the extension runs `rac` rather than
 reimplementing it ([ADR-063](../../rac/decisions/adr-063-non-python-clients-are-thin.md)).
 
-> Status: scaffold (0.1.0). MVP is validation diagnostics on open/save.
+> Status: early (0.1.0).
 
 ## Requirements
 
 - The `rac` CLI installed and discoverable (`pip install requirements-as-code`),
   or its path set in `rac.path`.
 
-## Features (MVP)
+## Features
 
-- Diagnostics for RAC artifacts on open and save (errors + warnings, mapped to
-  the right lines).
+- **Live validation** — diagnostics update as you type (the unsaved buffer is
+  piped through `rac validate -`, debounced), and immediately on open/save.
+  Errors + warnings are mapped to the right lines.
+- **Hover** — hovering an artifact ID or alias (e.g. `adr-007`,
+  `v0.20.0-python-sdk-foundation`) shows its title, type, and path via
+  `rac resolve`.
+- **Go-to-definition** — jump from a reference to the target artifact's file.
 - **RAC: Validate Open Artifacts** command.
 - Graceful handling when `rac` is missing — a one-time prompt to install or set
   `rac.path`, never a wall of errors.
 
 Only Markdown files with a leading `schema_version` frontmatter block are
-validated, so ordinary Markdown stays untouched.
+treated as RAC artifacts, so ordinary Markdown stays untouched.
 
 ## Settings
 
@@ -46,6 +51,5 @@ Then press **F5** (Run RAC Extension) to launch an Extension Development Host.
 ## Roadmap
 
 Tracked in [`rac/roadmaps/future/typescript-sdk-vscode.md`](../../rac/roadmaps/future/typescript-sdk-vscode.md).
-Next: live-as-you-type validation (pipe the buffer through `rac validate -`),
-ID hover / go-to-definition (`rac resolve` / `rac find`), and relationship
-findings (`rac relationships` / `rac review`).
+Next: relationship findings drawn at the reference site (`rac relationships` /
+`rac review`), and completion for artifact IDs.
