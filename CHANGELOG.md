@@ -8,6 +8,15 @@ details, release history over commit history.
 
 ### Added
 
+- Validate GitHub Action (v0.17.2): a composite action
+  (`tcballard/requirements-as-code/validate-action@<ref>`) runs
+  `rac validate --sarif` and uploads the result to GitHub Code Scanning, so RAC
+  findings annotate a pull request inline. A thin wrapper over the CLI (ADR-058):
+  errors fail the check, warnings (including findings downgraded in
+  `.rac/config.yaml`) annotate without failing — warnings-first onboarding. Docs
+  cover the workflow, the `security-events: write` permission, and the
+  custom-types/edges extensibility boundary (deferred, ADR-052/ADR-055).
+
 - Per-type standards enforcement (v0.17.1): `rac validate` now lints requirement
   *quality* against the standards RAC cites — BCP-14 keyword discipline
   (`requirement-normative-keyword`, error: only uppercase MUST/SHALL/SHOULD/MAY are

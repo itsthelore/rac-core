@@ -1,0 +1,100 @@
+# RAC validate composite action (v0.17.2, ADR-058).
+#
+# A thin wrapper: install RAC, run one `rac validate --sarif`, upload the SARIF
+# to GitHub Code Scanning, and re-surface the CLI exit code. All analysis and
+# severity policy live in the package (ADR-015 / ADR-053); the action never
+# reinterprets findings. The Watchkeeper action lives at the repository root;
+# this validate action is referenced as
+# `uses: tcballard/requirements-as-code/validate-action@<ref>`.
+name: "RAC validate"
+description: >-
+  Validate a requirements-as-code (RAC) corpus and surface findings on the pull
+  request via GitHub Code Scanning (SARIF). A thin wrapper over the `rac` CLI.
+author: "Tom Ballard"
+
+branding:
+  icon: "check-circle"
+  color: "purple"
+
+inputs:
+  path:
+    description: "The RAC corpus directory to validate (passed to `rac validate`)."
+    required: false
+    default: "rac"
+  upload-sarif:
+    description: >-
+      Upload SARIF to GitHub Code Scanning (`true` or `false`). Requires the job
+      to grant `security-events: write`.
+    required: false
+    default: "true"
+  sarif-file:
+    description: "Where the SARIF document is written."
+    required: false
+    default: "rac.sarif"
+  rac-version:
+    description: >-
+      Exact requirements-as-code version to install from PyPI. Empty installs the
+      latest release. Ignored when `install-from` is `source`.
+    required: false
+    default: ""
+  install-from:
+    description: >-
+      Where to install RAC from: `pypi` (the default for consumers) or `source`
+      (the action checkout itself — for this repository's own dogfood job;
+      requires `uses: ./validate-action` on a full checkout).
+    required: false
+    default: "pypi"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install RAC
+      shell: bash
+      env:
+        INSTALL_FROM: ${{ inputs.install-from }}
+        RAC_VERSION: ${{ inputs.rac-version }}
+      run: |
+        python -m pip install --quiet --upgrade pip
+        if [ "$INSTALL_FROM" = "source" ]; then
+          python -m pip install --quiet "$GITHUB_ACTION_PATH/.."
+        elif [ -n "$RAC_VERSION" ]; then
+          python -m pip install --quiet "requirements-as-code==$RAC_VERSION"
+        else
+          python -m pip install --quiet requirements-as-code
+        fi
+
+    # The CLI is the source of truth (ADR-058). `set +e` lets a non-zero exit
+    # still produce SARIF for upload; the exit code is re-surfaced below.
+    - name: Run rac validate (SARIF)
+      id: validate
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+      run: |
+        set +e
+        rac validate "$INPUT_PATH" --sarif > "$SARIF_FILE"
+        echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SARIF to Code Scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+
+    # Errors fail the check; warnings (including findings downgraded in
+    # .rac/config.yaml, ADR-053) annotate without failing — warnings-first.
+    - name: Report result
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.validate.outputs.exit_code }}
+      run: |
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "::error::rac validate exited $EXIT_CODE — see the Code Scanning annotations."
+          exit "$EXIT_CODE"
+        fi
+        echo "rac validate passed."

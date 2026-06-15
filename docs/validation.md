@@ -60,8 +60,9 @@ policy (a per-developer file would not keep CI green). Determinism holds: the
 same corpus *and config* yield the same findings and exit code. An absent
 `validation` section is a pure no-op — the default gate is strict.
 
-Overrides apply to `rac validate` only; `rac review`, `rac watchkeeper`, and
-`rac portfolio` report the corpus as authored.
+Overrides are repository-wide (ADR-053): a downgrade applies to `rac review`,
+`rac watchkeeper`, and `rac portfolio` as well as `rac validate`, so a
+warnings-first policy is consistent across every surface.
 
 A typical onboarding path: start by capping noisy types to `warning`, get CI
 green, then remove entries (or restore `error`) rule-by-rule as the corpus is
@@ -93,6 +94,45 @@ A worked example of the output is checked in at
 [`docs/examples/rac-validate.sarif.json`](examples/rac-validate.sarif.json): one
 `error` (an out-of-enum decision status), two recommended-section `warning`s, and
 a line-anchored `ambiguous-verb` finding (note the `region.startLine`).
+
+## Running in CI (GitHub Action)
+
+A composite GitHub Action wraps `rac validate --sarif` and uploads the result to
+GitHub Code Scanning, so findings annotate the pull request inline. The decision
+behind it is
+[ADR-058](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-058-validation-github-action.md);
+it is a thin wrapper — the `rac` CLI stays the source of truth.
+
+```yaml
+# .github/workflows/rac.yml
+name: RAC
+on: [pull_request]
+permissions:
+  contents: read
+  security-events: write          # required to upload SARIF to Code Scanning
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tcballard/requirements-as-code/validate-action@v0
+        with:
+          path: rac/
+```
+
+Inputs: `path` (default `rac`), `upload-sarif` (default `true`), `sarif-file`,
+`rac-version` (pin a release), and `install-from` (`pypi` or `source`). Errors
+fail the check; warnings — including findings downgraded in `.rac/config.yaml` —
+annotate without failing, so a legacy repo can adopt the gate green on day one and
+tighten over time.
+
+> **Extensibility boundary.** RAC's built-in artifact types and relationship
+> edges are the supported surface, defined in code. Custom artifact types and
+> custom relationship edges are deferred (ADR-052, ADR-055); a repo-local schema
+> registry is a future, separately recorded decision.
+
+(The Watchkeeper action at the repository root is the complementary PR-review
+surface — see [Watchkeeper](watchkeeper.md).)
 
 ## See also
 
