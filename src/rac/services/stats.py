@@ -276,6 +276,24 @@ class PortfolioStats:
         """True on a day-one corpus: no recognized or unrecognized artifacts."""
         return self.total_artifacts == 0 and self.unrecognized_count == 0
 
+    @property
+    def has_meaningful_content(self) -> bool:
+        """True when the portfolio holds at least one *valid* analysable artifact.
+
+        Distinct from :attr:`is_empty`: a corpus of only invalid files is neither
+        empty nor meaningful. ``rac stats`` exits OK when this is true *or* the
+        corpus is empty — a day-one corpus is a valid state, not a failure
+        (v0.13.1). The "files exist but none are valid known artifacts" failure is
+        preserved for a non-empty corpus.
+        """
+        return (
+            self.valid_features > 0
+            or self.decision_count > 0
+            or self.valid_roadmaps > 0
+            or self.valid_prompts > 0
+            or self.valid_designs > 0
+        )
+
 
 def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict[str, int]:
     """Count ``decisions`` by ``attr`` in the artifact spec's declared order."""

@@ -75,7 +75,7 @@ from pathlib import Path
 
 from rac import consent
 from rac import output as outputs
-from rac.core.classification import classify, score_artifacts
+from rac.core.classification import score_artifacts
 from rac.core.hooks import (
     DEFAULT_STYLE,
     HookNotFound,
@@ -85,7 +85,6 @@ from rac.core.hooks import (
 )
 from rac.core.markdown import parse, parse_file
 from rac.core.models import Product
-from rac.core.overrides import apply_overrides
 from rac.core.schema import available_schemas, schema_reference
 from rac.core.skills import SkillNotFound, SkillResourceMissing, skill_specs
 from rac.core.templates import (
@@ -93,7 +92,7 @@ from rac.core.templates import (
     TemplateResourceMissing,
     available_templates,
 )
-from rac.core.validation import has_errors, validate
+from rac.core.validation import has_errors
 from rac.output.portal import PortalSeamMissing, PortalShellMissing
 from rac.services.create import (
     IdGenerationExhausted,
@@ -114,7 +113,6 @@ from rac.services.init import (
     MalformedRepositoryConfig,
     RepositoryKeyConflict,
     init_repository,
-    load_overrides,
 )
 from rac.services.inspect import build_inspection, inspect_directory
 from rac.services.migrate import migrate_metadata
@@ -137,7 +135,7 @@ from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
 from rac.services.revisions import NotAGitRepository, RevisionNotFound
 from rac.services.skill import SkillFileExists, install_skills
 from rac.services.stats import collect_stats
-from rac.services.validate import validate_directory
+from rac.services.validate import validate_directory, validate_product
 from rac.services.watchkeeper import build_watchkeeper_report
 
 from . import __version__
@@ -188,7 +186,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
     product = _read_validate_input(args.file)
     start = "." if args.file == "-" else str(Path(args.file).parent)
-    issues = apply_overrides(validate(product), classify(product).type, load_overrides(start))
+    issues = validate_product(product, start)
     if args.json:
         print(outputs.render_validation_json(product, issues))
     else:
@@ -216,22 +214,14 @@ def cmd_stats(args: argparse.Namespace) -> int:
         print(outputs.render_stats_json(stats))
     else:
         print(outputs.render_stats_human(stats))
-    # Success as long as the portfolio has analysable content: at least one valid
-    # feature, one decision, one valid roadmap, one valid prompt, or one valid
-    # design. Invalid files are reported but don't fail the run on their own. (A
-    # future --strict flag will fail the run if *any* file is invalid, for CI use.)
-    has_content = (
-        stats.valid_features > 0
-        or stats.decision_count > 0
-        or stats.valid_roadmaps > 0
-        or stats.valid_prompts > 0
-        or stats.valid_designs > 0
-    )
-    # An empty corpus is a valid day-one state, not a failure (v0.13.1): it
-    # exits 0, matching validate/review/portfolio. The "files exist but none are
-    # valid known artifacts" failure is preserved for a non-empty corpus, and
-    # will move behind a future --strict flag.
-    return EXIT_OK if (has_content or stats.is_empty) else EXIT_VALIDATION_FAILED
+    # Success as long as the portfolio has analysable content (at least one valid
+    # feature/decision/roadmap/prompt/design) or is an empty day-one corpus.
+    # `has_meaningful_content` and `is_empty` are computed behind the gate
+    # (ADR-015); the CLI only reads them. An empty corpus is a valid state, not a
+    # failure (v0.13.1): it exits 0, matching validate/review/portfolio. The
+    # "files exist but none are valid known artifacts" failure is preserved for a
+    # non-empty corpus, and will move behind a future --strict flag for CI use.
+    return EXIT_OK if (stats.has_meaningful_content or stats.is_empty) else EXIT_VALIDATION_FAILED
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:

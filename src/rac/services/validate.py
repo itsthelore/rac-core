@@ -15,8 +15,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from rac.core.artifacts import spec_for
+from rac.core.classification import classify
 from rac.core.corpus import CorpusEntry, walk_corpus
-from rac.core.models import Issue
+from rac.core.models import Issue, Product
 from rac.core.overrides import SeverityOverrides, apply_overrides
 from rac.core.validation import has_errors, validate
 
@@ -104,6 +105,19 @@ class DirectoryValidation:
         if self.okf is not None:
             payload["okf"] = self.okf.to_dict()
         return payload
+
+
+def validate_product(product: Product, start: str = ".") -> list[Issue]:
+    """Validate one parsed artifact with repository severity overrides applied.
+
+    The single-file analogue of :func:`validate_directory`: run the
+    classification-dispatched rules (:func:`validate`) and apply the repository's
+    severity overrides (ADR-053) loaded from ``start`` (the directory whose
+    ``.rac/config.yaml`` governs policy). The CLI's single-file ``rac validate``
+    and SDK callers share this one composition, so behind-the-gate analysis never
+    drifts from what the interface reports (ADR-015).
+    """
+    return apply_overrides(validate(product), classify(product).type, load_overrides(start))
 
 
 def validate_directory(directory: str, recursive: bool = True) -> DirectoryValidation:
