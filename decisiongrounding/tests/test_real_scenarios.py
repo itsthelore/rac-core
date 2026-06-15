@@ -13,13 +13,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
+from ingest.peps import SOURCE_TEXT_MARKER
 from providers import build_provider, make_answering_model
+from providers.rac import _query_tokens
 from scenarios.loader import load_scenario, load_scenarios
 from scoring.scorer import score
+
+_HAS_RAC = shutil.which("rac") is not None
 
 _ROOT = Path(__file__).resolve().parent.parent
 _REAL_DIR = _ROOT / "scenarios_real"
@@ -54,8 +60,8 @@ def test_pilot_corpus_matches_provenance_hashes_offline():
     assert provenance["pinned_commit"]
     for entry in provenance["peps"]:
         md = (_PILOT / entry["file"]).read_text(encoding="utf-8")
-        # corpus_markdown() = provenance preamble + "\n\n---\n\n" + verbatim rst.
-        body = md.split("\n\n---\n\n", 1)[1]
+        # corpus_markdown() = RAC decision envelope + Source Text marker + rst.
+        body = md.split(SOURCE_TEXT_MARKER, 1)[1]
         got = hashlib.sha256(body.encode("utf-8")).hexdigest()
         assert got == entry["source_sha256"], f"{entry['id']} body drifted from pin"
 
@@ -80,3 +86,38 @@ def test_pilot_gold_label_is_not_a_negative_control():
     sc = load_scenario(_PILOT)
     assert sc.gold_label.governing_decision is not None
     assert sc.gold_label.verdict in ("permitted", "prohibited")
+
+
+def test_query_tokens_keeps_salient_terms_drops_noise():
+    toks = _query_tokens("Add version parsing to compare release strings, follow the scheme")
+    assert {"version", "parsing", "compare", "release", "scheme"} <= set(toks)
+    # Stopwords and short tokens are dropped (rac find substring-matches IDs/titles).
+    assert "add" not in toks and "the" not in toks and "to" not in toks
+
+
+@pytest.mark.skipif(not _HAS_RAC, reason="rac CLI not on PATH")
+def test_rac_arm_follows_supersedes_to_live_decision():
+    """The rac arm must classify the PEPs, follow the supersedes edge, and supply
+    the live successor (PEP-0440) rather than the superseded PEP-0386 — the whole
+    typed-retrieval thesis, exercised against the real rac CLI."""
+    sc = load_scenario(_PILOT)
+    arm = build_provider("rac", make_answering_model("offline-stub", 0), "local-hash")
+    arm.prepare(list(sc.corpus))
+    arm.respond(sc.task)
+    supplied = arm.grounding.artifacts_supplied
+    assert "PEP-0440" in supplied, f"governing decision not retrieved: {supplied}"
+    assert "PEP-0386" not in supplied, f"superseded decision was not dropped: {supplied}"
+
+
+@pytest.mark.skipif(not _HAS_RAC, reason="rac CLI not on PATH")
+def test_rac_corpus_relationships_resolve_cleanly():
+    """`rac relationships --validate` must resolve the Supersedes reference; a
+    dangling reference would mean the rac arm can't follow the edge."""
+    corpus_dir = _PILOT / "corpus"
+    out = subprocess.run(
+        ["rac", "relationships", str(corpus_dir), "--validate", "--json"],
+        capture_output=True,
+        text=True,
+    )
+    data = json.loads(out.stdout)
+    assert data["validation_issues"] == 0, data.get("issues")
