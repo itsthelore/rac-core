@@ -98,4 +98,4 @@ Architecture
 
 ## Related Roadmaps
 
-- typescript-sdk-vscode
+- v0.21.0-typescript-sdk-and-extension
