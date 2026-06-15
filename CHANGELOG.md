@@ -6,7 +6,26 @@ details, release history over commit history.
 
 ## Unreleased
 
+## v0.19.0 — 2026-06-15
+
+The kitchen-sink release. Everything since v0.7.3 lands at once. Over this
+stretch RAC grew from a requirements validator into a product-knowledge
+system: the Explorer TUI, canonical frontmatter identity and opaque IDs, the
+relationship graph and its integrity checks, repository intelligence
+(`rac portfolio`, `rac watchkeeper`), the Portal and OKF interop exports,
+per-type standards enforcement, and a GitHub Action that brings all of it to
+pull requests. This entry collects the whole arc into one formal release — the
+individual `(vX.Y.Z)` markers below trace where each capability landed.
+
 ### Added
+
+- Roadmap "Achieved" lifecycle status (v0.19.0): a roadmap whose scope has
+  shipped can declare `## Status: Achieved`, a validated *live terminal* state
+  (ADR-061) — the intent was delivered, so the roadmap reads as done without
+  being treated as retired, and inbound references to it are not flagged as
+  pointing at a superseded target. `rac schema roadmap` lists it among the
+  allowed statuses; the roadmap enum is now Planned / Achieved / Superseded /
+  Abandoned.
 
 - Validate GitHub Action (v0.17.2): a composite action
   (`tcballard/requirements-as-code/validate-action@<ref>`) runs
@@ -447,8 +466,6 @@ details, release history over commit history.
 - `rac portfolio --json` now lists `artifacts.unknown_paths` (additive).
 - `rac index` — flat artifact inventory (id, type, title, path) for tools and
   agents (v0.7.5).
-
-### Changed
 
 - Documentation restructured around task-focused guides under `docs/`
   (quickstart, CLI reference, artifacts, relationships, repository workflow,
