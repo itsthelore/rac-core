@@ -18,9 +18,10 @@ from __future__ import annotations
 from importlib import resources
 
 from rac.core.artifacts import ARTIFACT_SPECS
+from rac.errors import RACError
 
 
-class TemplateNotFound(Exception):
+class TemplateNotFound(RACError):
     """The requested artifact type has no canonical template (usage error)."""
 
     def __init__(self, artifact_type: str):
@@ -31,7 +32,7 @@ class TemplateNotFound(Exception):
         )
 
 
-class TemplateResourceMissing(Exception):
+class TemplateResourceMissing(RACError):
     """A registered type's packaged template is absent (operational error)."""
 
     def __init__(self, artifact_type: str):

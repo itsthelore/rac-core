@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from rac.errors import RACError
+
 if TYPE_CHECKING:  # pragma: no cover — typing only, never at runtime
     from rac.explorer.app import ExplorerApp
 
@@ -18,7 +20,7 @@ MISSING_EXTRA_HINT = (
 )
 
 
-class ExplorerUnavailable(Exception):
+class ExplorerUnavailable(RACError):
     """The Explorer cannot start because the ``explorer`` extra is missing."""
 
 

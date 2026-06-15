@@ -26,9 +26,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rac.core.skills import SkillNotFound, available_skills, load_skill
+from rac.errors import RACError
 
 
-class SkillFileExists(Exception):
+class SkillFileExists(RACError):
     """A target skill file already exists; RAC never overwrites it.
 
     For a no-name install every existing target is collected and reported

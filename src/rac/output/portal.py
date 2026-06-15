@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from importlib import resources
 
+from rac.errors import RACError
 from rac.services.export import CorpusExport
 
 from .json import render_export_json
@@ -36,7 +37,7 @@ from .json import render_export_json
 _SEAM = '<script type="application/json" id="lore-export"></script>'
 
 
-class PortalShellMissing(Exception):
+class PortalShellMissing(RACError):
     """The packaged Portal shell is absent (broken installation)."""
 
     def __init__(self) -> None:
@@ -46,7 +47,7 @@ class PortalShellMissing(Exception):
         )
 
 
-class PortalSeamMissing(Exception):
+class PortalSeamMissing(RACError):
     """The packaged shell lacks its single empty data seam (corrupt vendoring)."""
 
     def __init__(self) -> None:

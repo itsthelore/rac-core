@@ -21,6 +21,7 @@ from pathlib import Path
 import yaml
 
 from rac.core.overrides import EMPTY, RULE_VALUES, TYPE_VALUES, SeverityOverrides
+from rac.errors import RACError
 
 # Repository key contract (v0.7.11): uppercase alphanumeric, leading letter,
 # 2-10 characters. The key is the human-recognizable ID prefix, e.g. RAC.
@@ -31,7 +32,7 @@ CONFIG_DIR = ".rac"
 CONFIG_FILE = "config.yaml"
 
 
-class InvalidRepositoryKey(Exception):
+class InvalidRepositoryKey(RACError):
     """The requested repository key fails the syntax contract (usage error)."""
 
     def __init__(self, key: str):
@@ -42,7 +43,7 @@ class InvalidRepositoryKey(Exception):
         )
 
 
-class RepositoryKeyConflict(Exception):
+class RepositoryKeyConflict(RACError):
     """An established repository key differs from the requested one."""
 
     def __init__(self, existing: str, requested: str, config_path: str):
@@ -56,7 +57,7 @@ class RepositoryKeyConflict(Exception):
         )
 
 
-class MalformedRepositoryConfig(Exception):
+class MalformedRepositoryConfig(RACError):
     """An existing configuration file cannot be read (operational error)."""
 
     def __init__(self, config_path: str, reason: str):

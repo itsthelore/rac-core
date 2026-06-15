@@ -16,6 +16,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from rac.errors import RACError
+
 
 @dataclass(frozen=True)
 class Progress:
@@ -32,7 +34,7 @@ class Progress:
 ProgressCallback = Callable[[Progress], None]
 
 
-class OperationCancelled(Exception):
+class OperationCancelled(RACError):
     """Raised when an operation observes a cancelled token at a checkpoint."""
 
 

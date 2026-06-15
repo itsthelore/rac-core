@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import resources
 
+from rac.errors import RACError
+
 
 @dataclass(frozen=True)
 class SkillSpec:
@@ -50,7 +52,7 @@ BUNDLED_SKILLS = (
 )
 
 
-class SkillNotFound(Exception):
+class SkillNotFound(RACError):
     """The requested skill is not in the bundled registry (usage error)."""
 
     def __init__(self, skill_name: str):
@@ -60,7 +62,7 @@ class SkillNotFound(Exception):
         )
 
 
-class SkillResourceMissing(Exception):
+class SkillResourceMissing(RACError):
     """A registered skill's packaged resource is absent (operational error)."""
 
     def __init__(self, skill_name: str):

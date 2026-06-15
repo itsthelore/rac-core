@@ -21,12 +21,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from rac.errors import RACError
 
-class NotAGitRepository(Exception):
+
+class NotAGitRepository(RACError):
     """The directory is not inside a git work tree (or git is unavailable)."""
 
 
-class RevisionNotFound(Exception):
+class RevisionNotFound(RACError):
     """The named revision does not resolve to a commit."""
 
 

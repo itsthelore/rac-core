@@ -22,9 +22,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rac.core.hooks import DEFAULT_STYLE, HookNotFound, available_hooks, load_hook
+from rac.errors import RACError
 
 
-class NotAGitWorkTree(Exception):
+class NotAGitWorkTree(RACError):
     """The target directory has no ``.git`` directory (usage error)."""
 
     def __init__(self, directory: str):
@@ -34,7 +35,7 @@ class NotAGitWorkTree(Exception):
         )
 
 
-class HookFileExists(Exception):
+class HookFileExists(RACError):
     """A target hook file already exists; RAC never overwrites it."""
 
     def __init__(self, path: str):

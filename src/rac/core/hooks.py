@@ -18,6 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import resources
 
+from rac.errors import RACError
+
 
 @dataclass(frozen=True)
 class HookSpec:
@@ -43,7 +45,7 @@ BUNDLED_HOOKS = (
 DEFAULT_STYLE = BUNDLED_HOOKS[0].style
 
 
-class HookNotFound(Exception):
+class HookNotFound(RACError):
     """The requested hook style is not in the bundled registry (usage error)."""
 
     def __init__(self, style: str):
@@ -51,7 +53,7 @@ class HookNotFound(Exception):
         super().__init__(f"unknown hook style: {style} (available: {', '.join(available_hooks())})")
 
 
-class HookResourceMissing(Exception):
+class HookResourceMissing(RACError):
     """A registered hook's packaged resource is absent (operational error)."""
 
     def __init__(self, style: str):

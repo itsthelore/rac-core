@@ -17,8 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from rac.errors import RACError
 
-class ConversionError(Exception):
+
+class ConversionError(RACError):
     """A document was recognized but could not be converted."""
 
 

@@ -32,6 +32,7 @@ from pathlib import Path
 
 from rac.core.idgen import generate_id
 from rac.core.templates import load_template
+from rac.errors import RACError
 from rac.services.index import build_repository_index
 from rac.services.init import load_repository_config
 
@@ -41,7 +42,7 @@ from rac.services.init import load_repository_config
 _MAX_ID_ATTEMPTS = 5
 
 
-class OutputPathExists(Exception):
+class OutputPathExists(RACError):
     """The requested output path already exists; RAC never overwrites it."""
 
     def __init__(self, path: str):
@@ -49,7 +50,7 @@ class OutputPathExists(Exception):
         super().__init__(f"{path} already exists; rac new never overwrites")
 
 
-class OutputDirectoryMissing(Exception):
+class OutputDirectoryMissing(RACError):
     """The output path's parent directory does not exist (no auto-create)."""
 
     def __init__(self, path: str):
@@ -57,7 +58,7 @@ class OutputDirectoryMissing(Exception):
         super().__init__(f"directory does not exist: {path}")
 
 
-class MissingRepositoryConfig(Exception):
+class MissingRepositoryConfig(RACError):
     """No repository identity namespace is established (run `rac init`)."""
 
     def __init__(self, start_dir: str):
@@ -68,7 +69,7 @@ class MissingRepositoryConfig(Exception):
         )
 
 
-class IdGenerationExhausted(Exception):
+class IdGenerationExhausted(RACError):
     """Repeated ID collisions — the entropy source is not behaving."""
 
     def __init__(self, attempts: int):

@@ -33,6 +33,7 @@ from pathlib import Path
 
 from rac.core.idgen import generate_id
 from rac.core.templates import load_template
+from rac.errors import RACError
 from rac.services.create import CreatedArtifact, create_artifact
 from rac.services.index import build_repository_index
 from rac.services.init import DEFAULT_KEY, init_repository
@@ -40,7 +41,7 @@ from rac.services.init import DEFAULT_KEY, init_repository
 DEFAULT_TYPE = "requirement"
 
 
-class CorpusNotEmpty(Exception):
+class CorpusNotEmpty(RACError):
     """The corpus already holds a recognised artifact; quickstart refuses.
 
     Onboarding writes a starter artifact only into an empty corpus (ADR-044);
