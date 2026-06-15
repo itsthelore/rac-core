@@ -52,11 +52,14 @@ and `../CONTRIBUTING.md`).
 
 ## Worked-scenario coverage this pass
 
-Four worked scenarios ship under `../scenarios/`: `simple_adherence_logging`
+Five worked scenarios ship under `../scenarios/`: `simple_adherence_logging`
 (expected tie), `superseded_decision`, `prohibition_language_migration` (modelled
-on a real-world-style unauthorized implementation-language migration), and
-`negative_control_cache_ttl`. `conflicting_scoped` is defined in the schema and
-taxonomy and is a near-term next increment.
+on a real-world-style unauthorized implementation-language migration),
+`conflicting_scoped_retry` (a scope conflict where the in-scope handler rule
+governs over the out-of-scope background-jobs rule), and
+`negative_control_cache_ttl`. All five scenario types are exercised; the
+discriminating three (`superseded_decision`, `prohibition_at_point_of_action`,
+`conflicting_scoped`) drive the crossover curve.
 
 ## Provenance rule (non-negotiable)
 

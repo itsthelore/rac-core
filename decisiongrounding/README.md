@@ -119,17 +119,17 @@ make test
 | --- | --- |
 | Scenario + RunResult JSON Schemas (Draft 2020-12) | ✅ real |
 | Provider adapter contract | ✅ real |
-| `context_dump`, `naive_rag` arms | ✅ real, runnable offline |
+| `context_dump`, `naive_rag`, `no_grounding` arms | ✅ real, runnable offline |
 | Deterministic scorer + metrics + crossover chart | ✅ real |
 | Runner CLI (`run` / `compare` / `demo`), append-only reports | ✅ real |
-| Four worked scenarios (incl. negative control) | ✅ real, synthetic |
+| Five worked scenarios (incl. negative control + conflicting-scoped) | ✅ real, synthetic |
 | Governing-decision recall diagnostic | ✅ real |
 | Pinned Claude answering model (`--answering claude`, Opus 4.8) | ✅ implemented; needs `[real]` + `ANTHROPIC_API_KEY` |
 | Real embeddings (`--embedder voyage:…` / `st:…`) | ✅ implemented; needs `[real]` / `[local-embeddings]` |
 | `rac` arm (typed retrieval, follows `supersedes`) | ✅ implemented; needs the `rac` CLI on PATH |
-| `no_grounding`, `memory_provider` arms | ⏳ typed stubs + TODO |
+| `memory_provider` arm | ⏳ typed stub + TODO |
 | LLM-judge fallback | ⏳ disclosed, not built |
-| `conflicting_scoped` worked scenario, full N=300 corpus | ⏳ next increment |
+| Full N=300 corpus (real/public-derived) | ⏳ next increment |
 
 > **Pinned model caveat:** the answering model is `claude-opus-4-8`, which
 > rejects `temperature`/`top_p`/`seed` (the API 400s on them). There is no
