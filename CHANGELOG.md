@@ -13,8 +13,9 @@ details, release history over commit history.
   **caches** resolve/export lookups (cleared on save) so hover/completion stay
   responsive, **warns** once on `rac` schema-version skew, logs to a dedicated
   **"RAC" output channel** (no telemetry), and carries Marketplace/OpenVSX
-  packaging metadata (`repository`, `bugs`, `keywords`). The icon asset and the
-  publish step remain manual. This completes the `v0.21.x-editor` series.
+  packaging metadata (`repository`, `bugs`, `keywords`) and an **icon** (the RAC
+  lore-explorer mascot). Only the actual publish step remains manual. This
+  completes the `v0.21.x-editor` series.
 
 - RAC Explorer in the extension (v0.21.5 milestone). A **RAC: Open Explorer**
   command renders the corpus relationship graph in a webview — the self-contained

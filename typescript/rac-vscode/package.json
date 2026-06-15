@@ -4,6 +4,7 @@
   "description": "Inline validation for RAC (requirements-as-code) artifacts, powered by the rac CLI.",
   "version": "0.1.0",
   "publisher": "rac",
+  "icon": "icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
