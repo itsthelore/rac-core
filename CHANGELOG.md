@@ -6,6 +6,22 @@ details, release history over commit history.
 
 ## Unreleased
 
+### Added
+
+- TypeScript SDK and editor extension (v0.21.0 milestone — TypeScript-only; the
+  Python package is unchanged and versions independently). `@rac/sdk` is a thin
+  Node client that shells out to the installed `rac` CLI and returns typed results
+  over the stable `--json` contracts (ADR-063): validate a file, a directory, or
+  in-memory text (via `rac validate -` on stdin), plus resolve, find,
+  relationships, review, stats, and export — all under one `RacError` root, with
+  an injectable runner seam for testing. A VS Code / Cursor extension built on it
+  validates RAC artifacts in-editor (live as you type, plus on open/save) and
+  offers hover and go-to-definition on artifact IDs/aliases. Both packages live
+  under `typescript/` at 0.1.0; a TypeScript CI workflow builds and tests them.
+  The `v0.21.x` series (`rac/roadmaps/v0.21.x-editor/`) scopes the follow-on
+  releases — cross-artifact enforcement, authoring aids, navigation, awareness,
+  visualization, and release hardening.
+
 ## v0.19.0 — 2026-06-15
 
 The kitchen-sink release. Everything since v0.7.3 lands at once. Over this
