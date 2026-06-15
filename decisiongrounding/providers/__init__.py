@@ -45,6 +45,29 @@ ARMS: dict[str, type[Provider]] = {
 
 REAL_ARMS = ("context_dump", "naive_rag", "no_grounding")
 
+
+def make_answering_model(name: str, seed: int) -> AnsweringModel:
+    """Build the held-constant answering model from a name.
+
+    `offline-stub` -> ScriptedAnsweringModel (deterministic, no network);
+    `claude` -> ClaudeAnsweringModel (pinned Opus 4.8, needs the [real] extra +
+    ANTHROPIC_API_KEY). Lives here so both the CLI and the crossover can build
+    backends without importing each other.
+    """
+    if name == "offline-stub":
+        return ScriptedAnsweringModel(seed=seed)
+    if name == "claude":
+        return ClaudeAnsweringModel(seed=seed)
+    raise ValueError(f"unknown answering model {name!r}; use 'offline-stub' or 'claude'.")
+
+
+def build_provider(arm: str, answering_model, embedder_spec: str = "local-hash") -> Provider:
+    """Instantiate an arm, wiring a real embedder into naive_rag when asked."""
+    if arm == "naive_rag":
+        return NaiveRagProvider(answering_model, embedder=make_embedder(embedder_spec))
+    return ARMS[arm](answering_model)
+
+
 __all__ = [
     "ARMS",
     "REAL_ARMS",
@@ -57,6 +80,8 @@ __all__ = [
     "AnsweringModel",
     "ScriptedAnsweringModel",
     "ClaudeAnsweringModel",
+    "make_answering_model",
+    "build_provider",
     "Embedder",
     "LocalDeterministicEmbedder",
     "VoyageEmbedder",
