@@ -29,9 +29,11 @@ because a personal account is, in practice, a single repository:
 - `validate-action/action.yml` and the root `action.yml` (Watchkeeper) —
   thin GitHub composite actions that wrap the `rac` CLI (ADR-058 governs the
   validation action).
-- `examples/` and the planned liftable SDK examples sub-project — pedagogical
-  material. The v0.20.1 roadmap already designs the SDK examples to "graduate
-  to their own repo," mirroring the `decisiongrounding/` liftable pattern.
+- `examples/` — the flagship grounding demo (`examples/guide/`, referenced by
+  `guide-grounding-demo` and the v0.10.2 roadmap) and dashboard fixtures the
+  test suite depends on. This is product-defining, dogfooded material, distinct
+  from the *separately planned* liftable SDK examples sub-project that the
+  v0.20.1 roadmap designs to "graduate to their own repo."
 
 An organisation can host sibling repositories, so colocation is no longer
 forced. There is no recorded decision about the org move or about which
@@ -60,8 +62,13 @@ engine and everything that ships or governs it in
 | Component | Current path | New repo | Why it leaves |
 | --- | --- | --- | --- |
 | Decision-grounding benchmark | `decisiongrounding/` | `itsthelore/decisiongrounding` | Zero code coupling; own packaging, tests, LICENSE, and ADRs, which travel with it. |
-| GitHub Actions | `validate-action/action.yml`, root `action.yml` | `itsthelore/rac-actions` (or per-action repos) | Thin CLI wrappers reusable by any repo, with a release cadence independent of the engine. |
-| Examples | `examples/`, the planned SDK examples sub-project | `itsthelore/rac-examples` | Pedagogical; the SDK examples are already designed liftable (v0.20.1). |
+| GitHub Actions | `validate-action/action.yml`, root `action.yml` | `itsthelore/rac-actions` | Thin CLI wrappers reusable by any repo, with a release cadence independent of the engine. |
+
+The GitHub Actions land in a **single** `itsthelore/rac-actions` repository,
+each action in its own subdirectory (`gatekeeper/`, `watchkeeper/`), referenced
+as `itsthelore/rac-actions/<name>@<ref>`. The `validate` action is **renamed
+Gatekeeper** — it holds the gate on corpus validity, a sibling to Watchkeeper
+(ADR-049, "enforcement is the product").
 
 **Keep in `itsthelore/requirements-as-code`:**
 
@@ -71,6 +78,10 @@ engine and everything that ships or governs it in
   are shipped resources, discovered and installed by the CLI.
 - The dogfood corpus (`rac/`) — it governs the project and stays with the code
   it governs.
+- `examples/` — the grounding demo (`examples/guide/`) is the product's
+  headline proof, woven into the corpus (a design and the v0.10.2 roadmap
+  reference it) and into the test fixtures (`example_dashboard_v*.md`).
+  Extracting it would fragment the demo and strand the fixtures; it stays.
 - `lore-web/` — no Python coupling, but its Portal shell is *vendored* into
   `src/rac/` through a build script and a drift-guard test. Extraction is
   **deferred** until a publish/vendor contract exists; it is a future review
@@ -78,7 +89,9 @@ engine and everything that ships or governs it in
 
 Distribution names stay frozen (ADR-036, ADR-039). Extracted repos follow the
 `rac-<name>` convention where they relate to the engine; `decisiongrounding`
-keeps its established name.
+keeps its established name. Each repo carries its own `examples/` subdirectory
+where useful — the same convention the engine keeps for `examples/guide` —
+rather than a central examples repository.
 
 ## Consequences
 
@@ -122,8 +135,26 @@ Leave all components colocated and rely on directory boundaries.
 #### Disadvantages
 
 - Couples unrelated release cadences to the engine's, and keeps the engine
-  repository carrying a benchmark, actions, and examples that no longer need
-  to be there now that an org can host siblings.
+  repository carrying a benchmark and actions that no longer need to be there
+  now that an org can host siblings.
+
+### Extract `examples/` to its own repo
+
+Lift `examples/` into a dedicated `itsthelore/rac-examples` alongside the
+benchmark.
+
+#### Advantages
+
+- A single home for pedagogical material across the org.
+
+#### Disadvantages
+
+- `examples/guide` is the grounding demo — the product's headline proof — and
+  is referenced by a design, the v0.10.2 roadmap, and the test fixtures.
+  Extracting it fragments the demo and strands fixtures the suite depends on.
+  Rejected; examples stays, and each repo keeps its own `examples/` subdir
+  instead. (The separately planned liftable SDK examples sub-project, v0.20.1,
+  is unaffected.)
 
 ### Extract `lore-web` now as well
 
