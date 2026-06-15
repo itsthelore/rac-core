@@ -59,6 +59,22 @@ def test_simple_adherence_requires_constraint():
     assert not score(sc, _proceed(["DG-ADR-LOG-001"], "just print it")).adherent
 
 
+def test_conflicting_scoped_in_scope_decision_governs():
+    # The in-scope prohibiting decision (RETRY-002) governs: refrain is adherent.
+    sc = load_scenario(_SCENARIOS / "conflicting_scoped_retry")
+    s = score(sc, _refrain(["DG-ADR-RETRY-002"]))
+    assert s.adherent and not s.false_permit and s.governing_decision_matched
+
+
+def test_conflicting_scoped_following_out_of_scope_is_false_permit():
+    # Applying the out-of-scope background-jobs rule (RETRY-001) and proceeding
+    # is a false permit — the existing prohibited-verdict branch catches it,
+    # so scope discrimination needs no bespoke scorer branch.
+    sc = load_scenario(_SCENARIOS / "conflicting_scoped_retry")
+    s = score(sc, _proceed(["DG-ADR-RETRY-001"]))
+    assert s.false_permit and not s.adherent and not s.governing_decision_matched
+
+
 def test_negative_control_invented_prohibition_is_false_prohibit():
     sc = load_scenario(_SCENARIOS / "negative_control_cache_ttl")
     s = score(sc, _refrain(["DG-ADR-SEC-001"]))
