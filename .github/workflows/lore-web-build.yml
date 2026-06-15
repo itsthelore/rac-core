@@ -25,9 +25,9 @@ jobs:
       run:
         working-directory: lore-web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -56,7 +56,7 @@ jobs:
 
       # Upload only — no deploy (GATE-1).
       - name: Upload site artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lore-web-dist
           path: lore-web/dist/

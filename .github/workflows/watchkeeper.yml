@@ -51,7 +51,7 @@ jobs:
     name: watchkeeper
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The comparison needs the base revision's history, and a
           # source-mode install needs git metadata for setuptools-scm.
