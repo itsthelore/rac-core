@@ -234,10 +234,14 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related roadmaps",
         ),
-        # Lifecycle status (ADR-051): Planned is the live state; Superseded /
-        # Abandoned mark replaced or dropped *intent* — knowledge states, not
-        # delivery tracking (ADR-017). Per-milestone progress stays out.
-        metadata={"status": ("Planned", "Superseded", "Abandoned")},
+        # Lifecycle status (ADR-051, ADR-061): Planned is the live state and
+        # Achieved is the live terminal state (the intent was delivered, so the
+        # item is now a realized record — still valid to reference, not retired).
+        # Superseded / Abandoned mark replaced or dropped *intent*. All four are
+        # knowledge states, not delivery tracking (ADR-017): a terminal "the
+        # intent was realized" marker set at release is knowledge currency, while
+        # per-milestone work progress stays out.
+        metadata={"status": ("Planned", "Achieved", "Superseded", "Abandoned")},
         retired_status=("Superseded", "Abandoned"),
         descriptions={
             "outcomes": "The user, business, or operational outcomes this roadmap pursues",

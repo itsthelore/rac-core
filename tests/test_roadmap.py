@@ -51,11 +51,13 @@ def test_requirement_does_not_classify_as_roadmap():
 
 
 def test_roadmap_carries_lifecycle_status():
-    # ADR-051: status is a knowledge lifecycle (Planned/Superseded/Abandoned),
-    # never work/delivery state; no category or supersedes metadata.
+    # ADR-051/ADR-061: status is a knowledge lifecycle (Planned, Achieved,
+    # Superseded, Abandoned), never work/delivery state; no category or
+    # supersedes metadata. Achieved is a live terminal state (delivered intent),
+    # so it is deliberately NOT in retired_status.
     spec = spec_for("roadmap")
     assert spec is not None
-    assert spec.metadata == {"status": ("Planned", "Superseded", "Abandoned")}
+    assert spec.metadata == {"status": ("Planned", "Achieved", "Superseded", "Abandoned")}
     assert spec.retired_status == ("Superseded", "Abandoned")
 
 
