@@ -56,13 +56,26 @@ def test_supersedes_targets_from_replaces_header():
     assert peps.supersedes_targets({}) == []
 
 
-def test_corpus_markdown_is_provenance_plus_verbatim_body():
-    md = peps.corpus_markdown(9999, _FIXTURE, "abc123")
-    assert md.startswith("# PEP-9999 — A Superseding Example")
-    assert "Source: python/peps @ abc123" in md
-    # The upstream text is embedded verbatim after the preamble delimiter.
-    body = md.split("\n\n---\n\n", 1)[1]
+def test_corpus_markdown_is_rac_decision_wrapping_verbatim_body():
+    md = peps.corpus_markdown(9999, _FIXTURE, "abc123", frozenset({9999, 8888}))
+    # RAC-native decision artifact: front-matter + canonical decision sections so
+    # rac classifies it as a decision.
+    assert md.startswith("---\nschema_version: 1\nid: PEP-9999\ntype: decision")
+    for section in ("## Status", "## Context", "## Decision", "## Consequences"):
+        assert section in md, f"missing {section}"
+    assert "Final" in md  # status carried from the fixture's own header
+    assert "abc123" in md  # the pin is recorded in the Context provenance line
+    # Replaces: 8888 (in corpus) -> a directional, resolvable Supersedes edge.
+    assert "## Supersedes" in md and "- PEP-8888" in md
+    # The upstream text is embedded verbatim after the Source Text marker.
+    body = md.split(peps.SOURCE_TEXT_MARKER, 1)[1]
     assert body == _FIXTURE
+
+
+def test_corpus_markdown_omits_supersedes_when_target_outside_corpus():
+    # The Replaced PEP is not part of this corpus -> no dangling Supersedes ref.
+    md = peps.corpus_markdown(9999, _FIXTURE, "abc123", frozenset({9999}))
+    assert "## Supersedes" not in md
 
 
 def test_build_provenance_derives_supersedes_edge():
