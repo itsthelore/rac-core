@@ -21,6 +21,8 @@ export interface RunOptions {
   cwd?: string;
   /** Max stdout/stderr bytes to buffer (default 64 MiB, for large exports). */
   maxBuffer?: number;
+  /** Written to the child's stdin and then closed — used for `rac validate -`. */
+  input?: string;
 }
 
 /**
@@ -38,7 +40,7 @@ export type RacRunner = (
 /** The default runner, backed by `child_process.execFile`. */
 export const defaultRunner: RacRunner = (bin, args, options = {}) =>
   new Promise<RunResult>((resolve, reject) => {
-    execFile(
+    const child = execFile(
       bin,
       [...args],
       {
@@ -62,4 +64,9 @@ export const defaultRunner: RacRunner = (bin, args, options = {}) =>
         resolve({ stdout, stderr, code });
       },
     );
+    // Feed stdin for commands that read it (`rac validate -`), then close it so
+    // the child sees EOF and proceeds.
+    if (options.input !== undefined) {
+      child.stdin?.end(options.input);
+    }
   });

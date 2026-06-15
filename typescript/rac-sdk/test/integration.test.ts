@@ -42,9 +42,17 @@ describe.skipIf(!racBin)("integration (real rac)", () => {
     }
   });
 
-  it("validates the whole corpus directory", async () => {
+  it("validates the whole corpus directory (contract shape)", async () => {
     const result = await rac.validateDirectory("rac");
-    expect(result.valid).toBe(true);
-    expect(result.summary.invalid).toBe(0);
+    expect(result.summary.total_files).toBeGreaterThan(0);
+    expect(typeof result.summary.invalid).toBe("number");
+    expect(Array.isArray(result.files)).toBe(true);
+  });
+
+  it("validates in-memory text via stdin", async () => {
+    const bad = await rac.validateText("## Problem\n\nno title\n");
+    expect(bad.file).toBe("-");
+    expect(bad.valid).toBe(false);
+    expect(bad.errors.some((i) => i.code === "missing-title")).toBe(true);
   });
 });

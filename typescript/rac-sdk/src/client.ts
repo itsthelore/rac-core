@@ -50,9 +50,18 @@ export class RacClient {
     this.runner = options.runner ?? defaultRunner;
   }
 
-  /** `rac validate <file> --json` — validate a single artifact. */
+  /** `rac validate <file> --json` — validate a single artifact on disk. */
   validateFile(file: string): Promise<FileValidation> {
     return this.json<FileValidation>(["validate", file, "--json"]);
+  }
+
+  /**
+   * `rac validate - --json` — validate in-memory artifact text, e.g. an unsaved
+   * editor buffer, by piping it to `rac` on stdin. The result's `file` is `"-"`;
+   * the caller knows the real path. Severity overrides resolve from `cwd`.
+   */
+  validateText(text: string): Promise<FileValidation> {
+    return this.json<FileValidation>(["validate", "-", "--json"], { input: text });
   }
 
   /** `rac validate <dir> --json` — validate every artifact under a directory. */
@@ -124,10 +133,16 @@ export class RacClient {
     return args;
   }
 
-  private async run(args: readonly string[]): Promise<RunResult> {
+  private async run(
+    args: readonly string[],
+    extra: { input?: string } = {},
+  ): Promise<RunResult> {
     try {
-      return await this.runner(this.racPath, args, { cwd: this.cwd });
-    } catch (err) {
+      return await this.runner(this.racPath, args, {
+        cwd: this.cwd,
+        input: extra.input,
+      });
+    } catch {
       // A spawn failure (ENOENT and friends) means rac is not installed/usable.
       throw new RacNotFoundError(this.racPath);
     }
@@ -140,8 +155,11 @@ export class RacClient {
    * ({@link RacExecError}) or, on a clean exit, an unexpected-output failure
    * ({@link RacOutputError}).
    */
-  private async json<T>(args: readonly string[]): Promise<T> {
-    const result = await this.run(args);
+  private async json<T>(
+    args: readonly string[],
+    extra: { input?: string } = {},
+  ): Promise<T> {
+    const result = await this.run(args, extra);
     try {
       return JSON.parse(result.stdout) as T;
     } catch {

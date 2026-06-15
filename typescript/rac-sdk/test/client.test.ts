@@ -9,16 +9,18 @@ import {
 import type { RacRunner, RunResult } from "../src/runner.js";
 import { isResolved } from "../src/types.js";
 
-/** A fake runner that records the args it was called with and returns canned output. */
+/** A fake runner that records the args/stdin it was called with and returns canned output. */
 function fakeRunner(
   result: Partial<RunResult> & { stdout: string },
-): { runner: RacRunner; calls: string[][] } {
+): { runner: RacRunner; calls: string[][]; inputs: (string | undefined)[] } {
   const calls: string[][] = [];
-  const runner: RacRunner = async (_bin, args) => {
+  const inputs: (string | undefined)[] = [];
+  const runner: RacRunner = async (_bin, args, options) => {
     calls.push([...args]);
+    inputs.push(options?.input);
     return { stdout: result.stdout, stderr: result.stderr ?? "", code: result.code ?? 0 };
   };
-  return { runner, calls };
+  return { runner, calls, inputs };
 }
 
 describe("validateFile", () => {
@@ -48,6 +50,25 @@ describe("validateFile", () => {
     expect(result.errors[0]?.code).toBe("missing-title");
     expect(result.warnings[0]?.code).toBe("missing-risks");
     expect(calls[0]).toEqual(["validate", "bad.md", "--json"]);
+  });
+});
+
+describe("validateText", () => {
+  it("validates via stdin (`-`) and forwards the buffer as input", async () => {
+    const { runner, calls, inputs } = fakeRunner({
+      code: 1,
+      stdout: JSON.stringify({
+        file: "-",
+        valid: false,
+        errors: [{ severity: "error", code: "missing-title", message: "no title", line: null }],
+        warnings: [],
+      }),
+    });
+    const rac = new RacClient({ runner });
+    const result = await rac.validateText("## Problem\n\nno title\n");
+    expect(result.valid).toBe(false);
+    expect(calls[0]).toEqual(["validate", "-", "--json"]);
+    expect(inputs[0]).toBe("## Problem\n\nno title\n");
   });
 });
 
