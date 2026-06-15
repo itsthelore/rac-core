@@ -72,6 +72,16 @@
       },
       "description": "What this arm placed in the answering model's context. The single symmetric grounding opportunity."
     },
+    "embedder": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["name", "dim"],
+      "properties": {
+        "name": { "type": "string" },
+        "dim": { "type": "integer", "minimum": 1 }
+      },
+      "description": "Embedder identity for retrieval arms (model id + vector dimension), recorded for reproducibility. null for arms that do not embed."
+    },
     "proposed_change": {
       "type": "object",
       "additionalProperties": false,
