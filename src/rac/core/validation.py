@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Callable
+from typing import Literal
 
 from .artifacts import ArtifactSpec, spec_for
 from .classification import classify
 from .identity import identity_conflict
-from .models import Issue, Product
+from .models import Issue, Product, Requirement
 
 # A file with more requirements than this earns a (non-failing) warning.
 MAX_REQUIREMENTS = 50
@@ -336,6 +338,31 @@ def _validate_design(product: Product) -> list[Issue]:
     return issues
 
 
+def _report_duplicates(
+    requirements: list[Requirement],
+    *,
+    key: Callable[[Requirement], str],
+    severity: Literal["error", "warning"],
+    code: str,
+    message: Callable[[Requirement, int], str],
+) -> list[Issue]:
+    """One issue per requirement whose ``key`` collides with another's.
+
+    The issue is reported at the first offending occurrence of each duplicated
+    key, in document order, so each duplicate group is named exactly once.
+    ``message`` receives the offending requirement and its occurrence count.
+    """
+    counts = Counter(key(r) for r in requirements)
+    seen: set[str] = set()
+    issues: list[Issue] = []
+    for r in requirements:
+        k = key(r)
+        if counts[k] > 1 and k not in seen:
+            seen.add(k)
+            issues.append(Issue(severity, code, message(r, counts[k]), r.line))
+    return issues
+
+
 def _validate_requirement(product: Product) -> list[Issue]:
     """Check ``product`` and return all structural and quality findings."""
     # --- Hard failures: structure -------------------------------------------
@@ -384,19 +411,13 @@ def _validate_requirement(product: Product) -> list[Issue]:
             )
 
     # --- Hard failures: duplicate IDs ---------------------------------------
-    id_counts = Counter(r.id for r in product.requirements)
-    seen: set[str] = set()
-    for r in product.requirements:
-        if id_counts[r.id] > 1 and r.id not in seen:
-            seen.add(r.id)
-            issues.append(
-                Issue(
-                    "error",
-                    "duplicate-req-id",
-                    f"Duplicate requirement ID {r.id} (used {id_counts[r.id]} times).",
-                    r.line,
-                )
-            )
+    issues += _report_duplicates(
+        product.requirements,
+        key=lambda r: r.id,
+        severity="error",
+        code="duplicate-req-id",
+        message=lambda r, n: f"Duplicate requirement ID {r.id} (used {n} times).",
+    )
 
     # --- Warnings: missing optional sections --------------------------------
     if not product.has_metrics_section:
@@ -432,20 +453,13 @@ def _validate_requirement(product: Product) -> list[Issue]:
         )
 
     # --- Warnings: duplicate requirement text -------------------------------
-    text_counts = Counter(r.text.strip().casefold() for r in product.requirements)
-    seen_text: set[str] = set()
-    for r in product.requirements:
-        key = r.text.strip().casefold()
-        if text_counts[key] > 1 and key not in seen_text:
-            seen_text.add(key)
-            issues.append(
-                Issue(
-                    "warning",
-                    "duplicate-req-text",
-                    f"Duplicate requirement text: {r.text!r}.",
-                    r.line,
-                )
-            )
+    issues += _report_duplicates(
+        product.requirements,
+        key=lambda r: r.text.strip().casefold(),
+        severity="warning",
+        code="duplicate-req-text",
+        message=lambda r, n: f"Duplicate requirement text: {r.text!r}.",
+    )
 
     # --- Warnings: ambiguous verbs ------------------------------------------
     for r in product.requirements:
