@@ -9,7 +9,11 @@ section that marks a decision superseded — can fall out of the retrieved set,
 severing a relationship that whole-corpus or typed retrieval would preserve.
 
 For real runs, swap the embedder for a pinned hosted/local model via the
-`[real]` extra; the retrieval logic is unchanged.
+`[real]` extra; the retrieval logic is unchanged. Corpus sections are embedded
+with the `document` role and the task with the `query` role, so a backend that
+supports asymmetric query/document embeddings (e.g. Voyage `input_type`) is used
+the way it is meant to be — this keeps `naive_rag` a fair, strong baseline
+rather than a strawman.
 """
 
 from __future__ import annotations
@@ -65,13 +69,20 @@ class NaiveRagProvider(Provider):
         for a in corpus:
             for section in _split_sections(a.text):
                 self._chunks.append(
-                    _Chunk(a.id, a.type, section, self.embedder.embed(section))
+                    _Chunk(
+                        a.id,
+                        a.type,
+                        section,
+                        self.embedder.embed(section, input_type="document"),
+                    )
                 )
         # Grounding is task-dependent for RAG; assembled lazily in respond().
         self._grounding = GroundingContext(text="", artifacts_supplied=(), token_estimate=0)
 
     def respond(self, task: Task):
-        query = self.embedder.embed(f"{task.prompt}\n{task.proposed_action}")
+        query = self.embedder.embed(
+            f"{task.prompt}\n{task.proposed_action}", input_type="query"
+        )
         ranked = sorted(
             self._chunks, key=lambda c: cosine(query, c.vector), reverse=True
         )

@@ -26,13 +26,18 @@ def _tokenize(text: str) -> list[str]:
 
 
 class Embedder(ABC):
-    """Maps text to a fixed-width vector. Implementations must be deterministic."""
+    """Maps text to a fixed-width vector. Implementations must be deterministic.
+
+    `input_type` is an optional retrieval role (`"query"` or `"document"`).
+    Backends that distinguish the two (e.g. Voyage) embed them asymmetrically
+    for better retrieval; backends that do not simply ignore it.
+    """
 
     name: str = "base"
     dim: int = 0
 
     @abstractmethod
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, input_type: str | None = None) -> list[float]:
         ...
 
 
@@ -43,7 +48,8 @@ class LocalDeterministicEmbedder(Embedder):
         self.dim = dim
         self.name = f"local-hash-bow-{dim}"
 
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, input_type: str | None = None) -> list[float]:
+        # Offline bag-of-words has no notion of query vs document; ignore the role.
         vec = [0.0] * self.dim
         for tok in _tokenize(text):
             h = hashlib.blake2b(tok.encode("utf-8"), digest_size=8).digest()
@@ -76,7 +82,7 @@ class VoyageEmbedder(Embedder):
     keeps importing without the dependency.
     """
 
-    def __init__(self, model: str = "voyage-3") -> None:
+    def __init__(self, model: str = "voyage-4-large") -> None:
         self.model = model
         self.name = f"voyage:{model}"
         self._client = None
@@ -87,13 +93,18 @@ class VoyageEmbedder(Embedder):
 
             self._client = voyageai.Client()
             # Probe dimensionality once so cosine() comparisons are well-defined.
-            probe = self._client.embed(["."], model=self.model).embeddings[0]
+            probe = self._client.embed(
+                ["."], model=self.model, input_type="document"
+            ).embeddings[0]
             self.dim = len(probe)
         return self._client
 
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, input_type: str | None = None) -> list[float]:
         client = self._ensure_client()
-        vec = client.embed([text], model=self.model).embeddings[0]
+        # Voyage embeds queries and documents asymmetrically when told the role.
+        vec = client.embed(
+            [text], model=self.model, input_type=input_type
+        ).embeddings[0]
         return _l2_normalize(list(vec))
 
 
@@ -117,7 +128,8 @@ class SentenceTransformerEmbedder(Embedder):
             self.dim = self._model.get_sentence_embedding_dimension()
         return self._model
 
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, input_type: str | None = None) -> list[float]:
+        # This model does not take a query/document role; ignore input_type.
         model = self._ensure_model()
         vec = model.encode(text, normalize_embeddings=True)
         return [float(x) for x in vec]
@@ -133,7 +145,7 @@ def make_embedder(spec: str) -> Embedder:
         return LocalDeterministicEmbedder()
     if spec.startswith("voyage"):
         _, _, model = spec.partition(":")
-        return VoyageEmbedder(model or "voyage-3")
+        return VoyageEmbedder(model or "voyage-4-large")
     if spec.startswith("st"):
         _, _, model = spec.partition(":")
         return SentenceTransformerEmbedder(model or "all-MiniLM-L6-v2")
