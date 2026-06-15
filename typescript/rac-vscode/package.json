@@ -21,6 +21,10 @@
       {
         "command": "rac.validateWorkspace",
         "title": "RAC: Validate Open Artifacts"
+      },
+      {
+        "command": "rac.newArtifact",
+        "title": "RAC: New Artifact"
       }
     ],
     "configuration": {

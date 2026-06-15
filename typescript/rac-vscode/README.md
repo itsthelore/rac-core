@@ -28,6 +28,9 @@ reimplementing it ([ADR-063](../../rac/decisions/adr-063-non-python-clients-are-
   `v0.20.0-python-sdk-foundation`) shows its title, type, and path via
   `rac resolve`.
 - **Go-to-definition** — jump from a reference to the target artifact's file.
+- **Authoring aids** — artifact-alias completion inside relationship sections
+  (`## Related Decisions`, …), quick-fixes that insert a missing `## Section`,
+  and a **RAC: New Artifact** command that scaffolds via `rac new`.
 - **RAC: Validate Open Artifacts** command.
 - Graceful handling when `rac` is missing — a one-time prompt to install or set
   `rac.path`, never a wall of errors.

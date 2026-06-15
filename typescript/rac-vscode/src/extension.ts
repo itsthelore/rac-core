@@ -7,9 +7,13 @@
  *  - per-file validation diagnostics, live as you type (the unsaved buffer is
  *    piped through `rac validate -`), debounced, plus immediately on open/save;
  *  - cross-artifact enforcement: broken and retired-target references surfaced
- *    at the reference site, from `rac relationships --validate` (refreshed on
- *    save/activation, since relationship validation reads files from disk);
+ *    at the reference site, from `rac relationships --validate`;
+ *  - authoring aids: artifact-ID completion in relationship sections, quick-fix
+ *    insertion of missing sections, and a "New Artifact" command (`rac new`);
  *  - hover and go-to-definition on artifact IDs / aliases via `rac resolve`.
+ *
+ * The file is organized into clearly delimited sections; a module split is
+ * scoped for v0.21.6 (robustness/release).
  */
 
 import * as path from "node:path";
@@ -20,6 +24,7 @@ import {
   RacClient,
   RacNotFoundError,
   isResolved,
+  type CorpusExport,
   type FileValidation,
   type Issue,
   type RelationshipIssue,
@@ -29,10 +34,12 @@ import {
 
 const DEBOUNCE_MS = 300;
 const RELATIONSHIP_DEBOUNCE_MS = 600;
+const ARTIFACT_TYPES = ["requirement", "decision", "roadmap", "prompt", "design"];
 
 let diagnostics: vscode.DiagnosticCollection;
 let relationshipDiagnostics: vscode.DiagnosticCollection;
 const clients = new Map<string, RacClient>();
+const exportCache = new Map<string, CorpusExport>();
 const debounce = new Map<string, ReturnType<typeof setTimeout>>();
 const relationshipDebounce = new Map<string, ReturnType<typeof setTimeout>>();
 let warnedMissing = false;
@@ -49,6 +56,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument((doc) => {
       void validateDocument(doc);
       scheduleRelationshipsFor(doc);
+      invalidateExportFor(doc);
     }),
     vscode.workspace.onDidChangeTextDocument((e) => scheduleValidate(e.document)),
     vscode.workspace.onDidCloseTextDocument((doc) => {
@@ -58,13 +66,23 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("rac")) {
         clients.clear();
+        exportCache.clear();
         void validateWorkspace();
         refreshAllRelationships();
       }
     }),
     vscode.commands.registerCommand("rac.validateWorkspace", validateWorkspace),
+    vscode.commands.registerCommand("rac.newArtifact", newArtifact),
     vscode.languages.registerHoverProvider(selector, { provideHover }),
     vscode.languages.registerDefinitionProvider(selector, { provideDefinition }),
+    vscode.languages.registerCompletionItemProvider(selector, {
+      provideCompletionItems: provideCompletions,
+    }),
+    vscode.languages.registerCodeActionsProvider(
+      selector,
+      { provideCodeActions },
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
+    ),
   );
 
   for (const doc of vscode.workspace.textDocuments) void validateDocument(doc);
@@ -302,6 +320,110 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// --- authoring: completion, quick-fixes, new artifact -----------------------
+
+// Artifact-ID completion fires inside a relationship section, offering human
+// aliases from the corpus export (cached, invalidated on save).
+const RELATIONSHIP_HEADING = /^#{1,6}\s+(Related\s+\w+|Supersedes)\b/i;
+
+function inRelationshipSection(doc: vscode.TextDocument, line: number): boolean {
+  for (let i = line; i >= 0; i--) {
+    const text = doc.lineAt(i).text;
+    if (/^#{1,6}\s+/.test(text)) return RELATIONSHIP_HEADING.test(text);
+  }
+  return false;
+}
+
+async function provideCompletions(
+  doc: vscode.TextDocument,
+  position: vscode.Position,
+): Promise<vscode.CompletionItem[] | undefined> {
+  if (!looksLikeRacArtifact(doc.getText())) return undefined;
+  if (!inRelationshipSection(doc, position.line)) return undefined;
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  if (!folder) return undefined;
+  const corpus = await corpusExport(folder);
+  if (!corpus) return undefined;
+
+  const items: vscode.CompletionItem[] = [];
+  for (const artifact of corpus.artifacts) {
+    for (const alias of artifact.aliases) {
+      if (alias === artifact.id) continue; // offer human aliases, not the opaque id
+      const item = new vscode.CompletionItem(alias, vscode.CompletionItemKind.Reference);
+      item.detail = `${artifact.type} — ${artifact.title}`;
+      item.insertText = alias;
+      items.push(item);
+    }
+  }
+  return items;
+}
+
+function provideCodeActions(
+  doc: vscode.TextDocument,
+  _range: vscode.Range,
+  context: vscode.CodeActionContext,
+): vscode.CodeAction[] {
+  const actions: vscode.CodeAction[] = [];
+  for (const diagnostic of context.diagnostics) {
+    if (diagnostic.source !== "rac" || typeof diagnostic.code !== "string") continue;
+    const match = /^missing-(.+)$/.exec(diagnostic.code);
+    if (!match) continue;
+    const title = titleCase(match[1].replace(/-/g, " "));
+    const action = new vscode.CodeAction(
+      `Insert "## ${title}" section`,
+      vscode.CodeActionKind.QuickFix,
+    );
+    action.diagnostics = [diagnostic];
+    const edit = new vscode.WorkspaceEdit();
+    const text = doc.getText();
+    const separator = text.endsWith("\n") ? "\n" : "\n\n";
+    edit.insert(
+      doc.uri,
+      new vscode.Position(doc.lineCount, 0),
+      `${separator}## ${title}\n\n`,
+    );
+    action.edit = edit;
+    actions.push(action);
+  }
+  return actions;
+}
+
+async function newArtifact(): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showErrorMessage("RAC: open a workspace folder first.");
+    return;
+  }
+  const type = await vscode.window.showQuickPick(ARTIFACT_TYPES, {
+    placeHolder: "Artifact type",
+  });
+  if (!type) return;
+  const relPath = await vscode.window.showInputBox({
+    prompt: `Path for the new ${type}`,
+    value: `rac/${type}s/new-${type}.md`,
+  });
+  if (!relPath) return;
+
+  try {
+    const result = await clientFor(folder).createArtifact(type, relPath);
+    const uri = vscode.Uri.joinPath(folder.uri, result.path);
+    invalidateExport(folder);
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+  } catch (err) {
+    if (err instanceof RacNotFoundError) {
+      warnMissingOnce();
+      return;
+    }
+    void vscode.window.showErrorMessage(
+      `RAC: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+function titleCase(value: string): string {
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 // --- hover & go-to-definition ----------------------------------------------
 
 // Reference-ish tokens: identifiers with a hyphen (adr-007, v0.20.0-foo,
@@ -376,6 +498,33 @@ function clientFor(folder: vscode.WorkspaceFolder): RacClient {
     clients.set(key, client);
   }
   return client;
+}
+
+// The corpus export, cached per folder and invalidated on save. Powers
+// alias-based completion (and, later, hover enrichment).
+async function corpusExport(
+  folder: vscode.WorkspaceFolder,
+): Promise<CorpusExport | undefined> {
+  const key = folder.uri.fsPath;
+  const cached = exportCache.get(key);
+  if (cached) return cached;
+  try {
+    const data = await clientFor(folder).exportCorpus(folder.uri.fsPath);
+    exportCache.set(key, data);
+    return data;
+  } catch (err) {
+    if (err instanceof RacNotFoundError) warnMissingOnce();
+    return undefined;
+  }
+}
+
+function invalidateExport(folder: vscode.WorkspaceFolder): void {
+  exportCache.delete(folder.uri.fsPath);
+}
+
+function invalidateExportFor(doc: vscode.TextDocument): void {
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  if (folder) invalidateExport(folder);
 }
 
 // Only treat Markdown with a leading YAML frontmatter block carrying
