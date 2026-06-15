@@ -19,12 +19,12 @@ engine, its shipped resources, and its governing corpus in
 It is a non-versioned `future/` item because the work is structural and
 cross-cutting, not a feature release on the current series.
 
-The three targets differ sharply in risk. `decisiongrounding` imports no
-engine code and can move with no consumer impact. The examples are
-pedagogical and partly still being built liftable (v0.20.1). The GitHub
-Actions are the only target whose move is consumer-breaking: extraction
-changes the `uses:` path that downstream workflows reference, so it must come
-last and behind a versioned cutover.
+Two components extract; `examples/` is explicitly kept (ADR-063), since
+`examples/guide` is the grounding demo and the dashboards are test fixtures.
+The two extraction targets differ in risk. `decisiongrounding` imports no
+engine code and can move with no consumer impact. The GitHub Actions are the
+consumer-breaking target: extraction changes the `uses:` path that downstream
+workflows reference, so they come last and behind a versioned cutover.
 
 ## Outcomes
 
@@ -48,22 +48,28 @@ no code changes are needed; remove the directory from the monorepo and update
 any references to it (including the v0.20.1 roadmap's "mirrors
 `decisiongrounding/`" note, which becomes a cross-repo reference).
 
-### Initiative 2 — Extract examples to `itsthelore/rac-examples`
+### Initiative 2 — Extract the GitHub Actions to `itsthelore/rac-actions`
 
-Build the SDK examples sub-project liftable per v0.20.1 (own `pyproject.toml`
-depending on the published package), then graduate it together with
-`examples/` into `itsthelore/rac-examples`. The examples depend on the
-published package or the public CLI, proving the surface from outside the
-source tree.
+Move `validate-action/action.yml` and the root `action.yml` (Watchkeeper) into
+a single `itsthelore/rac-actions` repository, each action in its own
+subdirectory: `gatekeeper/` (the `validate` action, **renamed Gatekeeper** — it
+holds the gate on corpus validity, a sibling to Watchkeeper) and
+`watchkeeper/`. This changes the `uses:` path consumers reference, so it ships
+behind a versioned cutover: publish the new location, document the new `uses:`
+references (`itsthelore/rac-actions/gatekeeper@v1`,
+`itsthelore/rac-actions/watchkeeper@v1`), leave a deprecation note for the old
+`itsthelore/requirements-as-code/validate-action@ref` path, and update this
+repository's own `.github/workflows/` to the new location. ADR-058 governs the
+validation action and moves with it.
 
-### Initiative 3 — Extract the GitHub Actions (versioned cutover)
+### Initiative 3 — Keep `examples/`; adopt the per-repo examples convention
 
-Move `validate-action/action.yml` and the root `action.yml` (Watchkeeper) to
-`itsthelore/rac-actions` (or per-action repos). This changes the `uses:` path
-consumers reference, so it ships behind a versioned cutover: publish the new
-location, document the new `uses:` reference, leave a deprecation note for the
-old path, and update this repository's own `.github/workflows/` to the new
-location. ADR-058 governs the validation action and moves with it.
+`examples/` is **not** extracted. `examples/guide` is the grounding demo and
+the dashboards are test fixtures, so they stay in the engine repo (ADR-063).
+The convention going forward: each repo carries its own `examples/`
+subdirectory where useful, rather than a central examples repository. The
+separately planned liftable SDK examples sub-project (v0.20.1) is unaffected by
+this programme.
 
 ## Constraints
 
@@ -78,6 +84,8 @@ location. ADR-058 governs the validation action and moves with it.
 
 ## Non-Goals
 
+- Extracting `examples/` or creating a `rac-examples` repo — examples stays in
+  the engine repo (ADR-063).
 - Extracting `lore-web` — deferred by ADR-063 until its Portal-shell vendoring
   has a publish/vendor contract.
 - Renaming the package, CLI, or server.
@@ -86,18 +94,49 @@ location. ADR-058 governs the validation action and moves with it.
 
 ## Implementation Contract
 
-- Each extraction produces a new `itsthelore/<repo>` populated by a
-  history-preserving move, the source directory removed from the monorepo, and
-  all in-repo and documentation references updated.
-- The actions extraction additionally ships a versioned cutover: new `uses:`
-  reference documented, old path deprecated, this repo's workflows updated.
-- After each extraction the engine repository's `rac validate rac/`,
-  `rac relationships rac/ --validate`, and `rac review rac/` gates stay green.
+**Safety sequencing.** Populate each destination repo with preserved history
+and confirm it *before* removing anything from the engine repo. Never delete
+from `requirements-as-code` until the content lives elsewhere.
+
+**Seed `itsthelore/decisiongrounding`** (history-preserving):
+
+```bash
+git clone <engine-url> dg && cd dg
+git filter-repo --path decisiongrounding/ --path-rename decisiongrounding/:
+git remote add origin <decisiongrounding-url> && git push -u origin main
+```
+
+**Seed `itsthelore/rac-actions`** (history-preserving, two subdirs):
+
+```bash
+git clone <engine-url> acts && cd acts
+git filter-repo --path validate-action/ --path action.yml \
+  --path-rename validate-action/:gatekeeper/ \
+  --path-rename action.yml:watchkeeper/action.yml
+```
+
+Then rename the validate action to **Gatekeeper** inside
+`gatekeeper/action.yml` (the `name:` field and header comment), add a README
+documenting the new `uses:` references, tag `v1`, and push.
+
+**Removal + rewire PR on `requirements-as-code`** (one PR for the whole
+carve-out): remove `decisiongrounding/`, `validate-action/`, and the root
+`action.yml`; repoint the engine's own self-tests in
+`.github/workflows/pr-checks.yml` (`uses: ./` → `…/rac-actions/watchkeeper@v1`;
+`uses: ./validate-action` → `…/rac-actions/gatekeeper@v1`); update or remove
+`tests/test_validate_action.py` and `tests/test_watchkeeper.py`; update
+`docs/watchkeeper.md`, `docs/validation.md` (grep for others) to the new repo
+and add a deprecation note for the old path; keep `examples/` untouched.
+
+After the removals the engine repository's `rac validate rac/`,
+`rac relationships rac/ --validate`, and `rac review rac/` gates stay green,
+and `pytest` passes.
 
 ## Success Measures
 
-- All three targets are extracted and consume only the published package or
-  public CLI; no extracted repo imports engine internals.
+- Both extraction targets (`decisiongrounding`, `rac-actions`) live in their
+  own repos and consume only the published package or public CLI; neither
+  imports engine internals.
 - No issue traces to a stranded `uses:` path or a missing relocated component.
 - The engine repository's corpus gates remain green throughout.
 
@@ -107,9 +146,8 @@ location. ADR-058 governs the validation action and moves with it.
   maintainer can create and permission them when each initiative runs.
 - `decisiongrounding` continues to consume `rac` only as an external CLI on
   `PATH`, so its move needs no code change (DG-ADR-0001 holds).
-- The published `requirements-as-code` package remains the dependency surface
-  for the examples, and the public `rac` CLI for the actions — neither needs
-  engine internals.
+- The extracted actions consume only the public `rac` CLI, not engine
+  internals, so they run from any repo once published.
 - `lore-web` stays in this repository until its vendoring contract exists, so
   no Portal-shell drift-guard breaks during this programme.
 
