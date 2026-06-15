@@ -184,3 +184,38 @@ def test_unrecognized_key_absent_from_json_when_none(capsys):
     main(["stats", fixture_path("portfolio"), "--json"])
     payload = json.loads(capsys.readouterr().out)
     assert "unrecognized" not in payload
+
+
+# --- meaningful content (v0.20.0: stats success logic behind the gate) --------
+
+
+def test_has_meaningful_content_empty_corpus(tmp_path):
+    # A day-one corpus is empty and not meaningful: distinct states.
+    s = collect_stats(str(tmp_path))
+    assert s.is_empty is True
+    assert s.has_meaningful_content is False
+
+
+def test_has_meaningful_content_with_one_valid_feature(tmp_path):
+    (tmp_path / "ok.md").write_text(_OK_FEATURE)
+    s = collect_stats(str(tmp_path))
+    assert s.has_meaningful_content is True
+    assert s.is_empty is False
+
+
+def test_has_meaningful_content_all_invalid_is_neither_empty_nor_meaningful(tmp_path):
+    # Files exist but none validate: not empty, not meaningful -> stats fails.
+    (tmp_path / "broken.md").write_text("## Problem\n\nno title\n")
+    s = collect_stats(str(tmp_path))
+    assert s.is_empty is False
+    assert s.has_meaningful_content is False
+
+
+def test_cli_stats_exit_codes_track_meaningful_content(tmp_path):
+    # The CLI exit code follows the gate-computed property: empty -> 0,
+    # all-invalid -> 1, one valid artifact -> 0.
+    assert main(["stats", str(tmp_path)]) == 0  # empty
+    (tmp_path / "broken.md").write_text("## Problem\n\nno title\n")
+    assert main(["stats", str(tmp_path)]) == 1  # all-invalid
+    (tmp_path / "ok.md").write_text(_OK_FEATURE)
+    assert main(["stats", str(tmp_path)]) == 0  # one valid feature
