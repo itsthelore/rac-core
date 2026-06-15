@@ -1,0 +1,57 @@
+{
+  "name": "rac-vscode",
+  "displayName": "RAC — Requirements as Code",
+  "description": "Inline validation for RAC (requirements-as-code) artifacts, powered by the rac CLI.",
+  "version": "0.1.0",
+  "publisher": "rac",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "rac.validateWorkspace",
+        "title": "RAC: Validate Open Artifacts"
+      }
+    ],
+    "configuration": {
+      "title": "RAC",
+      "properties": {
+        "rac.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `rac` binary. Empty = the `RAC_BIN` environment variable, else `rac` on `PATH`."
+        },
+        "rac.validate.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate RAC artifacts and show diagnostics as you open and save them."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "vscode:prepublish": "npm run check-types && npm run compile"
+  },
+  "dependencies": {
+    "@rac/sdk": "file:../rac-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}
