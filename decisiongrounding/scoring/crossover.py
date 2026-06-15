@@ -20,7 +20,7 @@ import random
 import re
 from pathlib import Path
 
-from providers import ARMS, ScriptedAnsweringModel
+from providers import build_provider, make_answering_model
 from providers.base import CorpusArtifact
 from scenarios.loader import Scenario
 from scoring.scorer import score
@@ -81,8 +81,8 @@ def make_filler_notes(
     return notes
 
 
-def _run_arm_on_corpus(arm_name: str, corpus, scenario, seed: int):
-    provider = ARMS[arm_name](ScriptedAnsweringModel(seed=seed))
+def _run_arm_on_corpus(arm_name: str, corpus, scenario, answering_model, embedder_spec: str):
+    provider = build_provider(arm_name, answering_model, embedder_spec)
     provider.prepare(list(corpus))
     pc = provider.respond(scenario.task)
     gov = scenario.gold_label.governing_decision
@@ -95,9 +95,18 @@ def build_dataset(
     arms: tuple[str, ...] = ("context_dump", "naive_rag"),
     ns: tuple[int, ...] = DEFAULT_NS,
     seed: int = 0,
+    answering_model_name: str = "offline-stub",
+    embedder_spec: str = "local-hash",
 ) -> dict:
-    """Compute per-arm adherence at each N, averaged over discriminating scenarios."""
+    """Compute per-arm adherence at each N, averaged over discriminating scenarios.
+
+    Defaults keep the offline spine (scripted model + local-hash embedder). Pass
+    `answering_model_name="claude"` and an `embedder_spec` like
+    `voyage:voyage-4-large` to produce a real-model crossover.
+    """
     discriminating = [s for s in scenarios if s.scenario_type in DISCRIMINATING]
+    # One answering model instance reused across the sweep (lazy client for real).
+    answering_model = make_answering_model(answering_model_name, seed)
     points: dict[str, list[dict]] = {arm: [] for arm in arms}
     # per_scenario[arm][scenario_id] -> [{N, adherent, stale}]
     per_scenario: dict[str, dict[str, list[dict]]] = {
@@ -112,7 +121,9 @@ def build_dataset(
             for sc in discriminating:
                 filler = make_filler_notes(max(0, n - len(sc.corpus)), sc, seed, density)
                 corpus = list(sc.corpus) + filler
-                sc_score, gov_retrieved = _run_arm_on_corpus(arm, corpus, sc, seed)
+                sc_score, gov_retrieved = _run_arm_on_corpus(
+                    arm, corpus, sc, answering_model, embedder_spec
+                )
                 adhered += 1 if sc_score.adherent else 0
                 retrieved_flags.append(gov_retrieved)
                 per_scenario[arm][sc.scenario_id].append(
@@ -135,6 +146,8 @@ def build_dataset(
         "note": "Filler is synthetic untyped `note` padding. Illustrative, not a real corpus.",
         "seed": seed,
         "ns": list(ns),
+        "answering_model": answering_model.version,
+        "embedder": embedder_spec,
         "arms": {arm: points[arm] for arm in arms},
         "per_scenario": per_scenario,
     }

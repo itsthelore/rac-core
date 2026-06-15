@@ -27,10 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from providers import (  # noqa: E402
     ARMS,
     REAL_ARMS,
-    ClaudeAnsweringModel,
-    NaiveRagProvider,
-    ScriptedAnsweringModel,
-    make_embedder,
+    build_provider,
+    make_answering_model,
 )
 from providers.base import ProposedChange  # noqa: E402
 from scenarios.loader import Scenario, load_scenarios  # noqa: E402
@@ -43,22 +41,16 @@ _DEFAULT_RESULTS = _ROOT / "results"
 
 
 def _answering_model(name: str, seed: int):
-    if name == "offline-stub":
-        return ScriptedAnsweringModel(seed=seed)
-    if name == "claude":
-        # Real, pinned answering model (Claude Opus 4.8). Requires the [real]
-        # extra + ANTHROPIC_API_KEY; not runnable in the offline demo.
-        return ClaudeAnsweringModel(seed=seed)
-    raise SystemExit(
-        f"unknown answering model {name!r}; use 'offline-stub' or 'claude'."
-    )
+    # Thin CLI wrapper: surface the factory's error as a usage exit.
+    try:
+        return make_answering_model(name, seed)
+    except ValueError as e:
+        raise SystemExit(str(e))
 
 
 def _provider(arm: str, model, embedder_spec: str):
     """Instantiate an arm, wiring a real embedder into naive_rag when asked."""
-    if arm == "naive_rag":
-        return NaiveRagProvider(model, embedder=make_embedder(embedder_spec))
-    return ARMS[arm](model)
+    return build_provider(arm, model, embedder_spec)
 
 
 def _pc_to_dict(pc: ProposedChange) -> dict:
@@ -79,6 +71,10 @@ def run_one(arm: str, scenario: Scenario, model, seed: int, embedder: str = "loc
     g = provider.grounding
     gov = scenario.gold_label.governing_decision
     governing_retrieved = None if gov is None else (gov in g.artifacts_supplied)
+    # Reproducibility: record the embedder identity for retrieval arms (the dim
+    # is probed during prepare()); null for arms that don't embed.
+    emb = getattr(provider, "embedder", None)
+    embedder_meta = {"name": emb.name, "dim": emb.dim} if emb is not None else None
     return {
         "run_id": str(uuid.uuid4()),
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -96,11 +92,26 @@ def run_one(arm: str, scenario: Scenario, model, seed: int, embedder: str = "loc
             "token_estimate": g.token_estimate,
             "artifacts_supplied": list(g.artifacts_supplied),
         },
+        "embedder": embedder_meta,
         "proposed_change": _pc_to_dict(pc),
         "score": sc.as_dict(),
         "retrieval": {"governing_decision_retrieved": governing_retrieved},
         "harness_version": HARNESS_VERSION,
     }
+
+
+def _backend_versions() -> dict:
+    """Best-effort: the installed versions of the real backends, so each report
+    records exactly what produced it. Empty when the [real] extra isn't present."""
+    import importlib.metadata as md
+
+    out: dict[str, str] = {}
+    for pkg in ("anthropic", "voyageai"):
+        try:
+            out[pkg] = md.version(pkg)
+        except Exception:  # noqa: BLE001 - absence is expected offline
+            pass
+    return out
 
 
 def _write_report(results: list[dict], out_dir: Path, label: str) -> Path:
@@ -126,6 +137,7 @@ def _write_report(results: list[dict], out_dir: Path, label: str) -> Path:
         "harness_version": HARNESS_VERSION,
         "generated": datetime.now(timezone.utc).isoformat(),
         "label": label,
+        "backend_versions": _backend_versions(),
         "metrics_by_arm": metrics,
         "runs": results,
     }
@@ -180,7 +192,14 @@ def cmd_compare(args) -> int:
 def cmd_demo(args) -> int:
     arms = REAL_ARMS
     scenarios = load_scenarios(args.scenarios)
-    model = _answering_model("offline-stub", args.seed)
+    ns = tuple(int(x) for x in args.ns.split(",") if x.strip())
+    if args.answering == "claude":
+        print(
+            f"NOTE: --answering claude makes real API calls "
+            f"(~ {len(arms)} arms x scenarios x {len(ns)} corpus sizes). "
+            f"Use --ns to keep a real run cheap (e.g. --ns 10,50).\n"
+        )
+    model = _answering_model(args.answering, args.seed)
     print("== per-scenario, per-arm (tiny corpus) ==")
     results: list[dict] = []
     for arm in arms:
@@ -190,7 +209,14 @@ def cmd_demo(args) -> int:
     report = _write_report(results, Path(args.out), "demo")
 
     print("\n== adherence vs corpus size (discriminating scenarios, averaged) ==")
-    dataset = build_dataset(scenarios, arms=arms, seed=args.seed)
+    dataset = build_dataset(
+        scenarios,
+        arms=arms,
+        ns=ns,
+        seed=args.seed,
+        answering_model_name=args.answering,
+        embedder_spec=args.embedder,
+    )
     for arm in arms:
         row = " ".join(f"N={p['N']}:{p['adherence_rate']:.2f}" for p in dataset["arms"][arm])
         print(f"{arm:<16}{row}")
@@ -209,10 +235,16 @@ def cmd_demo(args) -> int:
             print(f"{arm:<13}{sid:<32}{row}")
     data_path, chart_path = emit(dataset, Path(args.out))
     print(f"\nwrote {report}\nwrote {data_path}\nwrote {chart_path}")
-    print(
-        "\nNOTE: offline-stub output is a harness illustration, NOT a benchmark "
-        "result. See README and ADR-0001."
-    )
+    if args.answering == "offline-stub":
+        print(
+            "\nNOTE: offline-stub output is a harness illustration, NOT a benchmark "
+            "result. See README and ADR-0001."
+        )
+    else:
+        print(
+            "\nNOTE: real-model run on the tiny SYNTHETIC scenarios — a real-model "
+            "crossover, not yet the real-CORPUS evidence run. See README and ADR-0001."
+        )
     return 0
 
 
@@ -238,6 +270,13 @@ def main(argv: list[str] | None = None) -> int:
             sp.add_argument("--arm", required=True, choices=sorted(ARMS))
         if name == "compare":
             sp.add_argument("--arms", default=",".join(REAL_ARMS))
+        if name == "demo":
+            sp.add_argument(
+                "--ns",
+                default="10,50,150,300",
+                help="comma-separated corpus sizes for the crossover sweep "
+                "(smaller keeps a real run cheap, e.g. 10,50)",
+            )
 
     args = p.parse_args(argv)
     return {"run": cmd_run, "compare": cmd_compare, "demo": cmd_demo}[args.cmd](args)
