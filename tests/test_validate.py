@@ -14,6 +14,7 @@ from rac.services.validate import (
     STATUS_SKIPPED,
     STATUS_VALID,
     validate_directory,
+    validate_product,
 )
 
 
@@ -193,3 +194,49 @@ def test_cli_single_file_behavior_unchanged(capsys):
     # Unknown single files still fall back to the legacy requirement rules.
     rc = main(["validate", fixture_path("portfolio_summary", "all_types", "unknown.md")])
     assert rc == 1
+
+
+# --- validate_product (v0.20.0: single-file composition behind the gate) ------
+
+
+def test_validate_product_matches_raw_validate_without_overrides(tmp_path):
+    # With no repository overrides, validate_product is exactly validate().
+    product = parse_file(fixture_path("valid", "minimal.md"))
+    assert codes(validate_product(product, str(tmp_path))) == codes(validate(product))
+
+
+def test_validate_product_agrees_with_directory_validation():
+    # The same artifact yields the same issues whether validated as a single
+    # file (validate_product) or inside a directory walk (validate_directory):
+    # one composition, one home (ADR-015).
+    path = fixture_path("portfolio", "broken.md")
+    single = codes(validate_product(parse_file(path)))
+
+    result = validate_directory(fixture_path("portfolio"))
+    in_dir = next(f for f in result.files if f.path.endswith("broken.md"))
+    assert {i.code for i in in_dir.issues} == single
+
+
+def test_validate_product_applies_repository_overrides(tmp_path):
+    # A severity override at `start` (ADR-053) is honoured by validate_product,
+    # proving the CLI no longer needs to compose validate + classify + overrides
+    # itself. `missing-success-metrics` is a warning by default; override it to
+    # error and validate_product must report it as an error.
+    (tmp_path / "feature.md").write_text(
+        "# Ok\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n"
+    )
+    product = parse_file(str(tmp_path / "feature.md"))
+
+    def metric_issues(start):
+        return [i for i in validate_product(product, start) if i.code == "missing-success-metrics"]
+
+    default = metric_issues(str(tmp_path))
+    assert default and default[0].severity == "warning"  # no config yet
+
+    config_dir = tmp_path / ".rac"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        "repository_key: RAC\nvalidation:\n  rules:\n    missing-success-metrics: error\n"
+    )
+    overridden = metric_issues(str(tmp_path))
+    assert overridden and overridden[0].severity == "error"
