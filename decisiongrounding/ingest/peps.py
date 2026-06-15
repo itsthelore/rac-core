@@ -97,19 +97,82 @@ def supersedes_targets(headers: dict[str, str]) -> list[int]:
     return _header_numbers(headers, "Replaces")
 
 
-def corpus_markdown(num: int, rst: str, sha: str = PINNED_COMMIT) -> str:
-    """A corpus artifact: provenance preamble + verbatim upstream PEP text."""
-    title = parse_headers(rst).get("Title", "").strip()
+# Marker that separates the derived RAC envelope from the verbatim PEP payload.
+# Everything after it is the unedited upstream reStructuredText (hash-anchored in
+# provenance.json), so integrity checks can recover it by splitting on this line.
+SOURCE_TEXT_MARKER = "\n\n## Source Text\n\n"
+
+
+def _pep_tags(headers: dict[str, str]) -> list[str]:
+    """Deterministic tags: always `pep`, plus the PEP's own Topic if present."""
+    tags = ["pep"]
+    topic = headers.get("Topic", "").strip().lower()
+    if topic:
+        tags.append(topic)
+    return tags
+
+
+def corpus_markdown(
+    num: int,
+    rst: str,
+    sha: str = PINNED_COMMIT,
+    corpus_nums: frozenset[int] | None = None,
+) -> str:
+    """A RAC-native `decision` artifact wrapping the verbatim PEP.
+
+    The artifact carries the canonical decision sections RAC classifies on
+    (`Status`/`Context`/`Decision`/`Consequences`) plus a directional `Supersedes`
+    section, so the `rac` arm can classify it and follow the edge. Every envelope
+    value is *derived from the PEP's own header fields* — the upstream `Status`,
+    and `Replaces` for the supersedes edge — and the authoritative content is the
+    unedited PEP reproduced verbatim under `Source Text`. Nothing here editorialises
+    the PEP's technical content.
+
+    `corpus_nums` is the set of PEP numbers in the same corpus; only `Replaces`
+    targets present in it are listed under `Supersedes`, so no reference dangles.
+    """
+    headers = parse_headers(rst)
+    title = headers.get("Title", "").strip()
+    status = headers.get("Status", "").strip() or "Final"
+    in_corpus = corpus_nums if corpus_nums is not None else frozenset({num})
+    supersedes = [pep_id(t) for t in supersedes_targets(headers) if t in in_corpus]
+    tags = ", ".join(_pep_tags(headers))
+
     heading = f"# {pep_id(num)} — {title}" if title else f"# {pep_id(num)}"
-    preamble = (
-        f"{heading}\n\n"
-        f"> Source: {SOURCE_REPO} @ {sha}\n"
-        f"> Path: peps/pep-{num:04d}.rst · {source_url(num, sha)}\n"
-        f"> Verbatim public artifact, pinned and unedited. Not authored for this\n"
-        f"> benchmark; see provenance.json for the upstream sha256.\n\n"
-        f"---\n\n"
-    )
-    return preamble + rst
+    parts = [
+        "---",
+        "schema_version: 1",
+        f"id: {pep_id(num)}",
+        "type: decision",
+        f"tags: [{tags}]",
+        "---",
+        "",
+        heading,
+        "",
+        "## Status",
+        "",
+        status,
+        "",
+        "## Context",
+        "",
+        f"Public decision ingested verbatim from {SOURCE_REPO} (PEP {num}) at commit",
+        f"{sha}; source peps/pep-{num:04d}.rst ({source_url(num, sha)}). Upstream",
+        f"status: {status}. The RAC envelope sections are derived from the PEP's own",
+        "header fields; the authoritative content is the unedited PEP reproduced under",
+        "Source Text (upstream sha256 recorded in provenance.json).",
+        "",
+        "## Decision",
+        "",
+        "Defined by the verbatim PEP text under Source Text below.",
+        "",
+        "## Consequences",
+        "",
+        "As stated by the upstream PEP; see Source Text.",
+    ]
+    if supersedes:
+        parts += ["", "## Supersedes", ""] + [f"- {sid}" for sid in supersedes]
+    envelope = "\n".join(parts)
+    return envelope + SOURCE_TEXT_MARKER + rst
 
 
 def build_provenance(peps: tuple[int, ...], texts: dict[int, str], sha: str) -> dict:
@@ -149,9 +212,10 @@ def build(out_dir: Path, peps: tuple[int, ...] = PILOT_PEPS, sha: str = PINNED_C
     corpus_dir = out_dir / "corpus"
     corpus_dir.mkdir(parents=True, exist_ok=True)
     texts = {num: fetch_pep(num, sha) for num in peps}
+    corpus_nums = frozenset(peps)
     for num in peps:
         (corpus_dir / f"{pep_id(num)}.md").write_text(
-            corpus_markdown(num, texts[num], sha), encoding="utf-8"
+            corpus_markdown(num, texts[num], sha, corpus_nums), encoding="utf-8"
         )
     provenance = build_provenance(peps, texts, sha)
     (out_dir / "provenance.json").write_text(
@@ -165,6 +229,7 @@ def verify(out_dir: Path) -> list[str]:
     means the committed corpus reproduces exactly from the upstream bytes)."""
     provenance = json.loads((out_dir / "provenance.json").read_text(encoding="utf-8"))
     sha = provenance["pinned_commit"]
+    corpus_nums = frozenset(e["number"] for e in provenance["peps"])
     problems: list[str] = []
     for entry in provenance["peps"]:
         num = entry["number"]
@@ -178,7 +243,7 @@ def verify(out_dir: Path) -> list[str]:
             problems.append(
                 f"{entry['id']}: upstream sha256 changed ({got} != {entry['source_sha256']})"
             )
-        expected_md = corpus_markdown(num, rst, sha)
+        expected_md = corpus_markdown(num, rst, sha, corpus_nums)
         actual_md = (out_dir / entry["file"]).read_text(encoding="utf-8")
         if expected_md != actual_md:
             problems.append(f"{entry['id']}: committed {entry['file']} does not match upstream bytes")
