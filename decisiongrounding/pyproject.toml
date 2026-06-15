@@ -35,4 +35,4 @@ dev = ["pytest>=7"]
 decisiongrounding = "runner.cli:main"
 
 [tool.setuptools]
-packages = ["providers", "scenarios", "scoring", "runner"]
+packages = ["providers", "scenarios", "scoring", "runner", "ingest"]
