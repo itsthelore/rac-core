@@ -136,8 +136,14 @@ for PEP 386's retired `verlib`/`NormalizedVersion` scheme is following a
 superseded decision; the adherent move is to cite PEP 440 instead. See
 `decisions/ADR-0002-real-corpus-pilot-peps.md`.
 
-The corpus is pinned to one immutable commit of `python/peps` and is fully
-reproducible — nothing in it is hand-written PEP prose:
+The PEPs are ingested as **RAC-native `decision` artifacts**: each carries the
+verbatim PEP under a `## Source Text` section, wrapped in a decision envelope
+(`Status`/`Context`/`Decision`/`Consequences`) plus a directional `## Supersedes`
+edge — every envelope value derived from the PEP's own headers — so the `rac` arm
+can classify them and follow the supersedes edge (see
+`decisions/ADR-0003-rac-arm-pep-integration.md`). The corpus is pinned to one
+immutable commit of `python/peps` and fully reproducible — nothing in it is
+hand-written PEP prose:
 
 ```bash
 # Regenerate the corpus from the pin, or verify it reproduces byte-for-byte.
@@ -149,15 +155,22 @@ Run the pilot for real (needs `[real]` + both keys, exactly as above):
 
 ```bash
 python -m runner.cli compare \
-  --arms context_dump,naive_rag,no_grounding \
+  --arms context_dump,naive_rag,no_grounding,rac \
   --answering claude --embedder voyage:voyage-4-large \
   --scenarios scenarios_real --seed 0
 ```
 
+The `rac` arm is the grounding layer under test: it follows the typed
+`supersedes` edge and supplies the live PEP 440, where `naive_rag` can surface
+PEP 386's appealing `verlib` section without the header that marks it superseded.
+It needs the `rac` CLI on PATH (`pip install -e .` from the repo root, or set
+`RAC_BIN`); drop `,rac` to run the baselines alone.
+
 This produces the first genuine decision-adherence result (win, tie, or loss)
 on a real corpus; like every run it is appended to `results/`. The build
 environment for this pilot had no API keys, so the scenario is offline-validated
-(loads, schema-validates, scores) and the real numbers are produced by whoever
+(loads, schema-validates, scores, and the `rac` arm's supersedes-following is
+verified against the real `rac` CLI) and the real numbers are produced by whoever
 holds the keys.
 
 Tests:
@@ -180,7 +193,7 @@ make test
 | Governing-decision recall diagnostic | ✅ real |
 | Pinned Claude answering model (`--answering claude`, Opus 4.8) | ✅ implemented; needs `[real]` + `ANTHROPIC_API_KEY` |
 | Real embeddings (`--embedder voyage:…` / `st:…`) | ✅ implemented; needs `[real]` / `[local-embeddings]` |
-| `rac` arm (typed retrieval, follows `supersedes`) | ✅ implemented; needs the `rac` CLI on PATH |
+| `rac` arm (typed retrieval, follows `supersedes`) | ✅ verified against the `rac` CLI on the real corpus; needs `rac` on PATH |
 | Real/public-derived scenario (PEP 386→440 supersession) | ✅ corpus built, pinned + verifiable; real run needs `[real]` + keys |
 | `memory_provider` arm | ⏳ typed stub + TODO |
 | LLM-judge fallback | ⏳ disclosed, not built |
