@@ -84,3 +84,26 @@ jobs:
         with:
           path: rac
           install-from: source
+
+  # Validate dogfood (v0.17.2): every pull request runs the local validate
+  # action in source mode — the live end-to-end test of validate-action/action.yml
+  # (install, `rac validate --sarif`, exit-code propagation). SARIF uploads to
+  # Code Scanning for same-repo PRs; it is skipped on forks, whose token cannot be
+  # granted security-events: write, so the check never fails on a missing scope.
+  validate:
+    name: validate (dogfood, source install)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./validate-action
+        with:
+          path: rac
+          install-from: source
+          upload-sarif: ${{ !github.event.pull_request.head.repo.fork }}
+
