@@ -22,7 +22,7 @@ chart = ["matplotlib>=3.7"]
 # Voyage embeddings (Anthropic's recommended embedding provider — Anthropic has
 # no embeddings endpoint). Replaces the offline stubs.
 # TODO: pin exact package versions before publishing runs.
-real = ["anthropic>=0.40", "voyageai>=0.2"]
+real = ["anthropic>=0.40", "voyageai>=0.3"]
 # Local, offline-capable embeddings alternative to Voyage.
 local-embeddings = ["sentence-transformers>=2.2"]
 # The rac arm additionally needs the `rac` CLI on PATH (or RAC_BIN) — it is an
