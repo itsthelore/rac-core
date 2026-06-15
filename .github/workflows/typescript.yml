@@ -1,0 +1,62 @@
+name: TypeScript
+
+# Build and test the TypeScript SDK and the VS Code / Cursor extension on their
+# own Node toolchain. Mirrors the CI trigger policy (ADR-027): run on push to
+# main, not on pull requests; scoped to typescript/** so Python-only changes
+# don't trigger it. workflow_dispatch allows a manual run from a branch.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "typescript/**"
+      - ".github/workflows/typescript.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typescript-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build & test (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            typescript/rac-sdk/package-lock.json
+            typescript/rac-vscode/package-lock.json
+
+      # The SDK's integration tests shell out to a real `rac`, so install it.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install rac
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: SDK — install, build, test (incl. real-rac integration)
+        working-directory: typescript/rac-sdk
+        env:
+          RAC_BIN: rac
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      # The extension consumes @rac/sdk via file:../rac-sdk, so the SDK must be
+      # built (previous step) before its dist is copied in here.
+      - name: Extension — install, typecheck, bundle
+        working-directory: typescript/rac-vscode
+        run: |
+          npm ci
+          npm run check-types
+          npm run compile
