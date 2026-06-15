@@ -17,10 +17,14 @@ are still counted and are reported separately (never silently skipped).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TypeVar
 
 from rac.core.artifacts import spec_for
 from rac.core.corpus import walk_corpus
+from rac.core.models import Product
 from rac.core.validation import validate
 
 from .inspect import build_inspection
@@ -295,6 +299,27 @@ def _neg_name(name: str) -> tuple[int, ...]:
     return tuple(-ord(c) for c in name)
 
 
+# The lightweight, validity-only stats share an identical constructor shape;
+# they are kept as separate types by design but built the same way.
+_ValidityStat = TypeVar("_ValidityStat", RoadmapStat, PromptStat, DesignStat)
+
+
+def _error_codes(product: Product) -> list[str]:
+    """Error-severity issue codes for ``product`` (empty means it is valid)."""
+    return [i.code for i in validate(product) if i.severity == "error"]
+
+
+def _validity_stat(
+    stat_cls: Callable[..., _ValidityStat],
+    path: Path,
+    name: str,
+    product: Product,
+) -> _ValidityStat:
+    """Build a lightweight validity stat: valid iff there are no error issues."""
+    codes = _error_codes(product)
+    return stat_cls(path=str(path), name=name, valid=not codes, error_codes=codes)
+
+
 def collect_stats(directory: str) -> PortfolioStats:
     """Parse and classify every Markdown file under ``directory``.
 
@@ -327,40 +352,13 @@ def collect_stats(directory: str) -> PortfolioStats:
             )
             continue
         if result.type == "roadmap":
-            issues = validate(product)
-            error_codes = [i.code for i in issues if i.severity == "error"]
-            stats.roadmaps.append(
-                RoadmapStat(
-                    path=str(path),
-                    name=name,
-                    valid=not error_codes,
-                    error_codes=error_codes,
-                )
-            )
+            stats.roadmaps.append(_validity_stat(RoadmapStat, path, name, product))
             continue
         if result.type == "prompt":
-            issues = validate(product)
-            error_codes = [i.code for i in issues if i.severity == "error"]
-            stats.prompts.append(
-                PromptStat(
-                    path=str(path),
-                    name=name,
-                    valid=not error_codes,
-                    error_codes=error_codes,
-                )
-            )
+            stats.prompts.append(_validity_stat(PromptStat, path, name, product))
             continue
         if result.type == "design":
-            issues = validate(product)
-            error_codes = [i.code for i in issues if i.severity == "error"]
-            stats.designs.append(
-                DesignStat(
-                    path=str(path),
-                    name=name,
-                    valid=not error_codes,
-                    error_codes=error_codes,
-                )
-            )
+            stats.designs.append(_validity_stat(DesignStat, path, name, product))
             continue
         if result.type == "unknown":
             # ADR-010: a document that matches no known artifact schema is not a
@@ -374,8 +372,7 @@ def collect_stats(directory: str) -> PortfolioStats:
                 )
             )
             continue
-        issues = validate(product)
-        error_codes = [i.code for i in issues if i.severity == "error"]
+        error_codes = _error_codes(product)
         stats.features.append(
             FeatureStat(
                 path=str(path),
