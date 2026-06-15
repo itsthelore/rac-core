@@ -193,6 +193,21 @@ describe("createArtifact", () => {
   });
 });
 
+describe("exportHtml", () => {
+  it("writes via --html --out and resolves on exit 0", async () => {
+    const { runner, calls } = fakeRunner({ stdout: "", stderr: "wrote x.html", code: 0 });
+    await new RacClient({ runner }).exportHtml("rac", "/tmp/x.html");
+    expect(calls[0]).toEqual(["export", "rac", "--html", "--out", "/tmp/x.html"]);
+  });
+
+  it("throws RacExecError on a non-zero exit", async () => {
+    const runner: RacRunner = async () => ({ stdout: "", stderr: "rac: unwritable", code: 2 });
+    await expect(
+      new RacClient({ runner }).exportHtml("rac", "/bad/x.html"),
+    ).rejects.toBeInstanceOf(RacExecError);
+  });
+});
+
 describe("error mapping", () => {
   it("raises RacNotFoundError when the binary cannot be spawned", async () => {
     const runner: RacRunner = async () => {

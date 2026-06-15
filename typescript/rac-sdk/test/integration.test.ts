@@ -8,8 +8,10 @@
  *     RAC_BIN=/abs/path/to/rac npm test
  */
 
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -61,5 +63,18 @@ describe.skipIf(!racBin)("integration (real rac)", () => {
     expect(schema.type).toBe("requirement");
     expect(schema.required).toContain("problem");
     expect(schema.required).toContain("requirements");
+  });
+
+  it("writes a self-contained Portal HTML via exportHtml", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "rac-sdk-"));
+    const out = join(dir, "portal.html");
+    try {
+      await rac.exportHtml("rac/decisions", out);
+      const html = await readFile(out, "utf8");
+      expect(html).toContain('id="lore-export"');
+      expect(html.length).toBeGreaterThan(10_000);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

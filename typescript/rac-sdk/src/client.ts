@@ -132,6 +132,19 @@ export class RacClient {
     return this.json<CreatedArtifact>(["new", artifactType, outputPath, "--json"]);
   }
 
+  /**
+   * `rac export <dir> --html --out <path>` — write the self-contained Portal
+   * HTML (the lore-web viewer with the corpus injected) to `outPath`. Resolves
+   * once written; throws {@link RacExecError} on a non-zero exit.
+   */
+  async exportHtml(directory: string, outPath: string): Promise<void> {
+    const args = ["export", directory, "--html", "--out", outPath];
+    const result = await this.run(args);
+    if (result.code !== 0) {
+      throw new RacExecError(args, result.code, result.stderr);
+    }
+  }
+
   /** `rac --version` — the installed RAC version string. */
   async version(): Promise<string> {
     const result = await this.run(["--version"]);
