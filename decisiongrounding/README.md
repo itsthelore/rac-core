@@ -99,9 +99,15 @@ export VOYAGE_API_KEY=...           # real embeddings for naive_rag
 python -m runner.cli compare \
   --arms context_dump,naive_rag,rac \
   --answering claude \
-  --embedder voyage:voyage-3 \
+  --embedder voyage:voyage-4-large \
   --scenarios scenarios/ --seed 0
 ```
+
+`naive_rag` embeds corpus sections with Voyage's `document` role and the task
+with its `query` role, so the RAG baseline uses asymmetric query/document
+embeddings the way Voyage intends — a fair, strong baseline, not a strawman.
+The default Voyage model is `voyage-4-large` (Voyage's current flagship);
+override with `--embedder voyage:<model>`.
 
 This is where the thesis is actually tested. Until it runs on real/public-derived
 corpora, the offline crossover is plumbing, not evidence.
