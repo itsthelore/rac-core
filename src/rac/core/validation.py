@@ -192,20 +192,18 @@ def _first_value(body: str) -> str:
     return ""
 
 
-def _validate_decision(product: Product) -> list[Issue]:
-    """Validate a Decision artifact (REQ-001/002/006/007).
+def _validate_title(product: Product) -> list[Issue]:
+    """Title structure shared by every artifact type: exactly one ``#`` title.
 
-    Missing metadata never fails (it is optional); only *invalid values* are
-    errors. Required sections (Context, Decision, Consequences) must be present.
+    A missing top-level title is an error; so is more than one. The same rule
+    applies to every artifact type, so all validators share this check.
     """
-    spec = spec_for("decision")
-    assert spec is not None  # the decision spec always exists
     issues: list[Issue] = []
-
     if not product.title:
         issues.append(Issue("error", "missing-title", "File has no top-level # title."))
-
     if product.extra_title_lines:
+        # One error regardless of how many extra titles there are; point at the
+        # first offending title.
         issues.append(
             Issue(
                 "error",
@@ -214,17 +212,40 @@ def _validate_decision(product: Product) -> list[Issue]:
                 product.extra_title_lines[0],
             )
         )
+    return issues
 
-    # Required sections define the artifact (ADR format).
+
+def _validate_required_sections(product: Product, spec: ArtifactSpec) -> list[Issue]:
+    """Each of the type's required sections must be present (ADR format).
+
+    The issue code spells multi-word section names with hyphens
+    (``missing-user-need``); for single-word sections this is a no-op, so the
+    codes are unchanged for types whose required sections are all single words.
+    The human label is the artifact type's display name.
+    """
+    issues: list[Issue] = []
     for section in spec.required:
         if section not in product.sections:
             issues.append(
                 Issue(
                     "error",
-                    f"missing-{section}",
-                    f"Decision is missing a ## {section.title()} section.",
+                    f"missing-{section.replace(' ', '-')}",
+                    f"{spec.name.title()} is missing a ## {section.title()} section.",
                 )
             )
+    return issues
+
+
+def _validate_decision(product: Product) -> list[Issue]:
+    """Validate a Decision artifact (REQ-001/002/006/007).
+
+    Missing metadata never fails (it is optional); only *invalid values* are
+    errors. Required sections (Context, Decision, Consequences) must be present.
+    """
+    spec = spec_for("decision")
+    assert spec is not None  # the decision spec always exists
+    issues = _validate_title(product)
+    issues += _validate_required_sections(product, spec)
 
     # Constrained metadata (status, category): a present value must be in the
     # allowed set. A missing section is fine — metadata is optional (REQ-007).
@@ -243,30 +264,8 @@ def _validate_roadmap(product: Product) -> list[Issue]:
     """
     spec = spec_for("roadmap")
     assert spec is not None  # the roadmap spec always exists
-    issues: list[Issue] = []
-
-    if not product.title:
-        issues.append(Issue("error", "missing-title", "File has no top-level # title."))
-
-    if product.extra_title_lines:
-        issues.append(
-            Issue(
-                "error",
-                "multiple-titles",
-                "File has more than one top-level # title; expected exactly one.",
-                product.extra_title_lines[0],
-            )
-        )
-
-    for section in spec.required:
-        if section not in product.sections:
-            issues.append(
-                Issue(
-                    "error",
-                    f"missing-{section}",
-                    f"Roadmap is missing a ## {section.title()} section.",
-                )
-            )
+    issues = _validate_title(product)
+    issues += _validate_required_sections(product, spec)
 
     # Horizon (v0.17.1, ADR-056): optional, validated when present — now/next/later
     # or a calendar quarter. Absent is fine (no horizon is forced on a roadmap).
@@ -313,30 +312,8 @@ def _validate_prompt(product: Product) -> list[Issue]:
     """
     spec = spec_for("prompt")
     assert spec is not None  # the prompt spec always exists
-    issues: list[Issue] = []
-
-    if not product.title:
-        issues.append(Issue("error", "missing-title", "File has no top-level # title."))
-
-    if product.extra_title_lines:
-        issues.append(
-            Issue(
-                "error",
-                "multiple-titles",
-                "File has more than one top-level # title; expected exactly one.",
-                product.extra_title_lines[0],
-            )
-        )
-
-    for section in spec.required:
-        if section not in product.sections:
-            issues.append(
-                Issue(
-                    "error",
-                    f"missing-{section}",
-                    f"Prompt is missing a ## {section.title()} section.",
-                )
-            )
+    issues = _validate_title(product)
+    issues += _validate_required_sections(product, spec)
 
     issues += _validate_status_metadata(product, spec)
     return issues
@@ -352,30 +329,8 @@ def _validate_design(product: Product) -> list[Issue]:
     """
     spec = spec_for("design")
     assert spec is not None  # the design spec always exists
-    issues: list[Issue] = []
-
-    if not product.title:
-        issues.append(Issue("error", "missing-title", "File has no top-level # title."))
-
-    if product.extra_title_lines:
-        issues.append(
-            Issue(
-                "error",
-                "multiple-titles",
-                "File has more than one top-level # title; expected exactly one.",
-                product.extra_title_lines[0],
-            )
-        )
-
-    for section in spec.required:
-        if section not in product.sections:
-            issues.append(
-                Issue(
-                    "error",
-                    f"missing-{section.replace(' ', '-')}",
-                    f"Design is missing a ## {section.title()} section.",
-                )
-            )
+    issues = _validate_title(product)
+    issues += _validate_required_sections(product, spec)
 
     issues += _validate_status_metadata(product, spec)
     return issues
@@ -383,23 +338,8 @@ def _validate_design(product: Product) -> list[Issue]:
 
 def _validate_requirement(product: Product) -> list[Issue]:
     """Check ``product`` and return all structural and quality findings."""
-    issues: list[Issue] = []
-
     # --- Hard failures: structure -------------------------------------------
-    if not product.title:
-        issues.append(Issue("error", "missing-title", "File has no top-level # title."))
-
-    if product.extra_title_lines:
-        # One error regardless of how many extra titles there are; point at the
-        # first offending title.
-        issues.append(
-            Issue(
-                "error",
-                "multiple-titles",
-                "File has more than one top-level # title; expected exactly one.",
-                product.extra_title_lines[0],
-            )
-        )
+    issues = _validate_title(product)
 
     if not product.has_problem_section:
         issues.append(Issue("error", "missing-problem", "File is missing a ## Problem section."))
