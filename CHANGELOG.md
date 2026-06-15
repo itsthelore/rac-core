@@ -8,6 +8,16 @@ details, release history over commit history.
 
 ### Added
 
+- Cross-artifact enforcement in the editor extension (v0.21.1 milestone). The
+  extension now flags references that don't resolve, and references to **retired**
+  (superseded/deprecated) artifacts, at the reference site — drawn distinctly
+  (an unresolved reference is an error, a retired one a warning). Findings come
+  from `rac relationships --validate`; the engine's `relationship-target-*` codes
+  map to editor diagnostics, anchored to the target token inside the source
+  artifact's relationship section. This is what makes the extension RAC rather
+  than a generic Markdown linter (ADR-049, ADR-051). Relationship diagnostics
+  refresh on save/activation (relationship validation reads files from disk).
+
 - TypeScript SDK and editor extension (v0.21.0 milestone — TypeScript-only; the
   Python package is unchanged and versions independently). `@rac/sdk` is a thin
   Node client that shells out to the installed `rac` CLI and returns typed results
