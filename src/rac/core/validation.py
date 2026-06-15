@@ -363,24 +363,13 @@ def _report_duplicates(
     return issues
 
 
-def _validate_requirement(product: Product) -> list[Issue]:
-    """Check ``product`` and return all structural and quality findings."""
-    # --- Hard failures: structure -------------------------------------------
-    issues = _validate_title(product)
+def _malformed_requirement_issues(product: Product) -> list[Issue]:
+    """Hard failures for requirement lines that are not a well-formed [REQ-NNN].
 
-    if not product.has_problem_section:
-        issues.append(Issue("error", "missing-problem", "File is missing a ## Problem section."))
-
-    if not product.has_requirements_section:
-        issues.append(
-            Issue(
-                "error",
-                "missing-requirements",
-                "File is missing a ## Requirements section.",
-            )
-        )
-
-    # --- Hard failures: malformed requirement lines -------------------------
+    One issue per malformed line, in document order: a missing ID, an empty
+    description, or a bracket ID that is not the canonical ``REQ-NNN`` shape.
+    """
+    issues: list[Issue] = []
     for m in product.malformed_requirements:
         if m.bad_id is None:
             issues.append(
@@ -409,17 +398,20 @@ def _validate_requirement(product: Product) -> list[Issue]:
                     m.line,
                 )
             )
+    return issues
 
-    # --- Hard failures: duplicate IDs ---------------------------------------
-    issues += _report_duplicates(
-        product.requirements,
-        key=lambda r: r.id,
-        severity="error",
-        code="duplicate-req-id",
-        message=lambda r, n: f"Duplicate requirement ID {r.id} (used {n} times).",
-    )
 
-    # --- Warnings: missing optional sections --------------------------------
+def _requirement_warning_issues(product: Product) -> list[Issue]:
+    """Non-failing requirement findings, in report order.
+
+    Missing optional sections, an empty problem, excess volume, duplicate
+    requirement text, then ambiguous verbs. All warnings — they never fail a
+    run, but they are the findings most requirement rules accrete to, so they
+    live here rather than inflating :func:`_validate_requirement`.
+    """
+    issues: list[Issue] = []
+
+    # Missing optional sections.
     if not product.has_metrics_section:
         issues.append(
             Issue(
@@ -437,11 +429,11 @@ def _validate_requirement(product: Product) -> list[Issue]:
             )
         )
 
-    # --- Warnings: empty problem --------------------------------------------
+    # Empty problem.
     if product.has_problem_section and not (product.problem or "").strip():
         issues.append(Issue("warning", "empty-problem", "## Problem section is empty."))
 
-    # --- Warnings: too many requirements ------------------------------------
+    # Too many requirements.
     if len(product.requirements) > MAX_REQUIREMENTS:
         issues.append(
             Issue(
@@ -452,7 +444,7 @@ def _validate_requirement(product: Product) -> list[Issue]:
             )
         )
 
-    # --- Warnings: duplicate requirement text -------------------------------
+    # Duplicate requirement text.
     issues += _report_duplicates(
         product.requirements,
         key=lambda r: r.text.strip().casefold(),
@@ -461,7 +453,16 @@ def _validate_requirement(product: Product) -> list[Issue]:
         message=lambda r, n: f"Duplicate requirement text: {r.text!r}.",
     )
 
-    # --- Warnings: ambiguous verbs ------------------------------------------
+    issues += _ambiguous_verb_issues(product)
+    return issues
+
+
+def _ambiguous_verb_issues(product: Product) -> list[Issue]:
+    """Warn on vague verbs (support/handle/allow/enable) that hide behavior.
+
+    One warning per requirement line that uses any, naming the verbs found.
+    """
+    issues: list[Issue] = []
     for r in product.requirements:
         found = _AMBIGUOUS_RE.findall(r.text)
         if found:
@@ -474,5 +475,34 @@ def _validate_requirement(product: Product) -> list[Issue]:
                     r.line,
                 )
             )
+    return issues
 
+
+def _validate_requirement(product: Product) -> list[Issue]:
+    """Check ``product`` and return all structural and quality findings.
+
+    Hard failures first (title, required sections, malformed lines, duplicate
+    IDs), then non-failing warnings. The malformed-line and warning clusters
+    live in helpers so this validator — the one most new requirement rules
+    accrete to — stays flat as the rule set grows. Findings are appended in a
+    fixed order so the report is deterministic.
+    """
+    issues = _validate_title(product)
+
+    if not product.has_problem_section:
+        issues.append(Issue("error", "missing-problem", "File is missing a ## Problem section."))
+    if not product.has_requirements_section:
+        issues.append(
+            Issue("error", "missing-requirements", "File is missing a ## Requirements section.")
+        )
+
+    issues += _malformed_requirement_issues(product)
+    issues += _report_duplicates(
+        product.requirements,
+        key=lambda r: r.id,
+        severity="error",
+        code="duplicate-req-id",
+        message=lambda r, n: f"Duplicate requirement ID {r.id} (used {n} times).",
+    )
+    issues += _requirement_warning_issues(product)
     return issues
