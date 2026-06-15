@@ -16,6 +16,8 @@
  * scoped for v0.21.6 (robustness/release).
  */
 
+import { readFile, rm } from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import * as vscode from "vscode";
@@ -91,6 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("rac.validateWorkspace", validateWorkspace),
     vscode.commands.registerCommand("rac.newArtifact", newArtifact),
+    vscode.commands.registerCommand("rac.showExplorer", showExplorer),
     vscode.languages.registerHoverProvider(selector, { provideHover }),
     vscode.languages.registerDefinitionProvider(selector, { provideDefinition }),
     vscode.languages.registerReferenceProvider(selector, { provideReferences }),
@@ -126,6 +129,7 @@ export function deactivate(): void {
   workspaceDiagnostics?.clear();
   workspaceDiagnostics?.dispose();
   statusBar?.dispose();
+  explorerPanel?.dispose();
 }
 
 // --- per-file validation ----------------------------------------------------
@@ -424,6 +428,73 @@ async function refreshWorkspaceDiagnostics(folder: vscode.WorkspaceFolder): Prom
     if (openPaths.has(uri.fsPath)) continue; // live diagnostics own open files
     workspaceDiagnostics.set(uri, file.issues.map(issueToDiagnostic));
   }
+}
+
+// --- corpus visualization (RAC Explorer webview) ----------------------------
+
+// `rac export --html` already produces a self-contained Portal viewer (the
+// lore-web build with the corpus injected, offline, no network). The command
+// renders it in a webview; re-running it refreshes. Editor sync (click an
+// artifact in the graph to open its file) is deferred — the standalone viewer
+// does not post messages to a host (see the v0.21.5 roadmap).
+
+let explorerPanel: vscode.WebviewPanel | undefined;
+
+async function showExplorer(): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showErrorMessage("RAC: open a workspace folder first.");
+    return;
+  }
+  if (!explorerPanel) {
+    explorerPanel = vscode.window.createWebviewPanel(
+      "racExplorer",
+      "RAC Explorer",
+      vscode.ViewColumn.Beside,
+      { enableScripts: true, retainContextWhenHidden: true },
+    );
+    explorerPanel.onDidDispose(() => {
+      explorerPanel = undefined;
+    });
+  }
+  explorerPanel.reveal(vscode.ViewColumn.Beside);
+  await loadExplorer(folder);
+}
+
+async function loadExplorer(folder: vscode.WorkspaceFolder): Promise<void> {
+  const panel = explorerPanel;
+  if (!panel) return;
+  panel.webview.html = explorerMessage("Building the corpus graph…");
+  const out = path.join(os.tmpdir(), `rac-explorer-${Date.now()}.html`);
+  try {
+    await clientFor(folder).exportHtml(folder.uri.fsPath, out);
+    const html = await readFile(out, "utf8");
+    if (explorerPanel === panel) panel.webview.html = html;
+  } catch (err) {
+    if (err instanceof RacNotFoundError) warnMissingOnce();
+    if (explorerPanel === panel) {
+      const detail = err instanceof Error ? err.message : String(err);
+      panel.webview.html = explorerMessage(`RAC Explorer unavailable: ${escapeHtmlText(detail)}`);
+    }
+  } finally {
+    void rm(out, { force: true }).catch(() => undefined);
+  }
+}
+
+function explorerMessage(text: string): string {
+  return (
+    "<!DOCTYPE html><html><body " +
+    'style="font-family: var(--vscode-font-family); padding: 1rem; ' +
+    'color: var(--vscode-foreground)">' +
+    text +
+    "</body></html>"
+  );
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>]/g, (char) =>
+    char === "&" ? "&amp;" : char === "<" ? "&lt;" : "&gt;",
+  );
 }
 
 // --- authoring: completion, quick-fixes, new artifact -----------------------

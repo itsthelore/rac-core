@@ -35,6 +35,9 @@ reimplementing it ([ADR-063](../../rac/decisions/adr-063-non-python-clients-are-
 - **Corpus awareness** — a status-bar health score (`rac review`, click for the
   Problems panel) and workspace-wide diagnostics (`rac validate <dir>`), so issues
   in unopened artifacts show up too.
+- **RAC Explorer** — **RAC: Open Explorer** renders the corpus relationship graph
+  in a panel (the self-contained Portal viewer from `rac export --html`); re-run
+  to refresh.
 - **Authoring aids** — artifact-alias completion inside relationship sections
   (`## Related Decisions`, …), quick-fixes that insert a missing `## Section`,
   and a **RAC: New Artifact** command that suggests an existing folder for the

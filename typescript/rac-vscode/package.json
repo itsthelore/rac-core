@@ -25,6 +25,10 @@
       {
         "command": "rac.newArtifact",
         "title": "RAC: New Artifact"
+      },
+      {
+        "command": "rac.showExplorer",
+        "title": "RAC: Open Explorer"
       }
     ],
     "configuration": {
