@@ -55,4 +55,11 @@ describe.skipIf(!racBin)("integration (real rac)", () => {
     expect(bad.valid).toBe(false);
     expect(bad.errors.some((i) => i.code === "missing-title")).toBe(true);
   });
+
+  it("returns the canonical schema for a type", async () => {
+    const schema = await rac.schema("requirement");
+    expect(schema.type).toBe("requirement");
+    expect(schema.required).toContain("problem");
+    expect(schema.required).toContain("requirements");
+  });
 });

@@ -9,6 +9,7 @@ import { RacExecError, RacNotFoundError, RacOutputError } from "./errors.js";
 import { defaultRunner, type RacRunner, type RunResult } from "./runner.js";
 import type {
   CorpusExport,
+  CreatedArtifact,
   DirectoryValidation,
   FileValidation,
   FindResult,
@@ -16,6 +17,7 @@ import type {
   RelationshipValidation,
   ResolveResult,
   ReviewReport,
+  SchemaReference,
 } from "./types.js";
 
 export interface RacClientOptions {
@@ -118,6 +120,16 @@ export class RacClient {
     return this.json<CorpusExport>(
       this.withTopLevel(["export", directory, "--json"], options),
     );
+  }
+
+  /** `rac schema <type> --json` — the canonical section/metadata reference for a type. */
+  schema(artifactType: string): Promise<SchemaReference> {
+    return this.json<SchemaReference>(["schema", artifactType, "--json"]);
+  }
+
+  /** `rac new <type> <path> --json` — scaffold a new artifact (never overwrites). */
+  createArtifact(artifactType: string, outputPath: string): Promise<CreatedArtifact> {
+    return this.json<CreatedArtifact>(["new", artifactType, outputPath, "--json"]);
   }
 
   /** `rac --version` — the installed RAC version string. */

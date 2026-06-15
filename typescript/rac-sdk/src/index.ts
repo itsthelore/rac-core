@@ -60,6 +60,8 @@ export type {
   ReviewIssue,
   ReviewReport,
   PortfolioStats,
+  SchemaReference,
+  CreatedArtifact,
   CorpusMeta,
   ExportArtifact,
   ExportRelationship,

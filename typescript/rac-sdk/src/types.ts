@@ -176,6 +176,31 @@ export interface PortfolioStats {
   [key: string]: unknown;
 }
 
+// --- rac schema <type> --json ----------------------------------------------
+
+export interface SchemaReference {
+  type: string;
+  required: string[];
+  recommended: string[];
+  optional: string[];
+  /** Section name → human description. */
+  descriptions: Record<string, string>;
+  /** Section name → authoring questions. */
+  guidance: Record<string, string[]>;
+  /** Metadata vocabularies (e.g. status/category enums). */
+  metadata: Record<string, unknown>;
+}
+
+// --- rac new <type> <path> --json -------------------------------------------
+
+export interface CreatedArtifact {
+  schema_version: string;
+  created: boolean;
+  type: string;
+  path: string;
+  id: string;
+}
+
 // --- rac export <dir> --json (the lore-web viewer payload) ------------------
 
 export interface CorpusMeta {

@@ -155,6 +155,44 @@ describe("validateRelationships", () => {
   });
 });
 
+describe("schema", () => {
+  it("returns the section reference and passes the type", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: JSON.stringify({
+        type: "requirement",
+        required: ["problem", "requirements"],
+        recommended: ["success_metrics"],
+        optional: [],
+        descriptions: { problem: "the problem" },
+        guidance: {},
+        metadata: {},
+      }),
+    });
+    const result = await new RacClient({ runner }).schema("requirement");
+    expect(result.required).toEqual(["problem", "requirements"]);
+    expect(result.descriptions.problem).toBe("the problem");
+    expect(calls[0]).toEqual(["schema", "requirement", "--json"]);
+  });
+});
+
+describe("createArtifact", () => {
+  it("scaffolds an artifact and parses the result", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: JSON.stringify({
+        schema_version: "1",
+        created: true,
+        type: "decision",
+        path: "d.md",
+        id: "RAC-NEW",
+      }),
+    });
+    const result = await new RacClient({ runner }).createArtifact("decision", "d.md");
+    expect(result.created).toBe(true);
+    expect(result.id).toBe("RAC-NEW");
+    expect(calls[0]).toEqual(["new", "decision", "d.md", "--json"]);
+  });
+});
+
 describe("error mapping", () => {
   it("raises RacNotFoundError when the binary cannot be spawned", async () => {
     const runner: RacRunner = async () => {
