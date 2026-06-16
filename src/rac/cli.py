@@ -357,6 +357,9 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 
 def cmd_relationships(args: argparse.Namespace) -> int:
+    if args.sarif and not args.validate:
+        print("rac: relationships --sarif requires --validate", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
     path = Path(args.path)
     # --recursive is the default; --top-level disables it. If both are given,
     # --top-level wins (mirrors `rac inspect`).
@@ -380,7 +383,9 @@ def cmd_relationships(args: argparse.Namespace) -> int:
             report = validate_relationships(args.path, recursive=not args.top_level)
         else:
             report = validate_relationships_file(args.path)
-        if args.json:
+        if args.sarif:
+            print(outputs.render_relationships_sarif(report))
+        elif args.json:
             print(outputs.render_relationship_validation_json(report))
         else:
             print(outputs.render_relationship_validation_human(report))
@@ -411,7 +416,9 @@ def cmd_review(args: argparse.Namespace) -> int:
     report = build_review(
         args.directory, recursive=not args.top_level, stale_after_days=args.stale_after
     )
-    if args.json:
+    if args.sarif:
+        print(outputs.render_review_sarif(report))
+    elif args.json:
         print(outputs.render_review_json(report))
     else:
         print(outputs.render_review_human(report))
@@ -1036,6 +1043,12 @@ def build_parser() -> argparse.ArgumentParser:
         "broken, ambiguous, self-referencing, or have duplicate identifiers.",
     )
     p_relationships.add_argument(
+        "--sarif",
+        action="store_true",
+        help="With --validate, emit SARIF 2.1.0 for GitHub Code Scanning "
+        "(CI pull-request enforcement).",
+    )
+    p_relationships.add_argument(
         "--top-level",
         action="store_true",
         help="When inspecting a directory, only its top-level files (no recursion).",
@@ -1055,6 +1068,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_review.add_argument("directory", help="Directory to scan recursively for *.md.")
     p_review.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_review.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Emit SARIF 2.1.0 for GitHub Code Scanning (CI pull-request enforcement).",
     )
     p_review.add_argument(
         "--top-level",
