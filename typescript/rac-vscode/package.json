@@ -33,7 +33,9 @@
   "activationEvents": [
     "workspaceContains:**/.rac/config.yaml",
     "onCommand:rac.setupWorkspace",
-    "onCommand:rac.installRac"
+    "onCommand:rac.installRac",
+    "onCommand:rac.enableClaudePreEditHook",
+    "onCommand:rac.disableClaudePreEditHook"
   ],
   "contributes": {
     "commands": [
@@ -60,6 +62,14 @@
       {
         "command": "rac.findDecisions",
         "title": "RAC: What did we decide about…?"
+      },
+      {
+        "command": "rac.enableClaudePreEditHook",
+        "title": "RAC: Enable Claude Code pre-edit hook"
+      },
+      {
+        "command": "rac.disableClaudePreEditHook",
+        "title": "RAC: Disable Claude Code pre-edit hook"
       }
     ],
     "walkthroughs": [

@@ -1,5 +1,5 @@
 {
-  "comment": "Compiles the @vscode/test-electron integration tests (src/test) to CommonJS in out/, which the VS Code test runner loads via require. Separate from the bundle build (esbuild) and the noEmit type-check (tsconfig.json).",
+  "comment": "Compiles the @vscode/test-electron integration tests (src/test) to CommonJS in out/, which the VS Code test runner loads via require. claudeHook.ts is included so its pure helpers (no vscode dependency) can be unit-tested directly. Separate from the bundle build (esbuild) and the noEmit type-check (tsconfig.json).",
   "compilerOptions": {
     "target": "ES2022",
     "module": "CommonJS",
@@ -13,5 +13,5 @@
     "sourceMap": true,
     "types": ["node", "mocha", "vscode"]
   },
-  "include": ["src/test"]
+  "include": ["src/test", "src/claudeHook.ts"]
 }
