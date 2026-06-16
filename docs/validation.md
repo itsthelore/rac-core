@@ -155,13 +155,15 @@ tighten over time.
 (The Watchkeeper action at the repository root is the complementary PR-review
 surface — see [Watchkeeper](watchkeeper.md).)
 
-### The full PR gate (validate + relationships + review)
+### The full PR gate (`rac gate`)
 
-To carry the whole contract into one required check, the `pr-gate-action` runs
-`rac validate`, `rac relationships --validate`, and `rac review` together,
-uploads all three SARIF documents to Code Scanning, and fails on the worst exit
-code (v0.21.13). It is the same thin wrapper — the engine's exit codes decide
-what is blocking, the action computes nothing ([ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)):
+To carry the whole contract into one required check, `rac gate` composes
+validation, relationship integrity, and review into a single enforced verdict
+under the corpus **enforcement policy**, and emits one combined SARIF document
+(v0.21.14). The `pr-gate-action` runs it and uploads that single SARIF to Code
+Scanning under one category (`rac-gate`), failing when any finding is *blocking*.
+It is the same thin wrapper — the engine decides what is blocking, the action
+computes nothing ([ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)):
 
 ```yaml
 # .github/workflows/rac.yml
@@ -181,13 +183,20 @@ jobs:
 ```
 
 Inputs mirror `validate-action`: `path` (default `rac`), `upload-sarif` (default
-`true`), `sarif-dir` (default `rac-sarif`, one file per check), `rac-version`,
-and `install-from` (`pypi` or `source`). A reference that points at a missing or
-retired decision fails the gate with an inline annotation matching
-`rac relationships --validate`.
+`true`), `sarif-dir` (default `rac-sarif`, now one `gate.sarif`), `rac-version`,
+and `install-from` (`pypi` or `source`).
+
+`rac gate <dir>` is also runnable locally — `--json` and `--sarif` produce the
+machine contracts, the exit code is `0` when nothing is blocking and `1`
+otherwise. **Which findings are blocking versus advisory is governed centrally**
+by an `enforcement:` section in the committed `.rac/config.yaml`. See
+[Governance](governance.md) for the policy shape, the default classifications,
+and how to standardise one policy across a fleet of repositories.
 
 ## See also
 
+- [Governance](governance.md) — the `enforcement:` policy and `rac gate`.
+- [Security posture](security.md) — the no-egress guarantee, SBOM, and how to verify it.
 - [CLI Reference](cli.md) — all `rac validate` flags and exit codes.
 - [OKF Profile](okf-profile.md) — the conformance findings SARIF also reports.
 - [Repository Workflow](repo-workflow.md) — `rac init` and `.rac/config.yaml`.

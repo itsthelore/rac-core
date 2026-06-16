@@ -1,0 +1,148 @@
+# Governance: the enforcement policy & `rac gate`
+
+`rac gate` is RAC's single enforcement entry point. It runs validation,
+relationship integrity, and review over a corpus, then classifies every finding
+as **blocking** or **advisory** under the corpus *enforcement policy*. One
+command, one exit code, one SARIF document — so a pull-request gate carries the
+whole RAC contract as a single required check.
+
+The policy is governed, not hardcoded. A repository declares which finding
+classes block the gate in its committed `.rac/config.yaml`, so the same policy
+travels with the corpus and applies identically in the editor and in CI. The
+decisions behind this are
+[ADR-049](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-049-enforcement-is-the-product.md)
+(enforcement is the product) and
+[ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)
+(policy lives in the corpus, not in any consumer).
+
+## Running the gate
+
+```bash
+rac gate rac/              # human summary; exit 0 if nothing blocking, else 1
+rac gate rac/ --json       # stable JSON contract (ADR-007)
+rac gate rac/ --sarif      # one SARIF 2.1.0 document over all findings
+rac gate rac/ --top-level  # do not recurse into subdirectories
+```
+
+The exit code is the only enforcement signal: `0` when nothing is blocking, `1`
+when at least one finding is blocking. Advisory findings are reported (and
+annotated in SARIF) but never fail the gate.
+
+## The `enforcement:` policy
+
+Add an optional top-level `enforcement:` section to `.rac/config.yaml`. It maps
+**finding codes** (the stable `[code]` shown in `rac validate`, `rac review`, and
+`rac relationships --validate` output) to an enforcement class:
+
+```yaml
+repository_key: RAC
+
+enforcement:
+  blocking:                          # force these codes to fail the gate
+    - missing-recommended-sections
+  advisory:                          # downgrade these to annotate-only
+    - relationship-target-superseded
+  off:                               # drop these findings entirely
+    - stale-corpus
+```
+
+- **`blocking`** promotes a code so any matching finding fails the gate.
+- **`advisory`** downgrades a code so matching findings annotate but do not fail.
+- **`off`** suppresses matching findings entirely — they do not appear at all.
+
+**Precedence** (so a code listed in more than one set is deterministic): `off`
+wins, then `blocking`, then `advisory`, otherwise the finding keeps its default
+class. The section is additive and offline; an absent `enforcement:` section is a
+pure no-op, and the gate's default verdict is then exactly
+`validate.ok AND relationships.ok AND review.ok` — the strict v0.21.13 behaviour.
+
+> YAML note: the bare word `off` is a boolean in YAML 1.1, but `rac` accepts it
+> as the suppression key without quotes — write `off:` directly.
+
+### Default classifications
+
+With no policy, each finding carries a default class chosen so the gate is
+`ok` exactly when validate, relationships, and review all pass:
+
+| Source | Default classification |
+| --- | --- |
+| `validate` — `error` severity | **blocking** |
+| `validate` — `warning` / `info` (incl. OKF) | advisory |
+| `relationships` — every finding | **blocking** |
+| `review` — priority 1–2 (invalid artifact, broken relationship) | **blocking** |
+| `review` — priority 3+ (unknown artifact, missing recommended, stale) | advisory |
+
+A policy entry only *changes* a default; it never invents findings.
+
+## Worked example: downgrade a superseded reference
+
+Suppose a live roadmap references a decision the team has retired. By default that
+is a blocking `relationship-target-superseded` finding, so the gate fails:
+
+```text
+$ rac gate rac/
+...
+Blocking:   1
+  ✗ rac/roadmaps/v1.md
+      [relationships] relationship-target-superseded: related_decisions: adr-002 — target is superseded
+✗ Gate failed — 1 blocking finding(s).
+$ echo $?
+1
+```
+
+Downgrade just that code in `.rac/config.yaml`:
+
+```yaml
+enforcement:
+  advisory:
+    - relationship-target-superseded
+```
+
+The finding still surfaces — now as advisory, and it still annotates the pull
+request in SARIF — but the gate passes:
+
+```text
+$ rac gate rac/
+...
+Blocking:   0
+Advisory:   1
+  ! rac/roadmaps/v1.md
+      [relationships] relationship-target-superseded: related_decisions: adr-002 — target is superseded
+✓ Gate passed — nothing blocking.
+$ echo $?
+0
+```
+
+The reference is still visible to reviewers; what changed is whether it *blocks*
+the merge — exactly the governed knob a maintainer wants.
+
+## Fleet readiness — one policy across many repositories
+
+Enforcement only standardises an organisation when *which findings are blocking*
+is set centrally, not re-litigated per repository. Because the policy is plain
+data in `.rac/config.yaml`, a team can standardise it across a fleet:
+
+- **Commit a shared `enforcement:` block.** Keep the canonical policy in one
+  place (a platform repo, a template repo, or a copier/cookiecutter template) and
+  have every RAC repository carry the same `.rac/config.yaml` enforcement section.
+  Each repository's `rac gate` then makes the same blocking-versus-advisory
+  decisions without per-repository edits.
+- **Tighten centrally, roll out by sync.** Promoting a code from `advisory` to
+  `blocking` in the shared block, then syncing the file, tightens the gate across
+  every repository at once — the change is visible in version control and applies
+  identically in the editor and in CI.
+- **Adopt warnings-first, then ratchet.** A new team can start with broad
+  `advisory`/`off` entries to get the gate green on a legacy corpus, then move
+  codes back to `blocking` one at a time as the corpus is cleaned up — the same
+  ratchet the severity overrides ([ADR-053](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-053-validation-severity-overrides.md))
+  offer for `rac validate`, now spanning the whole gate.
+
+Because the same file governs both the editor and the PR action, a fleet-wide
+policy change lands in one edit and is enforced everywhere the corpus is checked.
+
+## See also
+
+- [Validation](validation.md) — severity overrides (ADR-053) and SARIF.
+- [Security posture](security.md) — the offline guarantee behind the gate.
+- [Repository Workflow](repo-workflow.md) — `rac init` and `.rac/config.yaml`.
+- [CLI Reference](cli.md) — `rac gate` flags and exit codes.

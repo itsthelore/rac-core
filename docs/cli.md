@@ -305,6 +305,35 @@ one-screen summary and `review` when you want the prioritized worklist.
 
 ---
 
+## gate
+
+Enforce a corpus in one command: run validation, relationships, and review, then
+classify every finding as **blocking** or **advisory** under the corpus
+enforcement policy. The single enforcement entry point — one exit code, one SARIF
+document — used by the PR-gate Action.
+
+- **Input:** `rac gate <directory>` — scanned recursively for `*.md`.
+- **Options:** `--json` · `--sarif` (mutually exclusive) · `--top-level`
+- **Exit codes:** `0` nothing blocking · `1` a blocking finding (or malformed
+  `.rac/config.yaml`) · `2` not a directory
+
+```bash
+rac gate rac/                # human summary
+rac gate rac/ --json         # stable JSON contract (schema_version "1")
+rac gate rac/ --sarif        # one SARIF 2.1.0 document over all findings
+```
+
+Which findings block versus merely annotate is governed by an optional
+`enforcement:` section in `.rac/config.yaml` (`blocking` / `advisory` / `off`
+lists of finding codes). With no policy, the gate's verdict is exactly
+`validate ∧ relationships ∧ review`. The `--json` envelope carries `ok`,
+`blocking_count`, `advisory_count`, and `findings[]` (each with `source`, `code`,
+`severity`, `enforcement`, `path`, `line`, `message`); `--sarif` emits one
+combined document for GitHub Code Scanning. See
+[Governance](governance.md) for the policy shape and fleet-readiness guidance.
+
+---
+
 ## watchkeeper
 
 Review product knowledge *changes* between two repository states: what was
