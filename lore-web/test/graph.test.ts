@@ -69,3 +69,63 @@ describe('graph layout', () => {
     expect(snapshot()).toBe(snapshot());
   });
 });
+
+import type { LoreExport } from '../src/viewer/types';
+
+describe('force controls', () => {
+  const snapshot = (opts: Partial<{ repel: number; linkForce: number; linkDistance: number; center: number }>) => {
+    const g = buildGraph(fixtureExport);
+    layout(g.nodes, g.edges, { width: W, height: H, ...opts });
+    return g.nodes.map((n) => `${n.x.toFixed(2)},${n.y.toFixed(2)}`).join('|');
+  };
+
+  it('is deterministic for a given set of forces', () => {
+    expect(snapshot({ repel: 1.8 })).toBe(snapshot({ repel: 1.8 }));
+  });
+
+  it('different forces produce a different layout', () => {
+    expect(snapshot({ repel: 0.3 })).not.toBe(snapshot({ repel: 3 }));
+  });
+
+  it('stays inside the frame at extreme forces', () => {
+    const g = buildGraph(fixtureExport);
+    layout(g.nodes, g.edges, { width: W, height: H, repel: 3, linkForce: 3, linkDistance: 2.5 });
+    for (const n of g.nodes) {
+      expect(n.x).toBeGreaterThanOrEqual(0);
+      expect(n.x).toBeLessThanOrEqual(W);
+      expect(n.y).toBeGreaterThanOrEqual(0);
+      expect(n.y).toBeLessThanOrEqual(H);
+    }
+  });
+});
+
+describe('orphan layout', () => {
+  const withOrphans: LoreExport = {
+    schema_version: '1',
+    corpus: { name: 'orphans' },
+    artifacts: [
+      { id: 'A', aliases: ['a'], type: 'decision', status: 'Accepted', title: 'A', path: 'a.md', body_html: '' },
+      { id: 'B', aliases: ['b'], type: 'decision', status: 'Accepted', title: 'B', path: 'b.md', body_html: '' },
+      { id: 'O1', aliases: ['o1'], type: 'requirement', status: 'Active', title: 'O1', path: 'o1.md', body_html: '' },
+      { id: 'O2', aliases: ['o2'], type: 'requirement', status: 'Active', title: 'O2', path: 'o2.md', body_html: '' },
+      { id: 'O3', aliases: ['o3'], type: 'requirement', status: 'Active', title: 'O3', path: 'o3.md', body_html: '' },
+    ],
+    relationships: [{ from: 'A', to: 'B', type: 'relates-to' }],
+  };
+
+  it('places orphans inside the frame, spread out (not piled in one spot)', () => {
+    const g = buildGraph(withOrphans);
+    layout(g.nodes, g.edges, { width: W, height: H });
+    const orphans = g.nodes.filter((n) => n.degree === 0);
+    expect(orphans).toHaveLength(3);
+    for (const o of orphans) {
+      expect(o.x).toBeGreaterThanOrEqual(0);
+      expect(o.x).toBeLessThanOrEqual(W);
+      expect(o.y).toBeGreaterThanOrEqual(0);
+      expect(o.y).toBeLessThanOrEqual(H);
+    }
+    // spread horizontally rather than collapsed onto one column
+    const xs = new Set(orphans.map((o) => Math.round(o.x)));
+    expect(xs.size).toBeGreaterThan(1);
+  });
+});

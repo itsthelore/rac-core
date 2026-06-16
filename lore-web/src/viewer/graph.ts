@@ -135,23 +135,56 @@ export interface LayoutOptions {
   width: number;
   height: number;
   iterations?: number;
+  /** Repulsion strength multiplier (default 1). */
+  repel?: number;
+  /** Edge attraction strength multiplier (default 1). */
+  linkForce?: number;
+  /** Edge-length multiplier on the ideal separation `sqrt(area / n)` (default 1). */
+  linkDistance?: number;
+  /** Centering gravity strength (default 0.02). */
+  center?: number;
 }
+
+/** Default force parameters — these reproduce the unparameterised layout. */
+export const DEFAULT_FORCES = {
+  repel: 1,
+  linkForce: 1,
+  linkDistance: 1,
+  center: 0.02,
+} as const;
 
 /**
  * A seeded Fruchterman–Reingold force layout, mutating node `x`/`y` in place.
  * Deterministic: initial positions are a golden-angle spiral by node order
- * (the export is path-ordered), and the simulation uses no randomness.
+ * (the export is path-ordered), and the simulation uses no randomness. Force
+ * strengths are tunable, with defaults that reproduce the original layout.
+ * Orphans (degree 0) are excluded from the simulation and arranged in a tidy
+ * grid along the bottom band, so they no longer pile against the frame edge.
  */
-export function layout(
+export function layout(nodes: GraphNode[], edges: GraphEdge[], opts: LayoutOptions): void {
+  const { width, height } = opts;
+  const margin = Math.min(width, height) * 0.04;
+  const connected = nodes.filter((node) => node.degree > 0);
+  const orphans = nodes.filter((node) => node.degree === 0);
+  layoutConnected(connected, edges, opts, margin);
+  layoutOrphans(orphans, width, height, margin);
+}
+
+function layoutConnected(
   nodes: GraphNode[],
   edges: GraphEdge[],
-  { width, height, iterations }: LayoutOptions,
+  opts: LayoutOptions,
+  margin: number,
 ): void {
   const n = nodes.length;
   if (n === 0) return;
+  const { width, height, iterations } = opts;
+  const repel = opts.repel ?? DEFAULT_FORCES.repel;
+  const linkForce = opts.linkForce ?? DEFAULT_FORCES.linkForce;
+  const center = opts.center ?? DEFAULT_FORCES.center;
   const cx = width / 2;
   const cy = height / 2;
-  const k = Math.sqrt((width * height) / n); // ideal separation
+  const k = Math.sqrt((width * height) / n) * (opts.linkDistance ?? 1); // ideal separation
   const golden = Math.PI * (3 - Math.sqrt(5));
   const radius = Math.min(width, height) * 0.46;
   nodes.forEach((node, i) => {
@@ -165,7 +198,6 @@ export function layout(
   const index = new Map(nodes.map((node, i) => [node.id, i]));
   const iters = iterations ?? Math.round(Math.max(90, Math.min(320, 5200 / Math.sqrt(n))));
   const disp = nodes.map(() => ({ x: 0, y: 0 }));
-  const margin = Math.min(width, height) * 0.04;
   let temp = Math.min(width, height) * 0.12;
   const cool = temp / (iters + 1);
 
@@ -186,7 +218,7 @@ export function layout(
           d2 = dx * dx + dy * dy;
         }
         const d = Math.sqrt(d2);
-        const f = (k * k) / d;
+        const f = ((k * k) / d) * repel;
         const ux = dx / d;
         const uy = dy / d;
         disp[i].x += ux * f;
@@ -203,7 +235,7 @@ export function layout(
       const dx = nodes[a].x - nodes[b].x;
       const dy = nodes[a].y - nodes[b].y;
       const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
-      const f = (d * d) / k;
+      const f = ((d * d) / k) * linkForce;
       const ux = dx / d;
       const uy = dy / d;
       disp[a].x -= ux * f;
@@ -211,10 +243,10 @@ export function layout(
       disp[b].x += ux * f;
       disp[b].y += uy * f;
     }
-    // gentle gravity keeps disconnected nodes from drifting away
+    // gentle gravity keeps the cluster centred
     for (let i = 0; i < n; i++) {
-      disp[i].x += (cx - nodes[i].x) * 0.02;
-      disp[i].y += (cy - nodes[i].y) * 0.02;
+      disp[i].x += (cx - nodes[i].x) * center;
+      disp[i].y += (cy - nodes[i].y) * center;
     }
     // integrate, capped by the cooling temperature, and keep nodes inside the
     // frame (classic FR containment) so the graph stays compact and the
@@ -229,6 +261,21 @@ export function layout(
     }
     temp = Math.max(temp - cool, 0.01);
   }
+}
+
+/** Lay out orphans (no edges) in a tidy grid along the bottom band. */
+function layoutOrphans(orphans: GraphNode[], width: number, height: number, margin: number): void {
+  const n = orphans.length;
+  if (n === 0) return;
+  const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt(n) * 1.6)));
+  const cellW = (width - 2 * margin) / cols;
+  const cellH = Math.min(cellW, height * 0.08);
+  orphans.forEach((node, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    node.x = margin + cellW * (col + 0.5);
+    node.y = Math.max(margin, height - margin - cellH * (row + 0.5));
+  });
 }
 
 /** Node radius from degree — hubs read bigger. */

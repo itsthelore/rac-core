@@ -514,3 +514,48 @@
 .graph-legend__note {
   margin-left: auto;
 }
+
+/* ---- graph: force controls + keyboard focus (v0.21.12) -------------- */
+
+.graph-forces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: var(--dash-subtle);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+.graph-force {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.graph-force__label {
+  min-width: 3.5rem;
+}
+.graph-force input[type='range'] {
+  width: 5rem;
+}
+.graph-reset {
+  background: var(--bg-element);
+  border: var(--line);
+  color: var(--text);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  font: inherit;
+}
+.graph-reset:hover {
+  color: var(--accent-bright);
+}
+
+.graph-canvas:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+.graph-node__kbfocus {
+  fill: none;
+  stroke: var(--info);
+  stroke-width: 2.5;
+}

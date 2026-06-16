@@ -278,8 +278,12 @@ muted. Layout is a seeded, dependency-free force simulation computed in the
 browser (`src/viewer/graph.ts`) — **no positions are ever read from or written
 to the export**, so determinism (§1) is unaffected and only the vendored shell
 changes when the view does. It follows Obsidian conventions: a Global graph and
-a Local graph rooted on the host's active artifact to a user-set depth,
-hover-to-highlight with the rest dimmed, zoom-based label fade, pan/zoom/drag,
-and filters (search, type, status, orphans, unresolved). Selection reuses the
-§6 host bridge — `open-artifact` on click, `reveal-artifact` roots the local
-graph — so no new protocol is added. The list/detail view remains the default.
+a Local graph rooted on the host's active artifact to a user-set depth (with an
+opt-in "follow editor" default), hover-to-highlight with the rest dimmed,
+zoom-based label fade, pan/zoom/drag, **force-strength controls** (centre /
+repel / link / distance, debounced and seeded so they stay deterministic),
+**keyboard navigation** (arrow keys move between nodes, Enter selects, O opens),
+**orphans** laid out in a tidy grid rather than piled at the frame edge, and
+filters (search, type, status, orphans, unresolved). Selection reuses the §6
+host bridge — `open-artifact` on click, `reveal-artifact` roots the local graph —
+so no new protocol is added. The list/detail view remains the default.

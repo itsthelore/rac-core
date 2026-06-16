@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { CorpusIndex } from './data';
 import {
   bounds,
@@ -28,6 +28,26 @@ const LOGICAL_H = 720;
 const LABEL_ZOOM = 0.85; // show all labels at/above this zoom
 const LABEL_DEGREE = 7; // always label hubs, regardless of zoom
 
+interface Forces {
+  repel: number;
+  linkForce: number;
+  linkDistance: number;
+  center: number;
+}
+const DEFAULT_FORCES: Forces = { repel: 1, linkForce: 1, linkDistance: 1, center: 0.02 };
+
+type Dir = 'up' | 'down' | 'left' | 'right';
+
+/** Debounce a value so the force sim does not re-run on every slider tick. */
+function useDebounced<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
+
 export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphViewProps) {
   const [mode, setMode] = useState<'global' | 'local'>('global');
   const [depth, setDepth] = useState(2);
@@ -37,13 +57,17 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
   const [showOrphans, setShowOrphans] = useState(true);
   const [showUnresolved, setShowUnresolved] = useState(true);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [followEditor, setFollowEditor] = useState(false);
+  const [forces, setForces] = useState<Forces>(DEFAULT_FORCES);
+  const dForces = useDebounced(forces, 250);
 
-  // Full graph + global layout: computed once per corpus.
+  // Full graph + global layout: recomputed per corpus or when forces change.
   const full = useMemo(() => {
     const graph = buildGraph(index.data);
-    layout(graph.nodes, graph.edges, { width: LOGICAL_W, height: LOGICAL_H });
+    layout(graph.nodes, graph.edges, { width: LOGICAL_W, height: LOGICAL_H, ...dForces });
     return graph;
-  }, [index]);
+  }, [index, dForces]);
 
   const rootId = mode === 'local' && activeId && full.byId.has(activeId) ? activeId : null;
 
@@ -72,10 +96,10 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
     let nodes = full.nodes.filter((n) => visible.has(n.id));
     if (mode === 'local') {
       nodes = nodes.map((n) => ({ ...n }));
-      layout(nodes, edges, { width: LOGICAL_W, height: LOGICAL_H });
+      layout(nodes, edges, { width: LOGICAL_W, height: LOGICAL_H, ...dForces });
     }
     return { nodes, edges, byId: new Map(nodes.map((n) => [n.id, n])) };
-  }, [full, mode, rootId, depth, query, typeFilter, statusFilter, showOrphans, showUnresolved]);
+  }, [full, mode, rootId, depth, query, typeFilter, statusFilter, showOrphans, showUnresolved, dForces]);
 
   // --- viewport: size, pan/zoom, drag ---------------------------------------
   const svgRef = useRef<SVGSVGElement>(null);
@@ -99,7 +123,16 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
   const [overrides, setOverrides] = useState<Map<string, { x: number; y: number }>>(new Map());
   const overridesRef = useRef(overrides);
   overridesRef.current = overrides;
-  useEffect(() => setOverrides(new Map()), [view]);
+  useEffect(() => {
+    setOverrides(new Map());
+    setFocusedId(null);
+  }, [view]);
+
+  // Local-graph default: when "follow editor" is on, stay in local mode rooted
+  // on the active artifact.
+  useEffect(() => {
+    if (followEditor) setMode('local');
+  }, [followEditor, activeId]);
 
   const pos = useCallback(
     (node: GraphNode) => overridesRef.current.get(node.id) ?? { x: node.x, y: node.y },
@@ -184,7 +217,7 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
   };
 
   // --- highlight / dim ------------------------------------------------------
-  const focus = hoverId ?? null;
+  const focus = hoverId ?? focusedId;
   const focusSet = useMemo(() => {
     if (!focus) return null;
     const set = new Set<string>([focus]);
@@ -196,7 +229,74 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
     transform.k >= LABEL_ZOOM ||
     node.degree >= LABEL_DEGREE ||
     node.id === hoverId ||
+    node.id === focusedId ||
     node.id === activeId;
+
+  // --- keyboard navigation --------------------------------------------------
+  const nearestInDirection = useCallback(
+    (fromId: string, dir: Dir): string | null => {
+      const from = view.byId.get(fromId);
+      if (!from) return null;
+      let best: string | null = null;
+      let bestScore = Infinity;
+      for (const node of view.nodes) {
+        if (node.id === fromId) continue;
+        const dx = node.x - from.x;
+        const dy = node.y - from.y;
+        const inDir =
+          dir === 'right' ? dx > 0 : dir === 'left' ? dx < 0 : dir === 'up' ? dy < 0 : dy > 0;
+        if (!inDir) continue;
+        const horizontal = dir === 'left' || dir === 'right';
+        const along = horizontal ? Math.abs(dx) : Math.abs(dy);
+        const perp = horizontal ? Math.abs(dy) : Math.abs(dx);
+        const score = along + perp * 2;
+        if (score < bestScore) {
+          bestScore = score;
+          best = node.id;
+        }
+      }
+      return best;
+    },
+    [view],
+  );
+
+  const onKeyDown = (e: ReactKeyboardEvent<SVGSVGElement>) => {
+    if (view.nodes.length === 0) return;
+    const dirs: Record<string, Dir> = {
+      ArrowUp: 'up',
+      ArrowDown: 'down',
+      ArrowLeft: 'left',
+      ArrowRight: 'right',
+    };
+    const current = focusedId && view.byId.has(focusedId) ? focusedId : null;
+    if (e.key in dirs) {
+      e.preventDefault();
+      if (!current) {
+        setFocusedId(activeId && view.byId.has(activeId) ? activeId : view.nodes[0].id);
+        return;
+      }
+      const next = nearestInDirection(current, dirs[e.key]);
+      if (next) setFocusedId(next);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      const order = view.nodes;
+      const i = current ? order.findIndex((n) => n.id === current) : -1;
+      const step = e.shiftKey ? -1 : 1;
+      setFocusedId(order[(i + step + order.length) % order.length].id);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      if (current) {
+        e.preventDefault();
+        onSelect(current);
+      }
+    } else if (e.key === 'o') {
+      if (current) {
+        e.preventDefault();
+        onOpenDetail(current);
+      }
+    } else if (e.key === 'Escape') {
+      setFocusedId(null);
+    }
+  };
 
   return (
     <div className="graph">
@@ -206,7 +306,10 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
             type="button"
             className="graph-mode"
             aria-pressed={mode === 'global'}
-            onClick={() => setMode('global')}
+            onClick={() => {
+              setMode('global');
+              setFollowEditor(false);
+            }}
           >
             Global
           </button>
@@ -273,17 +376,70 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
           <input type="checkbox" checked={showUnresolved} onChange={(e) => setShowUnresolved(e.target.checked)} />
           unresolved
         </label>
+        <label className="graph-toggle" title="Default to a local graph rooted on the active artifact">
+          <input
+            type="checkbox"
+            checked={followEditor}
+            onChange={(e) => {
+              setFollowEditor(e.target.checked);
+              setMode(e.target.checked ? 'local' : 'global');
+            }}
+          />
+          follow editor
+        </label>
         <a className="graph-exit" href="#/">
           ← list
         </a>
       </div>
 
+      <div className="graph-forces" role="group" aria-label="Force controls">
+        <ForceSlider
+          label="repel"
+          min={0.2}
+          max={3}
+          step={0.1}
+          value={forces.repel}
+          onChange={(repel) => setForces((f) => ({ ...f, repel }))}
+        />
+        <ForceSlider
+          label="link"
+          min={0.2}
+          max={3}
+          step={0.1}
+          value={forces.linkForce}
+          onChange={(linkForce) => setForces((f) => ({ ...f, linkForce }))}
+        />
+        <ForceSlider
+          label="distance"
+          min={0.4}
+          max={2.5}
+          step={0.1}
+          value={forces.linkDistance}
+          onChange={(linkDistance) => setForces((f) => ({ ...f, linkDistance }))}
+        />
+        <ForceSlider
+          label="centre"
+          min={0}
+          max={0.08}
+          step={0.005}
+          value={forces.center}
+          onChange={(center) => setForces((f) => ({ ...f, center }))}
+        />
+        <button type="button" className="graph-reset" onClick={() => setForces(DEFAULT_FORCES)}>
+          reset
+        </button>
+      </div>
+
       <svg
         ref={svgRef}
         className="graph-canvas"
+        tabIndex={0}
+        role="application"
+        aria-label="Corpus graph. Arrow keys move between nodes, Enter opens, O opens its page."
         onPointerDown={onBackgroundDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
+        onKeyDown={onKeyDown}
       >
         <defs>
           <marker id="rac-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -314,11 +470,13 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
             const p = pos(node);
             const r = nodeRadius(node.degree);
             const isActive = node.id === activeId;
+            const isFocused = node.id === focusedId;
             const cls =
               'graph-node' +
               (node.unresolved ? ' graph-node--unresolved' : '') +
               (isRetired(node.status) ? ' graph-node--retired' : '') +
               (isActive ? ' is-active' : '') +
+              (isFocused ? ' is-kbfocus' : '') +
               (dimmed(node.id) ? ' is-dim' : '');
             return (
               <g
@@ -330,6 +488,7 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
                 onMouseEnter={() => setHoverId(node.id)}
                 onMouseLeave={() => setHoverId((h) => (h === node.id ? null : h))}
               >
+                {isFocused ? <circle className="graph-node__kbfocus" r={r + 7} /> : null}
                 {isActive ? <circle className="graph-node__focus" r={r + 5} /> : null}
                 <circle
                   className="graph-node__dot"
@@ -366,9 +525,35 @@ export function GraphView({ index, activeId, onSelect, onOpenDetail }: GraphView
           </span>
         ))}
         <span className="graph-legend__note">
-          {view.nodes.length} shown · node size = links · drag to move · scroll to zoom
+          {view.nodes.length} shown · node size = links · drag · scroll to zoom · arrows to navigate
         </span>
       </div>
     </div>
+  );
+}
+
+interface ForceSliderProps {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (value: number) => void;
+}
+
+function ForceSlider({ label, min, max, step, value, onChange }: ForceSliderProps) {
+  return (
+    <label className="graph-force">
+      <span className="graph-force__label">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={`${label} force`}
+      />
+    </label>
   );
 }
