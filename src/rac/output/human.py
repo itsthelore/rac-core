@@ -23,6 +23,7 @@ from rac.services.compare import (
     RelationshipIssueRef,
 )
 from rac.services.create import CreatedArtifact
+from rac.services.gate import GateReport
 from rac.services.hook import InstalledHook
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
@@ -810,6 +811,47 @@ def render_review_human(r: ReviewReport) -> str:
     ]
     if p.total_artifacts == 0:
         lines += ["", EMPTY_CORPUS_HINT]
+    return "\n".join(lines)
+
+
+# --- gate --------------------------------------------------------------------
+
+
+def render_gate_human(report: GateReport) -> str:
+    """Human-readable `rac gate` output (v0.21.14).
+
+    The unified enforcement verdict: blocking versus advisory counts, then the
+    findings grouped by enforcement class, each with its source, code, and
+    location. Blocking findings fail the gate; advisory findings annotate but do
+    not. The style mirrors `rac review` — coloured icons, a green clear line.
+    """
+    blocking = report.blocking
+    advisory = report.advisory
+    lines = [
+        _bold("Corpus Gate"),
+        "===========",
+        "",
+        f"Directory:  {report.directory}",
+        f"Blocking:   {len(blocking)}",
+        f"Advisory:   {len(advisory)}",
+    ]
+
+    def _emit(group: list, title: str, icon: str) -> None:
+        if not group:
+            return
+        lines.extend(["", _bold(f"{title} ({len(group)})"), "-" * len(f"{title} ({len(group)})")])
+        for f in group:
+            lines.append(f"  {icon} {_loc(f.path, f.line)}")
+            lines.append(f"      [{f.source}] {f.code}: {f.message}")
+
+    _emit(blocking, "Blocking", _red("✗"))
+    _emit(advisory, "Advisory", _yellow("!"))
+
+    lines.append("")
+    if report.ok:
+        lines.append(_green("✓ Gate passed — nothing blocking."))
+    else:
+        lines.append(_red(f"✗ Gate failed — {len(blocking)} blocking finding(s)."))
     return "\n".join(lines)
 
 

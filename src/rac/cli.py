@@ -10,6 +10,7 @@ Commands:
     rac schema [--list] [type] [--json | --template]
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
     rac review <directory> [--json] [--top-level]
+    rac gate <directory> [--json | --sarif] [--top-level]
     rac watchkeeper [directory] [--base REF] [--head REF]
                     [--format human|json|github] [--json] [--fail-on POLICY]
                     [--no-annotate]
@@ -103,6 +104,7 @@ from rac.services.create import (
 )
 from rac.services.diff import diff as diff_asts
 from rac.services.export import build_corpus_export
+from rac.services.gate import build_gate
 from rac.services.hook import HookFileExists, NotAGitWorkTree, install_hook
 from rac.services.improve import improve_product
 from rac.services.index import build_repository_index
@@ -424,6 +426,26 @@ def cmd_review(args: argparse.Namespace) -> int:
         print(outputs.render_review_human(report))
     # Priority 1-2 findings (invalid artifacts, broken relationships) fail the
     # review; priority 3-4 findings are advisory (REQ-Repository-Review-Mode).
+    return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
+
+
+def cmd_gate(args: argparse.Namespace) -> int:
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    try:
+        report = build_gate(args.directory, recursive=not args.top_level)
+    except MalformedRepositoryConfig as exc:  # unreadable/invalid .rac/config.yaml
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if args.sarif:
+        print(outputs.render_gate_sarif(report))
+    elif args.json:
+        print(outputs.render_gate_json(report))
+    else:
+        print(outputs.render_gate_human(report))
+    # The gate fails when any finding is blocking under the corpus enforcement
+    # policy; advisory findings annotate but never fail (ADR-049 / v0.21.14).
     return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
 
 
@@ -1100,6 +1122,30 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_review.set_defaults(func=cmd_review)
+
+    p_gate = sub.add_parser(
+        "gate",
+        help="Enforce the corpus: validation, relationships, and review under "
+        "the corpus enforcement policy.",
+        parents=[version_parent],
+    )
+    p_gate.add_argument("directory", help="The RAC corpus directory to enforce.")
+    gate_format = p_gate.add_mutually_exclusive_group()
+    gate_format.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    gate_format.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Emit one SARIF 2.1.0 document over all findings for GitHub Code "
+        "Scanning (CI pull-request enforcement).",
+    )
+    p_gate.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_gate.set_defaults(func=cmd_gate)
 
     p_watchkeeper = sub.add_parser(
         "watchkeeper",

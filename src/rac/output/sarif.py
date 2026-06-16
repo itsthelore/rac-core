@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 
 from rac import __version__
+from rac.services.gate import GateReport
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_EDGE_UNSUPPORTED,
@@ -25,6 +26,7 @@ from rac.services.relationships import (
     ISSUE_TARGET_NOT_FOUND,
     ISSUE_TARGET_SUPERSEDED,
     ISSUE_TARGET_TYPE_MISMATCH,
+    RELATIONSHIP_SEVERITY,
     RelationshipIssue,
     RelationshipValidation,
 )
@@ -89,21 +91,13 @@ def render_review_sarif(report: ReviewReport) -> str:
     return _document(results)
 
 
-# Relationship-validation findings map onto SARIF levels (ADR-054). Referential
-# integrity and graph-shape breakages are errors; advisory consistency findings
-# (self-reference, unsupported edge, retired-target reference) are warnings. The
-# PR gate blocks on any non-zero exit, so a warning-level retired-decision
-# reference still fails the check — the level only sets the annotation severity.
-_RELATIONSHIP_LEVEL = {
-    ISSUE_TARGET_NOT_FOUND: "error",
-    ISSUE_TARGET_AMBIGUOUS: "error",
-    ISSUE_TARGET_TYPE_MISMATCH: "error",
-    ISSUE_RELATIONSHIP_CYCLE: "error",
-    ISSUE_DUPLICATE_IDENTIFIER: "error",
-    ISSUE_TARGET_SUPERSEDED: "warning",
-    ISSUE_SELF_REFERENCE: "warning",
-    ISSUE_EDGE_UNSUPPORTED: "warning",
-}
+# Relationship-validation findings map onto SARIF levels (ADR-054) via the
+# canonical intrinsic severity owned by the relationships service
+# (``RELATIONSHIP_SEVERITY``), so the SARIF annotation level and the `rac gate`
+# enforcement layer read one source and can never disagree. The PR gate blocks on
+# any non-zero exit, so a warning-level retired-decision reference still fails the
+# check — the level only sets the annotation severity, not the enforcement class.
+_RELATIONSHIP_LEVEL = RELATIONSHIP_SEVERITY
 
 # Human-readable message per finding, keyed by code. Reference-style findings
 # format the relationship, target, and reason; repository-level findings
@@ -151,6 +145,20 @@ def render_relationships_sarif(validation: RelationshipValidation) -> str:
     review renderers, the output is deterministic and offline (ADR-002).
     """
     results = [_relationship_result(issue) for issue in validation.issues]
+    return _document(results)
+
+
+def render_gate_sarif(report: GateReport) -> str:
+    """Render a `rac gate` report as a single SARIF 2.1.0 document (v0.21.14).
+
+    One combined run over *all* gate findings — blocking and advisory alike — so
+    the PR gate uploads a single SARIF under one Code Scanning category instead of
+    three. The finding's intrinsic ``severity`` drives the annotation level (an
+    advisory finding still annotates at its own severity); the enforcement class is
+    carried in the gate's exit code, not the SARIF level. Deterministic and offline
+    (ADR-002): results are sorted by ``_document`` and no timestamps are emitted.
+    """
+    results = [_result(f.code, f.severity, f.message, f.path, f.line) for f in report.findings]
     return _document(results)
 
 

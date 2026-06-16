@@ -17,6 +17,7 @@ from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
 from rac.services.create import CreatedArtifact
 from rac.services.export import CorpusExport
+from rac.services.gate import GateReport
 from rac.services.hook import InstalledHook
 from rac.services.improve import ImprovementResult
 from rac.services.index import RepositoryIndex
@@ -62,6 +63,14 @@ def render_validate_dir_json(result: DirectoryValidation) -> str:
 
 def render_review_json(report: ReviewReport) -> str:
     """JSON `rac review` output (stable contract, ADR-007)."""
+    return json.dumps(report.to_dict(), indent=2)
+
+
+# --- gate --------------------------------------------------------------------
+
+
+def render_gate_json(report: GateReport) -> str:
+    """JSON `rac gate` output (stable contract, ADR-007)."""
     return json.dumps(report.to_dict(), indent=2)
 
 

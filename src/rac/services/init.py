@@ -17,8 +17,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from rac.services.gate import EnforcementPolicy
 
 from rac.core.overrides import EMPTY, RULE_VALUES, TYPE_VALUES, SeverityOverrides
 from rac.errors import RACError
@@ -155,6 +159,69 @@ def load_overrides(start_dir: str) -> SeverityOverrides:
     rules = _parse_severity_map(config_path, section.get("rules"), "validation.rules", RULE_VALUES)
     types = _parse_severity_map(config_path, section.get("types"), "validation.types", TYPE_VALUES)
     return SeverityOverrides(rules=rules, types=types)
+
+
+def load_enforcement_policy(start_dir: str) -> EnforcementPolicy:
+    """Read the ``enforcement`` policy from the nearest config (ADR-049 / v0.21.14).
+
+    The enforcement section maps finding *codes* to an enforcement class for
+    ``rac gate``: three optional list-of-strings keys ``blocking``, ``advisory``,
+    and ``off``. It is the central, governed knob that decides which finding
+    classes fail the gate versus merely annotate (ADR-063: the policy lives in the
+    committed corpus, not hardcoded in a consumer)::
+
+        enforcement:
+          advisory:
+            - relationship-target-superseded
+          off:
+            - stale-corpus
+
+    Returns :data:`~rac.services.gate.EMPTY_POLICY` when there is no config file or
+    no ``enforcement`` section. Malformed shapes (a non-mapping section, a
+    non-list key, or a non-string entry) raise :class:`MalformedRepositoryConfig`,
+    mirroring :func:`load_overrides` — policy is never silently ignored.
+    """
+    # Imported lazily to avoid a cycle: gate.py imports this loader, and the
+    # policy model lives alongside the gate service.
+    from rac.services.gate import EMPTY_POLICY, EnforcementPolicy
+
+    config_path = find_config_file(start_dir)
+    if config_path is None:
+        return EMPTY_POLICY
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    section = data.get("enforcement") if isinstance(data, dict) else None
+    if section is None:
+        return EMPTY_POLICY
+    if not isinstance(section, dict):
+        raise MalformedRepositoryConfig(str(config_path), "'enforcement' must be a mapping")
+    blocking = _parse_code_list(config_path, section.get("blocking"), "enforcement.blocking")
+    advisory = _parse_code_list(config_path, section.get("advisory"), "enforcement.advisory")
+    # YAML 1.1 resolves the bare key ``off`` to ``False`` (the same gotcha the
+    # severity loader handles for values). ``off`` is the natural suppression
+    # keyword, so accept the coerced ``False`` key rather than forcing quotes.
+    off_value = section["off"] if "off" in section else section.get(False)
+    off = _parse_code_list(config_path, off_value, "enforcement.off")
+    return EnforcementPolicy(
+        blocking=frozenset(blocking), advisory=frozenset(advisory), off=frozenset(off)
+    )
+
+
+def _parse_code_list(config_path: Path, value: object, where: str) -> list[str]:
+    """Validate one ``enforcement`` key as a list of finding-code strings.
+
+    ``None`` (absent) is an empty list. Any non-list shape, or a non-string entry,
+    is a malformed config — finding codes are plain strings (ADR-007 stable codes).
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise MalformedRepositoryConfig(
+            str(config_path), f"'{where}' must be a list of finding-code strings"
+        )
+    return value
 
 
 def _parse_severity_map(

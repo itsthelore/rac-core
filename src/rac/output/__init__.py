@@ -11,6 +11,7 @@ from .human import (
     render_diff_human,
     render_dir_inspect_human,
     render_find_human,
+    render_gate_human,
     render_hook_install_human,
     render_hook_list_human,
     render_improve_human,
@@ -43,6 +44,7 @@ from .json import (
     render_dir_inspect_json,
     render_export_json,
     render_find_json,
+    render_gate_json,
     render_hook_install_json,
     render_hook_list_json,
     render_improve_json,
@@ -72,6 +74,7 @@ from .json import (
 from .okf import render_okf_bundle
 from .portal import render_export_html
 from .sarif import (
+    render_gate_sarif,
     render_relationships_sarif,
     render_review_sarif,
     render_validate_sarif,
@@ -83,6 +86,9 @@ __all__ = [
     "render_diff_json",
     "render_find_human",
     "render_find_json",
+    "render_gate_human",
+    "render_gate_json",
+    "render_gate_sarif",
     "render_dir_inspect_human",
     "render_dir_inspect_json",
     "render_export_html",

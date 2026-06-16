@@ -323,6 +323,25 @@ ISSUE_TARGET_TYPE_MISMATCH = "relationship-target-type-mismatch"
 # (``supersedes``), which an ordering/replacement relationship must not contain.
 ISSUE_RELATIONSHIP_CYCLE = "relationship-cycle"
 
+# Canonical intrinsic severity per relationship finding (v0.21.14). Referential
+# integrity and graph-shape breakages are errors; advisory consistency findings
+# (self-reference, unsupported edge, retired-target reference) are warnings. This
+# is the single source of truth for the annotation severity: the SARIF renderer
+# and the `rac gate` enforcement layer both read it, so they can never disagree.
+# It is the *intrinsic* severity only — relationship findings still fail
+# `--validate` (and gate, by default) regardless of severity; the enforcement
+# class is decided separately under the corpus policy (ADR-049).
+RELATIONSHIP_SEVERITY: dict[str, str] = {
+    ISSUE_TARGET_NOT_FOUND: "error",
+    ISSUE_TARGET_AMBIGUOUS: "error",
+    ISSUE_TARGET_TYPE_MISMATCH: "error",
+    ISSUE_RELATIONSHIP_CYCLE: "error",
+    ISSUE_DUPLICATE_IDENTIFIER: "error",
+    ISSUE_TARGET_SUPERSEDED: "warning",
+    ISSUE_SELF_REFERENCE: "warning",
+    ISSUE_EDGE_UNSUPPORTED: "warning",
+}
+
 
 def _is_retired_artifact(product: Product, spec: ArtifactSpec | None) -> bool:
     """True when ``product``'s ``## Status`` is one of its type's retired states.
