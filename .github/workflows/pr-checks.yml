@@ -107,6 +107,33 @@ jobs:
           install-from: source
           upload-sarif: ${{ !github.event.pull_request.head.repo.fork }}
 
+  # Agent-rules drift gate (v0.21.16, ADR-067): every pull request re-derives the
+  # live-decision digest from the corpus and fails if any committed agent-context
+  # file (CLAUDE.md, AGENTS.md, .cursor/rules, .github/copilot-instructions.md) is
+  # stale or missing its managed block. `--check` never writes; this is the
+  # Success Measure "a stale rules file fails CI", so the generated projection
+  # cannot silently rot relative to rac/. Source install, like the other dogfood
+  # jobs.
+  agent-rules:
+    name: agent-rules (drift check, source install)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Check agent-rules freshness
+        run: rac export rac/ --agent-rules --check
+
   # PR-gate dogfood (v0.21.14): every pull request runs the local PR-gate action
   # in source mode — the live end-to-end test of pr-gate-action/action.yml. It
   # carries the full contract via a single `rac gate` command — validation,

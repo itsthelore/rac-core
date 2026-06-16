@@ -1,28 +1,3 @@
-# RAC — agent session context
-
-This file is a router. Canonical agent guidance lives in `rac/prompts/`,
-where the RAC corpus gates validate it. Do not add rules here — add them
-to the corpus artifact and they load through the imports below.
-
-## Loaded every session
-
-@rac/prompts/rac-agent-session-start.md
-@rac/prompts/rac-agent-commit-guidelines.md
-
-## Situational prompts — read when the task calls for it, do not import
-
-- Pull request preparation: `rac/prompts/rac-agent-pr-guidelines.md`
-- Minor release gate: `rac/prompts/rac-agent-release-gate-minor.md`
-- Major release gate: `rac/prompts/rac-agent-release-gate-major.md`
-- Refactoring and simplification: `rac/prompts/rac-agent-simplification-guidelines.md`
-- Context compression: `rac/prompts/rac-agent-compression.md`
-
-## Working corpus
-
-- Current series: `rac/roadmaps/v0.13.x-welcome/` (next up: v0.13.0)
-- Previous series: `rac/roadmaps/v0.12.x-watchkeeper/` (complete through v0.12.3)
-- Decisions (ADRs): `rac/decisions/`
-
 <!-- BEGIN RAC MANAGED BLOCK (digest: 9d7bf182c3691dd2e94a159ad425800c2e7cede6dde8e56486e7f277bc168a28) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
