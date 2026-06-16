@@ -100,11 +100,30 @@ runs:
 
         echo "exit_code=$worst" >> "$GITHUB_OUTPUT"
 
-    - name: Upload SARIF to Code Scanning
+    # Each check is uploaded under its own Code Scanning category. Code Scanning
+    # rejects multiple SARIF runs combined under one category, so the three runs
+    # (one tool, "rac") must arrive as separate, categorised analyses rather than
+    # a single merged directory upload.
+    - name: Upload validate SARIF
       if: ${{ always() && inputs.upload-sarif == 'true' }}
       uses: github/codeql-action/upload-sarif@v3
       with:
-        sarif_file: ${{ inputs.sarif-dir }}
+        sarif_file: ${{ inputs.sarif-dir }}/validate.sarif
+        category: rac-validate
+
+    - name: Upload relationships SARIF
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-dir }}/relationships.sarif
+        category: rac-relationships
+
+    - name: Upload review SARIF
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-dir }}/review.sarif
+        category: rac-review
 
     # Any non-zero CLI exit fails the check; the per-check exits above show which
     # gate failed, and the Code Scanning annotations show every finding. Severity
