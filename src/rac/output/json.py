@@ -33,7 +33,7 @@ from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
 from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
-from rac.services.validate import DirectoryValidation
+from rac.services.validate import DirectoryValidation, StdinCorpusValidation
 from rac.services.watchkeeper import WatchkeeperReport
 
 if TYPE_CHECKING:
@@ -56,6 +56,16 @@ def render_validation_json(product: Product, issues: list[Issue]) -> str:
 
 def render_validate_dir_json(result: DirectoryValidation) -> str:
     """JSON directory `rac validate` output (stable contract, ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)
+
+
+def render_stdin_corpus_json(result: StdinCorpusValidation) -> str:
+    """JSON `rac validate - --corpus` output (stable contract, ADR-007).
+
+    Additive over single-file `rac validate` JSON: the same ``file`` / ``valid`` /
+    ``errors`` / ``warnings`` keys, plus ``relationship_issues`` for the proposed
+    document's references resolved against the corpus (v0.21.17, ADR-067).
+    """
     return json.dumps(result.to_dict(), indent=2)
 
 

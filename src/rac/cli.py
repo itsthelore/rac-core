@@ -2,6 +2,7 @@
 
 Commands:
     rac validate <file.md | dir | -> [--json | --sarif] [--top-level]
+    rac validate <file.md | -> --corpus <dir> [--json]
     rac diff <old.md> <new.md> [--json]
     rac stats <directory> [--json]
     rac ingest <file> [-o OUT | --stdout] [--force] [--json]
@@ -144,7 +145,11 @@ from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
 from rac.services.revisions import NotAGitRepository, RevisionNotFound
 from rac.services.skill import SkillFileExists, install_skills
 from rac.services.stats import collect_stats
-from rac.services.validate import validate_directory, validate_product
+from rac.services.validate import (
+    validate_directory,
+    validate_product,
+    validate_stdin_against_corpus,
+)
 from rac.services.watchkeeper import build_watchkeeper_report
 
 from . import __version__
@@ -174,10 +179,18 @@ def _read_validate_input(target: str) -> Product:
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
+    corpus = getattr(args, "corpus", None)
+
     # Directory? Validate every recognized artifact beneath it (v0.7.9).
     # Unknown-type files are skipped, matching `rac portfolio` semantics; the
     # legacy requirement fallback applies only to explicit single-file input.
     if args.file != "-" and Path(args.file).is_dir():
+        if corpus is not None:
+            # --corpus resolves *one proposed document* against a corpus; a
+            # directory target already validates every artifact in place, so the
+            # flag is redundant and ambiguous there (ADR-067, v0.21.17).
+            print("rac: --corpus applies to stdin ('-') or a single file", file=sys.stderr)
+            raise SystemExit(EXIT_USAGE)
         result = validate_directory(args.file, recursive=not args.top_level)
         if args.sarif:
             print(outputs.render_validate_sarif(result))
@@ -194,6 +207,25 @@ def cmd_validate(args: argparse.Namespace) -> int:
         raise SystemExit(EXIT_USAGE)
 
     product = _read_validate_input(args.file)
+
+    # Corpus-aware single-document validation (v0.21.17, ADR-067): structural
+    # findings *plus* the proposed document's references resolved against the
+    # live corpus. This is the seam the generated Claude Code pre-edit hook
+    # pipes proposed content into — a reference to a retired or missing decision
+    # blocks before the edit lands. Either a structural error or any corpus
+    # reference finding fails the run.
+    if corpus is not None:
+        if not Path(corpus).is_dir():
+            print(f"rac: --corpus is not a directory: {corpus}", file=sys.stderr)
+            raise SystemExit(EXIT_USAGE)
+        source_path = "-" if args.file == "-" else str(Path(args.file))
+        corpus_result = validate_stdin_against_corpus(product, corpus, source_path=source_path)
+        if args.json:
+            print(outputs.render_stdin_corpus_json(corpus_result))
+        else:
+            print(outputs.render_stdin_corpus_human(corpus_result))
+        return EXIT_OK if corpus_result.ok else EXIT_VALIDATION_FAILED
+
     start = "." if args.file == "-" else str(Path(args.file).parent)
     issues = validate_product(product, start)
     if args.json:
@@ -1012,6 +1044,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--recursive",
         action="store_true",
         help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_validate.add_argument(
+        "--corpus",
+        metavar="DIR",
+        help=(
+            "Resolve the proposed document's references against the corpus at DIR "
+            "(stdin '-' or a single file only). Reports references to retired or "
+            "missing decisions in addition to structural findings. Used by the "
+            "generated Claude Code pre-edit hook."
+        ),
     )
     p_validate.set_defaults(func=cmd_validate)
 

@@ -67,7 +67,7 @@ from rac.services.review import (
 )
 from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
-from rac.services.validate import STATUS_INVALID, DirectoryValidation
+from rac.services.validate import STATUS_INVALID, DirectoryValidation, StdinCorpusValidation
 from rac.services.watchkeeper import WatchkeeperReport
 
 from ._shared import _UNKNOWN_MESSAGE, _unsupported_message
@@ -134,6 +134,48 @@ def render_validation_human(product: Product, issues: list[Issue]) -> str:
 
     lines.append("")
     lines.append(f"{len(errors)} error(s), {len(warnings)} warning(s).")
+    return "\n".join(lines)
+
+
+def render_stdin_corpus_human(result: StdinCorpusValidation) -> str:
+    """Human-readable `rac validate - --corpus` output (v0.21.17, ADR-067).
+
+    Renders the proposed document's structural findings exactly as single-file
+    ``rac validate`` does, then appends the corpus-resolved relationship findings
+    (references to retired or missing decisions) under their own heading. Both
+    contribute to the verdict; either alone fails the run. The reason text is the
+    finding the generated Claude Code pre-edit hook surfaces when it blocks.
+    """
+    file = result.source_path or "<input>"
+    errors = [i for i in result.structural_issues if i.severity == "error"]
+    warnings = [i for i in result.structural_issues if i.severity == "warning"]
+    rels = result.relationship_issues
+
+    lines: list[str] = []
+    lines.append(_green(_bold(f"PASS  {file}")) if result.ok else _red(_bold(f"FAIL  {file}")))
+
+    for issue in errors:
+        lines.append(f"  {_red('error')}   [{issue.code}] {_loc(file, issue.line)}")
+        lines.append(f"          {issue.message}")
+    for issue in warnings:
+        lines.append(f"  {_yellow('warning')} [{issue.code}] {_loc(file, issue.line)}")
+        lines.append(f"          {issue.message}")
+
+    if rels:
+        lines += ["", _bold("Corpus references")]
+        current_section = None
+        for rel in rels:
+            if rel.relationship != current_section:
+                current_section = rel.relationship
+                lines.append(f"  {_relationship_label(rel.relationship or '')}:")
+            suffix = _REF_ISSUE_SUFFIX.get(rel.code, rel.code)
+            lines.append(_red(f"  ✗ {rel.target} {suffix}"))
+
+    lines.append("")
+    lines.append(
+        f"{len(errors)} error(s), {len(warnings)} warning(s), "
+        f"{len(rels)} corpus reference finding(s)."
+    )
     return "\n".join(lines)
 
 

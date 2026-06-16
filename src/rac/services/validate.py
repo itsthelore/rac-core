@@ -23,6 +23,7 @@ from rac.core.validation import has_errors, validate
 
 from .init import load_overrides
 from .okf_conformance import OkfConformanceReport, check_okf_conformance
+from .relationships import RelationshipIssue, validate_document_against_corpus
 
 # Stable per-file statuses (part of the JSON contract, ADR-007).
 STATUS_VALID = "valid"
@@ -105,6 +106,82 @@ class DirectoryValidation:
         if self.okf is not None:
             payload["okf"] = self.okf.to_dict()
         return payload
+
+
+@dataclass
+class StdinCorpusValidation:
+    """Combined structural + corpus-relationship validation of a proposed document.
+
+    The result of ``rac validate - --corpus DIR`` (v0.21.17, ADR-067): the
+    single-document structural findings (:class:`Issue`) *and* the proposed
+    document's outbound relationship findings resolved against the live corpus
+    (:class:`RelationshipIssue`) — references to retired (superseded/deprecated)
+    or missing decisions, range/edge violations, etc. Both finding sets are
+    additive and ``schema_version``-gated (ADR-007); the proposed document is
+    identified as ``source_path`` ("-" for stdin).
+
+    ``ok`` is False — and the CLI exits non-zero — when *either* a structural
+    error or *any* relationship finding is present. Relationship findings are all
+    blocking here regardless of intrinsic severity: a reference to a retired
+    decision is a structural contradiction the pre-edit hook exists to stop
+    (ADR-067), so it blocks just like a missing target. Structural *warnings* do
+    not block, mirroring single-file ``rac validate``.
+    """
+
+    source_path: str
+    structural_issues: list[Issue]
+    relationship_issues: list[RelationshipIssue]
+
+    @property
+    def ok(self) -> bool:
+        return not has_errors(self.structural_issues) and not self.relationship_issues
+
+    def to_dict(self) -> dict:
+        return {
+            "schema_version": "1",
+            "file": self.source_path or None,
+            "valid": self.ok,
+            "errors": [asdict(i) for i in self.structural_issues if i.severity == "error"],
+            "warnings": [asdict(i) for i in self.structural_issues if i.severity == "warning"],
+            "relationship_issues": [i.to_dict() for i in self.relationship_issues],
+        }
+
+
+def validate_stdin_against_corpus(
+    product: Product,
+    corpus_dir: str,
+    source_path: str = "-",
+    recursive: bool = True,
+) -> StdinCorpusValidation:
+    """Validate a proposed document structurally *and* against a live corpus.
+
+    The engine seam behind ``rac validate - --corpus DIR`` and the generated
+    Claude Code ``PreToolUse`` pre-edit hook (v0.21.17, ADR-067): plain
+    ``rac validate -`` is single-document and cannot resolve cross-artifact
+    references, so a proposed edit introducing a reference to a *retired* or
+    *missing* decision would slip through. This composes the two existing
+    deterministic checks — it computes nothing new (ADR-063):
+
+    1. structural validation with the corpus' severity overrides applied
+       (:func:`validate_product` anchored at ``corpus_dir``, so policy matches a
+       normal ``rac validate`` in that repository, ADR-053); and
+    2. the proposed document's outbound relationship references resolved against
+       the whole corpus (:func:`validate_document_against_corpus`), which already
+       flags retired-target and missing-target references.
+
+    The on-disk counterpart of an edited artifact is excluded from the corpus
+    index by canonical identity, so an edit is validated as if it replaces the
+    committed version (see :func:`validate_document_against_corpus`).
+    """
+    structural = validate_product(product, start=corpus_dir)
+    relationships = validate_document_against_corpus(
+        product, source_path, corpus_dir, recursive=recursive
+    )
+    return StdinCorpusValidation(
+        source_path=source_path,
+        structural_issues=structural,
+        relationship_issues=relationships.issues,
+    )
 
 
 def validate_product(product: Product, start: str = ".") -> list[Issue]:

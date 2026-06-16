@@ -750,6 +750,64 @@ def validate_relationships_file(path: str) -> RelationshipValidation:
     return _validate(path, _parsed_items([path]), recursive=False)
 
 
+def validate_document_against_corpus(
+    product: Product,
+    source_path: str,
+    directory: str,
+    recursive: bool = True,
+) -> RelationshipValidation:
+    """Resolve one *proposed* document's outbound references against a live corpus.
+
+    The single seam the Claude Code ``PreToolUse`` pre-edit hook needs
+    (v0.21.17, ADR-067): a document held only in memory — typically piped to
+    ``rac validate - --corpus`` from the hook before the edit lands — has its
+    cross-artifact references resolved against the *whole* corpus index, so a
+    reference to a retired (superseded/deprecated) or missing decision is
+    reported even though the proposed document is not yet on disk.
+
+    This reuses the existing repository resolution (:func:`_validate`) rather
+    than reimplementing it (ADR-016 / ADR-063): the proposed document is folded
+    into the corpus snapshot as ``(source_path, product, spec)`` and the run's
+    findings are then filtered to those whose ``source_path`` is the proposed
+    document — pre-existing corpus issues are not the pre-edit hook's concern,
+    only the references the edit introduces.
+
+    Identifier collision (editing an existing artifact): the proposed document
+    usually shares its canonical identifier with the on-disk artifact being
+    edited. The on-disk counterpart is *excluded* from the corpus snapshot
+    (matched on canonical identifier, case-insensitively), so the proposed
+    document stands in for it. This prevents two spurious findings — a
+    ``duplicate-artifact-identifier`` against the very file being edited, and a
+    ``relationship-self-reference`` when the proposed document references its own
+    identity — and means an edit is validated *as if* it replaces the committed
+    version. A brand-new document (no identifier match) simply joins the corpus.
+    """
+    corpus = _corpus_items(directory, recursive)
+    spec = spec_for(classify(product).type)
+    proposed_ident = artifact_identifier(product, spec, source_path).casefold()
+    # Drop the on-disk counterpart of the document being edited (same canonical
+    # identity) so the proposed document replaces it rather than colliding with
+    # it. A new artifact matches nothing here and the corpus is unchanged.
+    kept = [
+        item
+        for item in corpus
+        if artifact_identifier(item[1], item[2], item[0]).casefold() != proposed_ident
+    ]
+    items = [*kept, (source_path, product, spec)]
+    result = _validate(directory, items, recursive)
+    # Only the proposed document's own outbound references are the hook's
+    # concern; pre-existing corpus findings (and repo-level duplicate/cycle
+    # findings not anchored to this document) are filtered out so the pre-edit
+    # signal is exactly "what this edit introduces".
+    own = [issue for issue in result.issues if issue.source_path == source_path]
+    return RelationshipValidation(
+        directory=directory,
+        recursive=recursive,
+        relationships_checked=result.relationships_checked,
+        issues=own,
+    )
+
+
 # --- Repository relationship summary (v0.7.3) ---------------------------------
 #
 # Aggregate relationship health for ``rac portfolio``. Returns counts and an
