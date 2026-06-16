@@ -451,9 +451,11 @@ async function refreshWorkspaceDiagnostics(folder: vscode.WorkspaceFolder): Prom
 
 // `rac export --html` already produces a self-contained Portal viewer (the
 // lore-web build with the corpus injected, offline, no network). The command
-// renders it in a webview; re-running it refreshes. Editor sync (click an
-// artifact in the graph to open its file) is deferred — the standalone viewer
-// does not post messages to a host (see the v0.21.5 roadmap).
+// renders it in a webview; re-running it refreshes. Graph ↔ editor sync
+// (v0.21.7): the vendored viewer posts `ready`/`open-artifact` to this host
+// and listens for `reveal-artifact`, so selecting an artifact opens its file
+// and the active editor's artifact is revealed in the graph. The extension
+// forwards a path to open and an id to reveal; it derives nothing (ADR-063).
 
 let explorerPanel: vscode.WebviewPanel | undefined;
 
@@ -464,18 +466,93 @@ async function showExplorer(): Promise<void> {
     return;
   }
   if (!explorerPanel) {
-    explorerPanel = vscode.window.createWebviewPanel(
+    const panel = vscode.window.createWebviewPanel(
       "racExplorer",
       "RAC Explorer",
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
     );
-    explorerPanel.onDidDispose(() => {
+    explorerPanel = panel;
+    // Wired only while the panel lives: the webview asks to open artifacts, and
+    // switching the active editor reveals its artifact in the graph.
+    const subs = [
+      panel.webview.onDidReceiveMessage((message: unknown) => {
+        void handleExplorerMessage(folder, message);
+      }),
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        void revealArtifact(folder, editor?.document);
+      }),
+    ];
+    panel.onDidDispose(() => {
+      for (const sub of subs) sub.dispose();
       explorerPanel = undefined;
     });
   }
   explorerPanel.reveal(vscode.ViewColumn.Beside);
   await loadExplorer(folder);
+}
+
+// A message from the Explorer webview. Only known types act, and `open-artifact`
+// resolves the id against the cached export — so the path opened is the engine's,
+// never one supplied by the webview, and it is confined to the workspace.
+async function handleExplorerMessage(
+  folder: vscode.WorkspaceFolder,
+  message: unknown,
+): Promise<void> {
+  if (typeof message !== "object" || message === null) return;
+  const type = (message as { type?: unknown }).type;
+  if (type === "ready") {
+    await revealArtifact(folder, vscode.window.activeTextEditor?.document);
+    return;
+  }
+  if (type === "open-artifact") {
+    const id = (message as { id?: unknown }).id;
+    if (typeof id === "string") await openArtifactById(folder, id);
+  }
+}
+
+async function openArtifactById(
+  folder: vscode.WorkspaceFolder,
+  id: string,
+): Promise<void> {
+  const corpus = await corpusExport(folder);
+  const artifact = corpus?.artifacts.find((a) => a.id === id);
+  if (!artifact) return;
+  const uri = artifactUri(folder, artifact.path);
+  if (!isInsideFolder(folder, uri)) return;
+  try {
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One });
+  } catch {
+    // A path that no longer opens is not actionable from here; ignore.
+  }
+}
+
+// Ask the graph to reveal the artifact for `doc`, when it is an artifact file
+// inside this workspace folder. No-op otherwise (e.g. a non-artifact editor).
+async function revealArtifact(
+  folder: vscode.WorkspaceFolder,
+  doc: vscode.TextDocument | undefined,
+): Promise<void> {
+  const panel = explorerPanel;
+  if (!panel || !doc || doc.uri.scheme !== "file") return;
+  if (vscode.workspace.getWorkspaceFolder(doc.uri)?.uri.fsPath !== folder.uri.fsPath) {
+    return;
+  }
+  const corpus = await corpusExport(folder);
+  if (!corpus) return;
+  const target = doc.uri.fsPath;
+  const artifact = corpus.artifacts.find(
+    (a) => artifactUri(folder, a.path).fsPath === target,
+  );
+  if (artifact) {
+    void panel.webview.postMessage({ type: "reveal-artifact", id: artifact.id });
+  }
+}
+
+function isInsideFolder(folder: vscode.WorkspaceFolder, uri: vscode.Uri): boolean {
+  const rel = path.relative(folder.uri.fsPath, uri.fsPath);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
 async function loadExplorer(folder: vscode.WorkspaceFolder): Promise<void> {

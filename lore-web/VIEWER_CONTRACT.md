@@ -245,3 +245,25 @@ cited ids and aliases in text nodes are linkified). The viewer performs
   corpus identity is labelled.
 - `/tmp/lore-export-500.json` — a deterministic 500-artifact synthetic
   corpus for performance testing. Not committed.
+
+## 6. Editor-host integration (optional)
+
+When the viewer runs inside an editor webview (VS Code / Cursor — the RAC
+extension, RAC v0.21.7), it talks to the host over `postMessage`. The bridge is
+**feature-detected**: it activates only when `acquireVsCodeApi` is present, so a
+standalone Portal opened from `file://` is entirely unaffected — every message
+path is inert and behaviour is identical to a hosted-free build.
+
+The protocol is intentionally tiny and carries only the `path`/`id` already in
+the payload (§1) — the host derives nothing the export does not already state:
+
+- viewer → host `{ type: "ready" }` — on mount, so the host can reveal the
+  artifact for the active editor.
+- viewer → host `{ type: "open-artifact", path, id }` — when the user selects an
+  artifact (navigates to its detail), so the host can open its file.
+- host → viewer `{ type: "reveal-artifact", id }` — navigate the viewer to that
+  artifact's detail. A reveal does not echo back as an `open-artifact`.
+
+The bridge lives in `src/viewer/host.ts` and is wired in `src/viewer/App.tsx`;
+it is part of the viewer source tree, so a change to it re-hashes the vendored
+shell (`viewer_source_sha256`) and requires re-running `npm run vendor:shell`.
