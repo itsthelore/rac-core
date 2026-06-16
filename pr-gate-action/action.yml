@@ -1,20 +1,23 @@
-# RAC PR-gate composite action (v0.21.13, ADR-049 / ADR-063).
+# RAC PR-gate composite action (v0.21.14, ADR-049 / ADR-063).
 #
 # Carries the full RAC contract into a single required pull-request check:
-# install RAC, run `rac validate`, `rac relationships --validate`, and
-# `rac review` — each emitting SARIF (ADR-054) — upload all three to GitHub
-# Code Scanning, and re-surface the worst CLI exit code. The action is a thin
-# consumer (ADR-063): all analysis and severity policy live in the package
-# (ADR-015 / ADR-049 / ADR-053); the action never reinterprets findings.
+# install RAC and run `rac gate` — one command that enforces validation,
+# relationship integrity, and review under the corpus enforcement policy
+# (`.rac/config.yaml`), emitting one SARIF document (ADR-054). The single SARIF
+# is uploaded to GitHub Code Scanning under one category (`rac-gate`), and the
+# CLI exit code is re-surfaced. The action is a thin consumer (ADR-063): all
+# analysis and enforcement policy live in the package (ADR-015 / ADR-049); the
+# action never reinterprets findings or decides what is blocking.
 #
 # The Watchkeeper action lives at the repository root and the single-command
 # validate action at `validate-action/`; this gate is referenced as
 # `uses: tcballard/requirements-as-code/pr-gate-action@<ref>`.
 name: "RAC PR gate"
 description: >-
-  Enforce a requirements-as-code (RAC) corpus on a pull request: validate,
-  relationship integrity, and review, surfaced inline via GitHub Code Scanning
-  (SARIF) as a required status check. A thin wrapper over the `rac` CLI.
+  Enforce a requirements-as-code (RAC) corpus on a pull request with a single
+  `rac gate` command — validation, relationship integrity, and review under the
+  corpus enforcement policy — surfaced inline via GitHub Code Scanning (SARIF) as
+  a required status check. A thin wrapper over the `rac` CLI.
 author: "Tom Ballard"
 
 branding:
@@ -23,7 +26,7 @@ branding:
 
 inputs:
   path:
-    description: "The RAC corpus directory to check (passed to each `rac` command)."
+    description: "The RAC corpus directory to enforce (passed to `rac gate`)."
     required: false
     default: "rac"
   upload-sarif:
@@ -33,7 +36,7 @@ inputs:
     required: false
     default: "true"
   sarif-dir:
-    description: "Directory the SARIF documents are written to (one file per check)."
+    description: "Directory the single `gate.sarif` document is written to."
     required: false
     default: "rac-sarif"
   rac-version:
@@ -73,10 +76,11 @@ runs:
         fi
 
     # The CLI is the source of truth (ADR-058). `set +e` lets a non-zero exit
-    # still produce SARIF for upload; the worst exit code is re-surfaced below.
-    # Each check writes its own SARIF file into the upload directory.
-    - name: Run RAC checks (SARIF)
-      id: checks
+    # still produce SARIF for upload; the exit code is re-surfaced below. One
+    # command, one SARIF document — `rac gate` already composes validation,
+    # relationships, and review under the corpus enforcement policy.
+    - name: Run RAC gate (SARIF)
+      id: gate
       shell: bash
       env:
         INPUT_PATH: ${{ inputs.path }}
@@ -84,57 +88,30 @@ runs:
       run: |
         set +e
         mkdir -p "$SARIF_DIR"
-        worst=0
+        rac gate "$INPUT_PATH" --sarif > "$SARIF_DIR/gate.sarif"
+        code=$?
+        echo "gate exited $code"
+        echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
-        run_check() {
-          local name="$1"; shift
-          "$@" > "$SARIF_DIR/$name.sarif"
-          local code=$?
-          echo "$name exited $code"
-          if [ "$code" -gt "$worst" ]; then worst=$code; fi
-        }
-
-        run_check validate       rac validate "$INPUT_PATH" --sarif
-        run_check relationships  rac relationships "$INPUT_PATH" --validate --sarif
-        run_check review         rac review "$INPUT_PATH" --sarif
-
-        echo "exit_code=$worst" >> "$GITHUB_OUTPUT"
-
-    # Each check is uploaded under its own Code Scanning category. Code Scanning
-    # rejects multiple SARIF runs combined under one category, so the three runs
-    # (one tool, "rac") must arrive as separate, categorised analyses rather than
-    # a single merged directory upload.
-    - name: Upload validate SARIF
+    # A single SARIF document uploaded under one Code Scanning category. The gate
+    # is one tool ("rac") producing one run, so one categorised analysis suffices.
+    - name: Upload gate SARIF
       if: ${{ always() && inputs.upload-sarif == 'true' }}
       uses: github/codeql-action/upload-sarif@v3
       with:
-        sarif_file: ${{ inputs.sarif-dir }}/validate.sarif
-        category: rac-validate
+        sarif_file: ${{ inputs.sarif-dir }}/gate.sarif
+        category: rac-gate
 
-    - name: Upload relationships SARIF
-      if: ${{ always() && inputs.upload-sarif == 'true' }}
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: ${{ inputs.sarif-dir }}/relationships.sarif
-        category: rac-relationships
-
-    - name: Upload review SARIF
-      if: ${{ always() && inputs.upload-sarif == 'true' }}
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: ${{ inputs.sarif-dir }}/review.sarif
-        category: rac-review
-
-    # Any non-zero CLI exit fails the check; the per-check exits above show which
-    # gate failed, and the Code Scanning annotations show every finding. Severity
-    # policy (what is blocking) lives in the engine's exit codes, not here.
+    # Any non-zero CLI exit fails the check; the Code Scanning annotations show
+    # every finding, blocking and advisory. What is blocking is decided by the
+    # engine under the corpus enforcement policy (ADR-049), not here.
     - name: Report result
       shell: bash
       env:
-        EXIT_CODE: ${{ steps.checks.outputs.exit_code }}
+        EXIT_CODE: ${{ steps.gate.outputs.exit_code }}
       run: |
         if [ "$EXIT_CODE" != "0" ]; then
-          echo "::error::RAC PR gate failed (worst exit $EXIT_CODE) — see the Code Scanning annotations."
+          echo "::error::RAC PR gate failed (exit $EXIT_CODE) — see the Code Scanning annotations."
           exit "$EXIT_CODE"
         fi
         echo "RAC PR gate passed."

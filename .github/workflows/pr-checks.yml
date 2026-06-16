@@ -107,13 +107,14 @@ jobs:
           install-from: source
           upload-sarif: ${{ !github.event.pull_request.head.repo.fork }}
 
-  # PR-gate dogfood (v0.21.13): every pull request runs the local PR-gate action
+  # PR-gate dogfood (v0.21.14): every pull request runs the local PR-gate action
   # in source mode — the live end-to-end test of pr-gate-action/action.yml. It
-  # carries the full contract (validate + relationships --validate + review) into
-  # one required check. Each check uploads under its own Code Scanning category
-  # (rac-validate / rac-relationships / rac-review), distinct from the standalone
-  # validate job above, so the analyses never collide. Skipped on forks, whose
-  # token cannot be granted security-events: write.
+  # carries the full contract via a single `rac gate` command — validation,
+  # relationships, and review under the corpus enforcement policy — into one
+  # required check, uploading one SARIF document under the Code Scanning category
+  # `rac-gate` (distinct from the standalone validate job above, so the analyses
+  # never collide). Skipped on forks, whose token cannot be granted
+  # security-events: write.
   gate:
     name: pr-gate (dogfood, source install)
     runs-on: ubuntu-latest
