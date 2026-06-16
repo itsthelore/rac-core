@@ -134,6 +134,38 @@ describe("find", () => {
   });
 });
 
+describe("findDecisions", () => {
+  it("passes --decisions and parses the live decisions", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: JSON.stringify({
+        schema_version: "1",
+        query: "caching",
+        type: "decision",
+        match_count: 1,
+        matches: [{ id: "RAC-9", type: "decision", title: "Cache policy", path: "d.md" }],
+      }),
+    });
+    const result = await new RacClient({ runner }).findDecisions("caching", "rac");
+    expect(result.type).toBe("decision");
+    expect(result.matches[0].id).toBe("RAC-9");
+    expect(calls[0]).toEqual(["find", "caching", "rac", "--decisions", "--json"]);
+  });
+
+  it("omits the directory when not given", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: JSON.stringify({
+        schema_version: "1",
+        query: "x",
+        type: "decision",
+        match_count: 0,
+        matches: [],
+      }),
+    });
+    await new RacClient({ runner }).findDecisions("x");
+    expect(calls[0]).toEqual(["find", "x", "--decisions", "--json"]);
+  });
+});
+
 describe("validateRelationships", () => {
   it("parses relationship issues", async () => {
     const { runner, calls } = fakeRunner({

@@ -56,6 +56,10 @@
       {
         "command": "rac.setupAgentIntegration",
         "title": "RAC: Set Up Agent Integration"
+      },
+      {
+        "command": "rac.findDecisions",
+        "title": "RAC: What did we decide about…?"
       }
     ],
     "walkthroughs": [

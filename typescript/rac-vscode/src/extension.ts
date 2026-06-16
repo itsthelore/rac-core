@@ -35,6 +35,7 @@ import {
   type DirectoryValidation,
   type ExportArtifact,
   type FileValidation,
+  type FindMatch,
   type Issue,
   type RelationshipIssue,
   type RelationshipValidation,
@@ -84,6 +85,15 @@ export function activate(context: vscode.ExtensionContext): void {
       // diagnostic for it to avoid duplicates.
       workspaceDiagnostics.delete(doc.uri);
     }),
+    // Save-time structural backstop (v0.21.16, Initiative 2; ADR-067). A save is
+    // a save regardless of which agent wrote the change, so this catches a
+    // structural contradiction — a reference to a retired or missing decision —
+    // *as* the file is committed to disk, before the bad state solidifies. It is
+    // non-blocking (it warns; it never vetoes the save) and strictly structural
+    // (no semantic scoring): the engine computes the finding via `rac validate`.
+    vscode.workspace.onWillSaveTextDocument((e) => {
+      e.waitUntil(saveGate(e.document));
+    }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
       void validateDocument(doc);
       scheduleRelationshipsFor(doc);
@@ -113,6 +123,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("rac.setupAgentIntegration", () =>
       setupAgentIntegration(context),
     ),
+    vscode.commands.registerCommand("rac.findDecisions", findDecisionsCommand),
+    vscode.commands.registerCommand("rac.openArtifactFile", openArtifactFile),
     vscode.commands.registerCommand("rac.installRac", installRac),
     vscode.languages.registerHoverProvider(selector, { provideHover }),
     vscode.languages.registerDefinitionProvider(selector, { provideDefinition }),
@@ -205,6 +217,37 @@ async function validateDocument(doc: vscode.TextDocument): Promise<void> {
     }
     log("validation failed", err);
   }
+}
+
+// The save-time backstop (v0.21.16, Initiative 2; ADR-067). Runs the engine's
+// own structural validation on the buffer being saved (`rac validate -` via the
+// thin client — no logic here) and, if it finds a blocking structural issue,
+// informs the user as the save lands. It returns no edits, so it never blocks or
+// mutates the save: a save is a save, and the gate is a backstop, not a veto
+// (the diagnostics model already surfaces the same findings inline). Strictly
+// structural — there is no semantic scoring anywhere in this path.
+async function saveGate(doc: vscode.TextDocument): Promise<vscode.TextEdit[]> {
+  if (!isEnabled()) return [];
+  if (doc.languageId !== "markdown" || doc.uri.scheme !== "file") return [];
+  if (!looksLikeRacArtifact(doc.getText())) return [];
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  if (!folder) return [];
+
+  try {
+    const result = await clientFor(folder).validateText(doc.getText());
+    if (result.errors.length > 0) {
+      const first = result.errors[0];
+      void vscode.window.showWarningMessage(
+        `RAC: saved with ${result.errors.length} structural issue(s) — ${first.message}. ` +
+          "See the Problems panel.",
+      );
+    }
+  } catch (err) {
+    if (err instanceof RacNotFoundError) warnMissingOnce();
+    else log("save-gate validation failed", err);
+  }
+  // Always resolve with no edits — the save proceeds unmodified.
+  return [];
 }
 
 function toDiagnostics(result: FileValidation): vscode.Diagnostic[] {
@@ -674,6 +717,18 @@ async function provideCompletions(
   return items;
 }
 
+// Reference-validation codes a reference-site quick-fix acts on (v0.21.16,
+// Initiative 2). A retired-target reference is the headline structural
+// contradiction the save-gate surfaces; a not-found/ambiguous reference is a
+// broken link. Both anchor at the reference token, so the quick-fix can offer to
+// open the (resolvable) target or remove the offending reference line.
+const REFERENCE_FIX_CODES = new Set([
+  "relationship-target-superseded",
+  "relationship-target-not-found",
+  "relationship-target-ambiguous",
+  "relationship-target-type-mismatch",
+]);
+
 function provideCodeActions(
   doc: vscode.TextDocument,
   _range: vscode.Range,
@@ -682,6 +737,44 @@ function provideCodeActions(
   const actions: vscode.CodeAction[] = [];
   for (const diagnostic of context.diagnostics) {
     if (diagnostic.source !== "rac" || typeof diagnostic.code !== "string") continue;
+
+    // Reference-site quick-fix layered over the relationship diagnostics. The
+    // target token is the diagnostic range's text; offer to open it (when it
+    // resolves, e.g. a retired but still-present decision) and to remove the
+    // broken/retired reference line. Removal is the structural repair — no
+    // semantic rewrite (ADR-067).
+    if (REFERENCE_FIX_CODES.has(diagnostic.code)) {
+      const target = doc.getText(diagnostic.range).trim();
+
+      if (diagnostic.code === "relationship-target-superseded" && target) {
+        // The retired target still exists, so offer to open it for the human to
+        // pick a live replacement.
+        const open = new vscode.CodeAction(
+          `Open referenced decision (${target})`,
+          vscode.CodeActionKind.QuickFix,
+        );
+        open.diagnostics = [diagnostic];
+        open.command = {
+          command: "rac.openArtifactFile",
+          title: "Open referenced decision",
+          arguments: [doc.uri, target],
+        };
+        actions.push(open);
+      }
+
+      const remove = new vscode.CodeAction(
+        `Remove reference to ${target || "this artifact"}`,
+        vscode.CodeActionKind.QuickFix,
+      );
+      remove.diagnostics = [diagnostic];
+      const edit = new vscode.WorkspaceEdit();
+      // Delete the whole list line bearing the reference (a "- adr-007" item),
+      // newline included, so the section is left structurally clean.
+      edit.delete(doc.uri, fullLineRange(doc, diagnostic.range.start.line));
+      remove.edit = edit;
+      actions.push(remove);
+      continue;
+    }
 
     if (diagnostic.code === "missing-title") {
       // A title is a top-level `# ` heading, not a `## ` section — insert it
@@ -732,6 +825,17 @@ function titleInsertPosition(doc: vscode.TextDocument): vscode.Position {
 
 function endOfDocument(doc: vscode.TextDocument): vscode.Position {
   return doc.lineAt(doc.lineCount - 1).range.end;
+}
+
+// The full range of a line including its trailing newline, so deleting it leaves
+// no blank gap (used by the reference-removal quick-fix).
+function fullLineRange(doc: vscode.TextDocument, line: number): vscode.Range {
+  const start = new vscode.Position(line, 0);
+  const end =
+    line + 1 < doc.lineCount
+      ? new vscode.Position(line + 1, 0)
+      : doc.lineAt(line).range.end;
+  return new vscode.Range(start, end);
 }
 
 async function newArtifact(): Promise<void> {
@@ -1200,6 +1304,100 @@ async function setupWorkspace(): Promise<void> {
     log("setupWorkspace failed", err);
     void vscode.window.showErrorMessage(
       `RAC: setup failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// --- live decision query (roadmap v0.21.16, Initiative 1; ADR-067) ----------
+//
+// "RAC: What did we decide about…?" prompts for a topic and runs the engine's
+// `rac find <topic> --decisions` (the live decision query), showing the ranked
+// live decisions in a quick-pick. Selecting one opens its file. The extension
+// computes nothing (ADR-063): the engine retrieves which live decisions bind the
+// topic; the human reads them and judges. No verdict, no scoring.
+
+interface DecisionPick extends vscode.QuickPickItem {
+  match: FindMatch;
+}
+
+async function findDecisionsCommand(): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showErrorMessage("RAC: open a workspace folder first.");
+    return;
+  }
+  const topic = await vscode.window.showInputBox({
+    prompt: "What did we decide about…?",
+    placeHolder: "Topic, e.g. caching, telemetry, identity",
+  });
+  if (!topic) return;
+
+  let matches: FindMatch[];
+  try {
+    const result = await clientFor(folder).findDecisions(topic, folder.uri.fsPath);
+    matches = result.matches;
+  } catch (err) {
+    if (err instanceof RacNotFoundError) {
+      warnMissingOnce();
+      return;
+    }
+    log("find-decisions failed", err);
+    void vscode.window.showErrorMessage(
+      `RAC: decision query failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  if (matches.length === 0) {
+    // An empty result is a valid answer, not an error — say so plainly.
+    void vscode.window.showInformationMessage(
+      `RAC: no live decision matches "${topic}".`,
+    );
+    return;
+  }
+
+  const picks: DecisionPick[] = matches.map((m) => ({
+    label: m.title || m.id,
+    description: m.id,
+    detail: m.snippet ? `${m.section ? `${m.section}: ` : ""}${m.snippet}` : m.path,
+    match: m,
+  }));
+  const chosen = await vscode.window.showQuickPick(picks, {
+    placeHolder: `Live decisions about "${topic}" — select one to open`,
+    matchOnDescription: true,
+    matchOnDetail: true,
+  });
+  if (!chosen) return;
+  await openArtifactPath(folder, chosen.match.path);
+}
+
+// Open an artifact file by its engine-reported path, confined to the workspace
+// folder. Shared by the decision quick-pick and the reference quick-fix.
+async function openArtifactPath(
+  folder: vscode.WorkspaceFolder,
+  artifactPath: string,
+): Promise<void> {
+  const uri = artifactUri(folder, artifactPath);
+  try {
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc);
+  } catch {
+    void vscode.window.showErrorMessage(`RAC: could not open ${artifactPath}.`);
+  }
+}
+
+// Command target for the reference-site "Open referenced decision" quick-fix:
+// resolve a reference token against the corpus and open the artifact it points
+// at. Resolution stays the engine's (ADR-063); the extension only navigates.
+async function openArtifactFile(docUri: vscode.Uri, token: string): Promise<void> {
+  const folder = vscode.workspace.getWorkspaceFolder(docUri);
+  if (!folder) return;
+  const result = await resolveToken(folder, token);
+  if (result && isResolved(result)) {
+    await openArtifactPath(folder, result.path);
+  } else {
+    void vscode.window.showInformationMessage(
+      `RAC: "${token}" does not resolve to an artifact.`,
     );
   }
 }

@@ -96,6 +96,20 @@ export class RacClient {
     return this.json<FindResult>(args);
   }
 
+  /**
+   * `rac find <topic> [dir] --decisions --json` — the live decision query
+   * (ADR-067): ranked *live* (Accepted, non-retired) decisions binding a topic,
+   * the "what did we decide about X / is X ruled out" retrieval. Structural only
+   * — the engine returns which decisions bind, never a verdict. An empty result
+   * is a valid answer, not an error.
+   */
+  findDecisions(topic: string, dir?: string): Promise<FindResult> {
+    const args = ["find", topic];
+    if (dir !== undefined) args.push(dir);
+    args.push("--decisions", "--json");
+    return this.json<FindResult>(args);
+  }
+
   /** `rac relationships <dir> --validate --json` — resolve declared references. */
   validateRelationships(
     directory: string,
