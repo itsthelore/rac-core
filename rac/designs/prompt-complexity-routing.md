@@ -36,21 +36,22 @@ same way.
 
 ### Deterministic feature set
 
-All features are structural, offline, and reproducible from the parsed prompt —
-no model, no network, no per-vendor tokenizer:
+All features are structural, offline, and reproducible — no model, no network,
+no per-vendor tokenizer. They are scanned line-by-line from the prompt *body*
+(a leading YAML frontmatter block is stripped first, so a stored Prompt artifact
+and the same prompt on stdin score identically), with lines inside fenced code
+blocks excluded from structural matching so a code sample's contents do not
+masquerade as headings or lists:
 
-- **Length proxy** — deterministic word and character counts. Explicitly *not*
-  model tokenization; v0.6.2 already deferred token counting and a per-model
-  token count would pull a vendor dependency into an offline Core (ADR-035).
-- **Section count / presence** — reuses the heading extraction already in
-  `classification.py`.
-- **Instruction-step count** — list items under an `Instructions` section, a
-  proxy for how much the prompt asks the model to do.
-- **Cross-reference count** — links / artifact references in the body.
-- **Structural depth** — maximum heading-nesting depth.
-- **Code-fence and table counts** — structured payloads the model must track.
-- **Constraints / Examples presence** — whether the prompt carries guardrails
-  and worked examples.
+- **Length proxy** — a deterministic word count. Explicitly *not* model
+  tokenization; v0.6.2 already deferred token counting and a per-model token
+  count would pull a vendor dependency into an offline Core (ADR-035).
+- **Heading count and depth** — number of headings and the maximum nesting
+  depth.
+- **Instruction-step count** — list items (bulleted or numbered), a proxy for
+  how much the prompt asks the model to do.
+- **Cross-reference count** — Markdown links in the body.
+- **Code-block and table counts** — structured payloads the model must track.
 
 ### Scoring
 

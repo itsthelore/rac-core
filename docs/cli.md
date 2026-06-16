@@ -183,6 +183,51 @@ Missing Sections:
 
 ---
 
+## route
+
+Score a prompt's *structural* complexity and recommend a `local` or `cloud` model
+against a threshold. RAC stops at the recommendation — it never selects a provider,
+reads a credential, or calls a model; the caller takes the recommendation and runs
+inference (ADR-068). The score is deterministic and offline: same prompt and same
+configured threshold always give the same answer. A leading YAML frontmatter block
+is stripped, so a stored Prompt artifact and the same prompt on stdin score
+identically.
+
+- **Input:** `rac route <prompt-file>` — or `-` to read the prompt from stdin. The
+  file need not be Markdown; any text prompt works.
+- **Options:** `--threshold N` (override the `0.0`–`1.0` cut for this run) · `--json`
+- **Config:** `.rac/config.yaml` may set `routing.threshold` (default `0.5`) and,
+  optionally, per-feature `routing.weights`, so a team calibrates the cut to its own
+  local/cloud capability without a RAC release.
+- **Exit codes:** `0` (a recommendation is always a valid result) · `1` malformed
+  repository config · `2` file not found or `--threshold` out of range
+
+```bash
+rac route prompt.md                      # recommend local or cloud
+cat prompt.md | rac route - --json       # machine-readable score + features
+rac route prompt.md --threshold 0.7      # demand more complexity before cloud
+```
+
+```text
+Recommended Model: CLOUD
+Complexity Score: 0.66  (threshold 0.50)
+
+Contributing Features:
+  Word Count: 545
+  Heading Count: 12
+  Max Heading Depth: 3
+  List Item Count: 33
+  Link Count: 0
+  Code Block Count: 0
+  Table Row Count: 0
+```
+
+The JSON form (`--json`) is a stable contract: `score`, `recommendation`,
+`threshold`, and the raw `features` behind it, so an agent or skill can read the
+recommendation and route to its own model.
+
+---
+
 ## improve
 
 Suggest the sections an artifact is missing, optionally as ready-to-paste templates.
