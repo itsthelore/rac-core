@@ -39,7 +39,8 @@ Validate an artifact — or every artifact in a directory — for structural and
 content issues.
 
 - **Input:** `rac validate <path>` — a Markdown file, a directory, or `-` for stdin.
-- **Options:** `--json` · `--top-level` · `--recursive` (directory mode)
+- **Options:** `--json` · `--top-level` · `--recursive` (directory mode) ·
+  `--corpus DIR` (stdin / single-file mode — see below)
 - **Exit codes:** `0` no errors · `1` validation errors · `2` path not found / unreadable
 
 ```bash
@@ -73,6 +74,52 @@ document is a valid outcome (see [ADR-010](artifacts.md#documents-vs-artifacts))
 Only validation *errors* in recognized artifacts fail the run. The `--json` form
 reports `summary` counts plus a per-file `files[]` list with `status`
 (`valid` / `invalid` / `skipped`) and issues.
+
+### Corpus-aware single-document validation (`--corpus`)
+
+Plain `rac validate -` is single-document: it cannot resolve cross-artifact
+references, so it cannot tell that a *proposed* edit introduces a reference to a
+decision the team has retired. Pass `--corpus DIR` (with stdin `-` or a single
+file) to validate the proposed document **and** resolve its outbound references
+against the live corpus at `DIR`:
+
+```bash
+cat proposed-roadmap.md | rac validate - --corpus rac/
+```
+
+```text
+FAIL  -
+
+Corpus references
+  Related Decisions:
+  ✗ adr-014-legacy-auth superseded
+
+0 error(s), 0 warning(s), 1 corpus reference finding(s).
+```
+
+- **Input:** the proposed document on stdin (`-`) or a single file; `--corpus`
+  points at the corpus directory.
+- **What it checks:** the document's own structural validation (exactly as
+  without `--corpus`), **plus** the document's references resolved against the
+  corpus — references to **retired** (superseded/deprecated) or **missing**
+  decisions, and other reference findings (wrong target type, etc.). Only the
+  proposed document's *own* outbound references are reported; pre-existing corpus
+  findings are not.
+- **Exit codes:** `0` clean · `1` any structural error **or** any corpus
+  reference finding · `2` usage (`--corpus` with a directory target, or a
+  `--corpus` path that is not a directory).
+- **Editing an existing artifact:** when the proposed document carries the same
+  canonical identity as an on-disk artifact (its frontmatter `id` or `## ID`),
+  that on-disk counterpart is excluded from the corpus index, so the edit is
+  validated as a *replacement* — no spurious duplicate-identity or
+  self-reference finding. A stdin document identified only by path (`-`) does not
+  collide and is validated against the whole corpus as-is.
+
+This is the engine seam the generated Claude Code pre-edit hook pipes proposed
+content into; see [Agent integration](governance.md#agent-integration-context-supply-and-enforcement).
+Validation stays in `rac` — the hook computes nothing
+([ADR-067](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-067-agent-integration-boundary.md),
+[ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)).
 
 ---
 
