@@ -71,7 +71,11 @@ from .json import (
 )
 from .okf import render_okf_bundle
 from .portal import render_export_html
-from .sarif import render_validate_sarif
+from .sarif import (
+    render_relationships_sarif,
+    render_review_sarif,
+    render_validate_sarif,
+)
 from .templates import render_improve_template, render_schema_template
 
 __all__ = [
@@ -113,10 +117,12 @@ __all__ = [
     "render_relationship_validation_json",
     "render_relationships_human",
     "render_relationships_json",
+    "render_relationships_sarif",
     "render_resolve_human",
     "render_resolve_json",
     "render_review_human",
     "render_review_json",
+    "render_review_sarif",
     "render_schema_human",
     "render_schema_json",
     "render_schema_list_human",
