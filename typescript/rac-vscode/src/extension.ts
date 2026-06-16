@@ -25,6 +25,7 @@ import {
   RacNotFoundError,
   isResolved,
   type CorpusExport,
+  type DirectoryValidation,
   type ExportArtifact,
   type FileValidation,
   type Issue,
@@ -35,28 +36,43 @@ import {
 
 const DEBOUNCE_MS = 300;
 const RELATIONSHIP_DEBOUNCE_MS = 600;
+const AWARENESS_DEBOUNCE_MS = 800;
 const ARTIFACT_TYPES = ["requirement", "decision", "roadmap", "prompt", "design"];
 
 let diagnostics: vscode.DiagnosticCollection;
 let relationshipDiagnostics: vscode.DiagnosticCollection;
+let workspaceDiagnostics: vscode.DiagnosticCollection;
+let statusBar: vscode.StatusBarItem;
 const clients = new Map<string, RacClient>();
 const exportCache = new Map<string, CorpusExport>();
 const debounce = new Map<string, ReturnType<typeof setTimeout>>();
 const relationshipDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+const awarenessDebounce = new Map<string, ReturnType<typeof setTimeout>>();
 let warnedMissing = false;
 
 export function activate(context: vscode.ExtensionContext): void {
   diagnostics = vscode.languages.createDiagnosticCollection("rac");
   relationshipDiagnostics = vscode.languages.createDiagnosticCollection("rac-relationships");
+  workspaceDiagnostics = vscode.languages.createDiagnosticCollection("rac-workspace");
+  statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+  statusBar.command = "workbench.actions.view.problems";
   const selector: vscode.DocumentSelector = { language: "markdown", scheme: "file" };
 
   context.subscriptions.push(
     diagnostics,
     relationshipDiagnostics,
-    vscode.workspace.onDidOpenTextDocument((doc) => void validateDocument(doc)),
+    workspaceDiagnostics,
+    statusBar,
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      void validateDocument(doc);
+      // The live per-file collection owns open files; drop any workspace-scan
+      // diagnostic for it to avoid duplicates.
+      workspaceDiagnostics.delete(doc.uri);
+    }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
       void validateDocument(doc);
       scheduleRelationshipsFor(doc);
+      scheduleAwarenessFor(doc);
       invalidateExportFor(doc);
     }),
     vscode.workspace.onDidChangeTextDocument((e) => scheduleValidate(e.document)),
@@ -70,6 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
         exportCache.clear();
         void validateWorkspace();
         refreshAllRelationships();
+        refreshAllAwareness();
       }
     }),
     vscode.commands.registerCommand("rac.validateWorkspace", validateWorkspace),
@@ -92,17 +109,23 @@ export function activate(context: vscode.ExtensionContext): void {
 
   for (const doc of vscode.workspace.textDocuments) void validateDocument(doc);
   refreshAllRelationships();
+  refreshAllAwareness();
 }
 
 export function deactivate(): void {
   for (const timer of debounce.values()) clearTimeout(timer);
   for (const timer of relationshipDebounce.values()) clearTimeout(timer);
+  for (const timer of awarenessDebounce.values()) clearTimeout(timer);
   debounce.clear();
   relationshipDebounce.clear();
+  awarenessDebounce.clear();
   diagnostics?.clear();
   diagnostics?.dispose();
   relationshipDiagnostics?.clear();
   relationshipDiagnostics?.dispose();
+  workspaceDiagnostics?.clear();
+  workspaceDiagnostics?.dispose();
+  statusBar?.dispose();
 }
 
 // --- per-file validation ----------------------------------------------------
@@ -323,6 +346,84 @@ function relationshipHeading(relationship: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// --- ambient awareness ------------------------------------------------------
+
+// A status-bar health score (rac review) and corpus-wide diagnostics
+// (rac validate <dir>), refreshed on save/activation. The live per-file
+// collection owns open files; the workspace scan covers the rest, so the
+// Problems panel reflects the whole corpus without double-reporting.
+
+function scheduleAwarenessFor(doc: vscode.TextDocument): void {
+  if (doc.languageId !== "markdown" || doc.uri.scheme !== "file") return;
+  if (!looksLikeRacArtifact(doc.getText())) return;
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  if (folder) scheduleAwareness(folder);
+}
+
+function scheduleAwareness(folder: vscode.WorkspaceFolder): void {
+  const key = folder.uri.fsPath;
+  const existing = awarenessDebounce.get(key);
+  if (existing) clearTimeout(existing);
+  awarenessDebounce.set(
+    key,
+    setTimeout(() => {
+      awarenessDebounce.delete(key);
+      void refreshAwareness(folder);
+    }, AWARENESS_DEBOUNCE_MS),
+  );
+}
+
+function refreshAllAwareness(): void {
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    void refreshAwareness(folder);
+  }
+}
+
+async function refreshAwareness(folder: vscode.WorkspaceFolder): Promise<void> {
+  if (!isEnabled()) return;
+  await Promise.allSettled([refreshStatusBar(folder), refreshWorkspaceDiagnostics(folder)]);
+}
+
+async function refreshStatusBar(folder: vscode.WorkspaceFolder): Promise<void> {
+  try {
+    const review = await clientFor(folder).review(folder.uri.fsPath);
+    statusBar.text = `$(pulse) RAC ${review.health.score}/100`;
+    statusBar.tooltip = review.ok
+      ? "RAC corpus: no blocking findings — click for Problems"
+      : "RAC corpus: blocking findings — click for Problems";
+    statusBar.show();
+  } catch (err) {
+    if (err instanceof RacNotFoundError) {
+      statusBar.hide();
+      warnMissingOnce();
+    } else {
+      console.error("RAC: review failed", err);
+    }
+  }
+}
+
+async function refreshWorkspaceDiagnostics(folder: vscode.WorkspaceFolder): Promise<void> {
+  let result: DirectoryValidation;
+  try {
+    result = await clientFor(folder).validateDirectory(folder.uri.fsPath);
+  } catch (err) {
+    if (err instanceof RacNotFoundError) warnMissingOnce();
+    else console.error("RAC: directory validation failed", err);
+    return;
+  }
+
+  workspaceDiagnostics.clear();
+  const openPaths = new Set(vscode.workspace.textDocuments.map((d) => d.uri.fsPath));
+  for (const file of result.files) {
+    if (file.issues.length === 0) continue;
+    const uri = path.isAbsolute(file.path)
+      ? vscode.Uri.file(file.path)
+      : vscode.Uri.joinPath(folder.uri, file.path);
+    if (openPaths.has(uri.fsPath)) continue; // live diagnostics own open files
+    workspaceDiagnostics.set(uri, file.issues.map(issueToDiagnostic));
+  }
 }
 
 // --- authoring: completion, quick-fixes, new artifact -----------------------

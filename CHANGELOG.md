@@ -8,6 +8,12 @@ details, release history over commit history.
 
 ### Added
 
+- Ambient corpus awareness in the extension (v0.21.4 milestone). A **status-bar
+  health score** (`rac review`, click for the Problems panel) and
+  **workspace-wide diagnostics** (`rac validate <dir>`) so issues in unopened
+  artifacts are visible. The live per-file diagnostics own open files; the
+  workspace scan covers the rest, so nothing is double-reported.
+
 - Editor navigation in the extension (v0.21.3 milestone). Hover now shows the
   target's lifecycle status (⚠ for retired) and a snippet; **find-all-references**
   lists every artifact that references the one under the cursor (from the export's
