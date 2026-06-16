@@ -76,6 +76,17 @@
   --warning:       #d9a85f;
   --error:         #ce7878;
 
+  /* categorical — node colours for the corpus graph (v0.21.8). The graph must
+   * tell artifact families apart at a glance, so this is the one surface where
+   * colour is categorical rather than semantic. Amber stays the decision (and
+   * dominant) hue; the rest are muted to keep the warm-dark feel. */
+  --type-requirement: #6c9bd1;
+  --type-decision:    #f5a623;
+  --type-roadmap:     #7bbf72;
+  --type-prompt:      #b08cc9;
+  --type-design:      #d08c7a;
+  --type-default:     #8f8d84;
+
   /* ---- type ---------------------------------------------------------- */
   --font-mono: 'JetBrains Mono', 'JetBrains Mono Fallback', ui-monospace,
                'Courier New', monospace;

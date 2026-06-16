@@ -1,6 +1,6 @@
 {
-  "lore_web_commit": "a0ac661",
-  "shell_sha256": "eda3f373b78777af89be94f5144eb95e8ca74e6d33564324aabca9f9b141929a",
-  "viewer_source_sha256": "9d262fcd2447e9d65692306b67b22dabbb1a6a9e494bff3503590e81a184709b",
+  "lore_web_commit": "082bd9b",
+  "shell_sha256": "607fac93646c7186f6687c0cef99ccc3b11ba98336fadac491d417d3cde419ea",
+  "viewer_source_sha256": "d663cab6980c61a47e5c98602e589264921c8f7d3305299964ae45f9f445913c",
   "vendored_with": "lore-web/scripts/vendor-portal-shell.mjs"
 }

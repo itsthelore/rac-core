@@ -267,3 +267,19 @@ the payload (§1) — the host derives nothing the export does not already state
 The bridge lives in `src/viewer/host.ts` and is wired in `src/viewer/App.tsx`;
 it is part of the viewer source tree, so a change to it re-hashes the vendored
 shell (`viewer_source_sha256`) and requires re-running `npm run vendor:shell`.
+
+## 7. Graph view (v0.21.8)
+
+Alongside the list/detail, the viewer offers a node-link **graph view**
+(`#/graph`) drawn entirely from the payload (§1): nodes are `artifacts[]`
+(coloured by `type`, sized by link count), edges are `relationships[]`, an
+unresolved `to` becomes a dangling node, and retired artifacts (ADR-051) render
+muted. Layout is a seeded, dependency-free force simulation computed in the
+browser (`src/viewer/graph.ts`) — **no positions are ever read from or written
+to the export**, so determinism (§1) is unaffected and only the vendored shell
+changes when the view does. It follows Obsidian conventions: a Global graph and
+a Local graph rooted on the host's active artifact to a user-set depth,
+hover-to-highlight with the rest dimmed, zoom-based label fade, pan/zoom/drag,
+and filters (search, type, status, orphans, unresolved). Selection reuses the
+§6 host bridge — `open-artifact` on click, `reveal-artifact` roots the local
+graph — so no new protocol is added. The list/detail view remains the default.

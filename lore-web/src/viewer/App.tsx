@@ -6,15 +6,17 @@ import type { LoreExport } from './types';
 import { ListView } from './ListView';
 import type { ListFilters } from './ListView';
 import { DetailView } from './DetailView';
-import { onRevealArtifact, postOpenArtifact, postReady } from './host';
+import { GraphView } from './GraphView';
+import { hasHost, onRevealArtifact, postOpenArtifact, postReady } from './host';
 import './viewer.css';
 
 /** Hash-based routing so links work from file:// — no router dep. */
-type Route = { view: 'list' } | { view: 'detail'; id: string };
+type Route = { view: 'list' } | { view: 'graph' } | { view: 'detail'; id: string };
 
 function parseHash(hash: string): Route {
   const match = /^#\/artifact\/(.+)$/.exec(hash);
   if (match) return { view: 'detail', id: decodeURIComponent(match[1]) };
+  if (hash === '#/graph') return { view: 'graph' };
   return { view: 'list' };
 }
 
@@ -45,6 +47,12 @@ export function App() {
   // is not echoed straight back as an open-artifact (which would re-open the
   // file the editor is already on). Consumed by the outbound effect below.
   const revealedRef = useRef<string | null>(null);
+  // The host/editor's active artifact — roots the local graph and is
+  // highlighted in the graph view.
+  const [activeId, setActiveId] = useState<string | null>(null);
+  // Mirror the current view so the once-bound reveal handler can branch on it.
+  const viewRef = useRef(route.view);
+  viewRef.current = route.view;
 
   useEffect(() => {
     loadExport().then(setData, (err: unknown) => {
@@ -61,6 +69,10 @@ export function App() {
   // reveal requests. Inert in a standalone Portal (no host).
   useEffect(() => {
     const unsubscribe = onRevealArtifact((id) => {
+      setActiveId(id);
+      // In the graph view a reveal just roots/highlights the node; it does not
+      // navigate away. Elsewhere it opens the detail page, as before.
+      if (viewRef.current === 'graph') return;
       const target = `#/artifact/${encodeURIComponent(id)}`;
       if (window.location.hash === target) {
         revealedRef.current = null; // already here — nothing to suppress
@@ -72,6 +84,17 @@ export function App() {
     postReady();
     return unsubscribe;
   }, []);
+
+  // Graph-view selection: open the file in a host (and root the local graph);
+  // double-click opens the detail page.
+  const selectInGraph = (id: string) => {
+    setActiveId(id);
+    const artifact = index?.byId.get(id);
+    if (artifact && hasHost()) postOpenArtifact(artifact.path, artifact.id);
+  };
+  const openDetail = (id: string) => {
+    window.location.hash = `#/artifact/${encodeURIComponent(id)}`;
+  };
 
   // Report the user's selection to the host so it can open the file. A reveal
   // the host itself requested is consumed here rather than echoed back.
@@ -129,6 +152,12 @@ export function App() {
               ) : null}
               {corpus.artifact_count ?? data?.artifacts.length ?? 0} artifacts{' '}
               {'·'} read-only
+              {route.view !== 'graph' ? (
+                <>
+                  {' '}
+                  {'·'} <a className="viewer-metalink" href="#/graph">graph view →</a>
+                </>
+              ) : null}
             </p>
           </header>
         ) : null}
@@ -147,6 +176,15 @@ export function App() {
             filters={filters}
             onFilters={setFilters}
             searchRef={searchRef}
+          />
+        ) : null}
+
+        {index && route.view === 'graph' ? (
+          <GraphView
+            index={index}
+            activeId={activeId}
+            onSelect={selectInGraph}
+            onOpenDetail={openDetail}
           />
         ) : null}
 
