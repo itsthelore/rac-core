@@ -56,6 +56,15 @@ from rac.services.relationships import (
     RelationshipReport,
     RelationshipValidation,
 )
+from rac.services.rename import (
+    REASON_NEW_COLLIDES,
+    REASON_NEW_INVALID,
+    REASON_OLD_AMBIGUOUS,
+    REASON_OLD_FILENAME_ONLY,
+    REASON_OLD_NOT_FOUND,
+    RenamePlan,
+    RenameResult,
+)
 from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import (
     PRIORITY_BROKEN_RELATIONSHIP,
@@ -1286,3 +1295,66 @@ def render_agent_rules_human(result: AgentRulesResult) -> str:
         else:
             lines.append(_green("✓ All targets already in sync — nothing to write."))
     return "\n".join(lines)
+
+
+# --- rename ------------------------------------------------------------------
+
+# Human-readable reasons for a refused/empty rename plan, keyed by the stable
+# REASON_* codes the engine emits. The CLI exit code is decided separately.
+_RENAME_REASONS = {
+    REASON_OLD_NOT_FOUND: "no artifact resolves to that id",
+    REASON_OLD_AMBIGUOUS: "the id is ambiguous — it resolves to more than one artifact",
+    REASON_NEW_COLLIDES: "the new id already names another artifact",
+    REASON_NEW_INVALID: "the new id is not a valid identifier",
+    REASON_OLD_FILENAME_ONLY: (
+        "the id is only a filename-derived alias — there is no in-file identity to "
+        "rewrite, and renaming files is out of scope"
+    ),
+}
+
+
+def render_rename_human(plan: RenamePlan) -> str:
+    """Render a rename plan as a reviewable preview (dry run) or refusal."""
+    header = f"Rename {plan.old_ref} -> {plan.new_ref}"
+    if not plan.ok:
+        reason = _RENAME_REASONS.get(plan.reason or "", plan.reason or "unknown")
+        return "\n".join([header, "", _red(f"✗ Refused: {reason}.")])
+
+    lines = [header, "=" * len(header), ""]
+    lines.append(f"Target: {plan.target_path}  (identity field: {plan.identity_field})")
+    lines.append(
+        f"{plan.reference_edits} inbound reference(s), "
+        f"{plan.identity_edits} identity edit across {plan.files_changed} file(s)."
+    )
+    lines.append("")
+    current: str | None = None
+    for edit in plan.edits:
+        if edit.path != current:
+            current = edit.path
+            lines.append(f"  {edit.path}")
+        # Show each edit as a diff hunk anchored to the 1-based line. The raw line
+        # text is shown verbatim (not re-marked), so an existing Markdown "- "
+        # list marker reads naturally next to the diff's own ✗/✓ column.
+        lines.append(f"    L{edit.line} {_red('✗ ' + edit.old_line)}")
+        lines.append(f"    L{edit.line} {_green('✓ ' + edit.new_line)}")
+    lines.append("")
+    lines.append("Dry run — pass --apply to write these edits.")
+    return "\n".join(lines)
+
+
+def render_rename_result_human(result: RenameResult) -> str:
+    """Render the outcome of an applied rename."""
+    header = f"Rename {result.old_ref} -> {result.new_ref}"
+    if not result.applied:
+        return "\n".join([header, "", _red("✗ Nothing applied (the plan was refused).")])
+    return "\n".join(
+        [
+            header,
+            "",
+            _green(
+                f"✓ Applied: {result.reference_edits} reference(s) and "
+                f"{result.identity_edits} identity edit across "
+                f"{result.files_changed} file(s)."
+            ),
+        ]
+    )

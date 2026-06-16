@@ -10,6 +10,7 @@ Commands:
     rac improve <file.md | -> [--json | --template]
     rac schema [--list] [type] [--json | --template]
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
+    rac rename <old-id> <new-id> <directory> [--json] [--apply] [--top-level]
     rac review <directory> [--json] [--top-level]
     rac gate <directory> [--json | --sarif] [--top-level]
     rac watchkeeper [directory] [--base REF] [--head REF]
@@ -134,6 +135,7 @@ from rac.services.relationships import (
     validate_relationships,
     validate_relationships_file,
 )
+from rac.services.rename import apply_rename, compute_rename
 from rac.services.resolve import (
     OUTCOME_DUPLICATE,
     OUTCOME_RESOLVED,
@@ -444,6 +446,51 @@ def cmd_relationships(args: argparse.Namespace) -> int:
         print(outputs.render_relationships_human(rel_report))
     # A completed inspection always succeeds — finding no relationships is a valid
     # outcome, not an error (REQ-010).
+    return EXIT_OK
+
+
+def cmd_rename(args: argparse.Namespace) -> int:
+    """Compute (and optionally apply) a corpus-wide artifact-id rename (v0.21.18).
+
+    Default is a dry run: it prints the planned edit set and exits 0 for any valid
+    plan (a preview always succeeds). An unresolvable/ambiguous OLD or an
+    invalid/colliding NEW is a refusal: it prints the reason and exits
+    EXIT_VALIDATION_FAILED (1) — the rename was rejected, not a usage error.
+    ``--apply`` writes the edits and reports what changed. The engine owns the
+    edit set (ADR-063); the CLI only renders and applies it.
+    """
+    directory = Path(args.directory)
+    if not directory.is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    plan = compute_rename(args.directory, args.old, args.new, recursive=not args.top_level)
+
+    if not plan.ok:
+        if args.json:
+            print(outputs.render_rename_json(plan))
+        else:
+            print(outputs.render_rename_human(plan), file=sys.stderr)
+        # Every refusal (unknown/ambiguous OLD, invalid/colliding NEW,
+        # filename-only alias) leaves the corpus untouched and exits 1 — the
+        # rename was rejected. EXIT_USAGE (2) is reserved for argument/IO errors
+        # like "not a directory" above, so a refused rename stays distinguishable
+        # from a misused command.
+        return EXIT_VALIDATION_FAILED
+
+    if not args.apply:
+        if args.json:
+            print(outputs.render_rename_json(plan))
+        else:
+            print(outputs.render_rename_human(plan))
+        # A valid dry-run preview always succeeds.
+        return EXIT_OK
+
+    result = apply_rename(plan)
+    if args.json:
+        print(outputs.render_rename_result_json(result))
+    else:
+        print(outputs.render_rename_result_human(result))
     return EXIT_OK
 
 
@@ -1208,6 +1255,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_relationships.set_defaults(func=cmd_relationships)
+
+    p_rename = sub.add_parser(
+        "rename",
+        help="Safely rename an artifact id across the corpus (dry run; --apply writes).",
+        parents=[version_parent],
+    )
+    p_rename.add_argument("old", help="The existing artifact id (or alias) to rename.")
+    p_rename.add_argument("new", help="The new artifact id, e.g. ADR-099.")
+    p_rename.add_argument("directory", help="The corpus directory to scan.")
+    p_rename.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_rename.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the edit set to disk (default is a dry-run preview).",
+    )
+    p_rename.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the directory's top-level files (no recursion).",
+    )
+    p_rename.set_defaults(func=cmd_rename)
 
     p_review = sub.add_parser(
         "review",

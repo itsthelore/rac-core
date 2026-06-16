@@ -29,6 +29,7 @@ from rac.services.migrate import MigrationReport
 from rac.services.portfolio import PortfolioSummary
 from rac.services.quickstart import QuickstartResult
 from rac.services.relationships import RelationshipReport, RelationshipValidation
+from rac.services.rename import RenamePlan, RenameResult
 from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
 from rac.services.skill import SkillInstallation
@@ -257,6 +258,19 @@ def render_relationship_validation_json(report: RelationshipValidation) -> str:
         "issues": [issue.to_dict() for issue in report.issues],
     }
     return json.dumps(payload, indent=2)
+
+
+# --- rename ------------------------------------------------------------------
+
+
+def render_rename_json(plan: RenamePlan) -> str:
+    """The rename plan as the stable additive contract (ADR-007, v0.21.18)."""
+    return json.dumps(plan.to_dict(), indent=2)
+
+
+def render_rename_result_json(result: RenameResult) -> str:
+    """The applied-rename outcome as the stable additive contract (ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)
 
 
 # --- ingest ------------------------------------------------------------------
