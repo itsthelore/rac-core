@@ -24,18 +24,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from rac.services.init import load_enforcement_policy
+from rac.core.corpus import walk_corpus
+from rac.services.init import load_enforcement_policy, load_overrides
+from rac.services.portfolio import portfolio_from_corpus
 from rac.services.relationships import (
     RELATIONSHIP_SEVERITY,
     RelationshipIssue,
-    validate_relationships,
+    validation_from_corpus,
 )
 from rac.services.review import (
     PRIORITY_BROKEN_RELATIONSHIP,
     ReviewIssue,
-    build_review,
+    review_from_portfolio,
 )
-from rac.services.validate import DirectoryValidation, validate_directory
+from rac.services.validate import DirectoryValidation, validate_corpus
 
 # The two enforcement classes a finding can carry, plus the suppressed marker
 # (``off`` drops the finding entirely). Sources name where a finding originated.
@@ -221,13 +223,27 @@ def build_gate(
     applied — findings the policy turns ``off`` are dropped. Findings are sorted
     deterministically by ``(path, line, source, code, message)`` so the report,
     JSON, and SARIF are byte-stable (ADR-002).
+
+    Single corpus walk (v0.21.19): the three analyses share one pre-walked corpus
+    snapshot via the engine's ``*_from_corpus`` snapshot seams instead of each
+    re-walking and re-parsing the tree, so the gate pays one walk, not three. The
+    result is byte-identical to the prior multi-walk composition — only corpus
+    acquisition changed (ADR-023). Severity overrides (ADR-053) are loaded once
+    from the directory and applied identically by every snapshot path.
     """
     if policy is None:
         policy = load_enforcement_policy(directory)
 
-    validation = validate_directory(directory, recursive=recursive)
-    relationships = validate_relationships(directory, recursive=recursive)
-    review = build_review(directory, recursive=recursive)
+    # One walk feeds every analysis (v0.21.19). The snapshot seams produce results
+    # identical to their directory entry points (validate_directory /
+    # validate_relationships / build_review), which themselves walk once each.
+    entries = list(walk_corpus(directory, recursive=recursive))
+    overrides = load_overrides(directory)
+
+    validation = validate_corpus(directory, entries, recursive=recursive, overrides=overrides)
+    relationships = validation_from_corpus(directory, entries, recursive=recursive)
+    portfolio = portfolio_from_corpus(directory, entries, recursive=recursive)
+    review = review_from_portfolio(directory, portfolio, recursive=recursive)
 
     findings: list[GateFinding] = []
 
