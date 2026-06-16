@@ -140,6 +140,51 @@ data in `.rac/config.yaml`, a team can standardise it across a fleet:
 Because the same file governs both the editor and the PR action, a fleet-wide
 policy change lands in one edit and is enforced everywhere the corpus is checked.
 
+## Agent integration: context supply and enforcement
+
+AI coding agents are the place a settled decision is most likely to be quietly
+re-litigated, because the agent never sees the corpus. RAC integrates with agents
+through two deterministic, engine-owned channels and enforces with structural
+validation — **not** a semantic verdict and **not** a cross-platform interceptor
+([ADR-067](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-067-agent-integration-boundary.md)):
+
+- **Context supply.** `rac export --agent-rules` generates committed,
+  drift-guarded rules files (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`,
+  `.github/copilot-instructions.md`) plus the `lore` MCP read tools. This reaches
+  *every* agent — including Copilot — with zero per-developer setup.
+- **Post-edit enforcement.** The same structural diagnostics fire on
+  agent-written files exactly as on human edits: the editor's save-time
+  diagnostics, `rac validate`, and the `rac gate` PR check.
+
+No platform exposes a hook to inspect-and-veto a proposed agent edit before it
+lands — with **one** exception.
+
+### Claude Code pre-edit hook
+
+Claude Code's `PreToolUse` hook is the single platform seam that permits a real
+pre-edit veto. The RAC VS Code/Cursor extension can **generate** an opt-in hook
+for it (command: **"RAC: Enable Claude Code pre-edit hook"**); the extension is
+not itself the interceptor. The generated hook:
+
+- lives at `.claude/hooks/rac-preedit.py` and is registered in
+  `.claude/settings.json` under `hooks.PreToolUse` (merged in without clobbering
+  existing settings);
+- fires on `Write`/`Edit`/`MultiEdit`, acts only on Markdown files under `rac/`,
+  and pipes the proposed content to `rac validate - --corpus rac/`
+  ([CLI reference](cli.md#corpus-aware-single-document-validation-corpus));
+- **blocks** the edit (exit 2, with the finding) only on a *structural* finding —
+  a reference to a retired or missing decision, or a malformed artifact;
+- **fails open** on any internal error (missing `rac`, unreadable file): a hook
+  fault never blocks a developer, only a real reported contradiction.
+
+It is **opt-in and Claude-Code-specific**. All validation stays in `rac` — the
+hook computes nothing
+([ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)).
+Disabling it (**"RAC: Disable Claude Code pre-edit hook"**, or deleting the
+registration) falls back cleanly to the post-edit diagnostics above. RAC makes no
+claim of intercepting Copilot inline suggestions or Cursor agent edits — no
+platform API exists for that, so those clients rely on the post-edit guard.
+
 ## See also
 
 - [Validation](validation.md) — severity overrides (ADR-053) and SARIF.
