@@ -13,7 +13,9 @@ import type {
   DirectoryValidation,
   FileValidation,
   FindResult,
+  InitResult,
   PortfolioStats,
+  QuickstartResult,
   RelationshipValidation,
   ResolveResult,
   ReviewReport,
@@ -130,6 +132,27 @@ export class RacClient {
   /** `rac new <type> <path> --json` — scaffold a new artifact (never overwrites). */
   createArtifact(artifactType: string, outputPath: string): Promise<CreatedArtifact> {
     return this.json<CreatedArtifact>(["new", artifactType, outputPath, "--json"]);
+  }
+
+  /** `rac init <dir> [--key K] --json` — establish the repository identity (`.rac/config.yaml`). */
+  init(directory: string, key?: string): Promise<InitResult> {
+    const args = ["init", directory, "--json"];
+    if (key !== undefined) args.push("--key", key);
+    return this.json<InitResult>(args);
+  }
+
+  /**
+   * `rac quickstart <dir> [--key K] [--type T] --json` — guided first run:
+   * establish the identity and scaffold a starter artifact.
+   */
+  quickstart(
+    directory: string,
+    options: { key?: string; type?: string } = {},
+  ): Promise<QuickstartResult> {
+    const args = ["quickstart", directory, "--json"];
+    if (options.key !== undefined) args.push("--key", options.key);
+    if (options.type !== undefined) args.push("--type", options.type);
+    return this.json<QuickstartResult>(args);
   }
 
   /**

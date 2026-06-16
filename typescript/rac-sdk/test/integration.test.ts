@@ -77,4 +77,19 @@ describe.skipIf(!racBin)("integration (real rac)", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("scaffolds a corpus with quickstart", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "rac-sdk-qs-"));
+    try {
+      const result = await rac.quickstart(dir, { key: "QSTEST" });
+      expect(result.repository_key).toBe("QSTEST");
+      expect(result.created).toBe(true);
+      expect(result.config_path).toContain(".rac");
+      expect(result.artifact.id.startsWith("QSTEST-")).toBe(true);
+      const body = await readFile(result.artifact.path, "utf8");
+      expect(body).toContain("schema_version");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

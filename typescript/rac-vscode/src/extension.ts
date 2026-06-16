@@ -109,6 +109,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("rac.validateWorkspace", validateWorkspace),
     vscode.commands.registerCommand("rac.newArtifact", newArtifact),
     vscode.commands.registerCommand("rac.showExplorer", showExplorer),
+    vscode.commands.registerCommand("rac.setupWorkspace", setupWorkspace),
+    vscode.commands.registerCommand("rac.installRac", installRac),
     vscode.languages.registerHoverProvider(selector, { provideHover }),
     vscode.languages.registerDefinitionProvider(selector, { provideDefinition }),
     vscode.languages.registerReferenceProvider(selector, { provideReferences }),
@@ -1130,18 +1132,71 @@ function log(message: string, err?: unknown): void {
 function warnMissingOnce(): void {
   if (warnedMissing) return;
   warnedMissing = true;
+  const INSTALL = "Install with pipx";
+  const PATH = "Set rac.path";
   void vscode.window
     .showWarningMessage(
-      "RAC: the `rac` CLI was not found. Install it (pip install requirements-as-code) " +
-        "or set `rac.path` in settings.",
-      "Open Settings",
+      "RAC: the `rac` CLI was not found. Install it, or point the extension at an existing install.",
+      INSTALL,
+      PATH,
     )
     .then((choice) => {
-      if (choice === "Open Settings") {
-        void vscode.commands.executeCommand(
-          "workbench.action.openSettings",
-          "rac.path",
-        );
+      if (choice === INSTALL) installRac();
+      else if (choice === PATH) {
+        void vscode.commands.executeCommand("workbench.action.openSettings", "rac.path");
       }
     });
+}
+
+// Open a terminal pre-loaded with the recommended install, for the user to run.
+// Wired to the missing-rac prompt and the Get-Started walkthrough.
+function installRac(): void {
+  const term = vscode.window.createTerminal("Install rac");
+  term.show();
+  term.sendText("pipx install requirements-as-code");
+}
+
+// Scaffold an empty workspace into a RAC corpus via `rac quickstart` (identity +
+// a starter artifact), then open it. The thin client computes nothing — `rac`
+// establishes the `.rac/config.yaml` identity and the template. Available in any
+// workspace (the command activates the extension), not just RAC ones.
+async function setupWorkspace(): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showErrorMessage("RAC: open a folder first, then set up a corpus.");
+    return;
+  }
+  const config = vscode.Uri.joinPath(folder.uri, ".rac", "config.yaml");
+  try {
+    await vscode.workspace.fs.stat(config);
+    void vscode.window.showInformationMessage(
+      "RAC: this workspace already has a corpus (.rac/config.yaml).",
+    );
+    return;
+  } catch {
+    // not set up yet — proceed
+  }
+  // A default repository key from the folder name; `rac` validates/normalizes it.
+  const key =
+    path.basename(folder.uri.fsPath).replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 12) ||
+    "RAC";
+  try {
+    const result = await clientFor(folder).quickstart(folder.uri.fsPath, { key });
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(result.artifact.path));
+    await vscode.window.showTextDocument(doc);
+    void vscode.window.showInformationMessage(
+      `RAC: corpus ready (key ${result.repository_key}). Edit the starter artifact and save to see it validate.`,
+    );
+    void validateWorkspace();
+    refreshAllRelationships();
+  } catch (err) {
+    if (err instanceof RacNotFoundError) {
+      warnMissingOnce();
+      return;
+    }
+    log("setupWorkspace failed", err);
+    void vscode.window.showErrorMessage(
+      `RAC: setup failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }

@@ -62,6 +62,8 @@ export type {
   PortfolioStats,
   SchemaReference,
   CreatedArtifact,
+  InitResult,
+  QuickstartResult,
   CorpusMeta,
   ExportArtifact,
   ExportRelationship,

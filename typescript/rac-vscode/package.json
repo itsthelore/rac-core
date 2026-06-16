@@ -31,7 +31,9 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:**/.rac/config.yaml"
+    "workspaceContains:**/.rac/config.yaml",
+    "onCommand:rac.setupWorkspace",
+    "onCommand:rac.installRac"
   ],
   "contributes": {
     "commands": [
@@ -46,6 +48,38 @@
       {
         "command": "rac.showExplorer",
         "title": "RAC: Open Explorer"
+      },
+      {
+        "command": "rac.setupWorkspace",
+        "title": "RAC: Set Up Workspace"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "rac.gettingStarted",
+        "title": "Get Started with RAC",
+        "description": "Set up a requirements-as-code corpus and watch the editor enforce your recorded decisions.",
+        "steps": [
+          {
+            "id": "install",
+            "title": "Install the rac CLI",
+            "description": "The extension runs your local `rac` CLI and reimplements nothing. Install it with pipx, or point the extension at an existing install.\n[Install with pipx](command:rac.installRac)\n[Set rac.path](command:workbench.action.openSettings?%5B%22rac.path%22%5D)",
+            "media": { "markdown": "walkthroughs/install.md" }
+          },
+          {
+            "id": "scaffold",
+            "title": "Set up your corpus",
+            "description": "Create a `.rac/config.yaml` identity and a starter artifact via `rac quickstart`.\n[Set Up Workspace](command:rac.setupWorkspace)",
+            "media": { "markdown": "walkthroughs/scaffold.md" },
+            "completionEvents": ["onCommand:rac.setupWorkspace"]
+          },
+          {
+            "id": "enforce",
+            "title": "See enforcement in your editor",
+            "description": "In a relationship section (e.g. `## Related Decisions`), reference a decision that does not exist — RAC flags it at the reference site, exactly as `rac relationships --validate` does on the CLI. That is the whole idea: the decisions your team already made, enforced where you type.",
+            "media": { "markdown": "walkthroughs/enforce.md" }
+          }
+        ]
       }
     ],
     "configuration": {

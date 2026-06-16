@@ -238,3 +238,67 @@ describe("error mapping", () => {
     );
   });
 });
+
+describe("init", () => {
+  it("runs `rac init <dir> --json` with the key and parses the result", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: JSON.stringify({
+        schema_version: "1",
+        repository_key: "DEMO",
+        config_path: "/w/.rac/config.yaml",
+        created: true,
+      }),
+    });
+    const result = await new RacClient({ runner }).init("/w", "DEMO");
+    expect(result.repository_key).toBe("DEMO");
+    expect(result.created).toBe(true);
+    expect(calls[0]).toEqual(["init", "/w", "--json", "--key", "DEMO"]);
+  });
+
+  it("omits --key when not given", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: JSON.stringify({
+        schema_version: "1",
+        repository_key: "W",
+        config_path: "p",
+        created: true,
+      }),
+    });
+    await new RacClient({ runner }).init("/w");
+    expect(calls[0]).toEqual(["init", "/w", "--json"]);
+  });
+});
+
+describe("quickstart", () => {
+  it("runs `rac quickstart <dir> --json` with key/type and parses the scaffolded artifact", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: JSON.stringify({
+        schema_version: "1",
+        repository_key: "DEMO",
+        config_path: "/w/.rac/config.yaml",
+        created: true,
+        artifact: {
+          type: "requirement",
+          path: "/w/rac/requirements/first-requirement.md",
+          id: "DEMO-KV8QR2AVYDFN",
+        },
+      }),
+    });
+    const result = await new RacClient({ runner }).quickstart("/w", {
+      key: "DEMO",
+      type: "requirement",
+    });
+    expect(result.repository_key).toBe("DEMO");
+    expect(result.artifact.id).toBe("DEMO-KV8QR2AVYDFN");
+    expect(result.artifact.path).toContain("first-requirement.md");
+    expect(calls[0]).toEqual([
+      "quickstart",
+      "/w",
+      "--json",
+      "--key",
+      "DEMO",
+      "--type",
+      "requirement",
+    ]);
+  });
+});

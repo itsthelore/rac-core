@@ -201,6 +201,19 @@ export interface CreatedArtifact {
   id: string;
 }
 
+// --- rac init / rac quickstart --json ---------------------------------------
+
+export interface InitResult {
+  schema_version: string;
+  repository_key: string;
+  config_path: string;
+  created: boolean;
+}
+
+export interface QuickstartResult extends InitResult {
+  artifact: { type: string; path: string; id: string };
+}
+
 // --- rac export <dir> --json (the lore-web viewer payload) ------------------
 
 export interface CorpusMeta {

@@ -35,6 +35,10 @@ suite("RAC extension", () => {
       cmds.includes("rac.validateWorkspace"),
       "rac.validateWorkspace is registered",
     );
+    assert.ok(
+      cmds.includes("rac.setupWorkspace"),
+      "rac.setupWorkspace is registered",
+    );
   });
 
   test("surfaces a relationship violation as a diagnostic", async () => {
