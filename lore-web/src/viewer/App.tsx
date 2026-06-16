@@ -6,6 +6,7 @@ import type { LoreExport } from './types';
 import { ListView } from './ListView';
 import type { ListFilters } from './ListView';
 import { DetailView } from './DetailView';
+import { onRevealArtifact, postOpenArtifact, postReady } from './host';
 import './viewer.css';
 
 /** Hash-based routing so links work from file:// — no router dep. */
@@ -40,6 +41,10 @@ export function App() {
     status: '',
   });
   const searchRef = useRef<HTMLInputElement>(null);
+  // Set when a reveal from the host navigates us, so the navigation it causes
+  // is not echoed straight back as an open-artifact (which would re-open the
+  // file the editor is already on). Consumed by the outbound effect below.
+  const revealedRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadExport().then(setData, (err: unknown) => {
@@ -51,6 +56,35 @@ export function App() {
     () => (data ? buildIndex(data) : null),
     [data],
   );
+
+  // Editor-host bridge (v0.21.7): announce readiness and apply the host's
+  // reveal requests. Inert in a standalone Portal (no host).
+  useEffect(() => {
+    const unsubscribe = onRevealArtifact((id) => {
+      const target = `#/artifact/${encodeURIComponent(id)}`;
+      if (window.location.hash === target) {
+        revealedRef.current = null; // already here — nothing to suppress
+        return;
+      }
+      revealedRef.current = id;
+      window.location.hash = target;
+    });
+    postReady();
+    return unsubscribe;
+  }, []);
+
+  // Report the user's selection to the host so it can open the file. A reveal
+  // the host itself requested is consumed here rather than echoed back.
+  useEffect(() => {
+    if (route.view !== 'detail') return;
+    const artifact = index?.byId.get(route.id);
+    if (!artifact) return;
+    if (revealedRef.current === route.id) {
+      revealedRef.current = null;
+      return;
+    }
+    postOpenArtifact(artifact.path, artifact.id);
+  }, [route, index]);
 
   // Keyboard: "/" focuses search on the list view; Escape returns from
   // detail to list. Both ignored while typing in a form control.
