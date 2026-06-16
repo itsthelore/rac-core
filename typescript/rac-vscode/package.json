@@ -70,10 +70,8 @@
     "watch": "node esbuild.mjs --watch",
     "vscode:prepublish": "npm run check-types && npm run compile"
   },
-  "dependencies": {
-    "@rac/sdk": "file:../rac-sdk"
-  },
   "devDependencies": {
+    "@rac/sdk": "file:../rac-sdk",
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.25.0",
