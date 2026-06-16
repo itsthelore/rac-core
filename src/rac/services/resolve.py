@@ -27,8 +27,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from rac.core.corpus import walk_corpus
 from rac.core.models import SearchSection
-from rac.services.index import build_repository_index
+from rac.services.index import build_repository_index, index_from_corpus
 
 OUTCOME_RESOLVED = "resolved"
 OUTCOME_NOT_FOUND = "not-found"
@@ -325,6 +326,53 @@ def find_artifacts(
     """
     entries = build_repository_index(directory, recursive=recursive).artifacts
     return search_index(entries, query, artifact_type=artifact_type)
+
+
+# --- Live decision query (v0.21.16, ADR-067) ---------------------------------
+#
+# The deterministic "what did we decide about X / is X ruled out" retrieval. The
+# engine asserts *which live decisions bind a topic* — structural search filtered
+# to decisions, then to the live ones — and stops there. It never asserts that a
+# change is *wrong*: semantic contradiction stays in the consuming agent, which
+# reads the engine-supplied decisions and judges (ADR-067). No scoring enters the
+# engine; ranking is the same explainable tiered ladder `rac find` already uses.
+
+# Decisions are the artifact type the query answers over. The same constant the
+# agent-rules projection scopes to, named locally so the dependency reads cleanly.
+_DECISION_TYPE = "decision"
+
+
+def find_decisions(directory: str, topic: str, recursive: bool = True) -> SearchResult:
+    """Search *live* decisions under ``directory`` for ``topic`` (ADR-067).
+
+    Two deterministic filters compose over the existing tiered search: the type
+    filter restricts to decisions, and a liveness filter — the same Accepted,
+    non-retired predicate the agent-rules projection uses (one source of truth,
+    never duplicated) — drops superseded/deprecated decisions even when their
+    text matches the topic. Ranking is the explainable id/title/path/heading/body
+    ladder (ADR-037/ADR-038); an empty result is a valid answer (a query always
+    succeeds), not an error.
+
+    This is structural retrieval, not a verdict: it returns the decisions that
+    bind the topic and lets the agent judge contradiction (ADR-067). No semantic
+    score is computed here or anywhere downstream.
+    """
+    # Reuse the liveness predicate from the agent-rules projection rather than
+    # re-deriving "Accepted and not retired" — the definition must not fork
+    # (the same rule the committed rules block is built from).
+    from rac.services.agent_rules import is_live_decision
+
+    entries = list(walk_corpus(directory, recursive=recursive))
+    live_paths = {
+        str(entry.path)
+        for entry in entries
+        if entry.artifact_type == _DECISION_TYPE and is_live_decision(entry.product)
+    }
+    index = index_from_corpus(directory, entries, recursive=recursive).artifacts
+    result = search_index(index, topic, artifact_type=_DECISION_TYPE)
+    # Drop matches that are decisions but not live; ranking/order is preserved.
+    result.matches = [m for m in result.matches if m.path in live_paths]
+    return result
 
 
 def search_index(

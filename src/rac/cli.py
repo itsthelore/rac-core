@@ -137,6 +137,7 @@ from rac.services.resolve import (
     OUTCOME_DUPLICATE,
     OUTCOME_RESOLVED,
     find_artifacts,
+    find_decisions,
     resolve_artifact,
 )
 from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
@@ -737,17 +738,28 @@ def cmd_find(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
-    result = find_artifacts(
-        args.directory,
-        args.query,
-        artifact_type=args.type,
-        recursive=not args.top_level,
-    )
+    if args.decisions:
+        # `--decisions` is the live decision query (ADR-067): it implies the
+        # decision type filter *and* restricts to live (Accepted, non-retired)
+        # decisions — the deterministic "what did we decide about X" retrieval.
+        # `--type` is redundant with it and mutually exclusive at the parser.
+        result = find_decisions(
+            args.directory,
+            args.query,
+            recursive=not args.top_level,
+        )
+    else:
+        result = find_artifacts(
+            args.directory,
+            args.query,
+            artifact_type=args.type,
+            recursive=not args.top_level,
+        )
     if args.json:
         print(outputs.render_find_json(result))
     else:
         print(outputs.render_find_human(result))
-    # An empty result is a valid outcome, not an error.
+    # An empty result is a valid outcome, not an error (a query always succeeds).
     return EXIT_OK
 
 
@@ -1579,9 +1591,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Directory to scan recursively for *.md (default: current directory).",
     )
-    p_find.add_argument(
+    # `--type` and `--decisions` both narrow the search; `--decisions` is the
+    # live decision query (decision type + Accepted/non-retired filter), so the
+    # two are mutually exclusive (ADR-067).
+    find_scope = p_find.add_mutually_exclusive_group()
+    find_scope.add_argument(
         "--type",
         help="Only match artifacts of this type (requirement, decision, ...).",
+    )
+    find_scope.add_argument(
+        "--decisions",
+        action="store_true",
+        help=(
+            "Only live decisions (Accepted, non-retired) — the 'what did we "
+            "decide about X / is X ruled out' query (ADR-067)."
+        ),
     )
     p_find.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
