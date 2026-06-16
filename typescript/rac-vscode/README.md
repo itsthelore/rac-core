@@ -25,9 +25,13 @@ reimplementing it ([ADR-063](../../rac/decisions/adr-063-non-python-clients-are-
   site, drawn distinctly (from `rac relationships --validate`). Refreshes on
   save/activation, since relationship validation reads files from disk.
 - **Hover** — hovering an artifact ID or alias (e.g. `adr-007`,
-  `v0.20.0-python-sdk-foundation`) shows its title, type, and path via
-  `rac resolve`.
-- **Go-to-definition** — jump from a reference to the target artifact's file.
+  `v0.20.0-python-sdk-foundation`) shows its title, type, **lifecycle status**
+  (⚠ for retired), a snippet, and its path.
+- **Go-to-definition, find-all-references, clickable links** — jump to a target,
+  list every artifact that references the one under the cursor (from the export's
+  resolved edges), and Ctrl/Cmd-click any alias to open its file.
+- **Outline & workspace symbols** — the artifact's sections in the Outline view,
+  and jump-to-any-artifact by title (Ctrl/Cmd-T).
 - **Authoring aids** — artifact-alias completion inside relationship sections
   (`## Related Decisions`, …), quick-fixes that insert a missing `## Section`,
   and a **RAC: New Artifact** command that suggests an existing folder for the

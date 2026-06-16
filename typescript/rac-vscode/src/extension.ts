@@ -25,6 +25,7 @@ import {
   RacNotFoundError,
   isResolved,
   type CorpusExport,
+  type ExportArtifact,
   type FileValidation,
   type Issue,
   type RelationshipIssue,
@@ -75,6 +76,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("rac.newArtifact", newArtifact),
     vscode.languages.registerHoverProvider(selector, { provideHover }),
     vscode.languages.registerDefinitionProvider(selector, { provideDefinition }),
+    vscode.languages.registerReferenceProvider(selector, { provideReferences }),
+    vscode.languages.registerDocumentLinkProvider(selector, { provideDocumentLinks }),
+    vscode.languages.registerDocumentSymbolProvider(selector, { provideDocumentSymbols }),
+    vscode.languages.registerWorkspaceSymbolProvider({ provideWorkspaceSymbols }),
     vscode.languages.registerCompletionItemProvider(selector, {
       provideCompletionItems: provideCompletions,
     }),
@@ -528,9 +533,18 @@ async function provideHover(
 ): Promise<vscode.Hover | undefined> {
   const target = await resolveAt(doc, position);
   if (!target) return undefined;
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  const corpus = folder ? await corpusExport(folder) : undefined;
+  const artifact = corpus?.artifacts.find((a) => a.id === target.id);
+
   const md = new vscode.MarkdownString(undefined, true);
   md.appendMarkdown(`**${target.title}**\n\n`);
-  md.appendMarkdown(`\`${target.type}\` · \`${target.id}\`\n\n`);
+  const status = artifact ? statusLabel(artifact.status) : "";
+  md.appendMarkdown(`\`${target.type}\`${status ? ` · ${status}` : ""} · \`${target.id}\`\n\n`);
+  if (artifact) {
+    const snippet = snippetFromHtml(artifact.body_html);
+    if (snippet) md.appendMarkdown(`${snippet}\n\n`);
+  }
   md.appendMarkdown(`[${target.path}](${vscode.Uri.file(target.path)})`);
   return new vscode.Hover(md);
 }
@@ -546,6 +560,171 @@ async function provideDefinition(
   // resolve returns a path relative to the client cwd (the workspace folder).
   const uri = vscode.Uri.joinPath(folder.uri, target.path);
   return new vscode.Location(uri, new vscode.Position(0, 0));
+}
+
+// Find-all-references: incoming links from the export's resolved `from → to`
+// edges (no extra `rac` call), anchored at the referencing token in each source.
+async function provideReferences(
+  doc: vscode.TextDocument,
+  position: vscode.Position,
+): Promise<vscode.Location[] | undefined> {
+  const target = await resolveAt(doc, position);
+  if (!target) return undefined;
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  if (!folder) return undefined;
+  const corpus = await corpusExport(folder);
+  if (!corpus) return undefined;
+  const index = buildIndex(corpus);
+  const targetAliases = (index.byId.get(target.id)?.aliases ?? [target.id]).map((a) =>
+    a.toLowerCase(),
+  );
+
+  const locations: vscode.Location[] = [];
+  const sourceIds = new Set(
+    corpus.relationships.filter((r) => r.to === target.id).map((r) => r.from),
+  );
+  for (const sourceId of sourceIds) {
+    const source = index.byId.get(sourceId);
+    if (!source) continue;
+    const uri = artifactUri(folder, source.path);
+    try {
+      const srcDoc = await vscode.workspace.openTextDocument(uri);
+      locations.push(new vscode.Location(uri, firstAliasRange(srcDoc, targetAliases)));
+    } catch {
+      locations.push(new vscode.Location(uri, new vscode.Position(0, 0)));
+    }
+  }
+  return locations;
+}
+
+// Make known artifact aliases in the document clickable links to their files.
+async function provideDocumentLinks(
+  doc: vscode.TextDocument,
+): Promise<vscode.DocumentLink[] | undefined> {
+  if (!looksLikeRacArtifact(doc.getText())) return undefined;
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  if (!folder) return undefined;
+  const corpus = await corpusExport(folder);
+  if (!corpus) return undefined;
+  const index = buildIndex(corpus);
+
+  const links: vscode.DocumentLink[] = [];
+  const text = doc.getText();
+  const tokenRe = /[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9]/g;
+  for (let m = tokenRe.exec(text); m !== null; m = tokenRe.exec(text)) {
+    const token = m[0];
+    if (!looksLikeReference(token)) continue;
+    const artifact = index.aliasToArtifact.get(token.toLowerCase());
+    if (!artifact) continue;
+    const range = new vscode.Range(doc.positionAt(m.index), doc.positionAt(m.index + token.length));
+    const link = new vscode.DocumentLink(range, artifactUri(folder, artifact.path));
+    link.tooltip = `${artifact.type} — ${artifact.title}`;
+    links.push(link);
+  }
+  return links;
+}
+
+// Outline: the artifact's own Markdown headings (`#` title, `##` sections).
+function provideDocumentSymbols(doc: vscode.TextDocument): vscode.DocumentSymbol[] {
+  const symbols: vscode.DocumentSymbol[] = [];
+  const lines = doc.getText().split(/\r?\n/);
+  let title: vscode.DocumentSymbol | undefined;
+  for (let i = 0; i < lines.length; i++) {
+    const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(lines[i]);
+    if (!heading) continue;
+    const level = heading[1].length;
+    const range = new vscode.Range(i, 0, i, lines[i].length);
+    const symbol = new vscode.DocumentSymbol(
+      heading[2],
+      "",
+      level === 1 ? vscode.SymbolKind.File : vscode.SymbolKind.String,
+      range,
+      range,
+    );
+    if (level === 1 || !title) {
+      symbols.push(symbol);
+      title = symbol;
+    } else {
+      title.children.push(symbol);
+    }
+  }
+  return symbols;
+}
+
+// Workspace symbols: every artifact, reachable by title (VS Code filters).
+async function provideWorkspaceSymbols(): Promise<vscode.SymbolInformation[]> {
+  const symbols: vscode.SymbolInformation[] = [];
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const corpus = await corpusExport(folder);
+    if (!corpus) continue;
+    for (const artifact of corpus.artifacts) {
+      const uri = artifactUri(folder, artifact.path);
+      symbols.push(
+        new vscode.SymbolInformation(
+          artifact.title,
+          vscode.SymbolKind.File,
+          artifact.type,
+          new vscode.Location(uri, new vscode.Position(0, 0)),
+        ),
+      );
+    }
+  }
+  return symbols;
+}
+
+// `rac export` returns absolute artifact paths when given an absolute directory
+// (the extension passes one), so build the Uri from the absolute path directly;
+// fall back to joining a relative path onto the workspace folder.
+function artifactUri(folder: vscode.WorkspaceFolder, artifactPath: string): vscode.Uri {
+  return path.isAbsolute(artifactPath)
+    ? vscode.Uri.file(artifactPath)
+    : vscode.Uri.joinPath(folder.uri, artifactPath);
+}
+
+interface CorpusIndex {
+  byId: Map<string, ExportArtifact>;
+  aliasToArtifact: Map<string, ExportArtifact>;
+}
+
+function buildIndex(corpus: CorpusExport): CorpusIndex {
+  const byId = new Map<string, ExportArtifact>();
+  const aliasToArtifact = new Map<string, ExportArtifact>();
+  for (const artifact of corpus.artifacts) {
+    byId.set(artifact.id, artifact);
+    for (const alias of artifact.aliases) {
+      aliasToArtifact.set(alias.toLowerCase(), artifact);
+    }
+  }
+  return { byId, aliasToArtifact };
+}
+
+function firstAliasRange(doc: vscode.TextDocument, aliasesLower: string[]): vscode.Range {
+  const lines = doc.getText().split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const lower = lines[i].toLowerCase();
+    for (const alias of aliasesLower) {
+      const col = lower.indexOf(alias);
+      if (col >= 0) return new vscode.Range(i, col, i, col + alias.length);
+    }
+  }
+  return new vscode.Range(0, 0, 0, 0);
+}
+
+const RETIRED_STATUS = new Set(["superseded", "deprecated", "abandoned"]);
+function statusLabel(status: string): string {
+  if (!status || status.toLowerCase() === "unknown") return "";
+  return RETIRED_STATUS.has(status.toLowerCase()) ? `⚠ ${status}` : status;
+}
+
+function snippetFromHtml(html: string): string {
+  // Drop the leading <h1> title (it repeats the bold title above), strip tags.
+  const text = html
+    .replace(/^[\s\S]*?<\/h1>/i, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  return text.length > 200 ? `${text.slice(0, 200)}…` : text;
 }
 
 // --- shared -----------------------------------------------------------------

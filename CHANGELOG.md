@@ -8,6 +8,13 @@ details, release history over commit history.
 
 ### Added
 
+- Editor navigation in the extension (v0.21.3 milestone). Hover now shows the
+  target's lifecycle status (⚠ for retired) and a snippet; **find-all-references**
+  lists every artifact that references the one under the cursor (from the export's
+  resolved edges); artifact aliases are **clickable links**; and the corpus is
+  navigable via the **Outline** (an artifact's sections) and **workspace symbols**
+  (jump to any artifact by title). All from the cached `rac export` (ADR-063).
+
 - Authoring aids in the editor extension (v0.21.2 milestone). Inside a
   relationship section, the extension now offers **artifact-alias completion**
   (human aliases like `adr-007`, from a cached `rac export`); **quick-fixes**
