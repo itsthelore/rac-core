@@ -1,10 +1,13 @@
-"""RAC Guide MCP server — the four-tool surface (v0.10.0).
+"""RAC Guide MCP server — the read-tool surface (v0.10.0; v0.21.16).
 
 This module is the FastMCP application: it builds a server bound to a
-repository root and registers the four read-only tools the
-``guide-tool-surface`` design pins (``get_artifact``, ``search_artifacts``,
-``get_related``, ``get_summary``). Tool descriptions ship verbatim from that
-design; changing them is a contract change (ADR-030).
+repository root and registers the read-only tools the agent queries. The
+original four the ``guide-tool-surface`` design pins (``get_artifact``,
+``search_artifacts``, ``get_related``, ``get_summary``) ship their descriptions
+verbatim from that design; changing them is a contract change (ADR-030).
+v0.21.16 adds ``find_decisions`` — the live decision query (ADR-067):
+deterministic retrieval of the Accepted, non-retired decisions binding a topic,
+so an agent consults what the team already settled instead of re-litigating it.
 
 The server is a *consumer* of RAC Core (ADR-015, ADR-031): every tool calls
 read-only service functions — resolution, search, relationships, portfolio —
@@ -56,6 +59,7 @@ from rac.services.relationships import relationships_from_corpus
 from rac.services.resolve import (
     OUTCOME_RESOLVED,
     ResolutionResult,
+    find_decisions,
     resolve_in_index,
     search_index,
 )
@@ -93,6 +97,19 @@ DESC_GET_RELATED = (
     "it. Call this after retrieving an artifact, and before changing anything "
     "it covers, to find the decisions, requirements, designs, and roadmaps the "
     "change could affect."
+)
+
+DESC_FIND_DECISIONS = (
+    "Find the team's already-settled decisions about a topic. Call this whenever "
+    "the user (or you) asks 'what did we decide about X', 'is X ruled out', 'did "
+    "we already decide this', 'what's our policy on X', or before proposing, "
+    "changing, or arguing for anything a prior decision might have settled — so "
+    "you respect recorded decisions instead of re-litigating them. Returns the "
+    "live (Accepted, non-retired) decisions ranked by relevance to the topic, "
+    "each with its identifier, title, path, category, and a snippet. It tells you "
+    "which decisions bind the topic; read them and judge for yourself — it does "
+    "not decide whether a change contradicts them. Use get_artifact to read a "
+    "decision's full text."
 )
 
 DESC_GET_SUMMARY = (
@@ -195,6 +212,23 @@ def _search_artifacts(root: str, query: str, artifact_type: str | None, budget: 
     return serialize(result.to_dict(), budget)
 
 
+def _find_decisions(root: str, topic: str, budget: int) -> str:
+    """Ranked live decisions binding ``topic`` (ADR-067, deterministic retrieval).
+
+    Calls the same ``find_decisions`` service the CLI ``--decisions`` face uses
+    (one source of truth): structural search restricted to live decisions, no
+    semantic verdict. The payload is the search contract plus the live-filter
+    intent in ``type``/``filter`` so a reader knows the result is the *settled*
+    decisions, not every match.
+    """
+    result = find_decisions(root, topic, recursive=True)
+    payload = result.to_dict()
+    # Make the live-decision intent explicit on the wire (additive, ADR-007): the
+    # type is always "decision" and the result is filtered to live decisions.
+    payload["filter"] = "live-decisions"
+    return serialize(payload, budget)
+
+
 def _get_related(root: str, artifact_id: str, budget: int) -> str:
     # One corpus walk feeds resolution, outgoing, and incoming, so the whole
     # response reflects a single atomic snapshot of the repository (ADR-032):
@@ -256,6 +290,12 @@ def build_server(
     def search_artifacts(query: str, type: str | None = None) -> str:
         return telemetry.observe(
             recorder, "search_artifacts", lambda: _search_artifacts(root, query, type, budget)
+        )
+
+    @server.tool(name="find_decisions", description=DESC_FIND_DECISIONS)
+    def find_decisions_tool(topic: str) -> str:
+        return telemetry.observe(
+            recorder, "find_decisions", lambda: _find_decisions(root, topic, budget)
         )
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
