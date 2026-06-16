@@ -56,7 +56,7 @@ jobs:
         # enforced by tests/test_ci_batteries.py in the core battery.
         battery:
           - name: core
-            paths: "tests/test_validate.py tests/test_okf_conformance.py tests/test_overrides.py tests/test_requirement_standards.py tests/test_sarif.py tests/test_parser.py tests/test_schema.py tests/test_identity.py tests/test_frontmatter.py tests/test_metadata_identity.py tests/test_idgen.py tests/test_ci_batteries.py tests/test_corpus.py tests/test_operations.py tests/test_sdk_surface.py"
+            paths: "tests/test_validate.py tests/test_okf_conformance.py tests/test_overrides.py tests/test_requirement_standards.py tests/test_sarif.py tests/test_parser.py tests/test_schema.py tests/test_identity.py tests/test_frontmatter.py tests/test_metadata_identity.py tests/test_idgen.py tests/test_ci_batteries.py tests/test_corpus.py tests/test_operations.py tests/test_sdk_surface.py tests/test_sbom.py"
           - name: cli
             paths: "tests/test_cli.py"
           - name: compare
@@ -110,7 +110,7 @@ jobs:
           - name: stats
             paths: "tests/test_stats.py"
           - name: watchkeeper
-            paths: "tests/test_watchkeeper.py tests/test_validate_action.py tests/test_pr_gate_action.py"
+            paths: "tests/test_watchkeeper.py tests/test_validate_action.py tests/test_pr_gate_action.py tests/test_gate.py tests/test_no_egress.py"
           # Trust gates (v0.7.9): dogfood validates RAC's own rac/ corpus,
           # golden pins CLI stdout byte-for-byte against committed files.
           - name: dogfood
