@@ -1,0 +1,121 @@
+# RAC PR-gate composite action (v0.21.13, ADR-049 / ADR-063).
+#
+# Carries the full RAC contract into a single required pull-request check:
+# install RAC, run `rac validate`, `rac relationships --validate`, and
+# `rac review` — each emitting SARIF (ADR-054) — upload all three to GitHub
+# Code Scanning, and re-surface the worst CLI exit code. The action is a thin
+# consumer (ADR-063): all analysis and severity policy live in the package
+# (ADR-015 / ADR-049 / ADR-053); the action never reinterprets findings.
+#
+# The Watchkeeper action lives at the repository root and the single-command
+# validate action at `validate-action/`; this gate is referenced as
+# `uses: tcballard/requirements-as-code/pr-gate-action@<ref>`.
+name: "RAC PR gate"
+description: >-
+  Enforce a requirements-as-code (RAC) corpus on a pull request: validate,
+  relationship integrity, and review, surfaced inline via GitHub Code Scanning
+  (SARIF) as a required status check. A thin wrapper over the `rac` CLI.
+author: "Tom Ballard"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  path:
+    description: "The RAC corpus directory to check (passed to each `rac` command)."
+    required: false
+    default: "rac"
+  upload-sarif:
+    description: >-
+      Upload SARIF to GitHub Code Scanning (`true` or `false`). Requires the job
+      to grant `security-events: write`.
+    required: false
+    default: "true"
+  sarif-dir:
+    description: "Directory the SARIF documents are written to (one file per check)."
+    required: false
+    default: "rac-sarif"
+  rac-version:
+    description: >-
+      Exact requirements-as-code version to install from PyPI. Empty installs the
+      latest release. Ignored when `install-from` is `source`.
+    required: false
+    default: ""
+  install-from:
+    description: >-
+      Where to install RAC from: `pypi` (the default for consumers) or `source`
+      (the action checkout itself — for this repository's own dogfood job;
+      requires `uses: ./pr-gate-action` on a full checkout).
+    required: false
+    default: "pypi"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install RAC
+      shell: bash
+      env:
+        INSTALL_FROM: ${{ inputs.install-from }}
+        RAC_VERSION: ${{ inputs.rac-version }}
+      run: |
+        python -m pip install --quiet --upgrade pip
+        if [ "$INSTALL_FROM" = "source" ]; then
+          python -m pip install --quiet "$GITHUB_ACTION_PATH/.."
+        elif [ -n "$RAC_VERSION" ]; then
+          python -m pip install --quiet "requirements-as-code==$RAC_VERSION"
+        else
+          python -m pip install --quiet requirements-as-code
+        fi
+
+    # The CLI is the source of truth (ADR-058). `set +e` lets a non-zero exit
+    # still produce SARIF for upload; the worst exit code is re-surfaced below.
+    # Each check writes its own SARIF file into the upload directory.
+    - name: Run RAC checks (SARIF)
+      id: checks
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        SARIF_DIR: ${{ inputs.sarif-dir }}
+      run: |
+        set +e
+        mkdir -p "$SARIF_DIR"
+        worst=0
+
+        run_check() {
+          local name="$1"; shift
+          "$@" > "$SARIF_DIR/$name.sarif"
+          local code=$?
+          echo "$name exited $code"
+          if [ "$code" -gt "$worst" ]; then worst=$code; fi
+        }
+
+        run_check validate       rac validate "$INPUT_PATH" --sarif
+        run_check relationships  rac relationships "$INPUT_PATH" --validate --sarif
+        run_check review         rac review "$INPUT_PATH" --sarif
+
+        echo "exit_code=$worst" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SARIF to Code Scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-dir }}
+
+    # Any non-zero CLI exit fails the check; the per-check exits above show which
+    # gate failed, and the Code Scanning annotations show every finding. Severity
+    # policy (what is blocking) lives in the engine's exit codes, not here.
+    - name: Report result
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.checks.outputs.exit_code }}
+      run: |
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "::error::RAC PR gate failed (worst exit $EXIT_CODE) — see the Code Scanning annotations."
+          exit "$EXIT_CODE"
+        fi
+        echo "RAC PR gate passed."
