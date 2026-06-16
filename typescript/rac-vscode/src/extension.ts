@@ -43,6 +43,14 @@ import {
   type ResolvedArtifact,
 } from "@rac/sdk";
 
+import {
+  CLAUDE_SETTINGS_RELPATH,
+  HOOK_SCRIPT_RELPATH,
+  mergeHookSettings,
+  removeHookSettings,
+  renderHookScript,
+} from "./claudeHook";
+
 const DEBOUNCE_MS = 300;
 const RELATIONSHIP_DEBOUNCE_MS = 600;
 const AWARENESS_DEBOUNCE_MS = 800;
@@ -126,6 +134,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("rac.findDecisions", findDecisionsCommand),
     vscode.commands.registerCommand("rac.openArtifactFile", openArtifactFile),
     vscode.commands.registerCommand("rac.installRac", installRac),
+    vscode.commands.registerCommand("rac.enableClaudePreEditHook", enableClaudePreEditHook),
+    vscode.commands.registerCommand("rac.disableClaudePreEditHook", disableClaudePreEditHook),
     vscode.languages.registerHoverProvider(selector, { provideHover }),
     vscode.languages.registerDefinitionProvider(selector, { provideDefinition }),
     vscode.languages.registerReferenceProvider(selector, { provideReferences }),
@@ -1609,4 +1619,107 @@ async function setupAgentIntegration(context: vscode.ExtensionContext): Promise<
   void vscode.window.showInformationMessage(
     `RAC: agent integration ready. ${mcpHint}"what did we decide about X?"`,
   );
+}
+
+// --- Claude Code pre-edit hook (v0.21.17, ADR-067) --------------------------
+//
+// ADR-067: Claude Code's `PreToolUse` hook is the one platform seam that permits
+// a real pre-edit veto. This extension *generates* the opt-in hook — it is not
+// itself the interceptor. The hook pipes proposed content to
+// `rac validate - --corpus rac` and blocks (exit 2) only on a structural finding
+// (a reference to a retired or missing decision, or a malformed artifact). All
+// validation stays in `rac` (ADR-063). This is Claude-Code-specific; other
+// clients rely on the v0.21.16 post-edit guard. The hook config format lives in
+// one place (`claudeHook.ts`) to mitigate format churn.
+
+/** The corpus directory, relative to the workspace root (matches the drift watcher). */
+const CORPUS_RELDIR = "rac";
+
+/** Read a workspace JSON file, returning `{}` when it is absent or unparseable. */
+async function readJsonFile(uri: vscode.Uri): Promise<Record<string, unknown>> {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    const text = new TextDecoder().decode(bytes).trim();
+    return text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    // Missing or malformed: start from an empty object so a merge never clobbers
+    // a file we could not understand — and never throws here.
+    return {};
+  }
+}
+
+/**
+ * "RAC: Enable Claude Code pre-edit hook" (opt-in, Claude-Code-specific).
+ *
+ * Writes the generated hook script to `.claude/hooks/rac-preedit.py` and MERGES
+ * a `PreToolUse` registration into `.claude/settings.json` without clobbering
+ * existing settings. Re-running is idempotent (a prior RAC registration is
+ * replaced, not duplicated). Other clients are unaffected (ADR-067).
+ */
+async function enableClaudePreEditHook(): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showErrorMessage("RAC: open a folder first, then enable the pre-edit hook.");
+    return;
+  }
+
+  try {
+    const racBin = racBinaryFor(folder);
+    const script = renderHookScript(CORPUS_RELDIR, racBin);
+    const scriptUri = vscode.Uri.joinPath(folder.uri, HOOK_SCRIPT_RELPATH);
+    const settingsUri = vscode.Uri.joinPath(folder.uri, CLAUDE_SETTINGS_RELPATH);
+    const encoder = new TextEncoder();
+
+    // Write the script. The directory is created implicitly by writeFile.
+    await vscode.workspace.fs.writeFile(scriptUri, encoder.encode(script));
+
+    // Merge the registration into existing Claude settings. The command runs the
+    // generated script via python3, with the project root from $CLAUDE_PROJECT_DIR
+    // so it works regardless of the directory Claude Code launches it in.
+    const command = `python3 "$CLAUDE_PROJECT_DIR/${HOOK_SCRIPT_RELPATH}"`;
+    const settings = mergeHookSettings(await readJsonFile(settingsUri), command);
+    const payload = JSON.stringify(settings, null, 2) + "\n";
+    await vscode.workspace.fs.writeFile(settingsUri, encoder.encode(payload));
+
+    log(`Claude Code pre-edit hook enabled (${HOOK_SCRIPT_RELPATH})`);
+    void vscode.window.showInformationMessage(
+      "RAC: Claude Code pre-edit hook enabled. Proposed edits under `rac/` are " +
+        "validated before they land — this is Claude-Code-specific; other clients " +
+        "use the post-edit guard.",
+    );
+  } catch (err) {
+    log("enabling Claude Code pre-edit hook failed", err);
+    void vscode.window.showErrorMessage(
+      `RAC: could not enable the pre-edit hook: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
+ * "RAC: Disable Claude Code pre-edit hook".
+ *
+ * Removes the RAC `PreToolUse` registration from `.claude/settings.json`,
+ * leaving every other hook intact, and deletes the generated script. Falls back
+ * cleanly to the v0.21.16 post-edit diagnostics (ADR-067 success measure).
+ */
+async function disableClaudePreEditHook(): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) return;
+
+  try {
+    const settingsUri = vscode.Uri.joinPath(folder.uri, CLAUDE_SETTINGS_RELPATH);
+    const settings = removeHookSettings(await readJsonFile(settingsUri));
+    const payload = JSON.stringify(settings, null, 2) + "\n";
+    await vscode.workspace.fs.writeFile(settingsUri, new TextEncoder().encode(payload));
+    try {
+      await vscode.workspace.fs.delete(vscode.Uri.joinPath(folder.uri, HOOK_SCRIPT_RELPATH));
+    } catch {
+      // Script already gone — disabling is still complete.
+    }
+    void vscode.window.showInformationMessage(
+      "RAC: Claude Code pre-edit hook disabled. Edits fall back to post-edit diagnostics.",
+    );
+  } catch (err) {
+    log("disabling Claude Code pre-edit hook failed", err);
+  }
 }
