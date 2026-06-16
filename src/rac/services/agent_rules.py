@@ -188,6 +188,17 @@ def _is_live_decision(entry_product: Product) -> bool:
     return status not in retired
 
 
+def is_live_decision(product: Product) -> bool:
+    """Public liveness predicate — Accepted and not retired (ADR-067, ADR-051).
+
+    The single source of truth for "is this decision live", shared by the
+    agent-rules projection and the live decision query (``find_decisions``) so
+    the two surfaces can never disagree on what is settled. Structural only — a
+    status string match, never a semantic judgement.
+    """
+    return _is_live_decision(product)
+
+
 def _canonical_payload(entries: list[AgentRulesEntry]) -> str:
     """Canonical, formatting-independent serialization the digest hashes.
 
