@@ -35,9 +35,11 @@ reimplementing it ([ADR-063](../../rac/decisions/adr-063-non-python-clients-are-
 - **Corpus awareness** — a status-bar health score (`rac review`, click for the
   Problems panel) and workspace-wide diagnostics (`rac validate <dir>`), so issues
   in unopened artifacts show up too.
-- **RAC Explorer** — **RAC: Open Explorer** renders the corpus relationship graph
-  in a panel (the self-contained Portal viewer from `rac export --html`); re-run
-  to refresh.
+- **RAC Explorer** — **RAC: Open Explorer** renders the corpus in a side panel
+  (the self-contained, offline Portal viewer from `rac export --html`): a
+  searchable list/detail view and an Obsidian-style **node-link graph** (a global
+  graph, or a local graph that follows the file you are editing). Selecting a node
+  opens its file, and switching files reveals that artifact in the graph.
 - **Authoring aids** — artifact-alias completion inside relationship sections
   (`## Related Decisions`, …), quick-fixes that insert a missing `## Section`,
   and a **RAC: New Artifact** command that suggests an existing folder for the
@@ -59,6 +61,13 @@ schema-version skew, and logs to a "RAC" output channel.
 | --- | --- | --- |
 | `rac.path` | `""` | Path to `rac`. Empty = `RAC_BIN` env, else `rac` on `PATH`. |
 | `rac.validate.enable` | `true` | Validate artifacts and show diagnostics. |
+
+## Privacy
+
+No telemetry. The extension runs entirely on your machine and only ever invokes
+your local `rac` CLI — it makes no network requests and collects no usage data.
+The Explorer webview is a self-contained, offline document served under a strict
+Content-Security-Policy (no network, no remote code, no eval).
 
 ## Develop
 
