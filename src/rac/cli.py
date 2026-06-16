@@ -16,7 +16,8 @@ Commands:
                     [--no-annotate]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
-    rac export [directory] [--json | --html | --okf] [--out PATH]
+    rac export [directory] [--json | --html | --okf | --agent-rules [--check]]
+               [--client CLIENT ...] [--out PATH]
     rac explorer [directory] [--top-level]
     rac mcp [--root PATH] [--telemetry]
     rac mcp-stats [--json | --share]
@@ -95,6 +96,11 @@ from rac.core.templates import (
 )
 from rac.core.validation import has_errors
 from rac.output.portal import PortalSeamMissing, PortalShellMissing
+from rac.services.agent_rules import (
+    check_agent_rules,
+    generate_agent_rules,
+    unknown_clients,
+)
 from rac.services.create import (
     IdGenerationExhausted,
     MissingRepositoryConfig,
@@ -512,9 +518,42 @@ def cmd_index(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _agent_rules_root(directory: str, out: str | None) -> Path:
+    """The directory the agent-rules files are written into.
+
+    Explicit ``--out`` wins. Otherwise default to the corpus's repo root: the
+    parent of a ``rac/`` directory (so ``rac export rac/ --agent-rules`` writes
+    CLAUDE.md/AGENTS.md beside it), else the directory itself. A bare ``rac``
+    with no parent component falls back to the current directory.
+    """
+    if out is not None:
+        return Path(out)
+    path = Path(directory.rstrip("/"))
+    if path.name == "rac":
+        return path.parent if str(path.parent) not in ("", ".") else Path(".")
+    return path
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    # Agent-rules is a distinct mode (ADR-067): a distilled, drift-guarded
+    # projection of live decisions into per-client managed blocks. It owns --out
+    # (the output root), --client (target selectors), --check (the drift gate),
+    # and --json (machine output) — none of the export-payload modes apply.
+    if args.agent_rules:
+        return _cmd_agent_rules(args)
+    if args.check:
+        print("rac: --check requires --agent-rules", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    if args.client:
+        print("rac: --client requires --agent-rules", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    if args.json and (args.html or args.okf):
+        print("rac: --json cannot combine with --html or --okf", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
     if args.out is not None and not (args.html or args.okf):
         print("rac: --out requires --html or --okf (--json writes to stdout)", file=sys.stderr)
@@ -559,6 +598,40 @@ def cmd_export(args: argparse.Namespace) -> int:
         raise SystemExit(EXIT_USAGE) from None
     edges = len(export.relationships)
     print(f"wrote {out} — {export.artifact_count} artifact(s), {edges} relationship(s)")
+    return EXIT_OK
+
+
+def _cmd_agent_rules(args: argparse.Namespace) -> int:
+    """`rac export --agent-rules [--check]` (v0.21.15, ADR-067).
+
+    Generates (or, under --check, verifies) the drift-guarded managed block in
+    each per-client agent-context file. --check never writes and exits non-zero
+    on drift (a stale or missing block) — the CI gate. Output is human by
+    default; --json emits the machine contract.
+    """
+    bad = unknown_clients(args.client)
+    if bad:
+        valid = "claude, agents, cursor, copilot"
+        print(f"rac: unknown --client: {', '.join(bad)} (choose from {valid})", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+    root = _agent_rules_root(args.directory, args.out)
+    try:
+        if args.check:
+            result = check_agent_rules(args.directory, str(root), clients=args.client)
+        else:
+            result = generate_agent_rules(args.directory, str(root), clients=args.client)
+    except OSError as exc:
+        print(f"rac: cannot write under {root}: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+
+    if args.json:
+        print(outputs.render_agent_rules_json(result))
+    else:
+        print(outputs.render_agent_rules_human(result))
+
+    if args.check and result.drifted:
+        return EXIT_VALIDATION_FAILED
     return EXIT_OK
 
 
@@ -1257,11 +1330,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Directory to scan recursively for *.md (default: current directory).",
     )
+    # --html / --okf / --agent-rules are the mutually-exclusive write modes; the
+    # default (none of them) writes the JSON payload to stdout. --json is *not*
+    # in this group: for the default mode it is the explicit no-op it always was,
+    # and for --agent-rules it toggles JSON vs human output (so --agent-rules
+    # --json is valid). --json with --html/--okf is rejected in cmd_export.
     export_mode = p_export.add_mutually_exclusive_group()
-    export_mode.add_argument(
+    p_export.add_argument(
         "--json",
         action="store_true",
-        help="Write the export JSON to stdout (the default; explicit for pipelines).",
+        help="Emit JSON instead of human-readable text (the default export mode "
+        "writes JSON to stdout regardless; with --agent-rules, selects JSON output).",
     )
     export_mode.add_argument(
         "--html",
@@ -1275,11 +1354,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write a derived OKF v0.1 bundle (one Markdown file per artifact, "
         "plus index.md and log.md) to a directory.",
     )
+    export_mode.add_argument(
+        "--agent-rules",
+        action="store_true",
+        help="Write per-client agent-context files (CLAUDE.md, AGENTS.md, "
+        ".cursor/rules, .github/copilot-instructions.md) with a drift-guarded "
+        "managed block distilled from live decisions (ADR-067).",
+    )
+    p_export.add_argument(
+        "--check",
+        action="store_true",
+        help="With --agent-rules: verify committed files match the corpus "
+        "without writing; exit non-zero on drift (the CI gate).",
+    )
+    p_export.add_argument(
+        "--client",
+        action="append",
+        choices=["claude", "agents", "cursor", "copilot"],
+        metavar="CLIENT",
+        help="With --agent-rules: restrict to specific clients "
+        "(claude|agents|cursor|copilot); repeatable. Default: all four.",
+    )
     p_export.add_argument(
         "--out",
         default=None,
-        help="Where --html writes the Portal (default: lore-export.html) or "
-        "--okf writes the bundle directory (default: okf-bundle). "
+        help="Where --html writes the Portal (default: lore-export.html), "
+        "--okf writes the bundle directory (default: okf-bundle), or "
+        "--agent-rules writes the per-client files (default: the corpus's repo "
+        "root — the parent of a rac/ directory). "
         "Exports are build artifacts: existing output is overwritten.",
     )
     p_export.set_defaults(func=cmd_export)

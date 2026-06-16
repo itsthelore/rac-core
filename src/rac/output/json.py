@@ -15,6 +15,7 @@ from rac.core.hooks import HookSpec
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
+from rac.services.agent_rules import AgentRulesResult
 from rac.services.create import CreatedArtifact
 from rac.services.export import CorpusExport
 from rac.services.gate import GateReport
@@ -287,6 +288,15 @@ def render_export_json(export: CorpusExport) -> str:
     external viewers consume (ADR-014).
     """
     return json.dumps(export.to_dict(), indent=2)
+
+
+def render_agent_rules_json(result: AgentRulesResult) -> str:
+    """JSON `rac export --agent-rules [--check]` output (stable contract, ADR-007).
+
+    The editor and CI consume this: ``mode``, the corpus ``digest``, the output
+    ``root``, and per-target ``files`` with their ``state``.
+    """
+    return json.dumps(result.to_dict(), indent=2)
 
 
 # --- create (rac new / rac templates, v0.7.10) -------------------------------

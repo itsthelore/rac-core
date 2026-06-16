@@ -16,6 +16,14 @@ from rac.core.hooks import HookSpec
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
+from rac.services.agent_rules import (
+    STATE_IN_SYNC,
+    STATE_MISSING,
+    STATE_STALE,
+    STATE_UPDATED,
+    STATE_WRITTEN,
+    AgentRulesResult,
+)
 from rac.services.compare import (
     CHANGE_ADDED,
     CHANGE_MODIFIED,
@@ -1184,4 +1192,55 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
     else:
         lines.append(f"  {_green('✓ Nothing requiring attention.')}")
 
+    return "\n".join(lines)
+
+
+# Per-file state icons for `rac export --agent-rules` (v0.21.15). A drift state
+# (stale/missing under --check) is the red failure; a write/update is a neutral
+# bullet; in-sync is the green clear.
+_AGENT_RULES_ICONS = {
+    STATE_WRITTEN: lambda: "+",
+    STATE_UPDATED: lambda: "~",
+    STATE_IN_SYNC: lambda: _green("✓"),
+    STATE_STALE: lambda: _red("✗"),
+    STATE_MISSING: lambda: _red("✗"),
+}
+
+
+def render_agent_rules_human(result: AgentRulesResult) -> str:
+    """Human-readable `rac export --agent-rules [--check]` output (v0.21.15).
+
+    Lists each target file with its outcome — written/updated/in-sync for a
+    generate run, in-sync/stale/missing for a check run — then a verdict line.
+    Under --check, drift (any stale or missing block) is the red failure the CLI
+    turns into a non-zero exit (the vendored-shell drift gate, ADR-067).
+    """
+    checking = result.mode == "check"
+    title = "Agent Rules — drift check" if checking else "Agent Rules"
+    lines = [
+        _bold(title),
+        "=" * len(title),
+        "",
+        f"Corpus digest: {result.digest}",
+        f"Output root:   {result.root}",
+        "",
+    ]
+    for f in result.files:
+        icon = _AGENT_RULES_ICONS.get(f.state, lambda: "·")()
+        lines.append(f"  {icon} {f.path}  [{f.state}]")
+
+    lines.append("")
+    if checking:
+        if result.drifted:
+            stale = [f.path for f in result.files if f.state in (STATE_STALE, STATE_MISSING)]
+            lines.append(_red(f"✗ Drift — {len(stale)} file(s) stale or missing the block."))
+            lines.append("  Regenerate: rac export --agent-rules")
+        else:
+            lines.append(_green("✓ In sync — every present target matches the corpus."))
+    else:
+        written = sum(1 for f in result.files if f.state in (STATE_WRITTEN, STATE_UPDATED))
+        if written:
+            lines.append(_green(f"✓ Wrote/updated {written} file(s)."))
+        else:
+            lines.append(_green("✓ All targets already in sync — nothing to write."))
     return "\n".join(lines)
