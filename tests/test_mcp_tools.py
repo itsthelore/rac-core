@@ -28,7 +28,7 @@ from rac.mcp.budget import (
 from rac.mcp.server import build_server
 from rac.output import json as json_output
 from rac.services.portfolio import build_portfolio_summary
-from rac.services.resolve import find_artifacts, resolve_artifact
+from rac.services.resolve import find_artifacts, find_decisions, resolve_artifact
 
 CORPUS = fixture_path("mcp", "corpus")
 DUPLICATE = fixture_path("mcp", "duplicate")
@@ -168,6 +168,107 @@ def test_search_snippet_match_truncates_as_whole_item():
         assert set(m) <= {"id", "type", "title", "path", "section", "snippet"}
         if "snippet" in m or "section" in m:
             assert "section" in m and "snippet" in m
+
+
+# --- find_decisions (v0.21.16, ADR-067) --------------------------------------
+
+
+# A live and a retired decision sharing a topic token, so the live filter is the
+# only thing that can separate them — pins the boundary, not just the search.
+_LIVE_DECISION = """---
+schema_version: 1
+id: RAC-FD0000000001
+type: decision
+---
+# Vault encryption policy
+
+## Status
+
+Accepted
+
+## Context
+
+Secrets need encryption at rest.
+
+## Decision
+
+Encrypt the vault with envelope keys.
+
+## Consequences
+
+Reads decrypt on access.
+"""
+
+_RETIRED_DECISION = """---
+schema_version: 1
+id: RAC-FD0000000002
+type: decision
+---
+# Old vault approach
+
+## Status
+
+Superseded
+
+## Context
+
+An earlier vault design we replaced.
+
+## Decision
+
+Store the vault in plaintext.
+
+## Consequences
+
+Replaced.
+"""
+
+
+def _two_decision_corpus(tmp_path) -> str:
+    root = tmp_path / "rac"
+    (root / "decisions").mkdir(parents=True)
+    (root / "decisions" / "live.md").write_text(_LIVE_DECISION, encoding="utf-8")
+    (root / "decisions" / "old.md").write_text(_RETIRED_DECISION, encoding="utf-8")
+    return str(root)
+
+
+def test_find_decisions_shape_matches_search_contract():
+    # The payload is the search contract plus the additive live-filter marker
+    # (ADR-007): same keys search_artifacts returns, with type pinned to decision.
+    payload = call(CORPUS, "find_decisions", {"topic": "event"})
+    assert {"schema_version", "query", "type", "match_count", "matches"} <= set(payload)
+    assert payload["type"] == "decision"
+    assert payload["filter"] == "live-decisions"
+
+
+def test_find_decisions_returns_live_decision_for_topic():
+    # The fixture decision ("Use an Event Bus") is Accepted, so it is returned.
+    payload = call(CORPUS, "find_decisions", {"topic": "event"})
+    assert DEC in [m["id"] for m in payload["matches"]]
+
+
+def test_find_decisions_excludes_retired(tmp_path):
+    root = _two_decision_corpus(tmp_path)
+    payload = call(root, "find_decisions", {"topic": "vault"})
+    ids = [m["id"] for m in payload["matches"]]
+    assert "RAC-FD0000000001" in ids
+    assert "RAC-FD0000000002" not in ids  # Superseded — excluded
+
+
+def test_find_decisions_matches_service_one_source_of_truth(tmp_path):
+    # The tool serializes exactly what the find_decisions service returns, plus
+    # the additive filter marker — no second retrieval path (ADR-031).
+    root = _two_decision_corpus(tmp_path)
+    payload = call(root, "find_decisions", {"topic": "vault"})
+    service = find_decisions(root, "vault").to_dict()
+    assert {k: v for k, v in payload.items() if k != "filter"} == service
+
+
+def test_find_decisions_empty_topic_is_not_an_error():
+    payload = call(CORPUS, "find_decisions", {"topic": "no-such-token"})
+    assert payload["match_count"] == 0
+    assert payload["matches"] == []
+    assert "error" not in payload
 
 
 # --- get_related -------------------------------------------------------------

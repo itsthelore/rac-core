@@ -1,11 +1,12 @@
 """Guide server wiring — factory, CLI registration, exit codes (v0.10.0).
 
 Covers the construction and CLI surface of ``rac mcp``: that the factory builds
-a server with the four pinned tools and verbatim descriptions, that the
+a server with the pinned read tools and verbatim descriptions, that the
 subcommand is registered and defaults ``--root`` to the current directory, and
 that a bad ``--root`` exits with the usage code without ever starting the
 server. The tool *contracts* (output shapes, truncation, errors) live in
-``test_mcp_tools``.
+``test_mcp_tools``. v0.21.16 adds ``find_decisions`` — the live decision query
+(ADR-067) — to the surface.
 """
 
 from __future__ import annotations
@@ -22,8 +23,15 @@ from rac.mcp.server import build_server, run_server
 
 CORPUS = fixture_path("mcp", "corpus")
 
-# The exact four tool names the surface pins (ADR-030); order-independent.
-EXPECTED_TOOLS = {"get_artifact", "search_artifacts", "get_related", "get_summary"}
+# The exact tool names the surface pins (ADR-030); order-independent. The four
+# original read tools plus find_decisions (v0.21.16, ADR-067).
+EXPECTED_TOOLS = {
+    "get_artifact",
+    "search_artifacts",
+    "find_decisions",
+    "get_related",
+    "get_summary",
+}
 
 
 def _tools(root: str):
@@ -31,7 +39,7 @@ def _tools(root: str):
     return {t.name: t for t in asyncio.run(server.list_tools())}
 
 
-def test_factory_registers_exactly_the_four_tools():
+def test_factory_registers_exactly_the_pinned_tools():
     assert set(_tools(CORPUS)) == EXPECTED_TOOLS
 
 
@@ -44,6 +52,7 @@ def test_tool_descriptions_ship_verbatim():
     tools = _tools(CORPUS)
     assert tools["get_artifact"].description == mcp_server.DESC_GET_ARTIFACT
     assert tools["search_artifacts"].description == mcp_server.DESC_SEARCH_ARTIFACTS
+    assert tools["find_decisions"].description == mcp_server.DESC_FIND_DECISIONS
     assert tools["get_related"].description == mcp_server.DESC_GET_RELATED
     assert tools["get_summary"].description == mcp_server.DESC_GET_SUMMARY
 
@@ -55,6 +64,11 @@ def test_descriptions_name_the_trigger_moment():
     assert "Call this before designing or implementing" in mcp_server.DESC_SEARCH_ARTIFACTS
     assert "Call this after retrieving an artifact" in mcp_server.DESC_GET_RELATED
     assert "Call this once at the start of a session" in mcp_server.DESC_GET_SUMMARY
+    # find_decisions must fire on the "what did we decide / is X ruled out"
+    # prompts the roadmap names, and must not claim a verdict (ADR-067).
+    assert "what did we decide about X" in mcp_server.DESC_FIND_DECISIONS
+    assert "is X ruled out" in mcp_server.DESC_FIND_DECISIONS
+    assert "judge for yourself" in mcp_server.DESC_FIND_DECISIONS
 
 
 def test_cli_registers_the_mcp_subcommand():
