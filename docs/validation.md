@@ -95,6 +95,27 @@ A worked example of the output is checked in at
 `error` (an out-of-enum decision status), two recommended-section `warning`s, and
 a line-anchored `ambiguous-verb` finding (note the `region.startLine`).
 
+### Relationship and review findings (`--sarif`)
+
+The same SARIF envelope is emitted by the two other repository-level checks, so a
+CI gate can surface cross-artifact integrity and review findings inline alongside
+validation (v0.21.13):
+
+```bash
+rac relationships rac/ --validate --sarif > relationships.sarif
+rac review rac/ --sarif > review.sarif
+```
+
+- `rac relationships --validate --sarif` annotates each broken, ambiguous,
+  self-referencing, retired-target (superseded), wrong-type, cyclic, or
+  duplicate-identifier finding on the referencing artifact. Referential-integrity
+  and graph-shape breakages map to `error`; advisory findings (self-reference,
+  unsupported edge, retired-target reference) map to `warning`. `--sarif` requires
+  `--validate`, and the exit code is unchanged: `1` when any finding is present.
+- `rac review --sarif` annotates each prioritized finding with its suggested
+  action in the message; the advisory `info` severity maps to the SARIF `note`
+  level. The exit code is unchanged: `1` when a priority 1–2 finding remains.
+
 ## Running in CI (GitHub Action)
 
 A composite GitHub Action wraps `rac validate --sarif` and uploads the result to
@@ -133,6 +154,37 @@ tighten over time.
 
 (The Watchkeeper action at the repository root is the complementary PR-review
 surface — see [Watchkeeper](watchkeeper.md).)
+
+### The full PR gate (validate + relationships + review)
+
+To carry the whole contract into one required check, the `pr-gate-action` runs
+`rac validate`, `rac relationships --validate`, and `rac review` together,
+uploads all three SARIF documents to Code Scanning, and fails on the worst exit
+code (v0.21.13). It is the same thin wrapper — the engine's exit codes decide
+what is blocking, the action computes nothing ([ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)):
+
+```yaml
+# .github/workflows/rac.yml
+name: RAC
+on: [pull_request]
+permissions:
+  contents: read
+  security-events: write          # required to upload SARIF to Code Scanning
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tcballard/requirements-as-code/pr-gate-action@v0
+        with:
+          path: rac/
+```
+
+Inputs mirror `validate-action`: `path` (default `rac`), `upload-sarif` (default
+`true`), `sarif-dir` (default `rac-sarif`, one file per check), `rac-version`,
+and `install-from` (`pypi` or `source`). A reference that points at a missing or
+retired decision fails the gate with an inline annotation matching
+`rac relationships --validate`.
 
 ## See also
 
