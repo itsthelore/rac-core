@@ -6,6 +6,7 @@ Commands:
     rac stats <directory> [--json]
     rac ingest <file> [-o OUT | --stdout] [--force] [--json]
     rac inspect <file.md | -> [--json]
+    rac route <prompt-file | -> [--threshold N] [--json]
     rac improve <file.md | -> [--json | --template]
     rac schema [--list] [type] [--json | --template]
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
@@ -45,7 +46,8 @@ Exit codes:
        --html Portal file or --okf bundle written, an empty corpus
        included; watchkeeper
        comparison with nothing requiring attention under the chosen
-       --fail-on policy, always with --fail-on none)
+       --fail-on policy, always with --fail-on none; route recommendation
+       produced — local or cloud is a valid outcome)
     1  validate: errors found; stats: no valid known artifacts; ingest:
        conversion failed; relationships --validate: broken/ambiguous/self
        references or duplicate identifiers found; review: invalid artifacts
@@ -53,7 +55,8 @@ Exit codes:
        template missing (broken installation) or malformed repository config;
        init: established key conflicts with the requested one; resolve:
        artifact not found or duplicate ID; migrate: malformed repository
-       config or ID generation exhausted; skill install: any target file
+       config or ID generation exhausted; route: malformed repository config;
+       skill install: any target file
        already exists (never overwritten; no-name installs refuse
        all-or-nothing) or packaged skill missing (broken installation);
        watchkeeper: review recommended (--fail-on error, the default) or
@@ -133,6 +136,7 @@ from rac.services.resolve import (
 )
 from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
 from rac.services.revisions import NotAGitRepository, RevisionNotFound
+from rac.services.route import route_file, route_text
 from rac.services.skill import SkillFileExists, install_skills
 from rac.services.stats import collect_stats
 from rac.services.validate import validate_directory, validate_product
@@ -307,6 +311,31 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     else:
         print(outputs.render_inspect_human(inspection))
     # A completed inspection always succeeds — Unknown is a valid outcome.
+    return EXIT_OK
+
+
+def cmd_route(args: argparse.Namespace) -> int:
+    if args.threshold is not None and not 0.0 <= args.threshold <= 1.0:
+        print("rac: --threshold must be a number between 0.0 and 1.0", file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        if args.prompt == "-":
+            result = route_text(sys.stdin.read(), start_dir=".", threshold=args.threshold)
+        else:
+            path = Path(args.prompt)
+            if not path.is_file():
+                print(f"rac: file not found: {args.prompt}", file=sys.stderr)
+                return EXIT_USAGE
+            result = route_file(args.prompt, threshold=args.threshold)
+    except MalformedRepositoryConfig as exc:
+        print(f"rac: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION_FAILED
+    if args.json:
+        print(outputs.render_route_json(result))
+    else:
+        print(outputs.render_route_human(result))
+    # A completed routing recommendation always succeeds — RAC stops here; the
+    # caller invokes the model (ADR-068).
     return EXIT_OK
 
 
@@ -973,6 +1002,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_inspect.set_defaults(func=cmd_inspect)
+
+    p_route = sub.add_parser(
+        "route",
+        help="Score a prompt's complexity and recommend a local or cloud model.",
+        parents=[version_parent],
+    )
+    p_route.add_argument(
+        "prompt",
+        help="A prompt file, or '-' to read the prompt from stdin.",
+    )
+    p_route.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Override the routing threshold (0.0-1.0) for this run "
+        "(default: .rac/config.yaml routing.threshold, else 0.5).",
+    )
+    p_route.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_route.set_defaults(func=cmd_route)
 
     p_improve = sub.add_parser(
         "improve",

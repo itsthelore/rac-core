@@ -32,6 +32,7 @@ from rac.services.relationships import (
 )
 from rac.services.resolve import find_artifacts, resolve_artifact
 from rac.services.review import build_review
+from rac.services.route import route_file, route_text
 from rac.services.stats import collect_stats
 from rac.services.validate import validate_directory, validate_product
 from rac.services.watchkeeper import build_watchkeeper_report
@@ -58,6 +59,8 @@ __all__ = [
     "find_artifacts",
     "resolve_artifact",
     "build_review",
+    "route_file",
+    "route_text",
     "collect_stats",
     "validate_directory",
     "validate_product",

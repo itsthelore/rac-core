@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
 from rac.core.classification import CONFIDENCE_THRESHOLD, TypeScore
+from rac.core.complexity import FEATURE_ORDER, ComplexityScore
 from rac.core.hooks import HookSpec
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
@@ -463,6 +464,22 @@ def render_inspect_verbose(result: InspectionResult, scores: list[TypeScore]) ->
     )
     if result.type == "unknown":
         lines.append(f"(below the {CONFIDENCE_THRESHOLD:.0%} threshold → Unknown)")
+    return "\n".join(lines)
+
+
+def render_route_human(result: ComplexityScore) -> str:
+    """Lead with the recommendation and score, then the contributing features."""
+    rec = result.recommendation.upper()
+    rec_line = _green(rec) if result.recommendation == "local" else _red(rec)
+    lines = [
+        _bold("Recommended Model: ") + rec_line,
+        f"Complexity Score: {result.score:.2f}  (threshold {result.threshold:.2f})",
+        "",
+        _bold("Contributing Features:"),
+    ]
+    lines.extend(
+        f"  {name.replace('_', ' ').title()}: {result.features[name]}" for name in FEATURE_ORDER
+    )
     return "\n".join(lines)
 
 
