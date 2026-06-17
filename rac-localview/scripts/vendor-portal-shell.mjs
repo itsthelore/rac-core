@@ -15,7 +15,7 @@
  * tree. The Python drift-guard test re-implements it exactly, so the
  * algorithm is normative:
  *
- *   File set (paths relative to lore-web/, POSIX separators):
+ *   File set (paths relative to rac-localview/, POSIX separators):
  *     - src/viewer/** recursively, EXCLUDING src/viewer/sample/
  *     - src/components/** recursively
  *     - src/styles/** recursively
@@ -99,8 +99,8 @@ if (!doctypeRe.test(shell)) {
   process.exit(1);
 }
 const provenanceComment =
-  `<!-- Portal shell vendored from lore-web @ ${commit}; ` +
-  'rebuild: cd lore-web && npm run vendor:shell -->';
+  `<!-- Portal shell vendored from rac-localview @ ${commit}; ` +
+  'rebuild: cd rac-localview && npm run vendor:shell -->';
 const vendoredShell = shell.replace(
   doctypeRe,
   (doctype) => `${doctype}\n${provenanceComment}`,
@@ -118,7 +118,7 @@ const provenance = {
   lore_web_commit: commit,
   shell_sha256: shellSha256,
   viewer_source_sha256: viewerSourceSha256,
-  vendored_with: 'lore-web/scripts/vendor-portal-shell.mjs',
+  vendored_with: 'rac-localview/scripts/vendor-portal-shell.mjs',
 };
 const provenancePath = resolve(portalDir, 'provenance.json');
 writeFileSync(provenancePath, JSON.stringify(provenance, null, 2) + '\n');

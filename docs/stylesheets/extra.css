@@ -1,9 +1,9 @@
 /*
- * Lore docs-site theme — translates the lore-web design system
- * (rac/.. lore-web/src/styles/tokens.css) onto MkDocs Material's slate
+ * Lore docs-site theme — translates the rac-localview design system
+ * (rac/.. rac-localview/src/styles/tokens.css) onto MkDocs Material's slate
  * scheme, and styles the custom splash home (overrides/home.html).
  *
- * Five rules carried over from lore-web/DESIGN.md:
+ * Five rules carried over from rac-localview/DESIGN.md:
  *   1. Three surfaces, warm near-black, never pure black.
  *   2. One hue dominates: the lantern amber. Teal/green are semantic only.
  *   3. Dashed borders = container chrome; solid borders = interactive.

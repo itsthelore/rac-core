@@ -12,7 +12,7 @@
  *      A deterministic 500-artifact synthetic corpus for performance
  *      testing. NOT committed.
  *
- * Schema: reconciled v1 — see lore-web/VIEWER_CONTRACT.md. Matches the
+ * Schema: reconciled v1 — see rac-localview/VIEWER_CONTRACT.md. Matches the
  * shape of `rac export --json`: string schema_version, opaque artifact
  * ids with human aliases, source paths, authored-case statuses, and
  * untyped `relates-to` edges only.

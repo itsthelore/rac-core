@@ -6,7 +6,7 @@ resolution — into one deterministic :class:`CorpusExport` payload for the
 Portal, the read-only HTML viewer (ADR-014: artifacts stay viewer-agnostic;
 exports are how external viewers consume a corpus; ADR-012: export lives in
 the open-source core). The payload shape is a stable public contract
-(ADR-007), reconciled with ``lore-web/VIEWER_CONTRACT.md`` v1.
+(ADR-007), reconciled with ``rac-localview/VIEWER_CONTRACT.md`` v1.
 
 Determinism (ADR-002): no timestamps, no environment-dependent fields,
 artifacts in sorted-path order, relationships sorted by ``(from, to)`` —

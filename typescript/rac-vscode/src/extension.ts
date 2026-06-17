@@ -519,7 +519,7 @@ async function refreshWorkspaceDiagnostics(folder: vscode.WorkspaceFolder): Prom
 // --- corpus visualization (RAC Explorer webview) ----------------------------
 
 // `rac export --html` already produces a self-contained Portal viewer (the
-// lore-web build with the corpus injected, offline, no network). The command
+// rac-localview build with the corpus injected, offline, no network). The command
 // renders it in a webview; re-running it refreshes. Graph ↔ editor sync
 // (v0.21.7): the vendored viewer posts `ready`/`open-artifact` to this host
 // and listens for `reveal-artifact`, so selecting an artifact opens its file
