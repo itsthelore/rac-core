@@ -56,10 +56,17 @@ here rather than after publishing.
 
 ### Initiative 3 — Deprecate and remove `rac route` from RAC
 
-Once Wayfinder ships and is verified, remove `rac route` and its supporting code
-(`core/complexity.py`, `services/route.py`, the routing config loader in
-`services/init.py`, the route renderers, `tests/test_route.py`, and the SDK
-exports) from RAC, with a deprecation note pointing users to Wayfinder, following
+**Done.** Now that Wayfinder exists in the `wayfinder/` subproject at full parity,
+the `rac route` prototype and all its supporting code (`core/complexity.py`,
+`services/route.py`, the routing config loader in `services/init.py`, the route
+renderers, the SDK exports, `tests/test_route.py`, the `route` CI battery, and the
+`docs/cli.md` section) have been removed from RAC by restoring those files to their
+pre-route state. The routing corpus artifacts (this roadmap, ADR-068, ADR-069, and
+the `prompt-complexity-routing` design) are kept as the historical record. What
+remains here is publishing Wayfinder to its own `itsthelore/wayfinder` repository.
+
+The original plan: once Wayfinder ships and is verified, remove `rac route` and its
+supporting code, with a deprecation note pointing users to Wayfinder, following
 ADR-064's history-preserving cutover discipline.
 
 ## Constraints

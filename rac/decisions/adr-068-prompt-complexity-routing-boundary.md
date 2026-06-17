@@ -10,8 +10,10 @@ type: decision
 Proposed
 
 The product home for this capability is now Wayfinder, a separate product
-(ADR-069). This boundary carries into Wayfinder unchanged; `rac route` remains in
-RAC only until Wayfinder ships.
+(ADR-069), and the in-RAC `rac route` prototype this boundary governed has since
+been **removed** from RAC. The boundary carries into Wayfinder unchanged (its
+WF-ADR-0001/0004); this ADR is retained as the historical record of why the line
+was drawn.
 
 ## Category
 

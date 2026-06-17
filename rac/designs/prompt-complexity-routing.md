@@ -7,6 +7,11 @@ type: design
 
 ## Context
 
+> **Historical note.** This design described the in-RAC `rac route` prototype,
+> which has since been **removed** from RAC: the capability now lives in the
+> separate Wayfinder product (ADR-069), where this design was carried forward and
+> extended. This document is retained as the record of the original approach.
+
 This design is the *how* for the `complexity-based-model-routing` future
 roadmap item: a deterministic way to score a prompt's complexity and recommend
 a `local` or `cloud` model, without RAC ever calling a model. The boundary it

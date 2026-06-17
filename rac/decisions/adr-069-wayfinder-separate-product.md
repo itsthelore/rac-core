@@ -54,7 +54,10 @@ dependency on it.**
 - The in-RAC `rac route` stays for now and is **earmarked for removal** once
   Wayfinder ships, following ADR-064's history-preserving safety contract (never
   delete until the capability lives elsewhere). The extraction is sequenced in the
-  `wayfinder-extraction` roadmap.
+  `wayfinder-extraction` roadmap. *(Update: now done — with Wayfinder at parity in
+  the `wayfinder/` subproject, the `rac route` prototype has been removed from RAC;
+  this ADR and its siblings are kept as the record. See `wayfinder-extraction`
+  Initiative 3.)*
 - The relationship to RAC is heritage only: Wayfinder was prototyped here, and its
   scoring shape was inspired by `classification.py`'s `points / ceiling`
   normalization. No shipped runtime dependency remains.

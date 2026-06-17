@@ -7,11 +7,13 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-Unscheduled — captured as future intent, not yet on a release. The product home
-for this capability is now Wayfinder, a separate product (ADR-069); the
-`wayfinder-extraction` roadmap sequences moving it out of RAC.
+Achieved by spinning the capability out as the separate **Wayfinder** product
+(ADR-069), rather than shipping it inside RAC. The in-RAC `rac route` prototype
+that explored this has since been removed (its code, tests, CI battery, and
+`docs/cli.md` section); this item is retained as the historical record of the
+exploration. The boundary it established lives on in Wayfinder.
 
 ## Context
 
