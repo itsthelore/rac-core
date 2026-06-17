@@ -6,7 +6,7 @@
       "tool": {
         "driver": {
           "name": "rac",
-          "informationUri": "https://github.com/tcballard/requirements-as-code",
+          "informationUri": "https://github.com/itsthelore/rac-core",
           "version": "0.15.2",
           "rules": [
             {

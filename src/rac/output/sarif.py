@@ -34,7 +34,7 @@ from rac.services.review import ReviewReport
 from rac.services.validate import DirectoryValidation
 
 _SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
-_INFORMATION_URI = "https://github.com/tcballard/requirements-as-code"
+_INFORMATION_URI = "https://github.com/itsthelore/rac-core"
 
 # SARIF `level` is a closed set; RAC severities map onto it. Suppressed
 # (``off``) findings never reach here — they are dropped before rendering.

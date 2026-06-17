@@ -23,7 +23,7 @@ The agent calls Lore, finds your soft-delete decision, cites it by ID, and propo
 
 The server exposes four read-only tools: `get_artifact`, `search_artifacts`, `get_related`, `get_summary`. It never writes to your repo.
 
-▶ **Full walkthrough + runnable example: [examples/guide/](https://github.com/tcballard/requirements-as-code/tree/main/examples/guide)**
+▶ **Full walkthrough + runnable example: [examples/guide/](https://github.com/itsthelore/rac-core/tree/main/examples/guide)**
 
 ## Why this works
 
@@ -99,7 +99,7 @@ Lore asks you to trust it with your product knowledge, so it holds itself to the
 
 - **The MCP server is read-only by construction.** It cannot create, modify, or delete files in your repo — enforced in code and verified by tests, not by convention.
 - **No AI in the core.** Retrieval is deterministic: the same repo state and the same query always return the same result. The reasoning is your agent's job; Lore's job is to hand it the facts.
-- **It dogfoods itself.** Lore's own planning corpus under [`rac/`](https://github.com/tcballard/requirements-as-code/tree/main/rac) is validated by RAC in CI — if the tool's rules break the tool's own artifacts, the build fails.
+- **It dogfoods itself.** Lore's own planning corpus under [`rac/`](https://github.com/itsthelore/rac-core/tree/main/rac) is validated by RAC in CI — if the tool's rules break the tool's own artifacts, the build fails.
 - **Output is a contract.** Golden tests pin CLI and MCP output; any change to what the tools return is reviewed as a product change.
 - **Telemetry is opt-in twice over.** Local recording needs an explicit `--telemetry` flag and never includes your arguments or repository content. Remote sharing is a separate, explicit consent (`rac telemetry on`, or one honest question at `rac init`): one anonymous daily ping — a random install id, the version, and an active-repo count — never paths, queries, or content. `rac telemetry status` shows exactly what is shared, the network surface is a single readable module, and ADR-041 records the decision.
 
@@ -116,6 +116,6 @@ The JSON payload is a stable contract (artifacts with ids, aliases, status, rend
 
 ---
 
-Lore is early and evolving quickly. The MCP server ships today; feedback from teams running agents in anger is exactly what shapes what comes next. Contributions, ideas, and experiments welcome — see [CONTRIBUTING.md](https://github.com/tcballard/requirements-as-code/blob/main/CONTRIBUTING.md).
+Lore is early and evolving quickly. The MCP server ships today; feedback from teams running agents in anger is exactly what shapes what comes next. Contributions, ideas, and experiments welcome — see [CONTRIBUTING.md](https://github.com/itsthelore/rac-core/blob/main/CONTRIBUTING.md).
 
-[GitHub repository](https://github.com/tcballard/requirements-as-code) · [MIT license](https://github.com/tcballard/requirements-as-code/blob/main/LICENSE)
+[GitHub repository](https://github.com/itsthelore/rac-core) · [MIT license](https://github.com/itsthelore/rac-core/blob/main/LICENSE)

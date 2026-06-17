@@ -5,7 +5,7 @@
 #
 #   jobs:
 #     watchkeeper:
-#       uses: tcballard/requirements-as-code/.github/workflows/watchkeeper.yml@<tag>
+#       uses: itsthelore/rac-core/.github/workflows/watchkeeper.yml@<tag>
 #       with:
 #         path: rac
 #
@@ -60,7 +60,7 @@ jobs:
       # Reusable workflows run in the caller's repository, so the action is
       # referenced by full path. Update this ref when cutting a release tag;
       # until the first v0.12.x release it tracks main.
-      - uses: tcballard/requirements-as-code@main
+      - uses: itsthelore/rac-core@main
         with:
           path: ${{ inputs.path }}
           base: ${{ inputs.base }}

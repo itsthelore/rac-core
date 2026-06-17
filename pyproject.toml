@@ -28,9 +28,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/tcballard/requirements-as-code"
-Repository = "https://github.com/tcballard/requirements-as-code"
-Issues = "https://github.com/tcballard/requirements-as-code/issues"
+Homepage = "https://github.com/itsthelore/rac-core"
+Repository = "https://github.com/itsthelore/rac-core"
+Issues = "https://github.com/itsthelore/rac-core/issues"
 
 [project.optional-dependencies]
 # Document ingestion (rac ingest). Optional so the core install stays light, and

@@ -5,7 +5,7 @@
 # severity policy live in the package (ADR-015 / ADR-053); the action never
 # reinterprets findings. The Watchkeeper action lives at the repository root;
 # this validate action is referenced as
-# `uses: tcballard/requirements-as-code/validate-action@<ref>`.
+# `uses: itsthelore/rac-core/validate-action@<ref>`.
 name: "RAC validate"
 description: >-
   Validate a requirements-as-code (RAC) corpus and surface findings on the pull
