@@ -29,7 +29,7 @@ Pointing `rac validate` at a legacy corpus for the first time can surface many
 pre-existing findings at once. Rather than fail the build on all of them, a
 repository can downgrade or silence specific findings in its committed
 `.rac/config.yaml`, then tighten the gate over time. The decision behind this is
-[ADR-053](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-053-validation-severity-overrides.md).
+[ADR-053](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-053-validation-severity-overrides.md).
 Overrides are **repository-wide**: a downgrade applies to `rac review`,
 `rac watchkeeper`, and `rac portfolio` as well as `rac validate`.
 
@@ -74,7 +74,7 @@ cleaned up.
 document covering core validation findings and OKF conformance findings, so a CI
 job can upload it and have GitHub Code Scanning annotate findings inline on a
 pull request. The decision behind this is
-[ADR-054](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-054-sarif-validation-output.md).
+[ADR-054](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-054-sarif-validation-output.md).
 
 ```bash
 rac validate rac/ --sarif > rac.sarif
@@ -121,7 +121,7 @@ rac review rac/ --sarif > review.sarif
 A composite GitHub Action wraps `rac validate --sarif` and uploads the result to
 GitHub Code Scanning, so findings annotate the pull request inline. The decision
 behind it is
-[ADR-058](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-058-validation-github-action.md);
+[ADR-058](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-058-validation-github-action.md);
 it is a thin wrapper — the `rac` CLI stays the source of truth.
 
 ```yaml
@@ -136,7 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: tcballard/requirements-as-code/validate-action@v0
+      - uses: itsthelore/rac-core/validate-action@v0
         with:
           path: rac/
 ```
@@ -163,7 +163,7 @@ under the corpus **enforcement policy**, and emits one combined SARIF document
 (v0.21.14). The `pr-gate-action` runs it and uploads that single SARIF to Code
 Scanning under one category (`rac-gate`), failing when any finding is *blocking*.
 It is the same thin wrapper — the engine decides what is blocking, the action
-computes nothing ([ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)):
+computes nothing ([ADR-063](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)):
 
 ```yaml
 # .github/workflows/rac.yml
@@ -177,7 +177,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: tcballard/requirements-as-code/pr-gate-action@v0
+      - uses: itsthelore/rac-core/pr-gate-action@v0
         with:
           path: rac/
 ```

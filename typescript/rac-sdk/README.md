@@ -1,4 +1,4 @@
-# @rac/sdk
+# @itsthelore/rac-sdk
 
 A thin TypeScript client for [RAC](../../README.md) (requirements-as-code).
 
@@ -23,13 +23,13 @@ any Node program (custom CI gates, dashboards, scripts).
 ## Install
 
 ```sh
-npm install @rac/sdk
+npm install @itsthelore/rac-sdk
 ```
 
 ## Usage
 
 ```ts
-import { RacClient, RacNotFoundError, isResolved } from "@rac/sdk";
+import { RacClient, RacNotFoundError, isResolved } from "@itsthelore/rac-sdk";
 
 const rac = new RacClient({ cwd: workspaceRoot }); // cwd resolves .rac/config.yaml
 

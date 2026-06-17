@@ -8,8 +8,8 @@ quickly — contributions, ideas, and experiments are welcome.
 Requires **Python 3.11+**.
 
 ```bash
-git clone https://github.com/tcballard/requirements-as-code.git
-cd requirements-as-code
+git clone https://github.com/itsthelore/rac-core.git
+cd rac-core
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'

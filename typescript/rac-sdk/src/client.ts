@@ -134,7 +134,7 @@ export class RacClient {
     return this.json<PortfolioStats>(["stats", directory, "--json"]);
   }
 
-  /** `rac export <dir> --json` — the corpus export payload (the lore-web viewer shape). */
+  /** `rac export <dir> --json` — the corpus export payload (the rac-localview viewer shape). */
   exportCorpus(directory: string, options: RecursiveOptions = {}): Promise<CorpusExport> {
     return this.json<CorpusExport>(
       this.withTopLevel(["export", directory, "--json"], options),
@@ -200,7 +200,7 @@ export class RacClient {
 
   /**
    * `rac export <dir> --html --out <path>` — write the self-contained Portal
-   * HTML (the lore-web viewer with the corpus injected) to `outPath`. Resolves
+   * HTML (the rac-localview viewer with the corpus injected) to `outPath`. Resolves
    * once written; throws {@link RacExecError} on a non-zero exit.
    */
   async exportHtml(directory: string, outPath: string): Promise<void> {

@@ -1,7 +1,7 @@
 # RAC for VS Code / Cursor
 
 Inline validation for [RAC](../../README.md) (requirements-as-code) artifacts,
-powered by the [`@rac/sdk`](../rac-sdk/README.md) thin client.
+powered by the [`@itsthelore/rac-sdk`](../rac-sdk/README.md) thin client.
 
 Open or save a RAC artifact (a Markdown file with `schema_version` frontmatter)
 and validation findings appear as diagnostics — the same findings `rac validate`
@@ -72,7 +72,7 @@ Content-Security-Policy (no network, no remote code, no eval).
 ## Develop
 
 ```sh
-npm install        # links @rac/sdk from ../rac-sdk (build it first: cd ../rac-sdk && npm run build)
+npm install        # links @itsthelore/rac-sdk from ../rac-sdk (build it first: cd ../rac-sdk && npm run build)
 npm run check-types
 npm run compile    # esbuild → dist/extension.js
 ```

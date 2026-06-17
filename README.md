@@ -3,12 +3,12 @@
 <!-- mcp-name: io.github.tcballard/lore -->
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/tcballard/requirements-as-code/main/rac/assets/images/lore-header-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/tcballard/requirements-as-code/main/rac/assets/images/lore-header-light.png">
-  <img alt="Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing." src="https://raw.githubusercontent.com/tcballard/requirements-as-code/main/rac/assets/images/lore-header-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-light.png">
+  <img alt="Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing." src="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-light.png">
 </picture>
 
-[![CI](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml/badge.svg)](https://github.com/tcballard/requirements-as-code/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Python](https://img.shields.io/pypi/pyversions/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![License: MIT](https://img.shields.io/pypi/l/requirements-as-code)](https://github.com/tcballard/requirements-as-code/blob/main/LICENSE)
+[![CI](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml/badge.svg)](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Python](https://img.shields.io/pypi/pyversions/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![License: MIT](https://img.shields.io/pypi/l/requirements-as-code)](https://github.com/itsthelore/rac-core/blob/main/LICENSE)
 
 > **Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.**
 
@@ -81,15 +81,15 @@ Google's Open Knowledge Format (OKF) standardises the *carrier* — a Git tree o
 
 ## Documentation
 
-**Full documentation: <https://tcballard.github.io/requirements-as-code/>**
+**Full documentation: <https://itsthelore.github.io/rac-core/>**
 
-- [Quickstart](https://tcballard.github.io/requirements-as-code/quickstart/) — install and author your first artifact
-- [MCP server](https://tcballard.github.io/requirements-as-code/mcp/) — tools, client configuration, examples
-- [CLI reference](https://tcballard.github.io/requirements-as-code/cli/) — every command, flag, and exit code
+- [Quickstart](https://itsthelore.github.io/rac-core/quickstart/) — install and author your first artifact
+- [MCP server](https://itsthelore.github.io/rac-core/mcp/) — tools, client configuration, examples
+- [CLI reference](https://itsthelore.github.io/rac-core/cli/) — every command, flag, and exit code
 
 ## Project status
 
-Lore is early and evolving quickly. The MCP server ships today. Contributions, ideas, and experiments welcome — see [CONTRIBUTING.md](https://github.com/tcballard/requirements-as-code/blob/main/CONTRIBUTING.md).
+Lore is early and evolving quickly. The MCP server ships today. Contributions, ideas, and experiments welcome — see [CONTRIBUTING.md](https://github.com/itsthelore/rac-core/blob/main/CONTRIBUTING.md).
 
 ## License
 

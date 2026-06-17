@@ -1,7 +1,7 @@
 /**
  * Typed bindings for the `rac … --json` contracts (ADR-007: additive,
  * `schema_version`-gated). These mirror the Python service result `to_dict()`
- * shapes and the `lore-web` viewer's export types; the client deserializes
+ * shapes and the `rac-localview` viewer's export types; the client deserializes
  * `rac` stdout into them without reinterpreting anything (ADR-063).
  */
 
@@ -214,7 +214,7 @@ export interface QuickstartResult extends InitResult {
   artifact: { type: string; path: string; id: string };
 }
 
-// --- rac export <dir> --json (the lore-web viewer payload) ------------------
+// --- rac export <dir> --json (the rac-localview viewer payload) ------------------
 
 export interface CorpusMeta {
   name: string;

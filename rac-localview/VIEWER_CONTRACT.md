@@ -166,7 +166,7 @@ file changes.
 `npm run vendor:shell` (`scripts/vendor-portal-shell.mjs`) builds the
 shell and commits it into the RAC package as
 `src/rac/templates/portal/lore-portal-shell.html` together with
-`provenance.json` (lore-web source commit, shell hash, viewer
+`provenance.json` (rac-localview source commit, shell hash, viewer
 source-tree hash). A drift-guard test on the Python side fails when the
 viewer source changes without re-vendoring; the normative hash
 algorithm is documented in `scripts/vendor-portal-shell.mjs`.

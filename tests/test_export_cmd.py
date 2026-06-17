@@ -3,7 +3,7 @@
 The export payload and the Portal HTML are public contracts (ADR-007, viewer
 contract v1): the JSON golden pins the payload byte-for-byte, the HTML test
 proves the file is exactly the vendored shell with the payload in its data
-seam, and the drift guard fails when the lore-web viewer source changes
+seam, and the drift guard fails when the rac-localview viewer source changes
 without re-vendoring (Initiative 2's mitigation).
 
 The golden lives here rather than in tests/test_golden.py because it needs a
@@ -32,7 +32,7 @@ from rac.services.export import build_corpus_export
 
 REPO_ROOT = Path(__file__).parent.parent
 GOLDEN = Path(__file__).parent / "golden" / "export_json.txt"
-LORE_WEB = REPO_ROOT / "lore-web"
+RAC_LOCALVIEW = REPO_ROOT / "rac-localview"
 
 # The empty data seam exactly as the shell-only viewer build emits it.
 SEAM = '<script type="application/json" id="lore-export"></script>'
@@ -267,9 +267,9 @@ def test_seam_missing_raises_and_cli_exits_2(monkeypatch, capsys):
 
 
 def test_viewer_source_drift_guard():
-    """Re-implements the normative hash from lore-web/scripts/vendor-portal-shell.mjs."""
-    if not LORE_WEB.is_dir():
-        pytest.skip("lore-web/ not present (installed-package context)")
+    """Re-implements the normative hash from rac-localview/scripts/vendor-portal-shell.mjs."""
+    if not RAC_LOCALVIEW.is_dir():
+        pytest.skip("rac-localview/ not present (installed-package context)")
 
     provenance = json.loads(
         (REPO_ROOT / "src/rac/templates/portal/provenance.json").read_text(encoding="utf-8")
@@ -280,27 +280,27 @@ def test_viewer_source_drift_guard():
         for p in base.rglob("*"):
             if not p.is_file():
                 continue
-            rel = p.relative_to(LORE_WEB).as_posix()
+            rel = p.relative_to(RAC_LOCALVIEW).as_posix()
             if any(rel == ex or rel.startswith(ex + "/") for ex in exclude):
                 continue
             out.append(rel)
         return out
 
     files = sorted(
-        collect(LORE_WEB / "src/viewer", exclude=("src/viewer/sample",))
-        + collect(LORE_WEB / "src/components")
-        + collect(LORE_WEB / "src/styles")
+        collect(RAC_LOCALVIEW / "src/viewer", exclude=("src/viewer/sample",))
+        + collect(RAC_LOCALVIEW / "src/components")
+        + collect(RAC_LOCALVIEW / "src/styles")
         + ["vite.config.viewer.ts", "scripts/build-viewer-artifact.mjs"]
     )
 
     digest = hashlib.sha256()
     for rel in files:
-        content = (LORE_WEB / rel).read_text(encoding="utf-8").replace("\r\n", "\n")
+        content = (RAC_LOCALVIEW / rel).read_text(encoding="utf-8").replace("\r\n", "\n")
         digest.update(rel.encode("utf-8"))
         digest.update(b"\0")
         digest.update(content.encode("utf-8"))
         digest.update(b"\0")
 
     assert digest.hexdigest() == provenance["viewer_source_sha256"], (
-        "viewer source changed — run `cd lore-web && npm run vendor:shell` and commit the result"
+        "viewer source changed — run `cd rac-localview && npm run vendor:shell` and commit it"
     )

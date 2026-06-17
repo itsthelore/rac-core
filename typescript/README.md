@@ -8,8 +8,8 @@ They version independently of the Python package.
 
 | Package | What it is |
 | --- | --- |
-| [`rac-sdk`](./rac-sdk) (`@rac/sdk`) | The thin Node client: `RacClient` over `rac … --json`, a `RacError` hierarchy, an injectable runner for tests. |
-| [`rac-vscode`](./rac-vscode) | The VS Code / Cursor extension: live validation, hover, and go-to-definition. Consumes `@rac/sdk`. |
+| [`rac-sdk`](./rac-sdk) (`@itsthelore/rac-sdk`) | The thin Node client: `RacClient` over `rac … --json`, a `RacError` hierarchy, an injectable runner for tests. |
+| [`rac-vscode`](./rac-vscode) | The VS Code / Cursor extension: live validation, hover, and go-to-definition. Consumes `@itsthelore/rac-sdk`. |
 
 ## Develop
 

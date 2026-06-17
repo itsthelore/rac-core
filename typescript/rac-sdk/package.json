@@ -1,9 +1,17 @@
 {
-  "name": "@rac/sdk",
+  "name": "@itsthelore/rac-sdk",
   "version": "0.1.0",
   "description": "Thin TypeScript client for RAC (requirements-as-code): typed access to the rac CLI's JSON contracts. Shells out to the installed rac binary; it never reimplements the engine (ADR-063).",
   "license": "MIT",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/itsthelore/rac-core.git",
+    "directory": "typescript/rac-sdk"
+  },
   "engines": {
     "node": ">=18"
   },

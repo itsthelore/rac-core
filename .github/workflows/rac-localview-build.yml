@@ -1,20 +1,20 @@
-name: Lore Web Build
+name: rac-localview Build
 
-# Builds the lore-web static surface to a CI artifact only. There is
+# Builds the rac-localview static surface to a CI artifact only. There is
 # deliberately NO publish or deploy step: GATE-1 — the site must not go
 # public until external-communications policy review is complete.
 on:
   pull_request:
     paths:
-      - "lore-web/**"
-      - ".github/workflows/lore-web-build.yml"
+      - "rac-localview/**"
+      - ".github/workflows/rac-localview-build.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: lore-web-build-${{ github.ref }}
+  group: rac-localview-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: lore-web
+        working-directory: rac-localview
     steps:
       - uses: actions/checkout@v5
 
@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: lore-web/package-lock.json
+          cache-dependency-path: rac-localview/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -61,6 +61,6 @@ jobs:
       - name: Upload site artifact
         uses: actions/upload-artifact@v6
         with:
-          name: lore-web-dist
-          path: lore-web/dist/
+          name: rac-localview-dist
+          path: rac-localview/dist/
           retention-days: 14

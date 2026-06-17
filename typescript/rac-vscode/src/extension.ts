@@ -1,7 +1,7 @@
 /**
  * RAC VS Code / Cursor extension.
  *
- * Wires the `@rac/sdk` thin client to the editor. All analysis stays in `rac`
+ * Wires the `@itsthelore/rac-sdk` thin client to the editor. All analysis stays in `rac`
  * (ADR-063); this extension maps its output into the editor:
  *
  *  - per-file validation diagnostics, live as you type (the unsaved buffer is
@@ -44,7 +44,7 @@ import {
   type ResolveResult,
   type ResolvedArtifact,
   type SchemaReference,
-} from "@rac/sdk";
+} from "@itsthelore/rac-sdk";
 
 import {
   CLAUDE_SETTINGS_RELPATH,
@@ -519,7 +519,7 @@ async function refreshWorkspaceDiagnostics(folder: vscode.WorkspaceFolder): Prom
 // --- corpus visualization (RAC Explorer webview) ----------------------------
 
 // `rac export --html` already produces a self-contained Portal viewer (the
-// lore-web build with the corpus injected, offline, no network). The command
+// rac-localview build with the corpus injected, offline, no network). The command
 // renders it in a webview; re-running it refreshes. Graph ↔ editor sync
 // (v0.21.7): the vendored viewer posts `ready`/`open-artifact` to this host
 // and listens for `reveal-artifact`, so selecting an artifact opens its file

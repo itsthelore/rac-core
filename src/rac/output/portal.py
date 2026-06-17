@@ -1,7 +1,7 @@
 """Portal HTML assembly — inject the export payload into the vendored shell.
 
 The Portal shell is a self-contained HTML viewer built from
-``lore-web/src/viewer/`` and committed as package data at
+``rac-localview/src/viewer/`` and committed as package data at
 ``rac.templates.portal`` together with its provenance manifest
 (roadmap v0.11.0, Initiative 2). It carries one empty data seam,
 
@@ -10,7 +10,7 @@ The Portal shell is a self-contained HTML viewer built from
 and ``render_export_html`` substitutes the export JSON into that element —
 nothing else in the file changes, so the result opens from ``file://`` with
 zero network requests (ADR-002 offline; data injection per
-``lore-web/VIEWER_CONTRACT.md``).
+``rac-localview/VIEWER_CONTRACT.md``).
 
 The serialized JSON is made ``<script>``-safe with two valid JSON escapes:
 ``</`` becomes ``<\\/`` (no premature ``</script>``) and ``<!--`` becomes
@@ -53,7 +53,7 @@ class PortalSeamMissing(RACError):
     def __init__(self) -> None:
         super().__init__(
             "packaged portal shell has no usable data seam "
-            f"({_SEAM}); re-vendor it: cd lore-web && npm run vendor:shell"
+            f"({_SEAM}); re-vendor it: cd rac-localview && npm run vendor:shell"
         )
 
 

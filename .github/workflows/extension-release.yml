@@ -43,8 +43,8 @@ jobs:
           python -m pip install .
 
       # ---- gate: the v0.21.9 test harness must pass before we package ----
-      - name: Viewer tests (lore-web)
-        working-directory: lore-web
+      - name: Viewer tests (rac-localview)
+        working-directory: rac-localview
         run: |
           npm ci
           npm test

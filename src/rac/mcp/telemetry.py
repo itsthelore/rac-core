@@ -57,7 +57,7 @@ MAX_LOG_BYTES = 1_000_000
 # Share flow (ADR-040): a prefilled new-issue URL against the repository's
 # usage-report issue form. Issue forms accept ``?field_id=value`` prefill;
 # the user's browser transmits, RAC never does.
-SHARE_ISSUE_URL = "https://github.com/tcballard/requirements-as-code/issues/new"
+SHARE_ISSUE_URL = "https://github.com/itsthelore/rac-core/issues/new"
 SHARE_TEMPLATE = "guide-usage-report.yml"
 SHARE_FIELD = "report"
 

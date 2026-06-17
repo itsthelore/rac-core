@@ -118,8 +118,8 @@ Corpus references
 This is the engine seam the generated Claude Code pre-edit hook pipes proposed
 content into; see [Agent integration](governance.md#agent-integration-context-supply-and-enforcement).
 Validation stays in `rac` — the hook computes nothing
-([ADR-067](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-067-agent-integration-boundary.md),
-[ADR-063](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)).
+([ADR-067](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-067-agent-integration-boundary.md),
+[ADR-063](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)).
 
 ---
 

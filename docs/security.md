@@ -15,12 +15,12 @@ a hosted service or a third-party certification (see [Scope](#scope-and-non-goal
 - **No network access.** `rac` reads and writes the local filesystem only. None
   of its analysis paths — validation, relationships, review, the unified gate,
   search, and export — open a socket. This is enforced as an architectural
-  invariant ([ADR-002](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-002-ai-optional.md)):
+  invariant ([ADR-002](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-002-ai-optional.md)):
   RAC is deterministic and AI-optional, so the core never depends on a remote
   call.
 - **No telemetry.** RAC collects no usage analytics in its default operation. The
   optional MCP server and any AI-assisted authoring are explicitly opt-in and
-  bring-your-own-credentials ([ADR-035](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-035-byo-ai-credentials.md));
+  bring-your-own-credentials ([ADR-035](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-035-byo-ai-credentials.md));
   nothing phones home on your behalf.
 - **Deterministic, local-only data flow.** The same corpus state yields
   byte-identical JSON and SARIF output, with no timestamps and stable ordering
@@ -50,7 +50,7 @@ RAC declares three runtime dependencies (`pyproject.toml`, `[project].dependenci
 | `mcp` | The optional Model Context Protocol server surface. |
 
 The full, machine-readable dependency list — including resolved versions — is the
-committed [`sbom.json`](https://github.com/tcballard/requirements-as-code/blob/main/sbom.json)
+committed [`sbom.json`](https://github.com/itsthelore/rac-core/blob/main/sbom.json)
 at the repository root.
 
 ## How to verify
@@ -99,5 +99,5 @@ offline posture is out of scope for the project (v0.21.14 Non-Goals).
 
 - [Governance](governance.md) — the `enforcement:` policy and `rac gate`.
 - [Validation](validation.md) — the write-time gate and SARIF output.
-- [ADR-002](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-002-ai-optional.md) — deterministic, AI-optional core.
-- [ADR-035](https://github.com/tcballard/requirements-as-code/blob/main/rac/decisions/adr-035-byo-ai-credentials.md) — bring-your-own AI credentials.
+- [ADR-002](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-002-ai-optional.md) — deterministic, AI-optional core.
+- [ADR-035](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-035-byo-ai-credentials.md) — bring-your-own AI credentials.
