@@ -24,7 +24,6 @@ is internal and may change without notice.
 from importlib.metadata import PackageNotFoundError, version
 
 from rac.core.classification import classify
-from rac.core.complexity import ComplexityScore, RoutingConfig, score_complexity
 from rac.core.markdown import parse, parse_file
 from rac.core.models import Issue, Product
 from rac.core.validation import has_errors, validate
@@ -51,8 +50,6 @@ from rac.services import (
     quickstart,
     relationships_from_corpus,
     resolve_artifact,
-    route_file,
-    route_text,
     summarize_relationships,
     validate_directory,
     validate_product,
@@ -78,12 +75,6 @@ __all__ = [
     "classify",
     "validate",
     "has_errors",
-    # Prompt-complexity routing (ADR-068) — score, never invoke a model.
-    "score_complexity",
-    "ComplexityScore",
-    "RoutingConfig",
-    "route_text",
-    "route_file",
     # Validation services.
     "validate_product",
     "validate_directory",

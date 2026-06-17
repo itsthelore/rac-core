@@ -20,11 +20,6 @@ from pathlib import Path
 
 import yaml
 
-from rac.core.complexity import (
-    DEFAULT_WEIGHTS,
-    FEATURE_ORDER,
-    RoutingConfig,
-)
 from rac.core.overrides import EMPTY, RULE_VALUES, TYPE_VALUES, SeverityOverrides
 from rac.errors import RACError
 
@@ -160,66 +155,6 @@ def load_overrides(start_dir: str) -> SeverityOverrides:
     rules = _parse_severity_map(config_path, section.get("rules"), "validation.rules", RULE_VALUES)
     types = _parse_severity_map(config_path, section.get("types"), "validation.types", TYPE_VALUES)
     return SeverityOverrides(rules=rules, types=types)
-
-
-def load_routing_config(start_dir: str) -> RoutingConfig:
-    """Read the ``routing`` decision boundary from the nearest config (ADR-068).
-
-    Returns :data:`~rac.core.complexity.DEFAULT_CONFIG`'s values when there is no
-    config file or no ``routing`` section. ``routing.threshold`` must be a number
-    in ``0.0 – 1.0``; ``routing.weights`` maps known feature names to
-    non-negative numbers and is merged over the defaults. Malformed shapes raise
-    :class:`MalformedRepositoryConfig` — routing config is never silently ignored,
-    so the same repository state always yields the same recommendation (ADR-002).
-    """
-    config_path = find_config_file(start_dir)
-    if config_path is None:
-        return RoutingConfig()
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
-    section = data.get("routing") if isinstance(data, dict) else None
-    if section is None:
-        return RoutingConfig()
-    if not isinstance(section, dict):
-        raise MalformedRepositoryConfig(str(config_path), "'routing' must be a mapping")
-    threshold = _parse_threshold(config_path, section.get("threshold"))
-    weights = _parse_weights(config_path, section.get("weights"))
-    return RoutingConfig(threshold=threshold, weights=weights)
-
-
-def _parse_threshold(config_path: Path, value: object) -> float:
-    """Validate ``routing.threshold``: a number in 0.0 – 1.0, default when absent."""
-    if value is None:
-        return RoutingConfig().threshold
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.0 <= value <= 1.0:
-        raise MalformedRepositoryConfig(
-            str(config_path), "'routing.threshold' must be a number between 0.0 and 1.0"
-        )
-    return float(value)
-
-
-def _parse_weights(config_path: Path, value: object) -> dict[str, float]:
-    """Validate ``routing.weights`` and merge over the defaults, default when absent."""
-    weights = dict(DEFAULT_WEIGHTS)
-    if value is None:
-        return weights
-    if not isinstance(value, dict):
-        raise MalformedRepositoryConfig(str(config_path), "'routing.weights' must be a mapping")
-    for name, weight in value.items():
-        if name not in FEATURE_ORDER:
-            raise MalformedRepositoryConfig(
-                str(config_path),
-                f"'routing.weights.{name}' is not a known feature "
-                f"(one of {', '.join(FEATURE_ORDER)})",
-            )
-        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
-            raise MalformedRepositoryConfig(
-                str(config_path), f"'routing.weights.{name}' must be a non-negative number"
-            )
-        weights[name] = float(weight)
-    return weights
 
 
 def _parse_severity_map(

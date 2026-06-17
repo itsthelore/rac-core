@@ -11,7 +11,6 @@ import json
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
-from rac.core.complexity import ComplexityScore
 from rac.core.hooks import HookSpec
 from rac.core.models import Diff, Issue, Product
 from rac.core.schema import SchemaReference
@@ -170,13 +169,6 @@ def render_stats_json(s: PortfolioStats) -> str:
 
 
 def render_inspect_json(result: InspectionResult) -> str:
-    return json.dumps(result.to_dict(), indent=2)
-
-
-# --- route -------------------------------------------------------------------
-
-
-def render_route_json(result: ComplexityScore) -> str:
     return json.dumps(result.to_dict(), indent=2)
 
 
