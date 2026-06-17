@@ -79,7 +79,7 @@ thin client over the engine contract (ADR-063), so it takes the `rac-*` prefix
 and moves to `itsthelore/rac-sdk-ts`, **published to npm** as
 `@itsthelore/rac-sdk`. The VS Code / Cursor extension is a surface a user
 installs, so it takes the `lore-*` prefix and moves to
-`itsthelore/lore-extensions` (one VSIX to Marketplace + OpenVSX). Sequencing:
+`itsthelore/lore-vscode` (one VSIX to Marketplace + OpenVSX). Sequencing:
 publish the SDK first, then repoint the extension from `file:../rac-sdk` to the
 published package and remove the in-repo `typescript/` stack and its CI.
 
@@ -148,8 +148,8 @@ root `action.yml` into `lore-watchkeeper`. ADR-058 moves with the gatekeeper.
 Add a README documenting the new `uses:` references, tag each `v1`, and push.
 
 **Seed the TypeScript repos** (`itsthelore/rac-sdk-ts`,
-`itsthelore/lore-extensions`) after the SDK is npm-publishable (v0.22.3): publish
-`@itsthelore/rac-sdk` from `rac-sdk-ts`, then seed `lore-extensions` and repoint
+`itsthelore/lore-vscode`) after the SDK is npm-publishable (v0.22.3): publish
+`@itsthelore/rac-sdk` from `rac-sdk-ts`, then seed `lore-vscode` and repoint
 it to the published package.
 
 **Removal + rewire PRs on `rac-core`**: remove `decisiongrounding/`, the
@@ -167,7 +167,7 @@ and `pytest` passes.
 
 ## Success Measures
 
-- Every extraction target (`decisiongrounding`, `rac-sdk-ts`, `lore-extensions`,
+- Every extraction target (`decisiongrounding`, `rac-sdk-ts`, `lore-vscode`,
   `lore-gatekeeper`, `lore-watchkeeper`) lives in its own repo and consumes only
   the published package, the published `@rac/sdk`, or the public CLI; none
   imports engine internals.

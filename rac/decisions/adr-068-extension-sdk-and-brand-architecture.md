@@ -74,7 +74,7 @@ ADR-039): PyPI `requirements-as-code`, CLI `rac`, import `rac`, server `lore`.
 | `rac-core` | The engine `src/rac/` (incl. the Python SDK surface, ADR-062), the dogfood corpus `rac/`, `examples/`, and the vendored viewer dir `rac-localview/` | The engine and its build-coupled internals. PyPI name stays `requirements-as-code` (ADR-036). |
 | `rac-localview` | The local Portal / graph viewer, vendored into the engine via a build script + drift-guard | Build-coupled internal of the engine; not separately installed while vendored. |
 | `rac-sdk-ts` | The TypeScript client `@rac/sdk`, published to npm as `@itsthelore/rac-sdk` | A typed client mirroring the engine contract (ADR-063). |
-| `lore-extensions` | The VS Code / Cursor extension — one VSIX to Marketplace + OpenVSX | A surface a user installs. |
+| `lore-vscode` | The VS Code extension — one VSIX to Marketplace + OpenVSX; runs in VS Code and, as a fork, Cursor | A surface a user installs (the first per-client repo). |
 | `lore-watchkeeper` | The Watchkeeper action (root `action.yml`) | A surface a team installs into CI. |
 | `lore-gatekeeper` | The gate action = `pr-gate-action` (`rac gate`); the older `validate-action` is folded in / deprecated by it (ADR-058 moves with the gate) | A surface a team installs into CI; the real enforcement gate (ADR-049). |
 | `decisiongrounding` | The reproducible benchmark (ADR-064, unchanged) | Established name; neither prefix. |
@@ -86,13 +86,31 @@ publish/vendor contract exists. Publishing `@rac/sdk` to npm decouples the
 extension from the current `file:../rac-sdk` path and is the foundation for
 per-client repositories.
 
+### Per-client integration repositories
+
+Each client integration is **its own `lore-<client>` repository**, consuming the
+published `@itsthelore/rac-sdk` — never engine internals (ADR-063). One repo per
+client is the model; a single `lore-extensions` container is rejected (it fights
+independent per-client cadence and ownership). Today there is exactly one:
+`lore-vscode`. Planned siblings — created when each is built, and **not part of
+this decision's scope or the v0.22.x series** — include:
+
+- **`lore-cursor`** — a Cursor-*native* integration (its rules and MCP surfaces).
+  Cursor can install the `lore-vscode` VSIX as a fork, but a dedicated repo gives
+  the richer native experience, so the two are separate from the start.
+- **`lore-codex`, `lore-claude`, `lore-jetbrains`, …** — one per agent or editor.
+
+The first repo is named for the editor (`lore-vscode`) because a VS Code
+extension's VSIX format is shared across VS Code and its forks; the rest are named
+for the agent or tool they integrate. The asymmetry is intentional.
+
 ### Release-management model
 
 Per-repo, tag-driven; consumers pin a major where they consume an action:
 
 - `rac-core` → PyPI on a version tag.
 - `rac-sdk-ts` → npm on `sdk-v*`.
-- `lore-extensions` → Marketplace + OpenVSX on `vscode-v*`.
+- `lore-vscode` → Marketplace + OpenVSX on `vscode-v*`.
 - `lore-watchkeeper` / `lore-gatekeeper` → `@v1` (consumers pin major).
 - `rac-localview` → vendored; no publish while it lives in `rac-core`.
 
@@ -107,7 +125,7 @@ supersession — most of ADR-064 holds:
    `pr-gate` / `rac gate` — the real gatekeeper. ADR-058 moves with the gate.
 2. **New surfaces.** The VS Code / Cursor extension and the TypeScript SDK,
    which post-date ADR-064, are added to the topology: the extension as
-   `lore-extensions`, the SDK as `rac-sdk-ts` published to npm.
+   `lore-vscode`, the SDK as `rac-sdk-ts` published to npm.
 3. **Viewer rename.** `lore-web` is renamed `rac-localview` **in-repo**
    (standalone extraction remains deferred per ADR-064).
 
