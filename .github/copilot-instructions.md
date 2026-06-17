@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: 9d7bf182c3691dd2e94a159ad425800c2e7cede6dde8e56486e7f277bc168a28) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: b3f1ad9cb7d425608c113cea71b5e77c4497cbe4f85d73888f540fec03bc37fa) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -49,4 +49,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KV6KFBDZ4D23** — ADR-065: Artifact Content Is Untrusted Input; the Trust Boundary Is Human PR Review _(Architecture)_
 - **RAC-KV6KFCC8MHTM** — ADR-066: Grounding Eval Scoring Is Deterministic — No Embeddings, No LLM Judge _(Technical)_
 - **RAC-KV80WX94GY8A** — ADR-067: Agent Integration is Context-Supply and Post-Edit Enforcement, Not Pre-Edit Interception _(Architecture)_
+- **RAC-KVA44MVMDXXX** — ADR-068: Extension, SDK, and Brand Architecture _(Architecture)_
 <!-- END RAC MANAGED BLOCK -->
