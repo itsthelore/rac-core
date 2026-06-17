@@ -1,4 +1,4 @@
-// Bundle the extension (and its @rac/sdk dependency) into a single CommonJS file
+// Bundle the extension (and its @itsthelore/rac-sdk dependency) into a single CommonJS file
 // for the VS Code extension host. `vscode` is provided by the host at runtime,
 // so it stays external.
 import * as esbuild from "esbuild";

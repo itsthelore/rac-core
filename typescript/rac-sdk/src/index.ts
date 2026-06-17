@@ -1,5 +1,5 @@
 /**
- * `@rac/sdk` — a thin TypeScript client for RAC (requirements-as-code).
+ * `@itsthelore/rac-sdk` — a thin TypeScript client for RAC (requirements-as-code).
  *
  * It shells out to the installed `rac` binary and deserializes its stable
  * `--json` contracts (ADR-007) into typed results. It reimplements none of
@@ -7,7 +7,7 @@
  * so a consumer (the VS Code / Cursor extension is the first) always agrees
  * with `rac` on the command line.
  *
- *     import { RacClient, RacNotFoundError } from "@rac/sdk";
+ *     import { RacClient, RacNotFoundError } from "@itsthelore/rac-sdk";
  *
  *     const rac = new RacClient({ cwd: workspaceRoot });
  *     try {

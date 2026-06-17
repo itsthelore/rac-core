@@ -131,7 +131,7 @@
     "package": "vsce package"
   },
   "devDependencies": {
-    "@rac/sdk": "file:../rac-sdk",
+    "@itsthelore/rac-sdk": "file:../rac-sdk",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",

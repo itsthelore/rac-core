@@ -1,7 +1,7 @@
 /**
  * RAC VS Code / Cursor extension.
  *
- * Wires the `@rac/sdk` thin client to the editor. All analysis stays in `rac`
+ * Wires the `@itsthelore/rac-sdk` thin client to the editor. All analysis stays in `rac`
  * (ADR-063); this extension maps its output into the editor:
  *
  *  - per-file validation diagnostics, live as you type (the unsaved buffer is
@@ -44,7 +44,7 @@ import {
   type ResolveResult,
   type ResolvedArtifact,
   type SchemaReference,
-} from "@rac/sdk";
+} from "@itsthelore/rac-sdk";
 
 import {
   CLAUDE_SETTINGS_RELPATH,
