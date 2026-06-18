@@ -133,6 +133,10 @@ Tools only, exactly four, is selected.
   identifiers the resolver owns.
 - ADR-029 defines how Guide ships; this decision defines what it exposes.
 - ADR-034 bounds what the tools may compute.
+- ADR-067 additively extends this surface with a fifth read-only tool,
+  `find_decisions` — the additive-extension path this decision anticipated (see
+  Risks). The tools-only surface and the four foundational tools above remain in
+  force; this is an extension, not a supersession.
 
 ## Success Measures
 
