@@ -6,6 +6,17 @@ details, release history over commit history.
 
 ## Unreleased
 
+### Changed
+
+- The TypeScript stack moved out of this repository (v0.22.5). The client SDK
+  now lives in `itsthelore/rac-sdk-ts`, published to npm as
+  `@itsthelore/rac-sdk`, and the VS Code extension in `itsthelore/lore-vscode`,
+  consuming that published package instead of the former in-repo
+  `file:../rac-sdk` path. The in-repo `typescript/` directory and its CI
+  (`typescript.yml`, `sdk-release.yml`, `extension-release.yml`) are removed.
+  The `rac` engine, CLI, and PyPI package (`requirements-as-code`) are
+  unchanged.
+
 ### Added
 
 - Extension robustness for release (v0.21.6 milestone). The extension now

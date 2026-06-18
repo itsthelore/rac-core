@@ -20,4 +20,3 @@ htmlcov/
 
 # MkDocs build output (deployed from CI, never committed)
 site/
-typescript/rac-vscode/out/
