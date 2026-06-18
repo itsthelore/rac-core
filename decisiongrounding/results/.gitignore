@@ -1,8 +1,0 @@
-# results/ is append-only at runtime. Generated artifacts are not committed;
-# `make demo` regenerates them. The append-only contract is documented in
-# results/README.md and enforced by the runner (new timestamped files, never
-# mutated). Keep the directory and its README under version control.
-run-*.json
-crossover_dataset.json
-crossover.png
-crossover.svg
