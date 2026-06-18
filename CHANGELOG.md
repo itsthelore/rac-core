@@ -68,6 +68,17 @@ details, release history over commit history.
   releases — cross-artifact enforcement, authoring aids, navigation, awareness,
   visualization, and release hardening.
 
+### Changed
+
+- **License: RAC is now under the Apache License 2.0 (previously MIT).** The
+  package, CLI, and TypeScript stack carry `Apache-2.0` metadata, and a `NOTICE`
+  file ships alongside `LICENSE`. Apache 2.0 adds an express patent grant and an
+  explicit trademark non-grant over MIT; it remains a permissive license, so
+  existing usage rights are unaffected. Contributions now require a Developer
+  Certificate of Origin sign-off (`git commit -s`); there is no CLA. Distribution
+  names are unchanged (PyPI `requirements-as-code`, CLI `rac`, server identity
+  `lore`). See `rac/decisions/adr-071-apache-2-relicense-and-dco.md`.
+
 ## v0.19.0 — 2026-06-15
 
 The kitchen-sink release. Everything since v0.7.3 lands at once. Over this
