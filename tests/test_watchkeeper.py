@@ -251,7 +251,7 @@ def test_reusable_workflow_passes_inputs_through():
     call_inputs = workflow[True]["workflow_call"]["inputs"]
     assert set(call_inputs) == {"path", "base", "fail-on", "annotate", "rac-version"}
     job = workflow["jobs"]["watchkeeper"]
-    action_step = next(s for s in job["steps"] if "requirements-as-code" in s.get("uses", ""))
+    action_step = next(s for s in job["steps"] if "rac-core" in s.get("uses", ""))
     assert set(action_step["with"]) == set(call_inputs)
     checkout = next(s for s in job["steps"] if "checkout" in s.get("uses", ""))
     assert checkout["with"]["fetch-depth"] == 0
