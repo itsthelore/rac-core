@@ -76,7 +76,18 @@ Follow [`rac/prompts/rac-agent-commit-guidelines.md`](rac/prompts/rac-agent-comm
 with `type` one of `feat`, `fix`, `test`, `docs`, `refactor`, `chore`. Keep
 commits small and single-purpose.
 
-## License
+## License and sign-off
 
-By contributing you agree your contributions are licensed under the
-[MIT License](LICENSE).
+RAC is licensed under the [Apache License 2.0](LICENSE). By contributing you
+agree your contributions are licensed under the same terms.
+
+Contributions must carry a [Developer Certificate of Origin](https://developercertificate.org/)
+sign-off: certify that you wrote the change (or have the right to submit it)
+by adding a `Signed-off-by` trailer to each commit. Git adds it for you:
+
+```bash
+git commit -s
+```
+
+This produces a `Signed-off-by: Your Name <you@example.com>` line matching your
+commit author identity. There is no CLA.

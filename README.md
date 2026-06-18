@@ -8,7 +8,7 @@
   <img alt="Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing." src="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-light.png">
 </picture>
 
-[![CI](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml/badge.svg)](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Python](https://img.shields.io/pypi/pyversions/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![License: MIT](https://img.shields.io/pypi/l/requirements-as-code)](https://github.com/itsthelore/rac-core/blob/main/LICENSE)
+[![CI](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml/badge.svg)](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Python](https://img.shields.io/pypi/pyversions/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![License: Apache 2.0](https://img.shields.io/pypi/l/requirements-as-code)](https://github.com/itsthelore/rac-core/blob/main/LICENSE)
 
 > **Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.**
 
@@ -93,4 +93,4 @@ Lore is early and evolving quickly. The MCP server ships today. Contributions, i
 
 ## License
 
-MIT
+[Apache License 2.0](LICENSE).

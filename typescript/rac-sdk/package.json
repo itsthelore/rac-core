@@ -2,7 +2,7 @@
   "name": "@itsthelore/rac-sdk",
   "version": "0.1.0",
   "description": "Thin TypeScript client for RAC (requirements-as-code): typed access to the rac CLI's JSON contracts. Shells out to the installed rac binary; it never reimplements the engine (ADR-063).",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "publishConfig": {
     "access": "public"

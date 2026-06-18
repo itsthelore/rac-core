@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "publisher": "rac",
   "icon": "icon.png",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/itsthelore/rac-core.git",

@@ -10,9 +10,9 @@ dynamic = ["version"]
 description = "RAC — lint and diff product requirements written in Markdown."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
-license-files = ["LICENSE"]
-authors = [{ name = "tcballard" }]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Tom Ballard" }]
 keywords = ["requirements", "product-management", "markdown", "linter", "cli", "diff"]
 dependencies = ["markdown-it-py>=3.0", "pyyaml>=6.0", "mcp>=1.0"]
 classifiers = [
