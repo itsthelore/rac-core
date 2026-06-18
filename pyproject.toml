@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-authors = [{ name = "tcballard" }]
+authors = [{ name = "Tom Ballard" }]
 keywords = ["requirements", "product-management", "markdown", "linter", "cli", "diff"]
 dependencies = ["markdown-it-py>=3.0", "pyyaml>=6.0", "mcp>=1.0"]
 classifiers = [
