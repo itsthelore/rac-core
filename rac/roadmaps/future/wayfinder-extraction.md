@@ -54,6 +54,16 @@ Check availability of the `wayfinder` name (PyPI package, trademark, org repo)
 before it is committed to any public surface. If taken, choose an alternative
 here rather than after publishing.
 
+**Done.** The `wayfinder` distribution name is already taken on PyPI by an
+unrelated project, and `wayfinder` is widely used as a navigation/wayfinding
+trademark. The product is therefore named **Wayfinder Router** and the name
+`wayfinder-router` is applied consistently across every surface: the PyPI
+distribution, the `itsthelore/wayfinder-router` repository, the CLI command, the
+`wayfinder_router` import package, the `wayfinder-router.toml` config file, the
+`WAYFINDER_ROUTER_THRESHOLD` env var, and the gateway's `x-wayfinder-router-*`
+response headers. The `-router` suffix keeps the standalone routing identity
+(ADR-069) rather than coupling it to the Lore brand.
+
 ### Initiative 3 — Deprecate and remove `rac route` from RAC
 
 **Done.** Now that Wayfinder exists in the `wayfinder/` subproject at full parity,
@@ -62,8 +72,18 @@ the `rac route` prototype and all its supporting code (`core/complexity.py`,
 renderers, the SDK exports, `tests/test_route.py`, the `route` CI battery, and the
 `docs/cli.md` section) have been removed from RAC by restoring those files to their
 pre-route state. The routing corpus artifacts (this roadmap, ADR-070, ADR-069, and
-the `prompt-complexity-routing` design) are kept as the historical record. What
-remains here is publishing Wayfinder to its own `itsthelore/wayfinder` repository.
+the `prompt-complexity-routing` design) are kept as the historical record.
+
+Publishing is now done: the `wayfinder/` subproject was lifted to repository
+root with its full commit history preserved (`git subtree split`) and pushed to
+`itsthelore/wayfinder-router`, whose `main` is the extracted history. The
+extracted tree was verified standalone — the 115-test suite, `ruff`, and `mypy`
+all pass in a clean environment with no `rac` installed and no `.rac/` on the
+path, `wayfinder-router serve` boots, and CI (Python 3.11/3.12/3.13 plus the
+Docker image build) is green — confirming the zero-dependency invariant
+(ADR-069). The in-RAC `wayfinder/` mirror is now eligible for removal under
+ADR-064's safety contract (the capability is live in its new home); that removal
+is a separate follow-up.
 
 The original plan: once Wayfinder ships and is verified, remove `rac route` and its
 supporting code, with a deprecation note pointing users to Wayfinder, following
@@ -97,7 +117,8 @@ ADR-064's history-preserving cutover discipline.
 
 ## Assumptions
 
-- The `wayfinder` name (or a chosen alternative) is available for public use.
+- The `wayfinder` name was taken on PyPI; the chosen alternative
+  `wayfinder-router` is available and is the public distribution/repository name.
 - Demand for a standalone deterministic prompt router is real but unproven; this
   stays considered until that signal arrives.
 - Reimplementing the ~30 generic lines in Wayfinder is preferable to a shared
