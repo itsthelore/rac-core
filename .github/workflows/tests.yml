@@ -97,6 +97,8 @@ jobs:
             paths: "tests/test_relationships.py tests/test_relationships_cmd.py tests/test_relationship_validation.py tests/test_relationship_graph.py tests/test_lifecycle_status.py tests/test_rename.py"
           - name: resolve
             paths: "tests/test_resolve.py tests/test_find_decisions.py"
+          - name: eval
+            paths: "tests/test_eval.py"
           - name: review
             paths: "tests/test_review.py tests/test_cadence.py"
           - name: revisions

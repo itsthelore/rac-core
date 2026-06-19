@@ -1,0 +1,19 @@
+{
+  "description": "Grounding-eval gate config (v0.23.0 WS1). The gate fails (rac eval --check, exit 1) when negative_violations exceeds its limit, a gated metric falls below its floor, or a gated metric falls below baseline minus tolerance. Gated metrics: overall.p_at_1, overall.r_at_5, negative_violations, and each query category's p_at_1 / r_at_5 (REQ-006). Per-tool figures are diagnostic. Overall floors are the fixed initial targets; per-category floors are absolute minimums calibrated from the first green run (all categories scored 1.0; floors sit a margin below, with the committed baseline minus tolerance providing the tight per-category regression guard).",
+  "tolerance": 0.02,
+  "floors": {
+    "negative_violations": 0,
+    "overall": {
+      "p_at_1": 0.9,
+      "r_at_5": 0.95
+    },
+    "by_category": {
+      "constraint_check": {"p_at_1": 0.9, "r_at_5": 0.9},
+      "decision_lookup": {"p_at_1": 0.9, "r_at_5": 0.9},
+      "disambiguation": {"p_at_1": 0.9, "r_at_5": 0.9},
+      "feature_lookup": {"p_at_1": 0.9, "r_at_5": 0.9},
+      "impact_analysis": {"p_at_1": 0.9, "r_at_5": 0.9},
+      "supersession": {"p_at_1": 0.9, "r_at_5": 0.9}
+    }
+  }
+}

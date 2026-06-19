@@ -1,0 +1,47 @@
+{
+  "overall": {
+    "p_at_1": 1.0,
+    "p_at_3": 0.416667,
+    "p_at_5": 0.25,
+    "r_at_1": 0.902778,
+    "r_at_3": 1.0,
+    "r_at_5": 1.0,
+    "negative_violations": 0
+  },
+  "by_category": {
+    "constraint_check": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    },
+    "decision_lookup": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    },
+    "disambiguation": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    },
+    "feature_lookup": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    },
+    "impact_analysis": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    },
+    "supersession": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    }
+  },
+  "by_tool": {
+    "get_related": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    },
+    "search_artifacts": {
+      "p_at_1": 1.0,
+      "r_at_5": 1.0
+    }
+  }
+}

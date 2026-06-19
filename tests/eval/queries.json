@@ -1,0 +1,94 @@
+{
+  "description": "Grounding retrieval benchmark query set (v0.23.0 WS1). Each case scores exactly one MCP tool (search_artifacts or get_related) against the fixture corpus under tests/eval/corpus. 'query' is the search string for search_artifacts cases, or the artifact id to look up for get_related cases.",
+  "cases": [
+    {
+      "id": "Q01",
+      "tool": "search_artifacts",
+      "category": "supersession",
+      "query": "refresh token rotation",
+      "relevant": ["EVAL-JTDKWHNVD8GG"],
+      "must_not_return": ["EVAL-KRRRS99DSV9W"]
+    },
+    {
+      "id": "Q02",
+      "tool": "search_artifacts",
+      "category": "supersession",
+      "query": "token rotation interval",
+      "relevant": ["EVAL-JTDKWHNVD8GG"],
+      "must_not_return": ["EVAL-KRRRS99DSV9W"]
+    },
+    {
+      "id": "Q03",
+      "tool": "search_artifacts",
+      "category": "constraint_check",
+      "query": "crdt realtime sync",
+      "relevant": ["EVAL-STK2ZW0AWS3V"]
+    },
+    {
+      "id": "Q04",
+      "tool": "search_artifacts",
+      "category": "constraint_check",
+      "query": "token bucket rate limiting",
+      "relevant": ["EVAL-1DJ9CM8QEXJX"],
+      "must_not_return": ["EVAL-JTDKWHNVD8GG"]
+    },
+    {
+      "id": "Q05",
+      "tool": "search_artifacts",
+      "category": "decision_lookup",
+      "query": "postgres datastore",
+      "relevant": ["EVAL-1483XGG8THGE"]
+    },
+    {
+      "id": "Q06",
+      "tool": "search_artifacts",
+      "category": "decision_lookup",
+      "query": "primary datastore",
+      "relevant": ["EVAL-1483XGG8THGE"]
+    },
+    {
+      "id": "Q07",
+      "tool": "search_artifacts",
+      "category": "feature_lookup",
+      "query": "offline editing",
+      "relevant": ["EVAL-FCTMD6C13A4N"]
+    },
+    {
+      "id": "Q08",
+      "tool": "search_artifacts",
+      "category": "feature_lookup",
+      "query": "session authentication",
+      "relevant": ["EVAL-1ZM9RM9559B2"]
+    },
+    {
+      "id": "Q09",
+      "tool": "search_artifacts",
+      "category": "disambiguation",
+      "query": "sidebar navigation",
+      "relevant": ["EVAL-2ABF382M9AKX"],
+      "must_not_return": ["EVAL-RADN71DPV8KA"]
+    },
+    {
+      "id": "Q10",
+      "tool": "search_artifacts",
+      "category": "disambiguation",
+      "query": "mobile navigation drawer",
+      "relevant": ["EVAL-RADN71DPV8KA"],
+      "must_not_return": ["EVAL-2ABF382M9AKX"]
+    },
+    {
+      "id": "Q11",
+      "tool": "get_related",
+      "category": "impact_analysis",
+      "query": "EVAL-STK2ZW0AWS3V",
+      "relevant": ["EVAL-M8R1BJ63YM1E", "EVAL-FCTMD6C13A4N", "EVAL-BB7BF4CHZEVN"]
+    },
+    {
+      "id": "Q12",
+      "tool": "get_related",
+      "category": "impact_analysis",
+      "query": "EVAL-JTDKWHNVD8GG",
+      "relevant": ["EVAL-1ZM9RM9559B2", "EVAL-BB7BF4CHZEVN"]
+    }
+  ]
+}
