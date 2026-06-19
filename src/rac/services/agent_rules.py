@@ -156,13 +156,23 @@ class AgentRulesProjection:
         }
 
 
-def _first_status_line(product: Product) -> str:
-    """First non-empty line of ``## Status``, casefolded (empty when absent)."""
+def artifact_status(product: Product) -> str:
+    """First non-empty line of ``## Status``, as stored (empty when absent).
+
+    The artifact's review/lifecycle signal exactly as authored — case preserved,
+    so a consumer sees ``Accepted`` rather than ``accepted`` (WS11 trust signal).
+    The casefolded liveness predicates build on this, so there is one reader of
+    the status line.
+    """
     body = product.sections.get("status")
     if not body:
         return ""
-    first = next((line.strip() for line in body.splitlines() if line.strip()), "")
-    return first.casefold()
+    return next((line.strip() for line in body.splitlines() if line.strip()), "")
+
+
+def _first_status_line(product: Product) -> str:
+    """First non-empty line of ``## Status``, casefolded (empty when absent)."""
+    return artifact_status(product).casefold()
 
 
 def _category(product: Product) -> str | None:

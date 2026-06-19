@@ -50,6 +50,7 @@ from mcp.server.fastmcp import FastMCP
 
 from rac import consent as consent_record
 from rac.core.corpus import walk_corpus
+from rac.core.markdown import parse
 from rac.mcp import errors, ping, telemetry
 from rac.mcp.budget import (
     DEFAULT_BUDGET,
@@ -60,6 +61,7 @@ from rac.mcp.budget import (
     serialize,
 )
 from rac.mcp.telemetry import TelemetryRecorder
+from rac.services.agent_rules import artifact_status
 from rac.services.index import build_repository_index, index_from_corpus
 from rac.services.portfolio import build_portfolio_summary
 from rac.services.relationships import (
@@ -166,6 +168,12 @@ def _get_artifact(root: str, artifact_id: str, budget: int) -> str:
         "schema_version": "1",
         **result.artifact.to_dict(),
         "content": content,
+        # Trust signal (WS11, ADR-065): the artifact's reviewed ``## Status``,
+        # nested under ``provenance`` — the one object get_artifact's additive
+        # fields share (WS5 adds author/date/status-history here later). It is a
+        # reported fact sourced from repository bytes, never a trust verdict
+        # (ADR-034); present-but-empty when the artifact declares no status.
+        "provenance": {"status": artifact_status(parse(content))},
     }
     return serialize(payload, budget)
 
