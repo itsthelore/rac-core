@@ -18,7 +18,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import yaml
+from yaml.nodes import Node
 
+from .limits import MAX_FRONTMATTER_BYTES, MAX_FRONTMATTER_DEPTH, exceeds_byte_cap
 from .metadata import (
     SUPPORTED_SCHEMA_VERSIONS,
     ArtifactMetadata,
@@ -57,6 +59,38 @@ def _no_duplicates(loader: _StrictLoader, node: yaml.MappingNode) -> dict:
 
 
 _StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicates)
+
+
+class _BoundedLoader(_StrictLoader):
+    """Strict loading plus WS4 adversarial-input bounds (REQ-002).
+
+    Forbids YAML aliases — which kills the "billion laughs" alias-expansion bomb
+    at its source — and caps nesting depth so deeply nested input is rejected as
+    a structured ``malformed-frontmatter`` issue before PyYAML recurses. Inherits
+    ``_StrictLoader``'s duplicate-key rejection and ``SafeLoader``'s refusal to
+    construct arbitrary objects.
+    """
+
+    # Per-instance nesting depth; the class default seeds each fresh loader.
+    _depth = 0
+
+    def compose_node(self, parent: Node | None, index: int) -> Node | None:
+        if self.check_event(yaml.events.AliasEvent):
+            event = self.peek_event()
+            raise yaml.MarkedYAMLError(
+                problem="YAML aliases are not permitted in frontmatter",
+                problem_mark=event.start_mark,
+            )
+        self._depth += 1
+        if self._depth > MAX_FRONTMATTER_DEPTH:
+            self._depth -= 1
+            raise yaml.MarkedYAMLError(
+                problem=f"frontmatter nesting exceeds the {MAX_FRONTMATTER_DEPTH}-level cap"
+            )
+        try:
+            return super().compose_node(parent, index)
+        finally:
+            self._depth -= 1
 
 
 @dataclass
@@ -101,8 +135,17 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
     callers can still read what parsed.
     """
     issues: list[Issue] = []
+    # Cap the raw block before PyYAML sees it (WS4, REQ-002), so an oversized
+    # front matter cannot allocate unbounded ahead of validation.
+    if exceeds_byte_cap(raw, MAX_FRONTMATTER_BYTES):
+        return None, [
+            _issue(
+                "malformed-frontmatter",
+                f"frontmatter exceeds the {MAX_FRONTMATTER_BYTES}-byte cap",
+            )
+        ]
     try:
-        data = yaml.load(raw, Loader=_StrictLoader)
+        data = yaml.load(raw, Loader=_BoundedLoader)
     except yaml.MarkedYAMLError as exc:
         if exc.problem and "duplicate frontmatter key" in exc.problem:
             return None, [_issue("duplicate-frontmatter-key", exc.problem)]
@@ -111,6 +154,9 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
         ]
     except yaml.YAMLError as exc:
         return None, [_issue("malformed-frontmatter", f"frontmatter is not valid YAML: {exc}")]
+    except RecursionError:
+        # Depth cap should pre-empt this, but never propagate a crash (REQ-002).
+        return None, [_issue("malformed-frontmatter", "frontmatter nesting too deep to parse")]
 
     if not isinstance(data, dict):
         return None, [

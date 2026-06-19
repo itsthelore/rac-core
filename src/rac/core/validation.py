@@ -168,7 +168,7 @@ def _validate_metadata(product: Product) -> list[Issue]:
     declaration) is detected here because it needs the classified spec. RAC
     never silently picks one identity (Initiative 7).
     """
-    issues = list(product.metadata_issues)
+    issues = list(product.metadata_issues) + list(product.parse_issues)
     spec = spec_for(classify(product).type)
     conflict = identity_conflict(product, spec)
     if conflict is not None:

@@ -172,15 +172,20 @@ EXIT_USAGE = 2
 
 
 def _read(path: str) -> Product:
-    """Parse a file, or print an error and exit with EXIT_USAGE."""
-    try:
-        return parse_file(path)
-    except FileNotFoundError:
+    """Parse a single named file, or print an error and exit with EXIT_USAGE.
+
+    A directly named file that is missing or unreadable is a usage error here —
+    distinct from the corpus walk, where ``parse_file`` degrades such inputs
+    gracefully so one bad file never aborts the walk (WS4, REQ-005).
+    """
+    if not Path(path).is_file():
         print(f"rac: file not found: {path}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE) from None
-    except OSError as exc:
-        print(f"rac: cannot read {path}: {exc}", file=sys.stderr)
+    product = parse_file(path)
+    if any(issue.code == "unreadable-artifact" for issue in product.parse_issues):
+        print(f"rac: cannot read {path}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE) from None
+    return product
 
 
 def _read_validate_input(target: str) -> Product:
