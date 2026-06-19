@@ -8,7 +8,7 @@ tags: [internal, robustness, parser, traversal, mcp]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — invisible, but the server must never crash in
 front of a partner. Scoped to the v0.23.0 hardening release (WS4).
