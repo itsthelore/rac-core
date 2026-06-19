@@ -12,6 +12,7 @@ Commands:
     rac relationships <dir | file.md> [--validate] [--json] [--top-level]
     rac rename <old-id> <new-id> <directory> [--json] [--apply] [--top-level]
     rac review <directory> [--json] [--top-level]
+    rac doctor [directory] [--json] [--hub-threshold N] [--top-level]
     rac gate <directory> [--json | --sarif] [--top-level]
     rac watchkeeper [directory] [--base REF] [--head REF]
                     [--format human|json|github] [--json] [--fail-on POLICY]
@@ -59,6 +60,8 @@ Exit codes:
        template missing (broken installation) or malformed repository config;
        eval --check: a gate rule fired (hard-negative violation, a metric below
        its floor, or a metric below baseline minus tolerance);
+       doctor: a validation or relationship-integrity error is present (orphan,
+       hub, and injection findings are warnings and exit 0);
        init: established key conflicts with the requested one; resolve:
        artifact not found or duplicate ID; migrate: malformed repository
        config or ID generation exhausted; skill install: any target file
@@ -103,6 +106,7 @@ from rac.core.templates import (
 )
 from rac.core.validation import has_errors
 from rac.output.portal import PortalSeamMissing, PortalShellMissing
+from rac.services import doctor
 from rac.services import eval as eval_service
 from rac.services.agent_rules import (
     check_agent_rules,
@@ -518,6 +522,28 @@ def cmd_review(args: argparse.Namespace) -> int:
         print(outputs.render_review_human(report))
     # Priority 1-2 findings (invalid artifacts, broken relationships) fail the
     # review; priority 3-4 findings are advisory (REQ-Repository-Review-Mode).
+    return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Aggregate corpus health into one verdict with paste-ready fixes (WS3).
+
+    Composes validate + relationships and adds high-fan-out hubs and an
+    injection-style content heuristic. Exits non-zero only on a validation or
+    relationship-integrity error; orphan/hub/injection warnings exit 0 (REQ-007).
+    """
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    report = doctor.diagnose(
+        args.directory,
+        recursive=not args.top_level,
+        hub_threshold=args.hub_threshold,
+    )
+    if args.json:
+        print(doctor.render_doctor_json(report))
+    else:
+        print(doctor.render_doctor_human(report))
     return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
 
 
@@ -1361,6 +1387,41 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_review.set_defaults(func=cmd_review)
+
+    p_doctor = sub.add_parser(
+        "doctor",
+        help="Diagnose corpus health in one pass, with a paste-ready fix per finding.",
+        parents=[version_parent],
+    )
+    p_doctor.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Directory to diagnose recursively for *.md (default: current directory).",
+    )
+    p_doctor.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_doctor.add_argument(
+        "--hub-threshold",
+        type=int,
+        default=doctor.DEFAULT_HUB_THRESHOLD,
+        help=(
+            "Flag artifacts with more than this many resolved relationship edges "
+            f"as high-fan-out hubs (default {doctor.DEFAULT_HUB_THRESHOLD})."
+        ),
+    )
+    p_doctor.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_doctor.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_doctor.set_defaults(func=cmd_doctor)
 
     p_gate = sub.add_parser(
         "gate",
