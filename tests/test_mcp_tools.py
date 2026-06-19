@@ -299,17 +299,10 @@ def test_get_related_outgoing_and_incoming_shape():
     ]
     # outgoing: the artifact's own sections, snake_case, references as stored.
     assert payload["outgoing"] == {"related_requirements": [REQ]}
-    # incoming: artifacts whose references resolve here, ordered by path/section.
+    # incoming: ordered by relationship type then ascending id (WS4, REQ-006).
+    # Both edges are related_decisions, so RDM (...RDM...) precedes REQ (...REQ...).
     edge = {"direction": "incoming", "relationship": "related_decisions", "target": DEC}
     assert payload["incoming"] == [
-        {
-            "id": REQ,
-            "type": "requirement",
-            "title": "Decoupled Messaging",
-            "path": fixture_path("mcp", "corpus", "requirement.md"),
-            "section": "related_decisions",
-            "evidence": edge,
-        },
         {
             "id": RDM,
             "type": "roadmap",
@@ -318,13 +311,25 @@ def test_get_related_outgoing_and_incoming_shape():
             "section": "related_decisions",
             "evidence": edge,
         },
+        {
+            "id": REQ,
+            "type": "requirement",
+            "title": "Decoupled Messaging",
+            "path": fixture_path("mcp", "corpus", "requirement.md"),
+            "section": "related_decisions",
+            "evidence": edge,
+        },
     ]
 
 
-def test_get_related_incoming_ordered_by_path_then_section():
+def test_get_related_incoming_ordered_by_relationship_then_id():
+    # WS4 (REQ-006): incoming is ordered by relationship type (canonical section
+    # order) then ascending id, so budget tail-truncation is deterministic. Both
+    # edges here are related_decisions, so ids ascend within that type.
     payload = call(CORPUS, "get_related", {"id": DEC})
-    keys = [(e["path"], e["section"]) for e in payload["incoming"]]
-    assert keys == sorted(keys)
+    incoming = payload["incoming"]
+    assert all(e["section"] == "related_decisions" for e in incoming)
+    assert [e["id"] for e in incoming] == sorted(e["id"] for e in incoming)
 
 
 def test_get_related_no_incoming_yields_empty_list():

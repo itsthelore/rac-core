@@ -93,8 +93,16 @@ async def test_broken_references_surface_in_summary():
 
 
 @pytest.mark.asyncio
-async def test_core_failure_renders_recoverable_error_state(tmp_path):
-    (tmp_path / "bad.md").write_bytes(b"\xff\xfe not utf-8 \xff")
+async def test_core_failure_renders_recoverable_error_state(tmp_path, monkeypatch):
+    # A genuine core failure renders the recoverable error screen. WS4 makes a
+    # malformed/non-UTF-8 artifact degrade gracefully, so the failure is injected
+    # at the load boundary rather than via bad file content.
+    import rac.explorer.adapter as adapter_mod
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("core exploded")
+
+    monkeypatch.setattr(adapter_mod, "load_repository", _boom)
     app = ExplorerApp(str(tmp_path))
     async with app.run_test() as pilot:
         text = await _settled_panel_text(app, pilot)
@@ -103,15 +111,25 @@ async def test_core_failure_renders_recoverable_error_state(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_reload_binding_recovers_after_repair(tmp_path):
-    bad = tmp_path / "bad.md"
-    bad.write_bytes(b"\xff\xfe not utf-8 \xff")
+async def test_reload_binding_recovers_after_repair(tmp_path, monkeypatch):
+    import rac.explorer.adapter as adapter_mod
+
+    real_load = adapter_mod.load_repository
+    state = {"broken": True}
+
+    def _maybe(*args, **kwargs):
+        if state["broken"]:
+            raise RuntimeError("core exploded")
+        return real_load(*args, **kwargs)
+
+    monkeypatch.setattr(adapter_mod, "load_repository", _maybe)
+    (tmp_path / "note.md").write_text("# Repaired Note\n", encoding="utf-8")
     app = ExplorerApp(str(tmp_path))
     async with app.run_test() as pilot:
         text = await _settled_panel_text(app, pilot)
         assert "Could not load repository" in text
 
-        bad.write_text("# Repaired Note\n", encoding="utf-8")
+        state["broken"] = False  # the operator repairs the underlying failure
         await pilot.press("r")
         text = await _settled_panel_text(app, pilot)
         assert "Artifacts      1" in text
@@ -1615,9 +1633,16 @@ async def test_watcher_is_quiet_while_paused_and_before_first_load(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_watcher_does_not_run_after_a_load_error(tmp_path):
-    bad = tmp_path / "bad.md"
-    bad.write_bytes(b"\xff\xfe not utf-8 \xff")
+async def test_watcher_does_not_run_after_a_load_error(tmp_path, monkeypatch):
+    # A genuine load failure (WS4: not a malformed artifact, which now degrades
+    # gracefully) leaves the watcher with no baseline; a file change does not
+    # auto-recover — only `r` does.
+    import rac.explorer.adapter as adapter_mod
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("core exploded")
+
+    monkeypatch.setattr(adapter_mod, "load_repository", _boom)
     app = ExplorerApp(str(tmp_path))
     async with app.run_test() as pilot:
         screen = app.screen
@@ -1625,7 +1650,7 @@ async def test_watcher_does_not_run_after_a_load_error(tmp_path):
         await _settled_panel_text(app, pilot)
         assert screen._watch_baseline is None  # load failed: nothing to compare
 
-        bad.write_text("# Repaired Note\n", encoding="utf-8")
+        (tmp_path / "note.md").write_text("# Repaired Note\n", encoding="utf-8")
         screen._watch_tick()
         await app.workers.wait_for_complete()
         await pilot.pause()

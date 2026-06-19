@@ -60,13 +60,31 @@ def test_load_translates_progress_with_labels():
     ]
 
 
-def test_failures_become_recoverable_error_state(tmp_path):
-    (tmp_path / "bad.md").write_bytes(b"\xff\xfe not utf-8 \xff")
+def test_failures_become_recoverable_error_state(tmp_path, monkeypatch):
+    # A genuine, unexpected core failure surfaces as a recoverable error state.
+    # The injection is at the load boundary because a malformed/non-UTF-8
+    # artifact no longer aborts the load — WS4 degrades it gracefully.
+    import rac.explorer.adapter as adapter_mod
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("core exploded")
+
+    monkeypatch.setattr(adapter_mod, "load_repository", _boom)
     result = ExplorerAdapter(str(tmp_path)).load()
     assert isinstance(result, LoadErrorState)
     assert result.can_retry
     assert result.title == "Could not load repository"
-    assert "UnicodeDecodeError" in result.detail
+    assert "RuntimeError" in result.detail
+
+
+def test_non_utf8_artifact_loads_gracefully_after_ws4(tmp_path):
+    # WS4 (REQ-005): a non-UTF-8 artifact no longer crashes the load; the walk
+    # continues and the file is surfaced as a (degraded) artifact, not a global
+    # load error.
+    (tmp_path / "bad.md").write_bytes(b"\xff\xfe not utf-8 \xff")
+    result = ExplorerAdapter(str(tmp_path)).load()
+    assert isinstance(result, RepositorySummaryState)
+    assert result.artifact_total == 1
 
 
 def test_empty_directory_is_a_summary_not_an_error(tmp_path):

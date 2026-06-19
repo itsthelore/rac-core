@@ -103,6 +103,8 @@ jobs:
             paths: "tests/test_review.py tests/test_cadence.py"
           - name: doctor
             paths: "tests/test_doctor.py"
+          - name: robustness
+            paths: "tests/test_robustness.py"
           - name: revisions
             paths: "tests/test_revisions.py"
           - name: recency
