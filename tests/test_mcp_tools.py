@@ -52,7 +52,9 @@ def call(root: str, tool: str, args: dict, budget: int = DEFAULT_BUDGET) -> dict
 
 def test_get_artifact_resolved_shape():
     payload = call(CORPUS, "get_artifact", {"id": DEC})
-    # WS11: additive nested `provenance` carrying the reviewed status signal.
+    # WS11 + WS5: additive nested `provenance` — the reviewed status signal
+    # (WS11) plus git-derived authorship/dates and status history (WS5). The
+    # top-level keys are unchanged from before WS5 (purely additive, ADR-007).
     assert list(payload) == [
         "schema_version",
         "id",
@@ -62,7 +64,21 @@ def test_get_artifact_resolved_shape():
         "content",
         "provenance",
     ]
-    assert payload["provenance"] == {"status": "Accepted"}
+    prov = payload["provenance"]
+    assert set(prov) == {
+        "status",
+        "last_committed",
+        "last_author",
+        "first_committed",
+        "first_author",
+        "status_history",
+    }
+    assert prov["status"] == "Accepted"
+    # The fixture is git-tracked, so the git fields populate from its real
+    # history; pin their shape (string-or-null, list), never the volatile values.
+    assert isinstance(prov["status_history"], list)
+    for git_field in ("last_committed", "last_author", "first_committed", "first_author"):
+        assert prov[git_field] is None or isinstance(prov[git_field], str)
     assert payload["schema_version"] == "1"
     assert payload["id"] == DEC
     assert payload["type"] == "decision"

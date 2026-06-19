@@ -110,7 +110,7 @@ jobs:
           - name: revisions
             paths: "tests/test_revisions.py"
           - name: recency
-            paths: "tests/test_recency.py"
+            paths: "tests/test_recency.py tests/test_provenance.py"
           - name: skill
             paths: "tests/test_skill.py"
           - name: hook

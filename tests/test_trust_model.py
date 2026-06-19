@@ -69,7 +69,11 @@ def test_security_md_makes_no_sla_or_sanitizer_promise():
 def test_provenance_status_reports_reviewed_status(tmp_path):
     _decision(tmp_path, "accepted", "RAC-AAAAAAAAAAAA", status="Accepted")
     payload = _get_artifact(tmp_path, "RAC-AAAAAAAAAAAA")
-    assert payload["provenance"] == {"status": "Accepted"}
+    # The reviewed status is reported (WS11). WS5's git fields share the object
+    # but degrade to null/[] here, because tmp_path is not a git repository.
+    assert payload["provenance"]["status"] == "Accepted"
+    assert payload["provenance"]["last_committed"] is None
+    assert payload["provenance"]["status_history"] == []
 
 
 def test_provenance_status_present_but_empty_when_indeterminate(tmp_path):
@@ -77,7 +81,7 @@ def test_provenance_status_present_but_empty_when_indeterminate(tmp_path):
     # never omitted (REQ-004).
     _decision(tmp_path, "draft", "RAC-BBBBBBBBBBBB", status=None)
     payload = _get_artifact(tmp_path, "RAC-BBBBBBBBBBBB")
-    assert payload["provenance"] == {"status": ""}
+    assert payload["provenance"]["status"] == ""
 
 
 def test_provenance_status_preserves_authored_case(tmp_path):
@@ -103,10 +107,18 @@ def test_content_is_served_verbatim_not_mutated(tmp_path):
 
 
 def test_provenance_carries_no_trust_verdict(tmp_path):
-    # The signal is reported status only — never a score or pass/fail verdict
+    # The object carries reported facts only — reviewed status (WS11) plus
+    # git-derived authorship/history (WS5) — never a score or pass/fail verdict
     # (REQ-005, ADR-034).
     _decision(tmp_path, "accepted", "RAC-AAAAAAAAAAAA", status="Accepted")
     payload = _get_artifact(tmp_path, "RAC-AAAAAAAAAAAA")
-    assert set(payload["provenance"]) == {"status"}
+    assert set(payload["provenance"]) == {
+        "status",
+        "last_committed",
+        "last_author",
+        "first_committed",
+        "first_author",
+        "status_history",
+    }
     for forbidden in ("score", "trust", "trusted", "safe", "verdict", "rating"):
         assert forbidden not in payload["provenance"]
