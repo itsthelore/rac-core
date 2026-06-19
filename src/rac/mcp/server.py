@@ -51,7 +51,14 @@ from mcp.server.fastmcp import FastMCP
 from rac import consent as consent_record
 from rac.core.corpus import walk_corpus
 from rac.mcp import errors, ping, telemetry
-from rac.mcp.budget import DEFAULT_BUDGET, serialize
+from rac.mcp.budget import (
+    DEFAULT_BUDGET,
+    HINT_RELATED,
+    MARKER_HINT,
+    MARKER_OMITTED,
+    MARKER_TRUNCATED,
+    serialize,
+)
 from rac.mcp.telemetry import TelemetryRecorder
 from rac.services.index import build_repository_index, index_from_corpus
 from rac.services.portfolio import build_portfolio_summary
@@ -200,6 +207,8 @@ def _get_related(root: str, artifact_id: str, budget: int) -> str:
     artifact = result.artifact
     relationships = relationships_from_corpus(entries)
     identity_by_path = {entry.path: (entry.id, entry.type, entry.title) for entry in index}
+    outgoing = outgoing_references(relationships, artifact.path)
+    incoming_result = incoming_references(relationships, identity_by_path, artifact.path)
     incoming = [
         {
             "id": ref.id,
@@ -217,14 +226,26 @@ def _get_related(root: str, artifact_id: str, budget: int) -> str:
                 "target": ref.target,
             },
         }
-        for ref in incoming_references(relationships, identity_by_path, artifact.path)
+        for ref in incoming_result.items
     ]
     payload = {
         "schema_version": "1",
         **artifact.to_dict(),
-        "outgoing": outgoing_references(relationships, artifact.path),
+        "outgoing": outgoing.by_section,
         "incoming": incoming,
     }
+    # Per-call edge cap overflow (WS4, REQ-007): when collection hit the cap, mark
+    # the response truncated up front. The ADR-033 response budget then enforces
+    # the character cap on top; if it must drop further incoming entries it
+    # recomputes the marker (budget.serialize), so the response is always bounded
+    # and carries the additive truncated/omitted/hint signal (REQ-006).
+    edge_overflow = (incoming_result.total - len(incoming_result.items)) + (
+        outgoing.total - outgoing.kept
+    )
+    if edge_overflow > 0:
+        payload[MARKER_TRUNCATED] = True
+        payload[MARKER_OMITTED] = edge_overflow
+        payload[MARKER_HINT] = HINT_RELATED
     return serialize(payload, budget)
 
 

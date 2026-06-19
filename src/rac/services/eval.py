@@ -278,7 +278,7 @@ def _related_returned(root: str, case: QueryCase) -> list[str]:
     relationships = relationships_from_corpus(entries)
     identity_by_path = {entry.path: (entry.id, entry.type, entry.title) for entry in index}
     incoming = incoming_references(relationships, identity_by_path, resolution.artifact.path)
-    return [ref.id for ref in incoming]
+    return [ref.id for ref in incoming.items]
 
 
 def returned_ids(root: str, entries: list, case: QueryCase) -> list[str]:

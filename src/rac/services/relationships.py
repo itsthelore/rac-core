@@ -23,6 +23,7 @@ from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
 from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
+from rac.core.limits import MAX_RELATED_EDGES
 from rac.core.markdown import parse_file
 from rac.core.models import Product
 from rac.core.relationship_types import REGISTRY, edge_spec
@@ -961,6 +962,19 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
 # incoming edge exists exactly when a reference resolved uniquely to the target.
 
 
+# Canonical relationship-section order (snake_case), for deterministic
+# get_related ordering (WS4, REQ-006): incoming edges sort by their section's
+# position in the artifact's spec/section vocabulary, then ascending id.
+_RELATIONSHIP_ORDER: dict[str, int] = {
+    _snake(section): index for index, section in enumerate(RELATIONSHIP_SECTIONS)
+}
+
+
+def _relationship_order(section: str) -> int:
+    """Rank of a snake_case relationship section in the canonical order."""
+    return _RELATIONSHIP_ORDER.get(section, len(_RELATIONSHIP_ORDER))
+
+
 @dataclass(frozen=True)
 class IncomingReference:
     """An artifact whose declared reference resolves to a target artifact.
@@ -978,36 +992,82 @@ class IncomingReference:
     target: str
 
 
+@dataclass(frozen=True)
+class IncomingReferences:
+    """Capped, ordered incoming edges plus the full pre-cap count (WS4).
+
+    ``items`` is ordered by relationship type then ascending id (REQ-006) and
+    capped at the per-call edge limit (REQ-007); ``total`` is the full count so a
+    caller can signal overflow via the truncation marker.
+    """
+
+    items: list[IncomingReference]
+    total: int
+
+
+@dataclass(frozen=True)
+class OutgoingReferences:
+    """Capped outgoing references grouped by section, plus the full count (WS4)."""
+
+    by_section: dict[str, list[str]]
+    total: int
+
+    @property
+    def kept(self) -> int:
+        return sum(len(targets) for targets in self.by_section.values())
+
+
 def outgoing_references(
-    relationships: list[Relationship], source_path: str
-) -> dict[str, list[str]]:
+    relationships: list[Relationship],
+    source_path: str,
+    *,
+    limit: int | None = None,
+) -> OutgoingReferences:
     """The references ``source_path`` declares, grouped by section, as stored.
 
     Keys are snake_case section names in the source artifact's own spec order
     (``relationships_from_corpus`` yields references in that order, so a
     first-seen-wins dict preserves it). References are the raw stored text — the
-    source of truth (ADR-016).
+    source of truth (ADR-016). Collection stops after ``limit`` edges so a
+    pathological artifact cannot build an unbounded list (WS4, REQ-007); the
+    default resolves to :data:`MAX_RELATED_EDGES` at call time.
     """
-    outgoing: dict[str, list[str]] = {}
+    if limit is None:
+        limit = MAX_RELATED_EDGES
+    by_section: dict[str, list[str]] = {}
+    total = 0
+    kept = 0
     for rel in relationships:
-        if rel.source_path == source_path:
-            outgoing.setdefault(rel.relationship, []).append(rel.target)
-    return outgoing
+        if rel.source_path != source_path:
+            continue
+        total += 1
+        if kept < limit:
+            by_section.setdefault(rel.relationship, []).append(rel.target)
+            kept += 1
+    return OutgoingReferences(by_section=by_section, total=total)
 
 
 def incoming_references(
     relationships: list[Relationship],
     identity_by_path: dict[str, tuple[str, str, str | None]],
     target_path: str,
-) -> list[IncomingReference]:
+    *,
+    limit: int | None = None,
+) -> IncomingReferences:
     """Artifacts whose declared references resolve uniquely to ``target_path``.
 
     ``identity_by_path`` maps each artifact path to ``(id, type, title)`` (the
-    caller builds it from the repository index). Self-references are excluded;
-    entries are ordered by source path, then section — the deterministic order
-    the ``get_related`` design pins.
+    caller builds it from the repository index). Self-references are excluded.
+    Collection stops storing after ``limit`` edges to bound work (WS4, REQ-007),
+    while the full count is still tallied so overflow can be signalled; the kept
+    edges are ordered by relationship type then ascending id (REQ-006) so
+    tail-truncation drops the lowest-priority edges deterministically (REQ-008).
+    The default resolves to :data:`MAX_RELATED_EDGES` at call time.
     """
+    if limit is None:
+        limit = MAX_RELATED_EDGES
     incoming: list[IncomingReference] = []
+    total = 0
     for rel in relationships:
         if rel.resolved_path != target_path:
             continue
@@ -1016,16 +1076,18 @@ def incoming_references(
         identity = identity_by_path.get(rel.source_path)
         if identity is None:  # pragma: no cover — every relationship source is indexed
             continue
-        source_id, source_type, source_title = identity
-        incoming.append(
-            IncomingReference(
-                id=source_id,
-                type=source_type,
-                title=source_title,
-                path=rel.source_path,
-                section=rel.relationship,
-                target=rel.target,
+        total += 1
+        if len(incoming) < limit:
+            source_id, source_type, source_title = identity
+            incoming.append(
+                IncomingReference(
+                    id=source_id,
+                    type=source_type,
+                    title=source_title,
+                    path=rel.source_path,
+                    section=rel.relationship,
+                    target=rel.target,
+                )
             )
-        )
-    incoming.sort(key=lambda e: (e.path, e.section))
-    return incoming
+    incoming.sort(key=lambda e: (_relationship_order(e.section), e.id, e.path))
+    return IncomingReferences(items=incoming, total=total)
