@@ -11,11 +11,18 @@ Heading matching is case-insensitive and whitespace-trimmed, so ``## problem`` a
 
 from __future__ import annotations
 
+import os
 import re
 
 from markdown_it import MarkdownIt
 
 from .frontmatter import parse_frontmatter, split_frontmatter
+from .limits import (
+    MAX_CAPTURED_LINES,
+    MAX_FIELD_CHARS,
+    exceeds_byte_cap,
+    max_file_bytes,
+)
 from .models import Issue, MalformedRequirement, Product, Requirement, SearchSection
 
 # A single shared parser, built once and reused for every ``parse`` call.
@@ -76,6 +83,17 @@ def _classify_requirement_line(text: str, line: int) -> Requirement | MalformedR
     return Requirement(id=req_id, text=desc, line=line)
 
 
+def _degraded_product(source_path: str, issues: list[Issue]) -> Product:
+    """A minimal Product carrying only parse-level issues (WS4, REQ-005).
+
+    Returned when input is rejected before the body is parsed (oversize, or an
+    unreadable file): an empty artifact that classifies as Unknown and fails
+    validation via its ``parse_issues``, so the defect is reported and the
+    corpus walk continues past it rather than crashing.
+    """
+    return Product(title=None, source_path=source_path, parse_issues=issues)
+
+
 def parse(text: str, source_path: str = "") -> Product:
     """Parse Markdown ``text`` into a :class:`Product`.
 
@@ -84,7 +102,26 @@ def parse(text: str, source_path: str = "") -> Product:
     number reported downstream is offset back to the original file so
     diagnostics stay file-accurate. Documents without frontmatter are parsed
     exactly as before.
+
+    Input over the per-parse byte cap (REQ-001) is rejected before tokenizing
+    and returned as a structured oversize issue, never an exception.
     """
+    cap = max_file_bytes()
+    if exceeds_byte_cap(text, cap):
+        return _degraded_product(
+            source_path,
+            [
+                Issue(
+                    "error",
+                    "artifact-oversize",
+                    f"artifact exceeds the {cap}-byte parse cap "
+                    "(set RAC_MAX_FILE_BYTES to raise it)",
+                    1,
+                )
+            ],
+        )
+
+    parse_issues: list[Issue] = []
     split = split_frontmatter(text)
     offset = split.line_offset
     metadata = None
@@ -118,6 +155,13 @@ def parse(text: str, source_path: str = "") -> Product:
     risk_lines: list[str] = []
     # Generic body text per ## section: {normalized heading -> [stripped lines]}.
     section_bodies: dict[str, list[str]] = {}
+    # Body-capture caps (WS4, REQ-003): per-section char budget and a total
+    # captured-line ceiling so one oversized field cannot dominate the Product.
+    # Generous enough that no real artifact is affected; inert below the caps.
+    section_chars: dict[str, int] = {}
+    captured_lines = 0
+    truncated_fields: set[str] = set()
+    body_truncated = False
 
     has = {
         "problem": False,
@@ -162,16 +206,31 @@ def parse(text: str, source_path: str = "") -> Product:
         if i > 0 and tokens[i - 1].type == "heading_open":
             continue
 
+        # Once the total captured-line ceiling is hit, stop capturing any further
+        # body (generic or recognized): the document is reported truncated and the
+        # parse completes rather than accumulating unboundedly (WS4, REQ-003).
+        if body_truncated:
+            continue
+
         # Generic body capture for every ## section (the canonical content map).
         if current_h2 is not None:
             for raw in tok.content.split("\n"):
                 stripped = raw.strip()
-                if stripped:
-                    section_bodies.setdefault(current_h2, []).append(stripped)
-                    if current_search is not None:
-                        current_search.lines.append(stripped)
+                if not stripped:
+                    continue
+                if captured_lines >= MAX_CAPTURED_LINES:
+                    body_truncated = True
+                    break
+                if section_chars.get(current_h2, 0) + len(stripped) > MAX_FIELD_CHARS:
+                    truncated_fields.add(current_h2)
+                    continue
+                section_bodies.setdefault(current_h2, []).append(stripped)
+                section_chars[current_h2] = section_chars.get(current_h2, 0) + len(stripped) + 1
+                captured_lines += 1
+                if current_search is not None:
+                    current_search.lines.append(stripped)
 
-        if section is None or section == "other":
+        if body_truncated or section is None or section == "other":
             continue
 
         start_line = (tok.map[0] + offset) if tok.map else 0
@@ -200,6 +259,27 @@ def parse(text: str, source_path: str = "") -> Product:
 
     sections = {h: "\n".join(lines) for h, lines in section_bodies.items()}
 
+    # Body-cap findings (WS4, REQ-003): a truncated field or document is reported
+    # as a warning — the artifact is served partial, not failed outright.
+    for heading in sorted(truncated_fields):
+        parse_issues.append(
+            Issue(
+                "warning",
+                "field-truncated",
+                f"section {heading!r} exceeds the {MAX_FIELD_CHARS}-char field cap "
+                "and was truncated",
+            )
+        )
+    if body_truncated:
+        parse_issues.append(
+            Issue(
+                "warning",
+                "body-truncated",
+                f"document body exceeds the {MAX_CAPTURED_LINES}-line capture cap "
+                "and was truncated",
+            )
+        )
+
     return Product(
         title=title,
         extra_title_lines=extra_title_lines,
@@ -217,10 +297,51 @@ def parse(text: str, source_path: str = "") -> Product:
         source_path=source_path,
         metadata=metadata,
         metadata_issues=metadata_issues,
+        parse_issues=parse_issues,
     )
 
 
 def parse_file(path: str) -> Product:
-    """Read ``path`` and parse it into a :class:`Product`."""
-    with open(path, encoding="utf-8") as fh:
-        return parse(fh.read(), source_path=path)
+    """Read ``path`` and parse it into a :class:`Product` (WS4-hardened).
+
+    Bounds work before reading the whole file into memory (REQ-001) and degrades
+    gracefully on adversarial input (REQ-005): an oversize file, an unreadable
+    file, or non-UTF-8 bytes yields a structured issue, never an exception that
+    would crash a serving path or abort the corpus walk.
+    """
+    cap = max_file_bytes()
+    try:
+        # Size-check the path first, then read at most the cap (+1 to detect a
+        # file that grew between stat and read, or a symlink to something larger).
+        size = os.path.getsize(path)
+        if size > cap:
+            return _degraded_product(path, [_oversize_issue(cap)])
+        with open(path, "rb") as fh:
+            data = fh.read(cap + 1)
+    except OSError as exc:
+        return _degraded_product(
+            path, [Issue("error", "unreadable-artifact", f"cannot read artifact: {exc}", 1)]
+        )
+    if len(data) > cap:
+        return _degraded_product(path, [_oversize_issue(cap)])
+
+    try:
+        text = data.decode("utf-8")
+        product = parse(text, source_path=path)
+    except UnicodeDecodeError:
+        # Non-UTF-8 / partial sequences: decode lossily so the parse still
+        # completes, and report the encoding defect for review (REQ-005, REQ-009).
+        product = parse(data.decode("utf-8", errors="replace"), source_path=path)
+        product.parse_issues.append(
+            Issue("warning", "non-utf8-content", "artifact is not valid UTF-8; decoded lossily", 1)
+        )
+    return product
+
+
+def _oversize_issue(cap: int) -> Issue:
+    return Issue(
+        "error",
+        "artifact-oversize",
+        f"artifact exceeds the {cap}-byte file cap (set RAC_MAX_FILE_BYTES to raise it)",
+        1,
+    )

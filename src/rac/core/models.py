@@ -93,6 +93,11 @@ class Product:
     # Frontmatter parse/schema findings, surfaced by validation. Kept separate
     # from body analysis: the envelope and the artifact are distinct concerns.
     metadata_issues: list[Issue] = field(default_factory=list)
+    # Parser-level robustness findings (v0.23.0, WS4): oversize input, a
+    # truncated body field, non-UTF-8 content, or an unreadable file. Surfaced by
+    # validation alongside metadata_issues so a degraded artifact is reported
+    # (and skipped) rather than crashing a parse or serving path (REQ-005).
+    parse_issues: list[Issue] = field(default_factory=list)
 
 
 @dataclass
