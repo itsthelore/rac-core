@@ -8,9 +8,18 @@ tags: [internal, changelog, testing, release]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]`. Scoped to the v0.23.0 hardening release (WS10).
+Delivered as the **Test tiers** section of `docs/testing.md` (the three tiers
+mapped to their real CI jobs and copy-paste local commands — documenting the
+existing ADR-027 topology, no new markers or taxonomy) and one honest v0.23.0
+CHANGELOG entry (What shipped / What is deferred / Known limits, headlining
+user-facing items only). REQ-005 — cutting the single `v0.23.0` git tag from
+which setuptools-scm derives the version — is the maintainer's release action,
+not performed here (the same human-only release-tail pattern as the v0.10.2
+guide demo); this workstream ships only after every other v0.23.0 workstream has
+landed.
 
 ## Problem
 
