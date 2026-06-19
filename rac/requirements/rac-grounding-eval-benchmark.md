@@ -8,7 +8,7 @@ tags: [user-facing, eval, retrieval, benchmark, ci]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[user-facing]` — it is the proof the tool works. Scoped to the
 v0.23.0 hardening release (WS1).
