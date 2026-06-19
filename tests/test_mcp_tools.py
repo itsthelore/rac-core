@@ -52,7 +52,17 @@ def call(root: str, tool: str, args: dict, budget: int = DEFAULT_BUDGET) -> dict
 
 def test_get_artifact_resolved_shape():
     payload = call(CORPUS, "get_artifact", {"id": DEC})
-    assert list(payload) == ["schema_version", "id", "type", "title", "path", "content"]
+    # WS11: additive nested `provenance` carrying the reviewed status signal.
+    assert list(payload) == [
+        "schema_version",
+        "id",
+        "type",
+        "title",
+        "path",
+        "content",
+        "provenance",
+    ]
+    assert payload["provenance"] == {"status": "Accepted"}
     assert payload["schema_version"] == "1"
     assert payload["id"] == DEC
     assert payload["type"] == "decision"

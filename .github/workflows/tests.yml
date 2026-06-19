@@ -105,6 +105,8 @@ jobs:
             paths: "tests/test_doctor.py"
           - name: robustness
             paths: "tests/test_robustness.py"
+          - name: trust
+            paths: "tests/test_trust_model.py"
           - name: revisions
             paths: "tests/test_revisions.py"
           - name: recency
