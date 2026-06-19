@@ -8,7 +8,7 @@ tags: [user-facing, doctor, validation, diagnostics]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[user-facing]` — the user runs it on their repo. Scoped to the
 v0.23.0 hardening release (WS3).
