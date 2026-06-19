@@ -53,6 +53,59 @@ plain service boundary, and `tests/test_explorer_isolation.py` enforces the laye
 rules with AST checks — `rac.core`/`rac.services` never import Textual or the
 Explorer, and widgets never import Core internals (ADR-015).
 
+## Test tiers
+
+CI already runs in three concrete layers (ADR-027). These are a *reading* of the
+existing workflows, not a new structure — there are no pytest markers or taxonomy
+to learn, and each tier maps to a real CI job and a copy-paste local command. Run
+the tier that matches the change at hand.
+
+### 1. Inner loop (smoke) — fastest signal
+
+The `smoke` job in [`.github/workflows/pr-checks.yml`](../.github/workflows/pr-checks.yml)
+(`core` subset + `golden` + `dogfood`, py3.11). Catches output-contract drift and
+corpus damage in seconds:
+
+```bash
+.venv/bin/python -m pytest -q \
+  tests/test_validate.py tests/test_parser.py tests/test_schema.py \
+  tests/test_identity.py tests/test_frontmatter.py \
+  tests/test_metadata_identity.py tests/test_idgen.py \
+  tests/test_ci_batteries.py tests/test_corpus.py \
+  tests/test_operations.py \
+  tests/test_golden.py tests/test_dogfood.py
+```
+
+### 2. Pre-push (PR tier) — what a pull request actually runs
+
+Everything `pr-checks.yml` runs on a PR: the `lint` job (`ruff check`,
+`ruff format --check`, `mypy src/` — see [Lint, format, and types](#lint-format-and-types)),
+the `smoke` job above, and the dogfood action jobs (`watchkeeper`, `validate`,
+`agent-rules`, `grounding-eval`, `doctor`, `pr-gate`). Local equivalent — the
+lint trio, the smoke set, plus the dogfood gates:
+
+```bash
+.venv/bin/python -m ruff check src/ tests/
+.venv/bin/python -m ruff format --check src/ tests/
+.venv/bin/python -m mypy src/
+.venv/bin/rac gate rac/        # validate + relationships + review, one command
+.venv/bin/rac eval --check     # grounding-eval gate
+.venv/bin/rac doctor rac/      # doctor dogfood
+```
+
+### 3. Full local CI (merge grid) — the complete suite
+
+The per-service battery × Python-version grid from the reusable
+[`.github/workflows/tests.yml`](../.github/workflows/tests.yml). Every
+`tests/test_*.py` belongs to exactly one battery (enforced by
+`tests/test_ci_batteries.py`). This is the grid that gates `main` (`ci.yml`) and
+releases (`python-publish.yml`, `needs: test`). Locally it is just the whole
+suite:
+
+```bash
+.venv/bin/python -m pytest        # the full suite, every battery
+```
+
 ## Lint, format, and types
 
 CI gates on ruff and mypy (configured in `pyproject.toml`); run them locally

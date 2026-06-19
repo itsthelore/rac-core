@@ -4,6 +4,43 @@ User-visible changes to RAC, by release. Follows the spirit of
 [Keep a Changelog](https://keepachangelog.com/): user impact over implementation
 details, release history over commit history.
 
+## v0.23.0 — Hardening
+
+The release that turns the grounding claim from "trust us" into something proven
+and legible. Everything a user feels:
+
+- **Explainable retrieval.** A search result now shows *why* it was retrieved —
+  which field matched, which term, which relationship edge — on
+  `search_artifacts` / `get_related`, and via `rac find --explain`.
+- **`rac doctor`.** One command diagnoses a corpus and emits paste-ready fixes
+  for malformed front matter, broken or cyclic relationships, orphans, duplicate
+  ids, contradictions, and injection-style content.
+- **Provenance on `get_artifact`.** The agent can cite who decided and when:
+  git-derived author and dates plus the reconstructed status history, additive
+  and backward-compatible.
+- **A documented trust model.** `SECURITY.md` records that artifact content is
+  untrusted input made authoritative by human PR review — the read-only server
+  protects the store, the PR gate protects the agent — and `get_artifact`
+  surfaces the reviewed status.
+- **Provably works, and stays working.** A gated grounding benchmark
+  (`rac eval --check`: deterministic Precision@k / Recall@k with a hard-negative
+  check and a committed baseline) and parser/traversal robustness (input caps,
+  graceful degradation, a bounded `get_related`) turn the claim into a CI
+  regression guard. A reproducible obey-demo (`examples/obey-demo/`) captures a
+  real agent declining a forbidden change after consulting Lore.
+
+**What is deferred.** No automated multi-agent CI harness — the obey-demo is a
+manual smoke, never a gate (the agent supplies the judgment, Lore the facts). No
+schema-migration framework (`schema_version: 1` already exists). No resumability
+or crash-safe job machinery. No multi-hop relationship traversal — `get_related`
+stays 1-hop, bounded by the response budget.
+
+**Known limits.** The MCP server is **pull-based and read-only**: the agent must
+consult it — nothing is pushed — and it never writes to or mutates the
+repository. Full CI enforcement of code-vs-decision conflicts is *not* in this
+release: the obey-demo demonstrates the behaviour, but a build does not yet fail
+when code contradicts a decision. That is a future release.
+
 ## Unreleased
 
 ### Changed
