@@ -29,7 +29,7 @@ Commands:
     rac init [directory] [--key KEY] [--json]
     rac quickstart [directory] [--key KEY] [--type TYPE] [--json]
     rac resolve <ID> [directory] [--json]
-    rac find <query> [directory] [--type TYPE] [--json]
+    rac find <query> [directory] [--type TYPE] [--json] [--explain]
     rac eval [--check | --update-baseline] [--json]
              [--root DIR] [--queries PATH] [--baseline PATH] [--config PATH]
     rac migrate metadata <directory> [--dry-run] [--json]
@@ -841,9 +841,9 @@ def cmd_find(args: argparse.Namespace) -> int:
             recursive=not args.top_level,
         )
     if args.json:
-        print(outputs.render_find_json(result))
+        print(outputs.render_find_json(result, explain=args.explain))
     else:
-        print(outputs.render_find_human(result))
+        print(outputs.render_find_human(result, explain=args.explain))
     # An empty result is a valid outcome, not an error (a query always succeeds).
     return EXIT_OK
 
@@ -1763,6 +1763,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_find.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_find.add_argument(
+        "--explain",
+        action="store_true",
+        help=(
+            "Show why each match was retrieved: the matched field, terms, and "
+            "tier (additive `evidence`, ADR-037/ADR-038)."
+        ),
     )
     p_find.add_argument(
         "--top-level",

@@ -354,9 +354,15 @@ def render_resolve_json(result: ResolutionResult) -> str:
     return json.dumps(result.to_dict(), indent=2)
 
 
-def render_find_json(result: SearchResult) -> str:
-    """JSON `rac find` output (stable contract, ADR-007)."""
-    return json.dumps(result.to_dict(), indent=2)
+def render_find_json(result: SearchResult, *, explain: bool = False) -> str:
+    """JSON `rac find` output (stable contract, ADR-007).
+
+    ``explain`` adds the additive per-match ``evidence`` object (WS2). It is
+    off by default so the standard ``rac find --json`` shape stays byte-stable;
+    ``rac find --explain --json`` emits the same ``evidence`` the MCP
+    ``search_artifacts`` tool emits (one source of truth, REQ-004).
+    """
+    return json.dumps(result.to_dict(include_evidence=explain), indent=2)
 
 
 # --- migrate (v0.7.13) ----------------------------------------------------------

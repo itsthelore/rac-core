@@ -996,12 +996,19 @@ def render_resolve_human(result: ResolutionResult) -> str:
     )
 
 
-def render_find_human(result: SearchResult) -> str:
-    """Human `rac find` output: aligned match rows, or a valid empty result."""
+def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
+    """Human `rac find` output: aligned match rows, or a valid empty result.
+
+    ``explain`` (WS2) appends one indented attribution line per match —
+    ``field=<tier> terms=<t1,t2> [section: snippet]`` — under the existing row,
+    read off the matcher's evidence (ADR-037). Without it the output is
+    unchanged (REQ-004).
+    """
     if not result.matches:
         return f"No artifacts match {result.query!r}."
     id_w = max(len(m.id) for m in result.matches)
     type_w = max(len(m.type) for m in result.matches)
+    indent = f"{' ' * id_w}  {' ' * type_w}  "
     lines: list[str] = []
     for m in result.matches:
         lines.append(f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}")
@@ -1010,7 +1017,13 @@ def render_find_human(result: SearchResult) -> str:
         # the file (ADR-038). Metadata matches have no snippet and stay one line.
         if m.snippet is not None:
             section = f"{m.section}: " if m.section else ""
-            lines.append(f"{' ' * id_w}  {' ' * type_w}  ↳ {section}{m.snippet}")
+            lines.append(f"{indent}↳ {section}{m.snippet}")
+        if explain and m.evidence is not None:
+            attribution = f"field={m.evidence['field']} terms={','.join(m.evidence['terms'])}"
+            if m.snippet is not None:
+                where = f"{m.section}: " if m.section else ""
+                attribution += f" [{where}{m.snippet}]"
+            lines.append(f"{indent}• {attribution}")
     lines.append("")
     lines.append(f"{result.match_count} match(es) for {result.query!r}.")
     return "\n".join(lines)
