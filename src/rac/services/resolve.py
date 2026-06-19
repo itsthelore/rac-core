@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from rac.core.corpus import walk_corpus
 from rac.core.models import SearchSection
@@ -65,6 +65,16 @@ _RANK_TITLE = 1
 _RANK_PATH = 2
 _RANK_HEADING = 3
 _RANK_BODY = 4
+
+# Tier number -> field name, the projection ADR-037's ladder exposes as match
+# evidence (WS2 explainable retrieval): the winning rank named, no new compute.
+_RANK_NAMES: dict[int, str] = {
+    _RANK_ID: "id",
+    _RANK_TITLE: "title",
+    _RANK_PATH: "path",
+    _RANK_HEADING: "heading",
+    _RANK_BODY: "body",
+}
 
 # A token is a maximal run that is neither a non-alphanumeric boundary nor a
 # camelCase transition. We split on both: ``_TOKEN_SPLIT`` breaks on runs of
@@ -113,9 +123,15 @@ class ResolvedArtifact:
     path: str
     section: str | None = None
     snippet: str | None = None
+    # Match evidence (v0.23.0, WS2, additive): the winning field/tier and matched
+    # terms for a *search* hit — ``{field, terms, tier}`` (ADR-037/ADR-038). None
+    # for resolution and absent from ``to_dict`` then, so the exact-lookup shape
+    # is unchanged. Always set for a search match; the gate it answers to is
+    # ``include_evidence`` so the CLI's default ``rac find`` JSON stays byte-stable.
+    evidence: dict | None = None
 
-    def to_dict(self) -> dict:
-        payload = {
+    def to_dict(self, *, include_evidence: bool = True) -> dict:
+        payload: dict[str, Any] = {
             "id": self.id,
             "type": self.type,
             "title": self.title,
@@ -125,6 +141,8 @@ class ResolvedArtifact:
             payload["section"] = self.section
         if self.snippet is not None:
             payload["snippet"] = self.snippet
+        if include_evidence and self.evidence is not None:
+            payload["evidence"] = self.evidence
         return payload
 
     @classmethod
@@ -134,6 +152,7 @@ class ResolvedArtifact:
         *,
         section: str | None = None,
         snippet: str | None = None,
+        evidence: dict | None = None,
     ) -> ResolvedArtifact:
         return cls(
             id=entry.id,
@@ -142,6 +161,7 @@ class ResolvedArtifact:
             path=entry.path,
             section=section,
             snippet=snippet,
+            evidence=evidence,
         )
 
 
@@ -180,13 +200,13 @@ class SearchResult:
     def match_count(self) -> int:
         return len(self.matches)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, *, include_evidence: bool = True) -> dict:
         return {
             "schema_version": "1",
             "query": self.query,
             "type": self.artifact_type,
             "match_count": self.match_count,
-            "matches": [m.to_dict() for m in self.matches],
+            "matches": [m.to_dict(include_evidence=include_evidence) for m in self.matches],
         }
 
 
@@ -230,11 +250,26 @@ def resolve_in_index(entries: Sequence[SearchableArtifact], artifact_id: str) ->
 
 @dataclass
 class _Match:
-    """A search hit: the winning tier plus snippet text for heading/body tiers."""
+    """A search hit: the winning tier, snippet for heading/body, matched terms.
+
+    ``terms`` is the matched-terms set the matcher already computes (WS2), kept
+    in query order and surfaced as evidence rather than recomputed (ADR-037).
+    """
 
     rank: int
     section: str | None = None
     snippet: str | None = None
+    terms: list[str] = field(default_factory=list)
+
+
+def _evidence(match: _Match) -> dict:
+    """The additive match ``evidence`` object for a search hit (WS2, ADR-037).
+
+    ``{field, terms, tier}``: the winning field name, the matched query terms in
+    query order, and the numeric tier — read off the matcher's existing rank and
+    matched-terms set, never a second heuristic or a relevance score (ADR-034).
+    """
+    return {"field": _RANK_NAMES[match.rank], "terms": list(match.terms), "tier": match.rank}
 
 
 def _id_tokens(entry: SearchableArtifact) -> list[str]:
@@ -304,11 +339,17 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
     if best_rank is None:
         return None
 
+    # Matched terms in query order (deduped) — the evidence the matcher already
+    # has (WS2). AND semantics make this every distinct query term.
+    ordered_terms = [term for term in dict.fromkeys(terms) if term in matched_terms]
+
     if best_rank == _RANK_HEADING and heading_hit is not None:
-        return _Match(rank=best_rank, section=heading_hit[0], snippet=heading_hit[1])
+        return _Match(
+            rank=best_rank, section=heading_hit[0], snippet=heading_hit[1], terms=ordered_terms
+        )
     if best_rank == _RANK_BODY and body_hit is not None:
-        return _Match(rank=best_rank, section=body_hit[0], snippet=body_hit[1])
-    return _Match(rank=best_rank)
+        return _Match(rank=best_rank, section=body_hit[0], snippet=body_hit[1], terms=ordered_terms)
+    return _Match(rank=best_rank, terms=ordered_terms)
 
 
 def find_artifacts(
@@ -399,7 +440,9 @@ def search_index(
         query=query,
         artifact_type=artifact_type,
         matches=[
-            ResolvedArtifact.from_entry(e, section=m.section, snippet=m.snippet)
+            ResolvedArtifact.from_entry(
+                e, section=m.section, snippet=m.snippet, evidence=_evidence(m)
+            )
             for _, _, e, m in ranked
         ],
     )
