@@ -8,10 +8,18 @@ tags: [internal, performance, determinism, hashing]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]`. Scoped to the v0.23.0 hardening release (WS8,
-core only).
+core only). Implemented as `CorpusCache` on the `collect_corpus` seam
+(`core/corpus.py`): a per-invocation, in-memory, content-hash-keyed snapshot
+reuse, with `content_hash` over full on-disk source bytes. `rac doctor` — the
+multi-phase command — shares one cache across its validation, relationship, and
+degree/injection passes, so each artifact is parsed once per run; the additive
+`cache` parameter on `validate_directory` / `validate_relationships` is the seam
+it threads through. The MCP serving path is deliberately untouched and re-reads
+per call (REQ-004); single-phase commands (`rac validate`, `rac eval`) gain the
+parameter but see no within-run reuse, which is correct.
 
 ## Problem
 
