@@ -8,7 +8,7 @@ tags: [user-facing, security, trust, mcp, grounding]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[user-facing]` — assurance the grounding layer is not an
 injection vector. Scoped to the v0.23.0 hardening release (WS11).
@@ -34,7 +34,7 @@ deterministic signal.
 - [REQ-001] The release MUST document the trust model in `SECURITY.md`: artifact content is authoritative because it passed human PR review; the read-only MCP server protects the store, not the agent; unreviewed or machine-ingested content is out of scope and MUST NOT be treated as trusted (ADR-065). `SECURITY.md` is scoped to RAC Core / the Lore read-only MCP server in this repository; it documents the trust model and the existing report channel, and MUST NOT promise a vulnerability-response SLA, a sanitizer, or any per-artifact trust verdict (ADR-034, ADR-065).
 - [REQ-002] `SECURITY.md` MUST state the threat (a poisoned artifact or hostile PR can attempt to steer the consuming agent — imperative overrides, system/agent/tool impersonation, decision-steering text) and the mitigation (human PR review as the boundary, plus the `rac doctor` injection flag and the `get_artifact` review signal as aids), and MUST state plainly that PR review is the trust boundary and that neither aid is a guarantee or a gate (ADR-065).
 - [REQ-003] The `rac doctor` injection-style-content check is owned by WS3 (`rac-doctor-diagnostic-validator`, REQ-004); this requirement MUST NOT re-specify or duplicate it. WS11 owns only the trust model documentation and the `get_artifact` review signal, and references the doctor flag as the authoring-time aid `SECURITY.md` points to.
-- [REQ-004] `get_artifact` MUST surface a review/trust signal additively and backward-compatibly (ADR-007): a top-level `status` string sourced deterministically from the artifact's `## Status` section as already parsed by Core (no new front-matter field, no PR-API call), so a consumer can distinguish a reviewed-`Accepted` decision from a `Proposed`/draft artifact. The signal MUST be derived from repository bytes plus git only and MUST be byte-identical across repeated calls on an unchanged corpus (ADR-032); when the status cannot be determined the field MUST be present with an explicit empty/unknown value rather than omitted.
+- [REQ-004] `get_artifact` MUST surface a review/trust signal additively and backward-compatibly (ADR-007): a `status` string under a nested `provenance` object (the single object get_artifact's additive fields share; WS5 adds author/date/status-history there), sourced deterministically from the artifact's `## Status` section as already parsed by Core (no new front-matter field, no PR-API call), so a consumer can distinguish a reviewed-`Accepted` decision from a `Proposed`/draft artifact. The signal MUST be derived from repository bytes plus git only and MUST be byte-identical across repeated calls on an unchanged corpus (ADR-032); when the status cannot be determined the field MUST be present with an explicit empty/unknown value rather than omitted.
 - [REQ-005] The review signal is a reported fact, not a verdict: `get_artifact` MUST NOT compute or return a "trustworthiness" score, a pass/fail trust judgement, or any per-artifact safety verdict (ADR-034). It surfaces status (and, where WS5 provenance lands, the author/reviewer facts) and leaves the trust judgement to the human reviewer and the consuming agent.
 - [REQ-006] Nothing in this release may auto-edit, sanitize, rewrite, or filter artifact content; the trust boundary remains human PR review and the read-only surface stays byte-stable (ADR-065, ADR-032).
 
@@ -43,7 +43,7 @@ deterministic signal.
 - The trust model is documented in `SECURITY.md`, within the scope of REQ-001,
   and states plainly that PR review is the boundary and the doctor flag and
   review signal are aids, not guarantees.
-- `get_artifact` exposes a top-level `status` field, verified by a test, as an
+- `get_artifact` exposes a `provenance.status` field (nested under `provenance`), verified by a test, as an
   additive backward-compatible field that is byte-identical across repeated
   calls on an unchanged corpus and present-but-empty when status is
   indeterminate.
