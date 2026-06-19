@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass
 
 from rac.core.artifacts import spec_for
 from rac.core.classification import classify
-from rac.core.corpus import CorpusEntry, walk_corpus
+from rac.core.corpus import CorpusCache, CorpusEntry, walk_corpus
 from rac.core.models import Issue, Product
 from rac.core.overrides import SeverityOverrides, apply_overrides
 from rac.core.validation import has_errors, validate
@@ -197,13 +197,22 @@ def validate_product(product: Product, start: str = ".") -> list[Issue]:
     return apply_overrides(validate(product), classify(product).type, load_overrides(start))
 
 
-def validate_directory(directory: str, recursive: bool = True) -> DirectoryValidation:
+def validate_directory(
+    directory: str, recursive: bool = True, *, cache: CorpusCache | None = None
+) -> DirectoryValidation:
     """Validate every recognized artifact under ``directory``.
 
     Files are processed in sorted path order (``walk_corpus``), so the
-    result — and everything rendered from it — is deterministic.
+    result — and everything rendered from it — is deterministic. When a
+    per-invocation ``cache`` is supplied, the walk is served through it so an
+    artifact already parsed in an earlier phase of the same run is not reparsed
+    (WS8); the result is byte-identical either way.
     """
-    entries = list(walk_corpus(directory, recursive=recursive))
+    entries = (
+        cache.collect(directory, recursive=recursive)
+        if cache is not None
+        else list(walk_corpus(directory, recursive=recursive))
+    )
     overrides = load_overrides(directory)
     return validate_corpus(directory, entries, recursive=recursive, overrides=overrides)
 

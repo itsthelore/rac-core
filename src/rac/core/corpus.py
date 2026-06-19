@@ -15,6 +15,7 @@ errors keep bubbling to the caller, matching the loops this replaces.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,3 +76,67 @@ def collect_corpus(
         if on_progress is not None:
             on_progress(Progress(phase="scan", completed=completed, total=total))
     return entries
+
+
+def content_hash(path: Path) -> str:
+    """SHA-256 of an artifact's full on-disk source bytes (front matter + body).
+
+    Source content only — never derived output, never mtime (WS8, REQ-002) — so
+    any edit (whitespace or front-matter included) changes the digest and forces
+    a reprocess, while touching a file without changing its bytes does not. An
+    unreadable file hashes to a stable sentinel rather than raising, so the walk
+    continues past it (the next read decides whether it changed).
+    """
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return hashlib.sha256(b"\x00rac-unreadable-artifact").hexdigest()
+
+
+class CorpusCache:
+    """Per-invocation, content-hash-keyed corpus snapshot reuse (v0.23.0, WS8).
+
+    Within ONE CLI invocation several phases each want the parsed corpus — the
+    doctor pass runs validation, relationship integrity, and its own degree /
+    injection checks, each of which would otherwise re-walk and re-parse every
+    artifact. This cache hashes each artifact's on-disk source bytes through the
+    ``collect_corpus`` seam ADR-032 names and, when a later phase requests an
+    artifact whose hash is unchanged from an earlier phase of the same run,
+    returns the already-parsed :class:`CorpusEntry` instead of reparsing it
+    (REQ-001).
+
+    It is in-memory and invocation-scoped: it persists no state to disk and
+    survives no process boundary (REQ-001), and it is deliberately NOT used by
+    the MCP serving path, which re-reads from disk on every tool call (ADR-032,
+    REQ-004). Because identical source bytes always reparse to the same
+    ``Product``, reusing an entry yields byte-identical derived output to
+    reprocessing it (REQ-003); ``reprocessed`` / ``reused`` are exposed only so
+    tests can prove the short-circuit fires.
+    """
+
+    def __init__(self) -> None:
+        self._by_path: dict[Path, tuple[str, CorpusEntry]] = {}
+        self.reprocessed = 0
+        self.reused = 0
+
+    def collect(self, directory: str, *, recursive: bool = True) -> list[CorpusEntry]:
+        """Return the corpus snapshot, reparsing only artifacts whose bytes changed.
+
+        Deterministic and order-stable: files arrive in ``find_markdown_files``
+        order, exactly as :func:`walk_corpus`. Every call still reads each file to
+        hash it (cheap); only the parse + classify is short-circuited.
+        """
+        entries: list[CorpusEntry] = []
+        for path in find_markdown_files(directory, recursive=recursive):
+            digest = content_hash(path)
+            cached = self._by_path.get(path)
+            if cached is not None and cached[0] == digest:
+                self.reused += 1
+                entries.append(cached[1])
+                continue
+            product = parse_file(str(path))
+            entry = CorpusEntry(path=path, product=product, classification=classify(product))
+            self._by_path[path] = (digest, entry)
+            self.reprocessed += 1
+            entries.append(entry)
+        return entries

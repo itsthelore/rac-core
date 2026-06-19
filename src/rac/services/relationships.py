@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
-from rac.core.corpus import CorpusEntry, walk_corpus
+from rac.core.corpus import CorpusCache, CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.limits import MAX_RELATED_EDGES
 from rac.core.markdown import parse_file
@@ -725,8 +725,19 @@ def _validate(
     )
 
 
-def validate_relationships(directory: str, recursive: bool = True) -> RelationshipValidation:
-    """Validate explicit relationship references across a directory."""
+def validate_relationships(
+    directory: str, recursive: bool = True, *, cache: CorpusCache | None = None
+) -> RelationshipValidation:
+    """Validate explicit relationship references across a directory.
+
+    When a per-invocation ``cache`` is supplied, the corpus is served through it
+    so artifacts already parsed in an earlier phase of the same run are not
+    reparsed (WS8); the result is byte-identical to the uncached walk.
+    """
+    if cache is not None:
+        return validation_from_corpus(
+            directory, cache.collect(directory, recursive=recursive), recursive
+        )
     items = _corpus_items(directory, recursive)
     return _validate(directory, items, recursive)
 

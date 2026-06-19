@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from rac.core.artifacts import spec_for
-from rac.core.corpus import CorpusEntry, walk_corpus
+from rac.core.corpus import CorpusCache, CorpusEntry
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_RELATIONSHIP_CYCLE,
@@ -165,11 +165,19 @@ class DoctorReport:
 def diagnose(
     directory: str, recursive: bool = True, hub_threshold: int = DEFAULT_HUB_THRESHOLD
 ) -> DoctorReport:
-    """Run validation, relationship integrity, and the two new checks in one pass."""
-    entries = list(walk_corpus(directory, recursive=recursive))
+    """Run validation, relationship integrity, and the two new checks in one pass.
+
+    All four phases share one per-invocation :class:`CorpusCache` (WS8), so each
+    artifact is parsed once for the whole run rather than re-parsed by the
+    validation, relationship, and degree/injection phases independently. The
+    short-circuit is a performance path only — the report is byte-identical to a
+    full reprocess (REQ-003).
+    """
+    cache = CorpusCache()
+    entries = cache.collect(directory, recursive=recursive)
     findings: list[DoctorFinding] = []
-    findings.extend(_validation_findings(directory, recursive))
-    findings.extend(_relationship_findings(directory, recursive))
+    findings.extend(_validation_findings(directory, recursive, cache))
+    findings.extend(_relationship_findings(directory, recursive, cache))
     findings.extend(_degree_findings(entries, hub_threshold))
     findings.extend(_injection_findings(entries))
     # Deterministic order: errors before warnings, then path, code, problem.
@@ -177,13 +185,15 @@ def diagnose(
     return DoctorReport(directory=directory, hub_threshold=hub_threshold, findings=findings)
 
 
-def _validation_findings(directory: str, recursive: bool) -> list[DoctorFinding]:
+def _validation_findings(
+    directory: str, recursive: bool, cache: CorpusCache | None = None
+) -> list[DoctorFinding]:
     """One finding per structurally invalid artifact, reusing the validator.
 
     The validator owns the defect detail; doctor surfaces the verdict and points
     at `rac validate <path>` for the full report (REQ-001, REQ-003).
     """
-    result = validate_directory(directory, recursive=recursive)
+    result = validate_directory(directory, recursive=recursive, cache=cache)
     findings: list[DoctorFinding] = []
     for file in result.files:
         if file.status != STATUS_INVALID:
@@ -202,14 +212,16 @@ def _validation_findings(directory: str, recursive: bool) -> list[DoctorFinding]
     return findings
 
 
-def _relationship_findings(directory: str, recursive: bool) -> list[DoctorFinding]:
+def _relationship_findings(
+    directory: str, recursive: bool, cache: CorpusCache | None = None
+) -> list[DoctorFinding]:
     """One finding per relationship-integrity issue, reusing the engine.
 
     Cycles, duplicate ids, broken / ambiguous / type-mismatch / retired / self
     references all come from `relationships --validate` (REQ-002, REQ-004);
     intrinsic severity is the recorded source of truth (`RELATIONSHIP_SEVERITY`).
     """
-    result = validate_relationships(directory, recursive=recursive)
+    result = validate_relationships(directory, recursive=recursive, cache=cache)
     findings: list[DoctorFinding] = []
     for issue in result.issues:
         findings.append(
