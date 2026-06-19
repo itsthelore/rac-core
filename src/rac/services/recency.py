@@ -19,11 +19,18 @@ cadence nudge, v0.13.3) stay inside ADR-017.
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from rac.core.markdown import parse
+from rac.services.agent_rules import artifact_status
 from rac.services.index import build_repository_index
+
+# Field separator for combined ``git log --format`` records. The unit-separator
+# control byte never appears in a commit date, author name, or email, so a
+# single ``--format`` call can carry several fields and be split unambiguously.
+_FIELD_SEP = "\x1f"
 
 
 def _run_git(args: list[str], cwd: str) -> subprocess.CompletedProcess[str] | None:
@@ -183,3 +190,135 @@ def artifact_recency(
             )
         )
     return RecencyReport(directory=directory, recursive=recursive, artifacts=artifacts)
+
+
+# --- Provenance (v0.23.0, WS5, ADR-045) --------------------------------------
+#
+# get_artifact surfaces who decided and when. Authorship and dates are *derived*
+# from git, never stored in front matter (ADR-045), through this same narrow git
+# touchpoint — WS5 adds no third git module and imports no git library (REQ-003).
+# Every git read degrades to ``None`` / ``[]`` rather than raising when git is
+# unavailable, the directory is not a repository, or the file is untracked
+# (REQ-004); the current status still comes from parsed metadata regardless.
+
+
+def _commit_record(
+    repo_root: str, path: str, *, earliest: bool
+) -> tuple[datetime | None, str | None]:
+    """``(commit time, "Name <email>")`` for one boundary commit touching ``path``.
+
+    ``earliest`` selects the creation commit (``git log --reverse``, first line);
+    otherwise the most recent change (``git log -1``). One ``--format`` call
+    carries both fields. Returns ``(None, None)`` when git does not know.
+    """
+    fmt = f"--format=%cI{_FIELD_SEP}%an <%ae>"
+    args = ["log", "--reverse", fmt] if earliest else ["log", "-1", fmt]
+    args += ["--", _pathspec(repo_root, path)]
+    result = _run_git(args, cwd=repo_root)
+    if result is None or result.returncode != 0:
+        return None, None
+    for line in result.stdout.splitlines():
+        if line.strip():
+            stamp, _, author = line.partition(_FIELD_SEP)
+            return _parse_stamp(stamp), (author.strip() or None)
+    return None, None
+
+
+def _status_history(repo_root: str, path: str) -> list[StatusChange]:
+    """The artifact's ``## Status`` value at each commit that changed it, oldest first.
+
+    Walks the file's history once (``git log --reverse``), then reads the parsed
+    status at each revision (``git show <rev>:<path>``), emitting one entry every
+    time the value changes from the previous one (REQ-003). Absent / empty status
+    is the baseline and yields no entry, so the history is the meaningful
+    lifecycle (e.g. ``Proposed`` → ``Accepted``). O(commits touching the file);
+    a missing or unreadable revision is skipped, never raised.
+    """
+    pathspec = _pathspec(repo_root, path)
+    walk = _run_git(
+        ["log", "--reverse", f"--format=%H{_FIELD_SEP}%cI{_FIELD_SEP}%an <%ae>", "--", pathspec],
+        cwd=repo_root,
+    )
+    if walk is None or walk.returncode != 0:
+        return []
+    history: list[StatusChange] = []
+    last_status = ""
+    for line in walk.stdout.splitlines():
+        if not line.strip():
+            continue
+        sha, stamp, author = line.split(_FIELD_SEP, 2)
+        shown = _run_git(["show", f"{sha}:{pathspec}"], cwd=repo_root)
+        if shown is None or shown.returncode != 0:
+            continue
+        status = artifact_status(parse(shown.stdout))
+        if status and status != last_status:
+            history.append(
+                StatusChange(
+                    status=status, committed=_parse_stamp(stamp), author=author.strip() or None
+                )
+            )
+            last_status = status
+    return history
+
+
+@dataclass
+class StatusChange:
+    """One lifecycle transition reconstructed from git: when the parsed
+    ``## Status`` value changed, and the author of the commit that changed it."""
+
+    status: str
+    committed: datetime | None
+    author: str | None
+
+    def to_dict(self) -> dict:
+        return {
+            "status": self.status,
+            "committed": self.committed.isoformat() if self.committed else None,
+            "author": self.author,
+        }
+
+
+@dataclass
+class ArtifactProvenance:
+    """One artifact's git-derived provenance: creation and last-change
+    author/time plus the reconstructed status history. Every field is ``None``
+    / ``[]`` when git cannot answer (ADR-045); the *current* status is sourced
+    from parsed metadata by the caller, not from git, so it is not carried here."""
+
+    last_committed: datetime | None = None
+    last_author: str | None = None
+    first_committed: datetime | None = None
+    first_author: str | None = None
+    status_history: list[StatusChange] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "last_committed": self.last_committed.isoformat() if self.last_committed else None,
+            "last_author": self.last_author,
+            "first_committed": self.first_committed.isoformat() if self.first_committed else None,
+            "first_author": self.first_author,
+            "status_history": [change.to_dict() for change in self.status_history],
+        }
+
+
+def artifact_provenance(directory: str, path: str) -> ArtifactProvenance:
+    """Git-derived provenance for one artifact at ``path`` within ``directory``.
+
+    Reuses the recency git boundary (no new touchpoint, no git library; REQ-003)
+    and never raises: outside a repository, in a shallow clone missing the
+    commits, or for an untracked file, every field degrades to ``None`` / ``[]``
+    (REQ-004). The current lifecycle status is read from parsed metadata by the
+    caller and is deliberately not part of this git-only object.
+    """
+    repo_root = _repository_root(directory)
+    if repo_root is None:
+        return ArtifactProvenance()
+    last_committed, last_author = _commit_record(repo_root, path, earliest=False)
+    first_committed, first_author = _commit_record(repo_root, path, earliest=True)
+    return ArtifactProvenance(
+        last_committed=last_committed,
+        last_author=last_author,
+        first_committed=first_committed,
+        first_author=first_author,
+        status_history=_status_history(repo_root, path),
+    )
