@@ -207,6 +207,15 @@ def _get_related(root: str, artifact_id: str, budget: int) -> str:
             "title": ref.title,
             "path": ref.path,
             "section": ref.section,
+            # Edge evidence (WS2, additive): the relationship edge that surfaced
+            # this artifact, named rather than recomputed (REQ-002). A relationship
+            # is not a text match, so it carries direction/relationship/target,
+            # not field/terms/tier.
+            "evidence": {
+                "direction": "incoming",
+                "relationship": ref.section,
+                "target": ref.target,
+            },
         }
         for ref in incoming_references(relationships, identity_by_path, artifact.path)
     ]

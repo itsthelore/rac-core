@@ -965,8 +965,9 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
 class IncomingReference:
     """An artifact whose declared reference resolves to a target artifact.
 
-    The ``get_related`` ``incoming`` shape: the referencing artifact's identity
-    plus the snake_case relationship section the reference sits in.
+    The ``get_related`` ``incoming`` shape: the referencing artifact's identity,
+    the snake_case relationship section the reference sits in, and ``target`` —
+    the reference text as stored (WS2 evidence: the edge that surfaced it).
     """
 
     id: str
@@ -974,6 +975,7 @@ class IncomingReference:
     title: str | None
     path: str
     section: str
+    target: str
 
 
 def outgoing_references(
@@ -1022,6 +1024,7 @@ def incoming_references(
                 title=source_title,
                 path=rel.source_path,
                 section=rel.relationship,
+                target=rel.target,
             )
         )
     incoming.sort(key=lambda e: (e.path, e.section))
