@@ -64,6 +64,7 @@ from rac.mcp.telemetry import TelemetryRecorder
 from rac.services.agent_rules import artifact_status
 from rac.services.index import build_repository_index, index_from_corpus
 from rac.services.portfolio import build_portfolio_summary
+from rac.services.recency import artifact_provenance
 from rac.services.relationships import (
     incoming_references,
     outgoing_references,
@@ -168,12 +169,17 @@ def _get_artifact(root: str, artifact_id: str, budget: int) -> str:
         "schema_version": "1",
         **result.artifact.to_dict(),
         "content": content,
-        # Trust signal (WS11, ADR-065): the artifact's reviewed ``## Status``,
-        # nested under ``provenance`` — the one object get_artifact's additive
-        # fields share (WS5 adds author/date/status-history here later). It is a
-        # reported fact sourced from repository bytes, never a trust verdict
-        # (ADR-034); present-but-empty when the artifact declares no status.
-        "provenance": {"status": artifact_status(parse(content))},
+        # Provenance (WS11 + WS5, ADR-065/ADR-045): the one additive object
+        # get_artifact's review/accountability fields share. ``status`` is the
+        # reviewed ``## Status`` from parsed bytes (WS11 trust signal,
+        # present-but-empty when none); the rest is git-derived authorship and
+        # the reconstructed status history (WS5), each ``null``/``[]`` when git
+        # cannot answer. All reported facts sourced from the repository, never a
+        # trust verdict or score (ADR-034).
+        "provenance": {
+            "status": artifact_status(parse(content)),
+            **artifact_provenance(root, result.artifact.path).to_dict(),
+        },
     }
     return serialize(payload, budget)
 
