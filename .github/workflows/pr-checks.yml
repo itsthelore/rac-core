@@ -160,6 +160,30 @@ jobs:
       - name: Run the grounding-eval gate
         run: rac eval --check
 
+  # Doctor dogfood (v0.23.0, WS3): every pull request runs `rac doctor` on the
+  # RAC corpus. It exits non-zero only on a validation or relationship-integrity
+  # error (orphan/hub/injection findings are advisory warnings and exit 0), so it
+  # gates the same errors the validate/relationships jobs do, in one health pass.
+  doctor:
+    name: doctor (dogfood, source install)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run the doctor health diagnostic
+        run: rac doctor rac/
+
   # PR-gate dogfood (v0.21.14): every pull request runs the local PR-gate action
   # in source mode — the live end-to-end test of pr-gate-action/action.yml. It
   # carries the full contract via a single `rac gate` command — validation,
