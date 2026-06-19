@@ -8,9 +8,15 @@ tags: [internal, schema, contract, mcp, tui]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]`. Scoped to the v0.23.0 hardening release (WS6).
+Delivered as a single pure-Python agreement test (`tests/test_schema_agreement.py`)
+in the core battery; the consumers (validator `spec_for`, the classifier
+`score_artifacts`, the portfolio type tally, the relationship vocabulary, and the
+TUI `schema_reference`/`available_schemas`) were already deriving from the single
+sources, so no ad-hoc schema logic needed folding back (REQ-005 satisfied with no
+source change).
 
 ## Problem
 
