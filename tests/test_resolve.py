@@ -296,10 +296,13 @@ def test_body_only_match_carries_snippet(tmp_path):
 
 
 def test_metadata_match_has_no_snippet_fields(repo):
-    # An id/title/path match's dict is byte-identical to the pre-v0.10.3 shape.
+    # An id/title/path match carries no section/snippet. The pre-v0.10.3 shape is
+    # recovered by excluding the additive WS2 evidence (REQ-003).
     match = find_artifacts(str(repo), CANONICAL_ID).matches[0]
     assert match.section is None and match.snippet is None
-    assert set(match.to_dict()) == {"id", "type", "title", "path"}
+    assert set(match.to_dict(include_evidence=False)) == {"id", "type", "title", "path"}
+    # Evidence is the only additive key on the search shape.
+    assert set(match.to_dict()) == {"id", "type", "title", "path", "evidence"}
 
 
 def test_body_snippet_is_first_matching_line_in_document_order(tmp_path):

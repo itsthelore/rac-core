@@ -106,7 +106,9 @@ def test_search_artifacts_shape_and_order():
     assert payload["type"] is None
     assert payload["match_count"] == 3
     for match in payload["matches"]:
-        assert list(match) == ["id", "type", "title", "path"]
+        # WS2: search results carry an additive `evidence` object (always present).
+        assert list(match) == ["id", "type", "title", "path", "evidence"]
+        assert set(match["evidence"]) == {"field", "terms", "tier"}
     assert "truncated" not in payload
 
 
@@ -118,7 +120,11 @@ def test_search_artifacts_type_filter():
 
 def test_search_artifacts_matches_cli_find_json():
     payload = call(CORPUS, "search_artifacts", {"query": "messaging"})
-    cli = json.loads(json_output.render_find_json(find_artifacts(CORPUS, "messaging")))
+    # MCP search always carries evidence; the equal CLI face is `--explain --json`
+    # (REQ-004, one source of truth).
+    cli = json.loads(
+        json_output.render_find_json(find_artifacts(CORPUS, "messaging"), explain=True)
+    )
     assert payload == cli
 
 
@@ -139,7 +145,7 @@ def test_search_artifacts_body_match_carries_snippet():
     assert match["id"] == REQ
     assert match["section"] == "Problem"
     assert match["snippet"] == "Services are tightly coupled."
-    cli = json.loads(json_output.render_find_json(find_artifacts(CORPUS, "tightly")))
+    cli = json.loads(json_output.render_find_json(find_artifacts(CORPUS, "tightly"), explain=True))
     assert payload == cli
 
 
@@ -148,7 +154,13 @@ def test_search_artifacts_metadata_match_omits_snippet_fields():
     # (ADR-007): no section/snippet keys appear.
     payload = call(CORPUS, "search_artifacts", {"query": "decoupled", "type": "requirement"})
     assert [m["id"] for m in payload["matches"]] == [REQ]
-    assert list(payload["matches"][0]) == ["id", "type", "title", "path"]
+    # No section/snippet on a metadata match; `evidence` is still additive.
+    assert list(payload["matches"][0]) == ["id", "type", "title", "path", "evidence"]
+    assert payload["matches"][0]["evidence"] == {
+        "field": "title",
+        "terms": ["decoupled"],
+        "tier": 1,
+    }
 
 
 def test_search_snippet_match_truncates_as_whole_item():
@@ -164,8 +176,8 @@ def test_search_snippet_match_truncates_as_whole_item():
     # Every kept entry is structurally complete: either a metadata shape or a
     # metadata-plus-snippet shape, never a fragment.
     for m in payload["matches"]:
-        assert {"id", "type", "title", "path"} <= set(m)
-        assert set(m) <= {"id", "type", "title", "path", "section", "snippet"}
+        assert {"id", "type", "title", "path", "evidence"} <= set(m)
+        assert set(m) <= {"id", "type", "title", "path", "section", "snippet", "evidence"}
         if "snippet" in m or "section" in m:
             assert "section" in m and "snippet" in m
 
@@ -288,6 +300,7 @@ def test_get_related_outgoing_and_incoming_shape():
     # outgoing: the artifact's own sections, snake_case, references as stored.
     assert payload["outgoing"] == {"related_requirements": [REQ]}
     # incoming: artifacts whose references resolve here, ordered by path/section.
+    edge = {"direction": "incoming", "relationship": "related_decisions", "target": DEC}
     assert payload["incoming"] == [
         {
             "id": REQ,
@@ -295,6 +308,7 @@ def test_get_related_outgoing_and_incoming_shape():
             "title": "Decoupled Messaging",
             "path": fixture_path("mcp", "corpus", "requirement.md"),
             "section": "related_decisions",
+            "evidence": edge,
         },
         {
             "id": RDM,
@@ -302,6 +316,7 @@ def test_get_related_outgoing_and_incoming_shape():
             "title": "Messaging Roadmap",
             "path": fixture_path("mcp", "corpus", "roadmap.md"),
             "section": "related_decisions",
+            "evidence": edge,
         },
     ]
 
@@ -387,7 +402,7 @@ def test_search_truncates_whole_matches_with_marker():
     assert payload["omitted"] == 3 - len(payload["matches"])
     # Every kept match is a complete entry (never mid-element).
     for match in payload["matches"]:
-        assert set(match) == {"id", "type", "title", "path"}
+        assert set(match) == {"id", "type", "title", "path", "evidence"}
     assert len(serialize(payload, budget)) <= budget or payload["matches"] == []
 
 
@@ -398,7 +413,7 @@ def test_related_truncates_whole_incoming_entries():
     assert payload["hint"] == HINT_RELATED
     assert payload["omitted"] == 2 - len(payload["incoming"])
     for entry in payload["incoming"]:
-        assert set(entry) == {"id", "type", "title", "path", "section"}
+        assert set(entry) == {"id", "type", "title", "path", "section", "evidence"}
 
 
 def test_artifact_truncates_content_tail():
