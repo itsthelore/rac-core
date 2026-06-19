@@ -30,6 +30,8 @@ Commands:
     rac quickstart [directory] [--key KEY] [--type TYPE] [--json]
     rac resolve <ID> [directory] [--json]
     rac find <query> [directory] [--type TYPE] [--json]
+    rac eval [--check | --update-baseline] [--json]
+             [--root DIR] [--queries PATH] [--baseline PATH] [--config PATH]
     rac migrate metadata <directory> [--dry-run] [--json]
     rac skill install [name] [--dir PATH] [--json]
     rac skill list [--json]
@@ -55,6 +57,8 @@ Exit codes:
        references or duplicate identifiers found; review: invalid artifacts
        or broken relationships found (priority 1-2 issues); new: packaged
        template missing (broken installation) or malformed repository config;
+       eval --check: a gate rule fired (hard-negative violation, a metric below
+       its floor, or a metric below baseline minus tolerance);
        init: established key conflicts with the requested one; resolve:
        artifact not found or duplicate ID; migrate: malformed repository
        config or ID generation exhausted; skill install: any target file
@@ -68,7 +72,8 @@ Exit codes:
        mcp --root not a directory, skill --dir not a directory, unknown
        skill name, export --out without --html/--okf or unwritable, missing or
        corrupt vendored portal shell, watchkeeper revision unknown or
-       directory not inside a git repository)
+       directory not inside a git repository, eval corpus unreadable or query
+       set / baseline / config missing or malformed)
 """
 
 from __future__ import annotations
@@ -98,6 +103,7 @@ from rac.core.templates import (
 )
 from rac.core.validation import has_errors
 from rac.output.portal import PortalSeamMissing, PortalShellMissing
+from rac.services import eval as eval_service
 from rac.services.agent_rules import (
     check_agent_rules,
     generate_agent_rules,
@@ -840,6 +846,42 @@ def cmd_find(args: argparse.Namespace) -> int:
         print(outputs.render_find_human(result))
     # An empty result is a valid outcome, not an error (a query always succeeds).
     return EXIT_OK
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    """Score retrieval against the fixture benchmark, or gate against the baseline.
+
+    Three modes (default report / ``--check`` gate / ``--update-baseline``):
+    a clean report exits 0; the gate exits 1 on regression; any usage error
+    (missing baseline, unreadable corpus, malformed query set) exits 2.
+    ``--update-baseline`` is human-only — CI never passes it (REQ-006/REQ-007).
+    """
+    try:
+        scorecard = eval_service.run_eval(args.root, args.queries)
+        if args.update_baseline:
+            Path(args.baseline).write_text(
+                eval_service.render_metrics_json(scorecard.metrics) + "\n", encoding="utf-8"
+            )
+            print(f"rac eval: baseline updated -> {args.baseline}")
+            return EXIT_OK
+        if args.check:
+            baseline = eval_service.load_baseline(args.baseline)
+            config = eval_service.load_config(args.config)
+            failures = eval_service.evaluate_gate(scorecard.metrics, baseline, config)
+            if failures:
+                for failure in failures:
+                    print(failure.render())
+                return EXIT_VALIDATION_FAILED
+            print("rac eval: gate PASS")
+            return EXIT_OK
+        if args.json:
+            print(eval_service.render_scorecard_json(scorecard))
+        else:
+            print(eval_service.render_scorecard_human(scorecard))
+        return EXIT_OK
+    except eval_service.EvalUsageError as exc:
+        print(f"rac eval: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
 
 
 def cmd_migrate(args: argparse.Namespace) -> int:
@@ -1733,6 +1775,53 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_find.set_defaults(func=cmd_find)
+
+    p_eval = sub.add_parser(
+        "eval",
+        help="Score retrieval against the grounding benchmark; gate CI against the baseline.",
+        parents=[version_parent],
+    )
+    eval_mode = p_eval.add_mutually_exclusive_group()
+    eval_mode.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "CI gate: re-score and fail (exit 1) on a hard-negative violation, a "
+            "metric below its floor, or a metric below baseline minus tolerance."
+        ),
+    )
+    eval_mode.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help=(
+            "Human-only re-baseline: overwrite the baseline with the current "
+            "metrics. CI must never pass this."
+        ),
+    )
+    p_eval.add_argument(
+        "--json", action="store_true", help="Emit the full scorecard JSON instead of tables."
+    )
+    p_eval.add_argument(
+        "--root",
+        default=eval_service.DEFAULT_CORPUS,
+        help="Fixture corpus directory (default: tests/eval/corpus).",
+    )
+    p_eval.add_argument(
+        "--queries",
+        default=eval_service.DEFAULT_QUERIES,
+        help="Query set JSON (default: tests/eval/queries.json).",
+    )
+    p_eval.add_argument(
+        "--baseline",
+        default=eval_service.DEFAULT_BASELINE,
+        help="Baseline metrics JSON (default: tests/eval/baseline.json).",
+    )
+    p_eval.add_argument(
+        "--config",
+        default=eval_service.DEFAULT_CONFIG,
+        help="Gate config (floors + tolerance) JSON (default: tests/eval/eval-config.json).",
+    )
+    p_eval.set_defaults(func=cmd_eval)
 
     p_migrate = sub.add_parser(
         "migrate",
