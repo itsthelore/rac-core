@@ -65,6 +65,21 @@ when code contradicts a decision. That is a future release.
   (the connector itself is companion work, ADR-073); the canonical `id` is the
   verify-in-Lore re-fetch hook. The default viewer JSON payload is unchanged.
 
+- `rac export --graph` (v0.25.0 WS2, ADR-074). A new additive export mode that
+  writes a single typed node+edge JSON graph to stdout. Nodes are
+  `{id, type, status, title}`; edges carry the real relationship kind
+  (`supersedes`, `related_*`) and a `directed` flag from the relationship-type
+  registry — so graph/GraphRAG backends (Neo4j, Graphiti, Cognee) receive RAC's
+  validated decision graph rather than one inferred from prose. Resolved
+  references become canonical-id edges; unresolved ones keep their literal target
+  with `resolved: false`. The viewer JSON's flattened `relates-to` edges are
+  unchanged.
+
+- Export documentation (v0.25.0 WS3). `docs/cli.md` now documents `rac export`
+  and its modes, names the supported memory/RAG/graph backends explicitly, and
+  spells out the verify-in-Lore loop by which an agent gets the authoritative
+  answer after a fuzzy recall.
+
 - Extension robustness for release (v0.21.6 milestone). The extension now
   **activates only in RAC workspaces** (a `.rac/config.yaml` is present),
   **caches** resolve/export lookups (cleared on save) so hover/completion stay

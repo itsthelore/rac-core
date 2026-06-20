@@ -8,11 +8,11 @@ tags: [internal, export, graph, relationships, determinism]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — give graph backends RAC's real decision graph.
-Scoped to v0.25.0 (WS2, Tier 2 / cut-first). A deterministic nodes+edges
-projection that surfaces the typed relationship graph; gated on ADR-074.
+Delivered in v0.25.0 (WS2): `rac export --graph`. A deterministic nodes+edges
+projection that surfaces the typed relationship graph (ADR-074, now Accepted).
 
 ## Problem
 
