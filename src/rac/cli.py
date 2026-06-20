@@ -19,8 +19,8 @@ Commands:
                     [--no-annotate]
     rac portfolio <directory> [--json] [--top-level]
     rac index [directory] [--json] [--top-level]
-    rac export [directory] [--json | --html | --okf | --agent-rules [--check]]
-               [--client CLIENT ...] [--out PATH]
+    rac export [directory] [--json | --html | --okf | --documents
+               | --agent-rules [--check]] [--client CLIENT ...] [--out PATH]
     rac explorer [directory] [--top-level]
     rac mcp [--root PATH] [--telemetry]
     rac mcp-stats [--json | --share]
@@ -121,7 +121,7 @@ from rac.services.create import (
     create_artifact,
 )
 from rac.services.diff import diff as diff_asts
-from rac.services.export import build_corpus_export
+from rac.services.export import build_corpus_export, build_documents_export
 from rac.services.gate import build_gate
 from rac.services.hook import HookFileExists, NotAGitWorkTree, install_hook
 from rac.services.improve import improve_product
@@ -675,6 +675,14 @@ def cmd_export(args: argparse.Namespace) -> int:
     if args.out is not None and not (args.html or args.okf):
         print("rac: --out requires --html or --okf (--json writes to stdout)", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
+
+    # Documents projection (v0.25.0 WS1, ADR-073): an ingestion-ready JSONL
+    # stream for external memory/RAG backends — Markdown bodies, not the viewer's
+    # HTML. Written to stdout so it stays pipeable (ADR-011); the export contract
+    # is additive and leaves the default viewer JSON untouched (ADR-007).
+    if args.documents:
+        print(outputs.render_documents_jsonl(build_documents_export(args.directory)))
+        return EXIT_OK
 
     export = build_corpus_export(args.directory)
 
@@ -1585,6 +1593,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write a derived OKF v0.1 bundle (one Markdown file per artifact, "
         "plus index.md and log.md) to a directory.",
+    )
+    export_mode.add_argument(
+        "--documents",
+        action="store_true",
+        help="Write an ingestion-ready JSON Lines projection to stdout — one "
+        "Markdown-bodied record per artifact, carrying id/type/status metadata — "
+        "for external memory/RAG backends.",
     )
     export_mode.add_argument(
         "--agent-rules",
