@@ -68,7 +68,7 @@ jobs:
           - name: diff
             paths: "tests/test_diff.py"
           - name: export
-            paths: "tests/test_export_cmd.py tests/test_export_okf.py tests/test_agent_rules.py"
+            paths: "tests/test_export_cmd.py tests/test_export_okf.py tests/test_documents_export.py tests/test_agent_rules.py"
           - name: improve
             paths: "tests/test_improve.py"
           - name: index
