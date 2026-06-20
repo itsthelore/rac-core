@@ -642,6 +642,66 @@ rac index rac/ --json
 
 ---
 
+## export
+
+Project the corpus into a derived view. One walk, several mutually-exclusive
+modes; the default writes the viewer JSON payload to stdout. Exports are build
+artifacts — existing output is overwritten.
+
+- **Input:** `rac export [directory]` — scanned recursively for `*.md` (default: current directory).
+- **Modes:** *(default)* viewer JSON to stdout · `--html` (self-contained Portal file) · `--okf` (OKF v0.1 Markdown bundle) · `--documents` (JSONL for memory/RAG backends) · `--graph` (typed node+edge JSON for graph backends) · `--agent-rules` (per-client agent-context files; see its own behaviour)
+- **Options:** `--out <path>` (only `--html`/`--okf`/`--agent-rules`; the stdout modes are pipeable) · `--json` (no-op for the default mode)
+- **Exit codes:** `0` success · `2` not a directory, or `--out` given to a stdout mode
+
+```bash
+rac export rac/                      # viewer JSON to stdout
+rac export rac/ --documents          # JSONL, one record per artifact
+rac export rac/ --graph              # typed node+edge graph
+rac export rac/ --html --out lore.html
+```
+
+### Exporting to external memory / RAG / graph backends
+
+`--documents` and `--graph` exist to feed RAC's recorded decisions into the tools
+teams already run, so an agent can recall fuzzily there and then **verify in
+Lore**. They are additive (ADR-007): the default viewer JSON is unchanged, and
+nothing here computes embeddings — that stays in the consuming backend (ADR-002,
+ADR-066). The connectors themselves live in the separate `lore-connectors`
+companion, one module per backend rather than a repo per provider (ADR-073).
+
+**What it exports to, by name.** The shapes are deliberately the common
+ingestion denominators, so most targets need no bespoke code:
+
+- **`--documents` (JSONL, one record per artifact)** — memory layers
+  (**Supermemory**, **Mem0**, **Zep**, **Letta**, **Cognee**) and vector stores
+  (**Pinecone**, **Weaviate**, **Qdrant**, **Chroma**, **Milvus**, **pgvector**,
+  **LanceDB**). Each line is `{schema_version, id, type, status, title, text,
+  metadata{path, aliases, tags, source}}`, where `text` is the artifact's
+  Markdown body. The first shipped connector targets Supermemory:
+  each line maps to `add({ content: text, containerTag: source, metadata })`.
+- **`--graph` (one node+edge JSON object)** — graph / GraphRAG backends
+  (**Neo4j**, **Zep Graphiti**, **Cognee**, **Microsoft GraphRAG**). Nodes are
+  `{id, type, status, title}`; edges carry the real relationship kind
+  (`supersedes`, `related_*`) and direction, so the backend gets RAC's validated
+  decision graph instead of one inferred from prose.
+
+**How the answer is then validated (verify-in-Lore).** The backend gives
+*recall*; Lore gives the *authoritative answer*. After a backend surfaces a
+candidate, the agent:
+
+1. reads the canonical `id` from the record's metadata (or the node/edge);
+2. re-fetches the current artifact from Lore by that `id` (the `get_artifact`
+   MCP tool, or `rac resolve`);
+3. uses Lore's lifecycle status to drop a retired or superseded decision
+   (`find_decisions` filters these);
+4. acts on **Lore's verbatim text**, never the backend's possibly-rewritten copy.
+
+RAC does not validate or sync the backend's store — verification happens on
+read, in Lore. The exported copy is a pointer, kept fresh by re-running the
+export; the canonical `id` is what makes the round-trip reliable.
+
+---
+
 ## explorer
 
 Launch the interactive terminal Explorer — browse every artifact, read it in
