@@ -56,6 +56,15 @@ when code contradicts a decision. That is a future release.
 
 ### Added
 
+- `rac export --documents` (v0.25.0 WS1). A new additive export mode that writes
+  an ingestion-ready JSON Lines projection to stdout — one record per classified
+  artifact, carrying the artifact's **Markdown body** (not the viewer's HTML) plus
+  `id`/`type`/`status`/`title` and a metadata block (`path`, `aliases`, `tags`,
+  `source`). One document per artifact (no chunking), all artifacts included with
+  status stamped, deterministic and offline. Feeds external memory/RAG backends
+  (the connector itself is companion work, ADR-073); the canonical `id` is the
+  verify-in-Lore re-fetch hook. The default viewer JSON payload is unchanged.
+
 - Extension robustness for release (v0.21.6 milestone). The extension now
   **activates only in RAC workspaces** (a `.rac/config.yaml` is present),
   **caches** resolve/export lookups (cleared on save) so hover/completion stay

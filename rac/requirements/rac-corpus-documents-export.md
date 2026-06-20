@@ -8,11 +8,12 @@ tags: [user-facing, export, rag, ingestion, determinism]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[user-facing]` — get the corpus into external memory/RAG
-backends. Scoped to v0.25.0 (WS1). A deterministic, ingestion-shaped JSONL
-projection derived from the existing export; no AI, additive output (ADR-007).
+backends. Delivered in v0.25.0 (WS1): `rac export --documents`. A deterministic,
+ingestion-shaped JSONL projection derived from the existing export; no AI,
+additive output (ADR-007).
 
 ## Problem
 
