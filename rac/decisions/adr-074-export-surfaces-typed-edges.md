@@ -71,9 +71,9 @@ projection alone, and leaves it in place for the viewer payload.
 
 ## Status
 
-Proposed
+Accepted
 
-Proposed until the v0.25.0 WS2 (graph export) workstream is accepted; the
+Accepted with the v0.25.0 WS2 graph-export delivery (`rac export --graph`); the
 documents projection (WS1) does not depend on it.
 
 ## Category
