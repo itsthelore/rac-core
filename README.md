@@ -85,9 +85,9 @@ Requires Python 3.11+. `uv tool install requirements-as-code` also works.
 
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/itsthelore/rac-core/claude/readme-mirror-preview/rac/assets/images/lore-how-it-works-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/itsthelore/rac-core/claude/readme-mirror-preview/rac/assets/images/lore-how-it-works-light.svg">
-  <img alt="How Lore works: typed Markdown in your repo flows through the deterministic rac engine into the read-only lore MCP server, which serves your agent." src="https://raw.githubusercontent.com/itsthelore/rac-core/claude/readme-mirror-preview/rac/assets/images/lore-how-it-works-light.svg" width="900">
+  <source media="(prefers-color-scheme: dark)" srcset="rac/assets/images/lore-how-it-works-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="rac/assets/images/lore-how-it-works-light.svg">
+  <img alt="How Lore works: typed Markdown in your repo flows through the deterministic rac engine into the read-only lore MCP server, which serves your agent." src="rac/assets/images/lore-how-it-works-light.svg" width="900">
 </picture>
 </p>
 
