@@ -8,11 +8,13 @@
   <img alt="Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing." src="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-light.png">
 </picture>
 
+<p align="center">
 <a href="#install">Install</a> ·
 <a href="#connect-your-agent">Connect your agent</a> ·
 <a href="https://itsthelore.github.io/rac-core/">Docs</a> ·
 <a href="https://itsthelore.github.io/rac-core/cli/">CLI</a> ·
 <a href="https://github.com/itsthelore/rac-core/blob/main/CHANGELOG.md">Changelog</a>
+</p>
 
 [![CI](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml/badge.svg)](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Python](https://img.shields.io/pypi/pyversions/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Types: Mypy](https://img.shields.io/badge/types-Mypy-blue.svg)](https://mypy-lang.org/) [![License: Apache 2.0](https://img.shields.io/pypi/l/requirements-as-code)](https://github.com/itsthelore/rac-core/blob/main/LICENSE)
 
