@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: 17674c0a9cd84512168f93b80fb4a12925bf2b99c213024a1b9dcb820307073a) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 6737a582a536703c7e0837489d18cf6c72eae0ecc985c85b5381018a2456bb33) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -76,4 +76,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KV80WX94GY8A** — ADR-067: Agent Integration is Context-Supply and Post-Edit Enforcement, Not Pre-Edit Interception _(Architecture)_
 - **RAC-KVA44MVMDXXX** — ADR-068: Extension, SDK, and Brand Architecture _(Architecture)_
 - **RAC-KVJK92SM2A1R** — ADR-072: Document Ingestion Parser Is markitdown _(Architecture)_
+- **RAC-KVJY1KJEWZ87** — ADR-073: Backend Connectors Are Export-Contract Consumers, Not Per-Provider Repos _(Architecture)_
 <!-- END RAC MANAGED BLOCK -->
