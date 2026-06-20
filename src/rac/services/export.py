@@ -140,6 +140,66 @@ class CorpusExport:
         }
 
 
+@dataclass
+class ExportDocument:
+    """One artifact as an ingestion-ready document (v0.25.0 WS1).
+
+    Unlike :class:`ExportArtifact`, ``text`` is the artifact's **Markdown body**
+    (frontmatter stripped), not rendered HTML: memory/RAG backends embed text,
+    and HTML markup would be noise. The artifact is the atomic unit (ADR-004,
+    ADR-010) — one document per artifact, never chunked.
+    """
+
+    id: str
+    type: str
+    status: str
+    title: str
+    text: str
+    aliases: list[str]
+    path: str
+    tags: list[str] = field(default_factory=list)
+
+    def to_dict(self, source: str) -> dict:
+        """One JSONL record. ``source`` namespaces the corpus (e.g. a containerTag)."""
+        return {
+            "schema_version": "1",
+            "id": self.id,
+            "type": self.type,
+            "status": self.status,
+            "title": self.title,
+            "text": self.text,
+            "metadata": {
+                "path": self.path,
+                "aliases": self.aliases,
+                "tags": self.tags,
+                "source": source,
+            },
+        }
+
+
+@dataclass
+class DocumentsExport:
+    """Deterministic, ingestion-shaped projection of the corpus (v0.25.0 WS1).
+
+    One record per classified artifact, in sorted-path order with no timestamps
+    (ADR-002), serialized as JSON Lines — the common ingestion shape for external
+    memory/RAG backends. The contract is additive and separate from the viewer
+    JSON (:class:`CorpusExport`), which is unchanged (ADR-007). Each record
+    carries the canonical ``id`` so an agent can re-fetch the authoritative
+    artifact from Lore, and ``status`` so a retired decision is filterable on read.
+    """
+
+    corpus_name: str
+    documents: list[ExportDocument] = field(default_factory=list)
+
+    @property
+    def document_count(self) -> int:
+        return len(self.documents)
+
+    def to_records(self) -> list[dict]:
+        return [doc.to_dict(self.corpus_name) for doc in self.documents]
+
+
 def _corpus_name(directory: str) -> str:
     """The directory's basename, deterministic relative to the argument given.
 
@@ -163,6 +223,13 @@ def _render_body(path: str, md: MarkdownIt) -> str:
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     return md.render(split_frontmatter(text).body)
+
+
+def _body_markdown(path: str) -> str:
+    """The artifact's Markdown body after the frontmatter envelope (no render)."""
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    return split_frontmatter(text).body
 
 
 def build_corpus_export(directory: str, recursive: bool = True) -> CorpusExport:
@@ -216,3 +283,34 @@ def build_corpus_export(directory: str, recursive: bool = True) -> CorpusExport:
         artifacts=artifacts,
         relationships=edges,
     )
+
+
+def build_documents_export(directory: str, recursive: bool = True) -> DocumentsExport:
+    """Project every classified artifact under ``directory`` as a document (one walk).
+
+    Mirrors :func:`build_corpus_export`'s gate — unknown-type files are skipped,
+    invalid-but-recognizable artifacts project as classified — but emits the
+    Markdown body and the verify-in-Lore metadata rather than the viewer's HTML.
+    Artifacts arrive in sorted-path order, so the projection is deterministic.
+    """
+    documents: list[ExportDocument] = []
+    for entry in walk_corpus(directory, recursive=recursive):
+        path = str(entry.path)
+        spec = spec_for(entry.artifact_type)  # None for Unknown
+        if spec is None:
+            continue  # unknown files are not exported
+        canonical = artifact_identifier(entry.product, spec, path)
+        meta = entry.product.metadata
+        documents.append(
+            ExportDocument(
+                id=canonical,
+                type=entry.artifact_type,
+                status=_status(entry.product, spec),
+                title=entry.product.title or canonical,
+                text=_body_markdown(path),
+                aliases=artifact_identifiers(entry.product, spec, path),
+                path=path,
+                tags=meta.tags if meta else [],
+            )
+        )
+    return DocumentsExport(corpus_name=_corpus_name(directory), documents=documents)

@@ -17,7 +17,7 @@ from rac.core.schema import SchemaReference
 from rac.core.skills import SkillSpec
 from rac.services.agent_rules import AgentRulesResult
 from rac.services.create import CreatedArtifact
-from rac.services.export import CorpusExport
+from rac.services.export import CorpusExport, DocumentsExport
 from rac.services.gate import GateReport
 from rac.services.hook import InstalledHook
 from rac.services.improve import ImprovementResult
@@ -312,6 +312,17 @@ def render_export_json(export: CorpusExport) -> str:
     external viewers consume (ADR-014).
     """
     return json.dumps(export.to_dict(), indent=2)
+
+
+def render_documents_jsonl(export: DocumentsExport) -> str:
+    """JSON Lines `rac export --documents` output (stable contract, ADR-007).
+
+    One compact JSON object per line — the ingestion shape memory/RAG backends
+    consume. Records are in sorted-path order and carry a Markdown body, so the
+    output is deterministic (ADR-002); ``ensure_ascii`` is off so the body is
+    emitted as UTF-8 rather than escaped.
+    """
+    return "\n".join(json.dumps(record, ensure_ascii=False) for record in export.to_records())
 
 
 def render_agent_rules_json(result: AgentRulesResult) -> str:
