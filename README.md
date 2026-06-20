@@ -8,7 +8,13 @@
   <img alt="Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing." src="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-light.png">
 </picture>
 
-[![CI](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml/badge.svg)](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Python](https://img.shields.io/pypi/pyversions/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![License: Apache 2.0](https://img.shields.io/pypi/l/requirements-as-code)](https://github.com/itsthelore/rac-core/blob/main/LICENSE)
+<a href="#install">Install</a> ·
+<a href="#connect-your-agent">Connect your agent</a> ·
+<a href="https://itsthelore.github.io/rac-core/">Docs</a> ·
+<a href="https://itsthelore.github.io/rac-core/cli/">CLI</a> ·
+<a href="https://github.com/itsthelore/rac-core/blob/main/CHANGELOG.md">Changelog</a>
+
+[![CI](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml/badge.svg)](https://github.com/itsthelore/rac-core/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Python](https://img.shields.io/pypi/pyversions/requirements-as-code)](https://pypi.org/project/requirements-as-code/) [![Types: Mypy](https://img.shields.io/badge/types-Mypy-blue.svg)](https://mypy-lang.org/) [![License: Apache 2.0](https://img.shields.io/pypi/l/requirements-as-code)](https://github.com/itsthelore/rac-core/blob/main/LICENSE)
 
 > **Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.**
 
@@ -86,6 +92,39 @@ Google's Open Knowledge Format (OKF) standardises the *carrier* — a Git tree o
 - [Quickstart](https://itsthelore.github.io/rac-core/quickstart/) — install and author your first artifact
 - [MCP server](https://itsthelore.github.io/rac-core/mcp/) — tools, client configuration, examples
 - [CLI reference](https://itsthelore.github.io/rac-core/cli/) — every command, flag, and exit code
+
+## Origin
+
+Lore is the product surface of **RAC — Requirements as Code**, the open-source
+engine underneath; the package, CLI, and MCP server ship under the `rac` name,
+and `lore` is the server identity and brand.
+[Wayfinder](https://github.com/itsthelore/wayfinder-router), the deterministic
+prompt-complexity router, began as a `route` experiment inside RAC and was split
+into its own tool — routing is a runtime concern, not a knowledge one.
+
+## Repository layout
+
+```text
+rac-core/
+  src/rac/        the engine: CLI, core, services, output, the in-process MCP
+                  server (rac mcp), and bundled skills, templates, and git hooks
+  rac/            the dogfood corpus — requirements, decisions, designs, roadmaps,
+                  and prompts that govern the project itself
+  tests/          per-service batteries plus core / cli / artifacts coverage (ADR-027)
+  docs/           the documentation site (MkDocs)
+  examples/       the grounding demo, woven into the corpus and the test fixtures
+  rac-localview/  the Portal / graph viewer, vendored into the engine
+```
+
+## Test
+
+```bash
+pip install -e .[dev]
+python -m pytest
+```
+
+`ruff check`, `ruff format --check`, and `mypy src/` run in CI alongside the
+per-service batteries (ADR-027).
 
 ## Project status
 
