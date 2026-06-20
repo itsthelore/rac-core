@@ -70,12 +70,15 @@ backends, and a *nodes + edges* projection for graph backends, both derived from
 the existing deterministic export (ADR-007). Embeddings are never computed in RAC
 — they live in the target (ADR-002, ADR-066).
 
-### Initiative 2 — Reference `lore-*` adapters
+### Initiative 2 — Reference connectors in one `lore-connectors` companion
 
-Ship a small, honest set of reference adapters as `lore-*` companions (ADR-068),
-not an exhaustive matrix: Supermemory first (per `lore-supermemory-grounding`),
-plus at least one graph-native target (e.g. Neo4j / Graphiti / Cognee) to prove
-the nodes+edges projection. Each is outbound-only; RAC never reads back.
+Ship a small, honest set of reference connectors as modules in a **single**
+`lore-connectors` companion (ADR-073), not one repo per provider and not an
+exhaustive matrix: Supermemory first (per `lore-supermemory-grounding`), plus at
+least one graph-native target (e.g. Neo4j / Graphiti / Cognee) to prove the
+nodes+edges projection. Each is outbound-only; RAC never reads back. A provider
+graduates to its own `lore-<provider>` repo only if it becomes an installable
+product with independent cadence (the ADR-073 escape hatch).
 
 ### Initiative 3 — Documentation that names targets and the validation loop
 
@@ -153,6 +156,7 @@ It must:
 - ADR-063
 - ADR-066
 - ADR-068
+- ADR-073
 
 ## Related Roadmaps
 

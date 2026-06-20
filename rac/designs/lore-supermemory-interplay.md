@@ -84,8 +84,8 @@ Lore*, never as a source of truth.
 
 ### The feed — a one-way ingest adapter
 
-A small companion, `lore-supermemory` (a `lore-*` repo per ADR-068, never inside
-`rac-core`):
+A Supermemory connector — a module (or recipe) in the shared `lore-connectors`
+companion, not a per-provider repo (ADR-073), and never inside `rac-core`:
 
 - runs `rac export --json` (the deterministic `CorpusExport`, a stable additive
   contract per ADR-007 / ADR-063) or reads the Markdown + frontmatter on disk;
@@ -117,9 +117,9 @@ already carries `id`, `type`, and `status`.
 - **Supermemory's copy is non-authoritative by construction.** Its ingest
   rewrites content with an LLM, so its text is an index, never a citation;
   authoritative text is always re-fetched from Lore.
-- **Companion, not core (ADR-068, ADR-024).** Any build is a `lore-*` repo. RAC
-  does not store, serve, or re-import the embedded copy; it is not becoming a
-  content store.
+- **Companion, not core (ADR-073, ADR-024).** Any build is a connector module in
+  the shared `lore-connectors` companion, not engine code. RAC does not store,
+  serve, or re-import the embedded copy; it is not becoming a content store.
 
 ## Rationale
 
@@ -175,8 +175,9 @@ Lore artifact, not the rewritten memory.
 
 ## Style Guidance
 
-- Name the companion `lore-supermemory` (the `lore-*` brand convention, ADR-068),
-  not `rac-*`; it is a Lore-brand integration, not an engine component.
+- The Supermemory connector is a module in the shared `lore-connectors` companion
+  (ADR-073), under the `lore-*` brand (ADR-068), not `rac-*`; it is a Lore-brand
+  integration, not an engine component, and not its own per-provider repo.
 - Vocabulary separates the layers: Lore *grounds* and is *authoritative*;
   Supermemory *recalls* and is *associative*. Never describe Supermemory output
   as a decision or a citation.
@@ -213,6 +214,7 @@ Lore artifact, not the rewritten memory.
 - ADR-066
 - ADR-067
 - ADR-068
+- ADR-073
 
 ## Related Roadmaps
 

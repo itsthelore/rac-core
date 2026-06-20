@@ -89,9 +89,9 @@ JSONL (the de-facto ingestion shape), one object per artifact:
 #### Supermemory mapping (the first adapter)
 
 Each JSONL line maps to `add({ content: text, containerTag: source,
-metadata: { id, type, status, title, path } })`. The adapter is a `lore-*`
-companion (ADR-068), outbound-only; embeddings live in Supermemory, never in RAC
-(ADR-002, ADR-066).
+metadata: { id, type, status, title, path } })`. The connector is a module in the
+shared `lore-connectors` companion (ADR-073), outbound-only; embeddings live in
+Supermemory, never in RAC (ADR-002, ADR-066).
 
 ### `--graph` — later, for graph backends (not Supermemory)
 
@@ -117,8 +117,8 @@ companion (ADR-068), outbound-only; embeddings live in Supermemory, never in RAC
   names, a `schema_version` per projection; the viewer JSON contract is unchanged.
 - Deterministic and offline; no embeddings, vectors, or LLM in RAC
   (ADR-002, ADR-066).
-- One-way: the adapter is a `lore-*` companion (ADR-068); RAC does not store,
-  serve, or re-import the embedded copy (ADR-024).
+- One-way: the connector is a module in the `lore-connectors` companion
+  (ADR-073); RAC does not store, serve, or re-import the embedded copy (ADR-024).
 - Text only for the first phase; asset references (ADR-019) are out of scope.
 - Unknown-type files are skipped; invalid-but-recognizable artifacts export as
   classified — the same gate the existing export applies.
@@ -198,6 +198,7 @@ authoritative, current Lore artifact rather than to the backend's rewritten copy
 - ADR-063
 - ADR-066
 - ADR-068
+- ADR-073
 
 ## Related Roadmaps
 
