@@ -209,7 +209,7 @@ one quarter after release if no user has opted in.
 
 ## Related Roadmaps
 
-- agent-usage-readback
+- v0.24.0-visibility
 
 ## Related Designs
 

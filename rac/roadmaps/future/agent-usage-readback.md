@@ -7,9 +7,10 @@ type: roadmap
 
 ## Status
 
-Planned
+Superseded
 
-Unscheduled — captured as future intent, not yet on a release.
+Superseded by `v0.24.0-visibility`, which schedules this intent into the v0.24.0
+release (WS-E — Agent usage read-back). Retained as the originating record.
 
 ## Context
 
@@ -154,3 +155,7 @@ string-only, user-submits flow.
 ## Related Designs
 
 - agent-usage-surface
+
+## Related Roadmaps
+
+- v0.24.0-visibility

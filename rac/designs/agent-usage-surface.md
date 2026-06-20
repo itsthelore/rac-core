@@ -183,4 +183,4 @@ before submitting.
 
 ## Related Roadmaps
 
-- agent-usage-readback
+- v0.24.0-visibility
