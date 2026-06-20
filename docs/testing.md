@@ -62,7 +62,7 @@ the tier that matches the change at hand.
 
 ### 1. Inner loop (smoke) — fastest signal
 
-The `smoke` job in [`.github/workflows/pr-checks.yml`](../.github/workflows/pr-checks.yml)
+The `smoke` job in [`.github/workflows/pr-checks.yml`](https://github.com/itsthelore/rac-core/blob/main/.github/workflows/pr-checks.yml)
 (`core` subset + `golden` + `dogfood`, py3.11). Catches output-contract drift and
 corpus damage in seconds:
 
@@ -96,7 +96,7 @@ lint trio, the smoke set, plus the dogfood gates:
 ### 3. Full local CI (merge grid) — the complete suite
 
 The per-service battery × Python-version grid from the reusable
-[`.github/workflows/tests.yml`](../.github/workflows/tests.yml). Every
+[`.github/workflows/tests.yml`](https://github.com/itsthelore/rac-core/blob/main/.github/workflows/tests.yml). Every
 `tests/test_*.py` belongs to exactly one battery (enforced by
 `tests/test_ci_batteries.py`). This is the grid that gates `main` (`ci.yml`) and
 releases (`python-publish.yml`, `needs: test`). Locally it is just the whole
