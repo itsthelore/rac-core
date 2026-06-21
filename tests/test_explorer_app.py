@@ -336,6 +336,28 @@ async def test_portfolio_filter_narrows_to_invalid():
 
 
 @pytest.mark.asyncio
+async def test_list_command_scopes_to_a_type():
+    from textual.widgets import DataTable
+
+    from rac.explorer.widgets.views import PortfolioView
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        app.screen.route_command("list")
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+        total = table.row_count
+        app.screen.route_command("list decision")  # scope to one type
+        await pilot.pause()
+        view = app.screen.query_one(PortfolioView)
+        assert view._type == "decision"
+        # A non-empty subset whose every visible row is that type.
+        assert 0 < table.row_count <= total
+        assert all(row.type == "decision" for row in view._visible())
+
+
+@pytest.mark.asyncio
 async def test_sidebar_hides_in_narrow_terminals():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test(size=(70, 24)) as pilot:
