@@ -828,7 +828,10 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   with live preview; all meaning survives any palette, and the artifact type
   tags re-tune their hue to the active theme so they stay legible on light or
   dark), mascot, animations, mascot interaction, artifact grouping
-  (`folders` default), and the editor command —
+  (`folders` default), workspace layout (`frame` default — the tree sidebar plus
+  a swapping context region — or `split`, a master-detail layout where the
+  portfolio list drives a persistent reading pane; switching applies live), and
+  the editor command —
   persisted to `$XDG_CONFIG_HOME/rac/explorer.json` (no login, cloud, or
   sync). Explorer remembers recently opened repositories plus the last
   artifact and view per repository (under `$XDG_STATE_HOME/rac/`); `.` or
