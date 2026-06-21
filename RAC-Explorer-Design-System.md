@@ -13,6 +13,12 @@ implementation tokens in `src/rac/explorer/`. Every value below is real.
 > tool — a hooded explorer carrying a single amber lantern through a
 > near-black repository.
 
+![RAC Explorer — Home](assets/explorer-design-system/01-home.svg)
+
+> The screenshots throughout are live `rac-lantern` renders of the running
+> Explorer (Textual SVG exports), not mockups. A full panel gallery is in
+> [§12](#12-panel-gallery).
+
 ---
 
 ## 1. Design principles
@@ -317,6 +323,82 @@ When prompting Claude design tooling, anchor on these so output stays on-brand:
   monospace → a mono display face (e.g. a Berkeley/JetBrains-mono register),
   inverse-video chips → small filled pill badges, rounded ASCII borders → 1px
   rounded borders in the `panel` colour that turn amber on focus.
+
+---
+
+## 12. Panel gallery
+
+Live `rac-lantern` renders of every panel, captured headlessly from the
+running Explorer (120×40 cells). Use these as visual ground truth when
+recreating the interface.
+
+### Home — first-run welcome
+
+The mascot, the repository summary, and the navigation key map. Onboarding is
+a calm overlay, never forced setup.
+
+![Home](assets/explorer-design-system/01-home.svg)
+
+### Artifact — Content tab
+
+The signature view: an artifact open on its rendered Markdown, the tab strip
+(`Content │ Inspection │ Links │ Findings`), the sidebar revealing the file,
+the panel title as `ID — title`, the status chip below the sidebar.
+
+![Artifact · Content](assets/explorer-design-system/02-artifact-content.svg)
+
+### Artifact — Links tab
+
+Relationships, impact analysis, and lineage — the graph around an artifact.
+
+![Artifact · Links](assets/explorer-design-system/03-artifact-links.svg)
+
+### Health
+
+Repository score, per-area breakdown, and the attention list of findings.
+
+![Health](assets/explorer-design-system/04-health.svg)
+
+### Recommendations
+
+Prioritised findings with impact and the action that resolves each one.
+
+![Recommendations](assets/explorer-design-system/05-recommendations.svg)
+
+### Portfolio Stats
+
+The numbers behind the corpus — counts, quality, decision status, relationships.
+
+![Portfolio Stats](assets/explorer-design-system/06-stats.svg)
+
+### Settings
+
+Explorer preferences (theme, grouping, mascot, animations, editor) — every
+setting carries a text label and a current value.
+
+![Settings](assets/explorer-design-system/07-settings.svg)
+
+### Results — search
+
+Filterable result rows, each with its type tag and status chip; the panel
+title carries the count.
+
+![Results](assets/explorer-design-system/08-results.svg)
+
+### Command palette
+
+Summoned by `/`, floated over the context region on its own layer, input on
+top and live suggestions below (here filtered to `/open`).
+
+![Command palette](assets/explorer-design-system/09-command-palette.svg)
+
+### New / Import — preview
+
+The guided write workflow: source, converter, and target up top, a Markdown
+preview below, and a `y Confirm` chip. Nothing is written until confirmed, and
+writes never overwrite.
+
+![New / Import](assets/explorer-design-system/10-import.svg)
 
 ---
 
