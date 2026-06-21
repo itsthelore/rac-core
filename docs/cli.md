@@ -732,7 +732,7 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   commands into the input); any other text shows live artifact matches —
   Enter quick-opens the highlighted one — plus a "search all results" row.
   Commands: `open <ref>` · `find <query> [type]` · `browse [type]` ·
-  `list` · `health` · `stats` · `recommendations` · `new <type> <path>` ·
+  `list [type]` · `health` · `stats` · `recommendations` · `new <type> <path>` ·
   `import <source> [target]` · `relationships <ref>` · `resume` ·
   `schema [type]` · `settings` · `home` · `help` · `quit` — anything else is
   a search, resolved with `rac resolve` / `rac find` semantics. Full results render in the context panel (the layout
@@ -794,7 +794,8 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   breakdowns, and relationship counts — the same facts `rac stats` reports,
   collected off the UI thread on request.
 - **Portfolio list:** `/list` opens a sortable table of every artifact — type
-  tag, id, status, link count, recency, and title. `s` cycles the sort (type,
+  tag, id, status, link count, recency, and title; `/list <type>` (for example
+  `/list decision`) scopes it to one artifact type. `s` cycles the sort (type,
   recency, links, status, id) and `f` the status filter (all, invalid, valid);
   Enter opens the highlighted artifact. Recency is git-derived (ADR-045), so the
   column fills from a worker after the table is on screen.

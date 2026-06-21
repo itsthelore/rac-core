@@ -888,6 +888,7 @@ class PortfolioView(Vertical):
         self._recency: dict[str, datetime] = {}
         self._sort = "type"
         self._filter = "all"
+        self._type: str | None = None  # /list <type> scopes to one artifact type
 
     def compose(self) -> ComposeResult:
         yield Static(id="portfolio-header")
@@ -899,8 +900,9 @@ class PortfolioView(Vertical):
         table = self.query_one(DataTable)
         table.add_columns("Type", "ID", "Status", "Links", "Recency", "Title")
 
-    def show_portfolio(self, state: PortfolioState) -> None:
+    def show_portfolio(self, state: PortfolioState, artifact_type: str | None = None) -> None:
         self._rows = state.rows
+        self._type = artifact_type
         self._rebuild()
         self._load_recency()
 
@@ -910,11 +912,14 @@ class PortfolioView(Vertical):
     # --- rendering -----------------------------------------------------------
 
     def _visible(self) -> list[PortfolioRow]:
+        rows: tuple[PortfolioRow, ...] | list[PortfolioRow] = self._rows
+        if self._type is not None:
+            rows = [r for r in rows if r.type == self._type]
         if self._filter == "invalid":
-            return [r for r in self._rows if "✗" in r.status_label]
+            return [r for r in rows if "✗" in r.status_label]
         if self._filter == "valid":
-            return [r for r in self._rows if "✗" not in r.status_label]
-        return list(self._rows)
+            return [r for r in rows if "✗" not in r.status_label]
+        return list(rows)
 
     def _sorted_rows(self) -> list[PortfolioRow]:
         rows = self._visible()
@@ -954,9 +959,10 @@ class PortfolioView(Vertical):
                 Text(row.title or row.id),
                 key=row.path,
             )
+        kind = f" · {self._type}" if self._type else ""
         scope = f" · {self._filter} only" if self._filter != "all" else ""
         self.query_one("#portfolio-header", Static).update(
-            f"{len(rows)} of {len(self._rows)} artifacts{scope}"
+            f"{len(rows)} of {len(self._rows)} artifacts{kind}{scope}"
             f" · sorted by {self._sort}  ·  s sort · f filter"
         )
 

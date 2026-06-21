@@ -617,7 +617,10 @@ class MainScreen(Screen[None]):
             if state is None:
                 self._show_message("Repository not loaded yet")
                 return
-            self.query_one(PortfolioView).show_portfolio(state)
+            # `/list <type>` scopes the table to one artifact type; bare `/list`
+            # shows every artifact (v0.26.2).
+            artifact_type = invocation.args.casefold() or None
+            self.query_one(PortfolioView).show_portfolio(state, artifact_type=artifact_type)
             self.show_view("view-portfolio")
         elif invocation.command == "browse":
             artifact_type = invocation.args.casefold() or None
