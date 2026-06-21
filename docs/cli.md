@@ -812,8 +812,11 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   value keeps the `$VISUAL`/`$EDITOR` fallback), typing sets the `editor`
   preference, Esc skips — `/settings` can change it any time.
 - **Settings & continuity:** `/settings` changes everything in place — theme
-  (default `rac-lantern`; Enter cycles every Textual theme with live
-  preview), mascot, animations, mascot interaction, artifact grouping
+  (two curated RAC themes ship: `rac-lantern`, the dark default, and
+  `rac-parchment`, a light companion — warm paper, dark ink, the lantern
+  amber deepened to read on light; Enter cycles them and every other Textual
+  theme with live preview, and all meaning survives any palette), mascot,
+  animations, mascot interaction, artifact grouping
   (`folders` default), and the editor command —
   persisted to `$XDG_CONFIG_HOME/rac/explorer.json` (no login, cloud, or
   sync). Explorer remembers recently opened repositories plus the last
