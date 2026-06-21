@@ -17,7 +17,42 @@ implementation tokens in `src/rac/explorer/`. Every value below is real.
 
 > The screenshots throughout are live `rac-lantern` renders of the running
 > Explorer (Textual SVG exports), not mockups. A full panel gallery is in
-> [§12](#12-panel-gallery).
+> [§12](#12-panel-gallery); PNG copies of every panel live in
+> `assets/explorer-design-system/png/` for tools that don't render SVG.
+
+---
+
+## 0. Quick prompt block
+
+Copy-paste this into Claude design for an on-brand result in one shot; the
+sections below are the full reference behind it.
+
+```text
+Design in the RAC Explorer language: a calm, information-dense, keyboard-first
+terminal developer tool. A hooded explorer with one amber lantern on near-black.
+
+Palette — near-black canvas #121110, warm off-white text #E8E2D5, and exactly
+ONE accent: lantern amber #F5A800 (reserve it for focus and the brand mark, do
+not spread it). Success #46A758, error #E5484D.
+
+Surfaces — three flat depth levels, no drop shadows. Rounded-rectangle panels
+with their title inline on the top border; focus is shown by the border turning
+amber, nothing else.
+
+Type — monospace only; hierarchy comes from weight, casing, and spacing, never
+font size. Capped reading width.
+
+Meaning never rides on colour alone. Artifact type tags are text + colour:
+REQ #46A758, ADR #3B82F6, RMP #A855F7, PRM #06B6D4, DSG #EC4899. State chips are
+inverse-video, icon + label: "✓ Valid", "! 2 Warnings", "✗ Error".
+
+Density — map 1 terminal cell ≈ 8px; generous-but-tight; blank-line group breaks.
+
+Voice — calm, terse, developer-tool confident: "Found something." not
+"Congratulations!". The lantern mascot is the only friendly flourish.
+
+Interaction — keyboard-first; a "/" command palette is the primary verb.
+```
 
 ---
 
