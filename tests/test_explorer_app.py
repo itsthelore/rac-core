@@ -216,6 +216,51 @@ async def test_parchment_theme_preference_applies(monkeypatch, tmp_path):
         assert app.theme == "rac-parchment"
 
 
+def test_type_tag_hue_adapts_to_theme():
+    from rac.explorer.widgets.sidebar import type_tag
+
+    # The tag text is identical across themes; only the hue changes so it stays
+    # legible on light or dark (v0.26.1) — meaning never rides on colour alone.
+    dark_tag, dark_hue = type_tag("prompt", dark=True)
+    light_tag, light_hue = type_tag("prompt", dark=False)
+    assert dark_tag == light_tag == "PRM"
+    assert dark_hue != light_hue
+    # Unknown types still resolve to a tag in both modes.
+    assert type_tag("mystery", dark=False)[0] == "UNK"
+
+
+@pytest.mark.asyncio
+async def test_rac_high_contrast_theme_is_registered():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        assert "rac-high-contrast" in app.available_themes
+        assert app.available_themes["rac-high-contrast"].dark is True
+
+
+@pytest.mark.asyncio
+async def test_type_tags_recolour_on_theme_change():
+    from rac.explorer.preferences import Preferences, save_preferences
+
+    save_preferences(Preferences(artifact_grouping="type"))
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        sidebar = app.screen.query_one(NavigationSidebar)
+        sidebar.root.children[0].expand()
+        await pilot.pause()
+
+        def tag_style() -> str:
+            # The first span of a row label is the type tag (`bold <hue>`).
+            return str(sidebar.root.children[0].children[0].label.spans[0].style)
+
+        dark_style = tag_style()
+        app.theme = "rac-parchment"  # live switch re-renders the tags
+        await pilot.pause()
+        assert app.current_theme.dark is False
+        assert tag_style() != dark_style
+
+
 @pytest.mark.asyncio
 async def test_sidebar_hides_in_narrow_terminals():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
