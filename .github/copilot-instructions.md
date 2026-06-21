@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: bd2a3eb266502357e10d8a8d9a0dc79cf317ae95f2874b2f3e2d0b1d4811026c) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 4bad6cdd663e91b89aa7b39a27a3d25c33bec751ae167acff6f8eb911df1742d) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -53,4 +53,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KVJK92SM2A1R** — ADR-072: Document Ingestion Parser Is markitdown _(Architecture)_
 - **RAC-KVJY1KJEWZ87** — ADR-073: Backend Connectors Are Export-Contract Consumers, Not Per-Provider Repos _(Architecture)_
 - **RAC-KVK19NPWFYC9** — ADR-074: The Graph Export Surfaces Typed Relationship Edges _(Technical)_
+- **RAC-KVNM01QPBPXB** — ADR-075: The Pre-Merge Check Tier Is a Required Merge Gate on `main` _(Process)_
 <!-- END RAC MANAGED BLOCK -->
