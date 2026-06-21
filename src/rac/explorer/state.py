@@ -8,6 +8,24 @@ import Core models, and this module never imports Textual.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
+
+
+def relative_age(then: datetime, now: datetime | None = None) -> str:
+    """A compact "time ago" label (today, 3d, 2w, 5mo, 1y) for the portfolio
+    recency column (v0.26.2). Shared so display and any other caller agree.
+    """
+    now = now or datetime.now(UTC)
+    days = (now - then).days
+    if days <= 0:
+        return "today"
+    if days < 7:
+        return f"{days}d"
+    if days < 30:
+        return f"{days // 7}w"
+    if days < 365:
+        return f"{days // 30}mo"
+    return f"{days // 365}y"
 
 
 def health_label(score: int) -> str:
@@ -59,6 +77,32 @@ class ArtifactRow:
     type: str
     title: str | None
     status_label: str  # e.g. "✓ valid" — text alongside any symbol
+
+
+@dataclass(frozen=True)
+class PortfolioRow:
+    """One row in the portfolio list view (v0.26.2).
+
+    Carries the browser fields plus a relationship ``link_count`` (degree in
+    the loaded graph) and a ``recency_label`` filled later by the recency
+    worker — git is too slow to run in the load path (ADR-045), so it arrives
+    after the table is already on screen.
+    """
+
+    path: str
+    id: str
+    type: str
+    title: str | None
+    status_label: str
+    link_count: int
+    recency_label: str = ""  # "2d", "3w", … ; "" until the worker fills it
+
+
+@dataclass(frozen=True)
+class PortfolioState:
+    """Every artifact as a portfolio row (v0.26.2)."""
+
+    rows: tuple[PortfolioRow, ...]
 
 
 @dataclass(frozen=True)
