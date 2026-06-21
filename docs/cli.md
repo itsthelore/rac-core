@@ -732,7 +732,7 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   commands into the input); any other text shows live artifact matches —
   Enter quick-opens the highlighted one — plus a "search all results" row.
   Commands: `open <ref>` · `find <query> [type]` · `browse [type]` ·
-  `health` · `stats` · `recommendations` · `new <type> <path>` ·
+  `list` · `health` · `stats` · `recommendations` · `new <type> <path>` ·
   `import <source> [target]` · `relationships <ref>` · `resume` ·
   `schema [type]` · `settings` · `home` · `help` · `quit` — anything else is
   a search, resolved with `rac resolve` / `rac find` semantics. Full results render in the context panel (the layout
@@ -793,6 +793,11 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   validity, requirement/metric/risk totals, decision status and category
   breakdowns, and relationship counts — the same facts `rac stats` reports,
   collected off the UI thread on request.
+- **Portfolio list:** `/list` opens a sortable table of every artifact — type
+  tag, id, status, link count, recency, and title. `s` cycles the sort (type,
+  recency, links, status, id) and `f` the status filter (all, invalid, valid);
+  Enter opens the highlighted artifact. Recency is git-derived (ADR-045), so the
+  column fills from a worker after the table is on screen.
 - **Live reload:** Explorer compares the corpus files on disk every two
   seconds (paths and mtimes only — no parsing) and reloads when something
   changed: the sidebar keeps its expansion and cursor, the open artifact
