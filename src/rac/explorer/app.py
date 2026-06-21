@@ -14,7 +14,7 @@ from textual.binding import Binding
 
 from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.screens.main import MainScreen
-from rac.explorer.theme import RAC_LANTERN, THEME_NAME
+from rac.explorer.theme import RAC_THEMES, THEME_NAME
 from rac.explorer.widgets.palette import CommandPalette
 
 
@@ -36,9 +36,11 @@ class ExplorerApp(App[None]):
         self.sub_title = directory
 
     def on_mount(self) -> None:
-        # The curated default (v0.8.7); the `theme` preference overrides it
-        # with any Textual theme, and an unknown name never breaks startup.
-        self.register_theme(RAC_LANTERN)
+        # The curated pair (v0.26.0): rac-lantern (dark, the default) and
+        # rac-parchment (light). The `theme` preference selects either, or any
+        # other Textual theme, and an unknown name never breaks startup.
+        for theme in RAC_THEMES:
+            self.register_theme(theme)
         try:
             self.theme = self.adapter.preferences.theme
         except Exception:  # noqa: BLE001 - unknown theme: keep the default
