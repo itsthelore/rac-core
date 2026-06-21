@@ -873,12 +873,15 @@ class PortfolioView(Vertical):
     Type, id, title, status, and link count render from already-loaded state
     (ADR-015); the recency column arrives from a git worker after the table is
     on screen, since git is too slow for the load path (ADR-045). Enter opens
-    the highlighted artifact; ``s`` cycles the sort and ``f`` the status filter.
+    the highlighted artifact; ``s`` cycles the sort, ``f`` the status filter.
+    A name search runs from the command (``/list <text>``) or live in the box
+    (``ctrl+f``), and ``/list <type>`` scopes by artifact type.
     """
 
     BINDINGS = [
         Binding("s", "cycle_sort", "Sort"),
         Binding("f", "cycle_filter", "Filter"),
+        Binding("ctrl+f", "search", "Search", show=False),
     ]
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
@@ -889,9 +892,11 @@ class PortfolioView(Vertical):
         self._sort = "type"
         self._filter = "all"
         self._type: str | None = None  # /list <type> scopes to one artifact type
+        self._query = ""  # live fuzzy name search within the visible rows
 
     def compose(self) -> ComposeResult:
         yield Static(id="portfolio-header")
+        yield Input(placeholder="Search by name…  (fuzzy)", id="portfolio-search")
         yield DataTable(id="portfolio-table", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self) -> None:
@@ -900,9 +905,18 @@ class PortfolioView(Vertical):
         table = self.query_one(DataTable)
         table.add_columns("Type", "ID", "Status", "Links", "Recency", "Title")
 
-    def show_portfolio(self, state: PortfolioState, artifact_type: str | None = None) -> None:
+    def show_portfolio(
+        self,
+        state: PortfolioState,
+        artifact_type: str | None = None,
+        query: str | None = None,
+    ) -> None:
         self._rows = state.rows
         self._type = artifact_type
+        self._query = query or ""
+        # Reflect a command-seeded query in the search box; setting the value
+        # re-renders through on_input_changed, so the rebuild below is enough.
+        self.query_one("#portfolio-search", Input).value = self._query
         self._rebuild()
         self._load_recency()
 
@@ -915,6 +929,8 @@ class PortfolioView(Vertical):
         rows: tuple[PortfolioRow, ...] | list[PortfolioRow] = self._rows
         if self._type is not None:
             rows = [r for r in rows if r.type == self._type]
+        if self._query:
+            rows = [r for r in rows if _fuzzy(self._query, f"{r.id} {r.title or ''}")]
         if self._filter == "invalid":
             return [r for r in rows if "✗" in r.status_label]
         if self._filter == "valid":
@@ -961,9 +977,10 @@ class PortfolioView(Vertical):
             )
         kind = f" · {self._type}" if self._type else ""
         scope = f" · {self._filter} only" if self._filter != "all" else ""
+        find = f' · matching "{self._query}"' if self._query else ""
         self.query_one("#portfolio-header", Static).update(
-            f"{len(rows)} of {len(self._rows)} artifacts{kind}{scope}"
-            f" · sorted by {self._sort}  ·  s sort · f filter"
+            f"{len(rows)} of {len(self._rows)} artifacts{kind}{scope}{find}"
+            f" · sorted by {self._sort}  ·  s sort · f filter · ^f search"
         )
 
     # --- recency worker (git, off the load path) -----------------------------
@@ -997,6 +1014,42 @@ class PortfolioView(Vertical):
         path = event.row_key.value
         if path is not None:
             self.post_message(OpenArtifact(path))
+
+    # --- live fuzzy name search ----------------------------------------------
+
+    def action_search(self) -> None:
+        self.query_one("#portfolio-search", Input).focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "portfolio-search":
+            return
+        event.stop()
+        self._query = event.value.strip()
+        self._rebuild()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        # Enter from the search box hands focus to the table to navigate the
+        # narrowed rows; the query stays applied.
+        if event.input.id == "portfolio-search":
+            event.stop()
+            self.query_one(DataTable).focus()
+
+    def on_key(self, event: events.Key) -> None:
+        # Esc from the search box returns to the table (not all the way back),
+        # so the global Esc=back still works when the table has focus.
+        if event.key == "escape" and self.query_one("#portfolio-search", Input).has_focus:
+            event.stop()
+            self.query_one(DataTable).focus()
+
+
+def _fuzzy(query: str, text: str) -> bool:
+    """Case-insensitive fuzzy match: substring, else subsequence (chars in
+    order). Cheap and predictable for an in-table name search (v0.26.2)."""
+    q, t = query.casefold(), text.casefold()
+    if q in t:
+        return True
+    cursor = iter(t)
+    return all(char in cursor for char in q)
 
 
 def _negated_age(committed: datetime | None) -> float:

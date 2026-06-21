@@ -794,11 +794,14 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   breakdowns, and relationship counts — the same facts `rac stats` reports,
   collected off the UI thread on request.
 - **Portfolio list:** `/list` opens a sortable table of every artifact — type
-  tag, id, status, link count, recency, and title; `/list <type>` (for example
-  `/list decision`) scopes it to one artifact type. `s` cycles the sort (type,
-  recency, links, status, id) and `f` the status filter (all, invalid, valid);
-  Enter opens the highlighted artifact. Recency is git-derived (ADR-045), so the
-  column fills from a worker after the table is on screen.
+  tag, id, status, link count, recency, and title. `/list <type>` (for example
+  `/list decision`) scopes it to one artifact type, and `/list <text>` (anything
+  that is not a type) runs a fuzzy name search; `s` cycles the sort (type,
+  recency, links, status, id), `f` the status filter (all, invalid, valid), and
+  `ctrl+f` focuses the same name search live in the box. Enter opens the
+  highlighted artifact. The type scope, status filter, and name search compose,
+  and the header names whichever are active. Recency is git-derived (ADR-045),
+  so the column fills from a worker after the table is on screen.
 - **Live reload:** Explorer compares the corpus files on disk every two
   seconds (paths and mtimes only — no parsing) and reloads when something
   changed: the sidebar keeps its expansion and cursor, the open artifact

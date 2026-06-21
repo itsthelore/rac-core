@@ -335,6 +335,52 @@ async def test_portfolio_filter_narrows_to_invalid():
         assert 0 < table.row_count <= total
 
 
+def test_fuzzy_matches_substring_and_subsequence():
+    from rac.explorer.widgets.views import _fuzzy
+
+    assert _fuzzy("explorer", "ADR-028 Explorer Delivery Surface")  # substring, case-insensitive
+    assert _fuzzy("expsurf", "Explorer Delivery Surface")  # subsequence (chars in order)
+    assert not _fuzzy("zzz", "Explorer Delivery Surface")
+
+
+@pytest.mark.asyncio
+async def test_portfolio_fuzzy_search_narrows_rows():
+    from textual.widgets import DataTable, Input
+
+    from rac.explorer.widgets.views import PortfolioView
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        app.screen.route_command("list")
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+        total = table.row_count
+        view = app.screen.query_one(PortfolioView)
+        app.screen.query_one("#portfolio-search", Input).focus()
+        await pilot.pause()
+        for char in "search":
+            await pilot.press(char)
+        await pilot.pause()
+        assert view._query == "search"
+        # A non-empty subset of the whole portfolio.
+        assert 0 < table.row_count <= total
+
+
+@pytest.mark.asyncio
+async def test_list_command_searches_names_when_not_a_type():
+    from rac.explorer.widgets.views import PortfolioView
+
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        app.screen.route_command("list search")  # not a type → fuzzy name search
+        await pilot.pause()
+        view = app.screen.query_one(PortfolioView)
+        assert view._type is None
+        assert view._query == "search"
+
+
 @pytest.mark.asyncio
 async def test_list_command_scopes_to_a_type():
     from textual.widgets import DataTable

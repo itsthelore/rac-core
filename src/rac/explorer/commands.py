@@ -39,7 +39,9 @@ REGISTRY: tuple[CommandSpec, ...] = (
     CommandSpec("open", "open <ref>", "Open an artifact by ID or alias"),
     CommandSpec("find", "find <query> [type]", "Search artifacts by ID, title, or path"),
     CommandSpec("browse", "browse [type]", "Browse the sidebar; a type lists results"),
-    CommandSpec("list", "list [type]", "List artifacts as a sortable table; a type scopes it"),
+    CommandSpec(
+        "list", "list [type|text]", "List artifacts; a type scopes, other text searches names"
+    ),
     CommandSpec("health", "health", "Show repository health and attention items"),
     CommandSpec("stats", "stats", "Show portfolio statistics"),
     CommandSpec(

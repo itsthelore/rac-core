@@ -55,6 +55,7 @@ _HINTS: dict[str, tuple[tuple[str, str], ...]] = {
         ("⏎", "Open"),
         ("s", "Sort"),
         ("f", "Filter"),
+        ("^f", "Search"),
         ("Esc", "Back"),
         ("/", "Commands"),
     ),
