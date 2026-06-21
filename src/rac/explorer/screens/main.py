@@ -130,10 +130,21 @@ class MainScreen(Screen[None]):
         self.query_one(NavigationSidebar).display = self.app.size.width >= _SIDEBAR_MIN_WIDTH
         self.query_one(HomeView).focus()
         self.set_interval(_WATCH_INTERVAL, self._watch_tick)
+        # Type tags are pre-rendered Rich text, not theme tokens, so a live
+        # theme change must re-render them (v0.26.1); the rest recolours itself.
+        self.watch(self.app, "theme", self._retheme_tags, init=False)
         self.action_reload()
 
     def on_resize(self, event: Resize) -> None:
         self.query_one(NavigationSidebar).display = event.size.width >= _SIDEBAR_MIN_WIDTH
+
+    def _retheme_tags(self) -> None:
+        # Re-render the sidebar so its theme-aware type-tag hues track the new
+        # theme (v0.26.1). The rebuild preserves expansion and cursor, and the
+        # palette reads the active theme each time it builds its menu.
+        state = self.adapter.browser_state()
+        if state is not None:
+            self.query_one(NavigationSidebar).show_repository(state)
 
     @property
     def current_view(self) -> str:

@@ -19,29 +19,37 @@ from textual.widgets.tree import TreeNode
 
 from rac.explorer.state import ArtifactRow, BrowserState, DirectoryNode
 
-# Type → (fixed-width tag, hue). The tag text is always rendered beside the
-# name, so the colour is reinforcement, never the only carrier of meaning.
+# Type → (tag, dark hue, light hue). The tag text always renders beside the
+# name, so colour is reinforcement, never the only carrier of meaning (ADR-028).
+# The hue adapts to the active theme (v0.26.1): the dark set on near-black, a
+# deepened set on light so every tag stays legible on paper.
 _TYPE_TAGS = {
-    "requirement": ("REQ", "#46A758"),
-    "decision": ("ADR", "#3B82F6"),
-    "roadmap": ("RMP", "#A855F7"),
-    "prompt": ("PRM", "#06B6D4"),
-    "design": ("DSG", "#EC4899"),
+    "requirement": ("REQ", "#46A758", "#2F6B22"),
+    "decision": ("ADR", "#3B82F6", "#2457B8"),
+    "roadmap": ("RMP", "#A855F7", "#7A35A8"),
+    "prompt": ("PRM", "#06B6D4", "#0E6E7D"),
+    "design": ("DSG", "#EC4899", "#B83275"),
 }
-_UNKNOWN_TAG = ("UNK", "bright_black")
+_UNKNOWN_TAG = ("UNK", "bright_black", "#6B6253")
 
 
-def type_tag(artifact_type: str) -> tuple[str, str]:
-    """The (tag, colour) pair for ``artifact_type``."""
-    return _TYPE_TAGS.get(artifact_type, _UNKNOWN_TAG)
+def type_tag(artifact_type: str, *, dark: bool = True) -> tuple[str, str]:
+    """The (tag, colour) pair for ``artifact_type``, tuned to the theme.
+
+    The hue adapts to a dark or light background so the tag reads clearly
+    either way; the tag text is identical across themes, so meaning never
+    depends on the palette (ADR-028).
+    """
+    tag, dark_hue, light_hue = _TYPE_TAGS.get(artifact_type, _UNKNOWN_TAG)
+    return tag, (dark_hue if dark else light_hue)
 
 
-def _row_label(row: ArtifactRow) -> Text:
+def _row_label(row: ArtifactRow, *, dark: bool = True) -> Text:
     # The human title leads (the ID lives in the context panel and the
     # Inspection tab); invalid artifacts carry the ✗ marker beside the tag,
     # so repository trouble is visible from the tree (ADR-028: text, not
     # colour, carries the state).
-    tag, colour = type_tag(row.type)
+    tag, colour = type_tag(row.type, dark=dark)
     label = Text()
     label.append(tag, style=f"bold {colour}")
     if "✗" in row.status_label:
@@ -93,14 +101,15 @@ class NavigationSidebar(Tree[str]):
         self._status_by_path = {
             row.path: row.status_label for _, rows in browser.groups for row in rows
         }
+        dark = self._tag_dark()
         if browser.tree is not None:
             # Folders grouping (the default, v0.8.10): the real directory
             # structure, built eagerly but collapsed.
-            self._add_directory(self.root, browser.tree, expanded)
+            self._add_directory(self.root, browser.tree, expanded, dark)
         elif len(browser.groups) == 1 and browser.groups[0][0] == "all":
             # Flat grouping (preference): rows directly, no type headers.
             for row in browser.groups[0][1]:
-                leaf = self.root.add_leaf(_row_label(row), data=row.path)
+                leaf = self.root.add_leaf(_row_label(row, dark=dark), data=row.path)
                 self._node_by_data[row.path] = leaf
         else:
             for group_type, rows in browser.groups:
@@ -133,8 +142,15 @@ class NavigationSidebar(Tree[str]):
             NavigationSidebar._count_rows(child) for child in directory.dirs
         )
 
+    def _tag_dark(self) -> bool:
+        """Whether the active theme is dark, for theme-aware tag hues (v0.26.1)."""
+        try:
+            return bool(self.app.current_theme.dark)
+        except Exception:  # noqa: BLE001 - no app/theme yet: assume the dark default
+            return True
+
     def _add_directory(
-        self, parent: TreeNode[str], directory: DirectoryNode, expanded: set[str]
+        self, parent: TreeNode[str], directory: DirectoryNode, expanded: set[str], dark: bool
     ) -> None:
         """Render one directory's children: subdirectories first, then rows."""
         for child in directory.dirs:
@@ -144,11 +160,11 @@ class NavigationSidebar(Tree[str]):
             data = f"dir:{child.path}"
             node = parent.add(label, data=data)
             self._node_by_data[data] = node
-            self._add_directory(node, child, expanded)
+            self._add_directory(node, child, expanded, dark)
             if data in expanded:
                 node.expand()
         for row in directory.rows:
-            leaf = parent.add_leaf(_row_label(row), data=row.path)
+            leaf = parent.add_leaf(_row_label(row, dark=dark), data=row.path)
             self._node_by_data[row.path] = leaf
 
     def _restore_cursor(self, data: str) -> None:
@@ -168,8 +184,9 @@ class NavigationSidebar(Tree[str]):
         group_type = data.removeprefix("group:")
         if node.children or data == group_type:
             return  # already populated, or a leaf
+        dark = self._tag_dark()
         for row in self._rows_by_group.get(group_type, ()):
-            self._node_by_data[row.path] = node.add_leaf(_row_label(row), data=row.path)
+            self._node_by_data[row.path] = node.add_leaf(_row_label(row, dark=dark), data=row.path)
 
     def on_tree_node_expanded(self, event: Tree.NodeExpanded[str]) -> None:
         self._populate(event.node)

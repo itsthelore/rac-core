@@ -39,8 +39,8 @@ def _command_option(spec: commands.CommandSpec) -> Option:
     return Option(label, id=f"cmd:{spec.name}")
 
 
-def _artifact_option(row: ArtifactRow) -> Option:
-    tag, colour = type_tag(row.type)
+def _artifact_option(row: ArtifactRow, *, dark: bool = True) -> Option:
+    tag, colour = type_tag(row.type, dark=dark)
     label = Text()
     label.append(tag, style=f"bold {colour}")
     label.append(f" {row.title or row.id}")
@@ -106,10 +106,20 @@ class CommandPalette(Vertical):
     def _menu(self) -> OptionList:
         return self.query_one(OptionList)
 
+    def _tag_dark(self) -> bool:
+        """Whether the active theme is dark, for theme-aware tag hues (v0.26.1)."""
+        try:
+            return bool(self.app.current_theme.dark)
+        except Exception:  # noqa: BLE001 - no app/theme yet: assume the dark default
+            return True
+
     def _refresh_menu(self, text: str) -> None:
         menu = self._menu()
         menu.clear_options()
         stripped = text.strip().lstrip("/").strip()
+        # Theme-aware tag hues (v0.26.1); the menu rebuilds on every keystroke,
+        # so reading the active theme here keeps the palette tags current.
+        dark = self._tag_dark()
         options: list[Option] = []
         if not stripped:
             # The artifacts the user actually works in come first (v0.8.9);
@@ -117,7 +127,7 @@ class CommandPalette(Vertical):
             recents = self.adapter.recent_rows()
             if recents:
                 options.append(Option(Text("Recent", style="dim"), disabled=True))
-                options.extend(_artifact_option(row) for row in recents)
+                options.extend(_artifact_option(row, dark=dark) for row in recents)
                 options.append(Option(Text("Commands", style="dim"), disabled=True))
             options.extend(_command_option(spec) for spec in commands.REGISTRY)
         else:
@@ -126,7 +136,9 @@ class CommandPalette(Vertical):
                 options = [_command_option(spec) for spec in matched]
             else:
                 lookup = self.adapter.search_rows(stripped)
-                options.extend(_artifact_option(row) for row in lookup.rows[:_MATCH_LIMIT])
+                options.extend(
+                    _artifact_option(row, dark=dark) for row in lookup.rows[:_MATCH_LIMIT]
+                )
                 options.append(Option(f"Search all results for '{stripped}'", id="route:search"))
         menu.add_options(options)
         for index in range(menu.option_count):
