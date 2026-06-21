@@ -10,7 +10,9 @@ testable without a terminal.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path, PurePath
 
 from rac.core.frontmatter import split_frontmatter
@@ -66,6 +68,8 @@ from .state import (
     LoadErrorState,
     LoadProgressState,
     LookupState,
+    PortfolioRow,
+    PortfolioState,
     RecommendationRow,
     RecommendationsState,
     RelationshipLink,
@@ -150,6 +154,20 @@ def _row(artifact: Artifact) -> ArtifactRow:
         title=artifact.title,
         status_label=_status_label(artifact.status),
     )
+
+
+def _display_id(artifact: Artifact) -> str:
+    """A human-readable id for the portfolio list (v0.26.2).
+
+    The canonical ``id`` is the opaque ``RAC-…`` key; the readable reference
+    (``adr-028``, the filename stem) lives in the aliases. Prefer the shortest
+    non-opaque alias, upper-casing the ``letters-digits`` form (``ADR-028``).
+    """
+    candidates = [alias for alias in artifact.aliases if not alias.startswith("RAC-")]
+    if not candidates:
+        return artifact.id
+    short = min(candidates, key=len)
+    return short.upper() if re.fullmatch(r"[a-z]+-\d+", short) else short
 
 
 def _directory_tree(rows: tuple[ArtifactRow, ...], directory: str) -> DirectoryNode:
@@ -370,6 +388,54 @@ class ExplorerAdapter:
             groups=groups,
             total=sum(len(rows) for _, rows in groups),
         )
+
+    def portfolio_state(self) -> PortfolioState | None:
+        """Every artifact as a portfolio row with its link count (v0.26.2).
+
+        ``link_count`` is the artifact's degree in the loaded relationship
+        graph — outgoing plus incoming edges — so the table renders from
+        already-loaded state with no git or extra Core call (ADR-015). Recency
+        is filled later by :meth:`recency_labels`, off the UI thread.
+        """
+        repository = self.repository
+        if repository is None:
+            return None
+        counts: dict[str, int] = {}
+        for rel in repository.relationships:
+            if rel.source_path:
+                counts[rel.source_path] = counts.get(rel.source_path, 0) + 1
+            if rel.resolved_path:
+                counts[rel.resolved_path] = counts.get(rel.resolved_path, 0) + 1
+        rows = tuple(
+            PortfolioRow(
+                path=a.path,
+                id=_display_id(a),
+                type=a.type,
+                title=a.title,
+                status_label=_status_label(a.status),
+                link_count=counts.get(a.path, 0),
+            )
+            for a in repository.artifacts
+        )
+        return PortfolioState(rows=rows)
+
+    def recency_index(self) -> dict[str, datetime]:
+        """Per-path last-committed times from git (ADR-045), or empty when git
+        is unavailable. Expensive — a git call per artifact — so the portfolio
+        view runs it in a worker, never the load path (v0.26.2). Datetimes (not
+        labels) so the view can both format and sort by age.
+        """
+        from rac.services.recency import artifact_recency
+
+        try:
+            report = artifact_recency(self.directory, recursive=self.recursive)
+        except Exception:  # noqa: BLE001 - no git, or a git failure: no recency
+            return {}
+        return {
+            entry.path: entry.last_committed
+            for entry in report.artifacts
+            if entry.last_committed is not None
+        }
 
     def open_ref(self, ref: str) -> LookupState:
         """Exact lookup for `/open`, with `rac resolve` semantics (ADR-026).
