@@ -36,7 +36,7 @@ from textual.worker import Worker, WorkerState, get_current_worker
 from rac.explorer import editor as editor_mod
 from rac.explorer import firstrun, mascot
 from rac.explorer.adapter import ExplorerAdapter
-from rac.explorer.preferences import GROUPINGS, preferences_path
+from rac.explorer.preferences import GROUPINGS, LAYOUTS, preferences_path
 from rac.explorer.state import (
     ArtifactRow,
     ContextState,
@@ -884,6 +884,15 @@ class PortfolioView(Vertical):
         Binding("ctrl+f", "search", "Search", show=False),
     ]
 
+    class Followed(Message):
+        """The master row changed in the split layout — open it in the detail
+        pane (v0.26.3). Distinct from the Enter-to-open path so it only fires
+        when the view is acting as a master."""
+
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+
     def __init__(self, adapter: ExplorerAdapter) -> None:
         super().__init__(id="view-portfolio")
         self.adapter = adapter
@@ -893,6 +902,7 @@ class PortfolioView(Vertical):
         self._filter = "all"
         self._type: str | None = None  # /list <type> scopes to one artifact type
         self._query = ""  # live fuzzy name search within the visible rows
+        self._follow = False  # split layout: highlight drives the detail pane
 
     def compose(self) -> ComposeResult:
         yield Static(id="portfolio-header")
@@ -1024,6 +1034,29 @@ class PortfolioView(Vertical):
         if path is not None:
             self.post_message(OpenArtifact(path))
 
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        # Split layout (v0.26.3): the highlighted row drives the detail pane as
+        # the cursor moves. Off in the frame layout, where Enter opens instead.
+        if self._follow and event.row_key is not None and event.row_key.value is not None:
+            self.post_message(self.Followed(event.row_key.value))
+
+    # --- split layout (master pane, v0.26.3) ---------------------------------
+
+    def set_follow(self, follow: bool) -> None:
+        self._follow = follow
+
+    def reveal_first(self) -> None:
+        """Open the first visible row in the detail pane; no-op when empty."""
+        table = self.query_one(DataTable)
+        if self._follow and table.row_count:
+            first = next(iter(table.rows))
+            self.post_message(self.Followed(first.value))
+            table.move_cursor(row=0)
+
+    def refresh_tags(self) -> None:
+        """Re-render so theme-aware tag hues track a live theme change."""
+        self._rebuild()
+
     # --- live fuzzy name search ----------------------------------------------
 
     def action_search(self) -> None:
@@ -1096,6 +1129,7 @@ class SettingsView(Vertical):
             ("animations", "on" if prefs.animations else "off"),
             ("mascot_interaction", "on" if prefs.mascot_interaction else "off"),
             ("artifact_grouping", prefs.artifact_grouping),
+            ("layout", prefs.layout),
             ("editor", prefs.editor or "(from $VISUAL / $EDITOR)"),
         )
         listing = self.query_one("#settings-list", OptionList)
@@ -1130,6 +1164,10 @@ class SettingsView(Vertical):
             # folders → type → flat → folders (the canonical order, v0.8.10).
             current = GROUPINGS.index(prefs.artifact_grouping)
             updated = replace(prefs, artifact_grouping=GROUPINGS[(current + 1) % len(GROUPINGS)])
+        elif key == "layout":
+            # frame → split → frame (v0.26.3).
+            current = LAYOUTS.index(prefs.layout) if prefs.layout in LAYOUTS else 0
+            updated = replace(prefs, layout=LAYOUTS[(current + 1) % len(LAYOUTS)])
         else:  # editor — reveal the inline input instead of cycling
             field = self.query_one("#settings-editor-input", Input)
             field.display = True

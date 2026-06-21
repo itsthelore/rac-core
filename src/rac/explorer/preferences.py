@@ -22,6 +22,13 @@ GROUPING_FLAT = "flat"
 GROUPINGS = (GROUPING_FOLDERS, GROUPING_TYPE, GROUPING_FLAT)
 _GROUPINGS = GROUPINGS
 
+# Workspace layouts, in settings-cycle order (v0.26.3). `frame` is the tree +
+# swapping context region; `split` is master-detail — the portfolio list driving
+# a persistent reading pane.
+LAYOUT_FRAME = "frame"
+LAYOUT_SPLIT = "split"
+LAYOUTS = (LAYOUT_FRAME, LAYOUT_SPLIT)
+
 
 @dataclass(frozen=True)
 class Preferences:
@@ -38,6 +45,8 @@ class Preferences:
     # The default Markdown editor command (v0.8.8); empty falls back to
     # $VISUAL / $EDITOR (DESIGN-editor-integration).
     editor: str = ""
+    # Workspace layout (v0.26.3): `frame` (default) or `split` master-detail.
+    layout: str = LAYOUT_FRAME
 
 
 def preferences_path() -> Path:
@@ -58,6 +67,9 @@ def load_preferences() -> Preferences:
     grouping = data.get("artifact_grouping", defaults.artifact_grouping)
     if grouping not in _GROUPINGS:
         grouping = defaults.artifact_grouping
+    layout = data.get("layout", defaults.layout)
+    if layout not in LAYOUTS:
+        layout = defaults.layout
     return Preferences(
         theme=str(data.get("theme", defaults.theme)),
         mascot=bool(data.get("mascot", defaults.mascot)),
@@ -65,6 +77,7 @@ def load_preferences() -> Preferences:
         mascot_interaction=bool(data.get("mascot_interaction", defaults.mascot_interaction)),
         artifact_grouping=grouping,
         editor=str(data.get("editor", defaults.editor)),
+        layout=layout,
     )
 
 

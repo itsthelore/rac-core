@@ -80,6 +80,22 @@ PortfolioView {
     height: 1fr;
 }
 
+/* Split layout (v0.26.3): the portfolio list as the master pane — a titled
+   panel beside the reading pane. Only the direct workspace child is styled,
+   so the /list view (nested in the context region) is unaffected. */
+#workspace > PortfolioView {
+    width: 44%;
+    border: round $panel;
+    border-title-color: $text;
+    background: $surface;
+    padding: 0 1;
+}
+
+#workspace > PortfolioView:focus-within {
+    border: round $accent;
+    border-title-color: $accent;
+}
+
 #portfolio-header {
     height: 1;
     color: $text-muted;

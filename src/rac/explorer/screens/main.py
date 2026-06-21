@@ -23,6 +23,7 @@ from textual.worker import Worker, WorkerState, get_current_worker
 
 from rac.explorer import commands, mascot
 from rac.explorer.adapter import ExplorerAdapter
+from rac.explorer.preferences import LAYOUT_SPLIT
 from rac.explorer.state import (
     LoadErrorState,
     LoadProgressState,
@@ -53,6 +54,10 @@ from rac.explorer.widgets.views import (
 
 # The sidebar hides below this width so the context panel keeps room to read.
 _SIDEBAR_MIN_WIDTH = 80
+
+# Split layout (v0.26.3) needs room for two panes; below this the master pane
+# hides and the reading pane takes the full width (navigate with the palette).
+_SPLIT_MIN_WIDTH = 100
 
 # How often the live watcher compares the corpus files on disk (v0.8.9).
 _WATCH_INTERVAL = 2.0
@@ -109,10 +114,22 @@ class MainScreen(Screen[None]):
 
     # --- frame ----------------------------------------------------------------
 
+    def _split(self) -> bool:
+        """Whether the master-detail split layout is active (v0.26.3)."""
+        return self.adapter.preferences.layout == LAYOUT_SPLIT
+
     def compose(self) -> ComposeResult:
+        # Two layouts (v0.26.3, ADR-028): `frame` is the tree sidebar plus a
+        # swapping context region; `split` is master-detail — the portfolio list
+        # drives a persistent reading pane. The sidebar is always composed (it
+        # hosts the loaded browser state and the reveal/status calls); it simply
+        # hides in split, where the list is the navigator instead.
+        split = self._split()
         yield AppBar(self.adapter.directory)
         with Horizontal(id="workspace"):
             yield NavigationSidebar()
+            if split:
+                yield PortfolioView(self.adapter)  # the master pane
             with Vertical(id="context-region"), ContentSwitcher(initial="view-home", id="views"):
                 yield HomeView(self.adapter)
                 yield ContextView(self.adapter)
@@ -122,7 +139,8 @@ class MainScreen(Screen[None]):
                 yield ResultsView()
                 yield SettingsView(self.adapter)
                 yield StatsView(self.adapter)
-                yield PortfolioView(self.adapter)
+                if not split:
+                    yield PortfolioView(self.adapter)  # a swappable /list view
         yield StatusLine()
         # Floats over the context region on its own layer; hidden when idle.
         yield CommandPalette(self.adapter)
@@ -130,8 +148,11 @@ class MainScreen(Screen[None]):
     def on_mount(self) -> None:
         self._set_region_title("view-home")
         self.query_one(StatusLine).show_hints("home")
-        self.query_one(NavigationSidebar).display = self.app.size.width >= _SIDEBAR_MIN_WIDTH
-        self.query_one(HomeView).focus()
+        self._apply_layout_visibility()
+        if self._split():
+            self.query_one(PortfolioView).take_focus()
+        else:
+            self.query_one(HomeView).focus()
         self.set_interval(_WATCH_INTERVAL, self._watch_tick)
         # Type tags are pre-rendered Rich text, not theme tokens, so a live
         # theme change must re-render them (v0.26.1); the rest recolours itself.
@@ -139,12 +160,25 @@ class MainScreen(Screen[None]):
         self.action_reload()
 
     def on_resize(self, event: Resize) -> None:
-        self.query_one(NavigationSidebar).display = event.size.width >= _SIDEBAR_MIN_WIDTH
+        self._apply_layout_visibility()
+
+    def _apply_layout_visibility(self) -> None:
+        # Frame: the sidebar hides under 80 cols. Split (v0.26.3): the sidebar
+        # is always hidden (the list is the navigator) and the master pane hides
+        # under 100 cols, leaving the reading pane full width.
+        width = self.app.size.width
+        if self._split():
+            self.query_one(NavigationSidebar).display = False
+            self.query_one(PortfolioView).display = width >= _SPLIT_MIN_WIDTH
+        else:
+            self.query_one(NavigationSidebar).display = width >= _SIDEBAR_MIN_WIDTH
 
     def _retheme_tags(self) -> None:
-        # Re-render the sidebar so its theme-aware type-tag hues track the new
-        # theme (v0.26.1). The rebuild preserves expansion and cursor, and the
-        # palette reads the active theme each time it builds its menu.
+        # Re-render the active navigator so its theme-aware type-tag hues track
+        # the new theme (v0.26.1); the palette reads the active theme each time.
+        if self._split():
+            self.query_one(PortfolioView).refresh_tags()
+            return
         state = self.adapter.browser_state()
         if state is not None:
             self.query_one(NavigationSidebar).show_repository(state)
@@ -275,6 +309,7 @@ class MainScreen(Screen[None]):
                 home.show_result(result)
                 self.query_one(NavigationSidebar).show_repository(self.adapter.browser_state())
                 self.query_one(StatusLine).show_summary(result)
+                self._populate_master()  # split layout master pane (v0.26.3)
                 self._refresh_current_view()
                 pending, self._open_after_load = self._open_after_load, None
                 if pending is not None and self.adapter.context_state(pending) is not None:
@@ -411,6 +446,24 @@ class MainScreen(Screen[None]):
         message.stop()
         self.open_artifact(message.path, tab=message.tab)
 
+    def on_portfolio_view_followed(self, message: PortfolioView.Followed) -> None:
+        message.stop()
+        # Split layout (v0.26.3): the master cursor moved, so refresh the detail
+        # pane in place and keep focus on the list so arrows keep driving it.
+        self.open_artifact(message.path, record=False, focus=False)
+
+    def _populate_master(self) -> None:
+        """Fill the split layout's master list and open its first row (v0.26.3)."""
+        if not self._split():
+            return
+        state = self.adapter.portfolio_state()
+        if state is None:
+            return
+        master = self.query_one(PortfolioView)
+        master.set_follow(True)
+        master.show_portfolio(state)
+        master.reveal_first()
+
     def on_browse_requested(self, message: BrowseRequested) -> None:
         message.stop()
         self.query_one(NavigationSidebar).focus()
@@ -429,6 +482,49 @@ class MainScreen(Screen[None]):
         if message.key == "artifact_grouping":
             # The sidebar mirrors the grouping preference immediately.
             self.query_one(NavigationSidebar).show_repository(self.adapter.browser_state())
+        elif message.key == "layout":
+            # Live-switch the workspace between frame and split (v0.26.3).
+            self._switch_layout()
+
+    def _make_workspace(self) -> Horizontal:
+        """Build the workspace for the current layout preference (v0.26.3)."""
+        split = self._split()
+        views: list[Widget] = [
+            HomeView(self.adapter),
+            ContextView(self.adapter),
+            HealthView(),
+            RecommendationsView(self.adapter),
+            ImportView(self.adapter),
+            ResultsView(),
+            SettingsView(self.adapter),
+            StatsView(self.adapter),
+        ]
+        if not split:
+            views.append(PortfolioView(self.adapter))
+        context = Vertical(
+            ContentSwitcher(*views, initial="view-home", id="views"), id="context-region"
+        )
+        left: list[Widget] = [NavigationSidebar()]
+        if split:
+            left.append(PortfolioView(self.adapter))
+        left.append(context)
+        return Horizontal(*left, id="workspace")
+
+    @work(exclusive=True, group="layout-switch")
+    async def _switch_layout(self) -> None:
+        # Re-mount the workspace for the new layout, then reload from the
+        # already-open repository (v0.26.3). The frame never jumps during
+        # navigation; this is an explicit preference change, like the theme.
+        await self.query_one("#workspace").remove()
+        await self.mount(self._make_workspace(), after=self.query_one(AppBar))
+        self._apply_layout_visibility()
+        self._set_region_title("view-home")
+        self.query_one(StatusLine).show_hints("home")
+        if self._split():
+            self.query_one(PortfolioView).take_focus()
+        else:
+            self.query_one(HomeView).focus()
+        self.action_reload()
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[str]) -> None:
         path = event.node.data
@@ -621,11 +717,19 @@ class MainScreen(Screen[None]):
             # name search; bare `/list` shows everything (v0.26.2).
             arg = invocation.args.strip()
             view = self.query_one(PortfolioView)
+            follow = self._split()  # the master keeps driving the detail pane
+            view.set_follow(follow)
             if arg.casefold() in {row.type for row in state.rows}:
                 view.show_portfolio(state, artifact_type=arg.casefold())
             else:
                 view.show_portfolio(state, query=arg or None)
-            self.show_view("view-portfolio")
+            if follow:
+                # In split the list is the master pane; just focus it (and keep
+                # the detail in sync), never swap it into the context region.
+                view.take_focus()
+                view.reveal_first()
+            else:
+                self.show_view("view-portfolio")
         elif invocation.command == "browse":
             artifact_type = invocation.args.casefold() or None
             if artifact_type is None:
