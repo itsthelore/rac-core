@@ -194,6 +194,29 @@ async def test_theme_preference_overrides_the_default(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_rac_parchment_light_theme_is_registered():
+    # The curated light companion ships beside the dark default (v0.26.0), so
+    # it appears in the `/settings` cycle over available themes.
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        assert "rac-parchment" in app.available_themes
+        assert app.available_themes["rac-parchment"].dark is False
+
+
+@pytest.mark.asyncio
+async def test_parchment_theme_preference_applies(monkeypatch, tmp_path):
+    from rac.explorer.preferences import Preferences, save_preferences
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    save_preferences(Preferences(theme="rac-parchment"))
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        assert app.theme == "rac-parchment"
+
+
+@pytest.mark.asyncio
 async def test_sidebar_hides_in_narrow_terminals():
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test(size=(70, 24)) as pilot:
