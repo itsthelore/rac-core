@@ -911,17 +911,15 @@ class PortfolioView(Vertical):
 
     def on_mount(self) -> None:
         # Fixed widths for the scannable columns keep them tidy and aligned;
-        # Title is auto-sized last so full titles show (and the table scrolls
-        # horizontally if needed). Tune the widths here (v0.26.2).
+        # ID and Title are auto-sized so they fit the longest value in the
+        # column (the table scrolls horizontally if needed). Tune the fixed
+        # widths here (v0.26.2).
         table = self.query_one(DataTable)
-        for label, width in (
-            ("Type", 4),
-            ("ID", 24),
-            ("Status", 16),
-            ("Links", 6),
-            ("Recency", 8),
-        ):
-            table.add_column(label, width=width)
+        table.add_column("Type", width=4)
+        table.add_column("ID")  # auto-width: as wide as the longest id
+        table.add_column("Status", width=16)
+        table.add_column("Links", width=6)
+        table.add_column("Recency", width=8)
         table.add_column("Title")  # auto-width: as wide as the longest title
 
     def show_portfolio(
@@ -984,10 +982,9 @@ class PortfolioView(Vertical):
             tag, hue = type_tag(row.type, dark=dark)
             committed = self._recency.get(row.path)
             recency = relative_age(committed) if committed is not None else "·"
-            ident = row.id if len(row.id) <= 24 else row.id[:23] + "…"
             table.add_row(
                 Text(tag, style=f"bold {hue}"),
-                ident,
+                row.id,
                 row.status_label,
                 str(row.link_count),
                 recency,
