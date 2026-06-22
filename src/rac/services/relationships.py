@@ -23,7 +23,12 @@ from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
 from rac.core.corpus import CorpusCache, CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier, artifact_identifiers
-from rac.core.limits import MAX_RELATED_EDGES
+from rac.core.limits import (
+    MAX_RELATED_EDGES,
+    MAX_TRAVERSAL_DEPTH,
+    MAX_TRAVERSAL_FRONTIER,
+    MAX_TRAVERSAL_WORK,
+)
 from rac.core.markdown import parse_file
 from rac.core.models import Product
 from rac.core.relationship_types import REGISTRY, edge_spec
@@ -1102,3 +1107,105 @@ def incoming_references(
             )
     incoming.sort(key=lambda e: (_relationship_order(e.section), e.id, e.path))
     return IncomingReferences(items=incoming, total=total)
+
+
+@dataclass(frozen=True)
+class NeighborhoodNode:
+    """One artifact reachable from the origin, with its hop distance (v0.24, WS-D)."""
+
+    id: str
+    type: str
+    title: str | None
+    path: str
+    hops: int
+
+
+@dataclass(frozen=True)
+class Neighborhood:
+    """The bounded multi-hop neighbourhood of an origin artifact.
+
+    ``nodes`` excludes the origin and is ordered deterministically by
+    ``(hops, type, id)`` so response-budget truncation drops the farthest,
+    lowest-priority artifacts first. ``truncated`` is True when any traversal
+    cap stopped the walk early.
+    """
+
+    nodes: list[NeighborhoodNode]
+    truncated: bool
+
+
+def neighborhood(
+    relationships: list[Relationship],
+    identity_by_path: dict[str, tuple[str, str, str | None]],
+    origin_path: str,
+    *,
+    depth: int,
+    max_frontier: int = MAX_TRAVERSAL_FRONTIER,
+    work_budget: int = MAX_TRAVERSAL_WORK,
+) -> Neighborhood:
+    """Artifacts within ``depth`` hops of ``origin_path`` (v0.24, WS-D).
+
+    A breadth-first walk over resolved relationship edges in both directions,
+    bounded by the four caps from ``rac-parser-traversal-robustness`` REQ-010:
+    the requested ``depth`` is clamped to :data:`MAX_TRAVERSAL_DEPTH`, each level
+    admits at most ``max_frontier`` nodes, a visited set makes the walk
+    cycle-safe, and ``work_budget`` caps the edges examined across the whole
+    walk. The origin is never included. Deterministic and offline (ADR-002):
+    identical corpus bytes yield a byte-identical, ordered result.
+    """
+    depth = max(0, min(depth, MAX_TRAVERSAL_DEPTH))
+
+    # Undirected adjacency over resolved edges; each entry carries the relationship
+    # rank of the edge so discovery order is deterministic (REQ-004).
+    adjacency: dict[str, list[tuple[str, int]]] = {}
+    for rel in relationships:
+        if rel.resolved_path is None or rel.source_path == rel.resolved_path:
+            continue
+        rank = _relationship_order(rel.relationship)
+        adjacency.setdefault(rel.source_path, []).append((rel.resolved_path, rank))
+        adjacency.setdefault(rel.resolved_path, []).append((rel.source_path, rank))
+
+    visited: set[str] = {origin_path}
+    discovered: list[tuple[int, int, str, str]] = []  # (hops, rank, id, path)
+    frontier = [origin_path]
+    work = 0
+    truncated = False
+
+    for current_depth in range(1, depth + 1):
+        next_frontier: list[str] = []
+        for path in sorted(frontier):
+            for neighbor_path, rank in sorted(set(adjacency.get(path, []))):
+                work += 1
+                if work > work_budget:
+                    truncated = True
+                    break
+                if neighbor_path in visited:
+                    continue
+                visited.add(neighbor_path)
+                identity = identity_by_path.get(neighbor_path)
+                if identity is None:  # pragma: no cover — every edge target is indexed
+                    continue
+                discovered.append((current_depth, rank, identity[0], neighbor_path))
+                if len(next_frontier) >= max_frontier:
+                    truncated = True
+                else:
+                    next_frontier.append(neighbor_path)
+            if truncated and work > work_budget:
+                break
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    discovered.sort()  # (hops, rank, id, path) — deterministic, stable truncation
+    nodes = [
+        NeighborhoodNode(
+            id=identity_by_path[path][0],
+            type=identity_by_path[path][1],
+            title=identity_by_path[path][2],
+            path=path,
+            hops=hops,
+        )
+        for hops, _rank, _id, path in discovered
+    ]
+    nodes.sort(key=lambda n: (n.hops, n.type, n.id))
+    return Neighborhood(nodes=nodes, truncated=truncated)

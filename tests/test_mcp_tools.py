@@ -740,3 +740,37 @@ def test_get_related_performs_exactly_one_corpus_walk(monkeypatch):
     server_obj = build_server(CORPUS)
     asyncio.run(server_obj.call_tool("get_related", {"id": DEC}))
     assert calls["count"] == 1
+
+
+# --- get_related bounded multi-hop (v0.24, WS-D) -----------------------------
+
+
+def _chain_corpus(root) -> None:
+    """Three decisions linked head->tail: dec1 -> dec2 -> dec3."""
+    from pathlib import Path
+
+    base = Path(root)
+    ids = ["RAC-MCPCHN000001", "RAC-MCPCHN000002", "RAC-MCPCHN000003"]
+    for i, ident in enumerate(ids):
+        link = f"\n## Related Decisions\n\n- {ids[i + 1]}\n" if i + 1 < len(ids) else ""
+        (base / f"dec{i + 1}.md").write_text(
+            f"---\nschema_version: 1\nid: {ident}\ntype: decision\n---\n"
+            f"# Chain {i + 1}\n\n## Status\n\nAccepted\n\n## Category\n\nArchitecture\n\n"
+            f"## Context\n\nC.\n\n## Decision\n\nD.\n\n## Consequences\n\nX.\n{link}",
+            encoding="utf-8",
+        )
+
+
+def test_get_related_depth_one_has_no_neighborhood_field(tmp_path):
+    _chain_corpus(tmp_path)
+    payload = call(str(tmp_path), "get_related", {"id": "RAC-MCPCHN000001"})
+    assert "neighborhood" not in payload and "depth" not in payload
+
+
+def test_get_related_depth_two_surfaces_two_hop_neighbour(tmp_path):
+    _chain_corpus(tmp_path)
+    payload = call(str(tmp_path), "get_related", {"id": "RAC-MCPCHN000001", "depth": 2})
+    assert payload["depth"] == 2
+    # dec1 -> dec2 (1 hop, already in outgoing) -> dec3 (2 hops, in neighborhood).
+    hood = {(n["id"], n["hops"]) for n in payload["neighborhood"]}
+    assert ("RAC-MCPCHN000003", 2) in hood

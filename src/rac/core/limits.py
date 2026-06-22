@@ -40,6 +40,18 @@ MAX_CAPTURED_LINES = 50_000  # total non-blank body lines captured per document
 # force an unbounded in-memory list before the response budget trims it.
 MAX_RELATED_EDGES = 1000
 
+# Bounded multi-hop traversal caps for get_related (v0.24, WS-D;
+# rac-multi-hop-relationship-traversal REQ-002). A depth parameter widens
+# get_related beyond immediate neighbours, but every traversal stays bounded by
+# four caps so a deep or high-fan-out graph cannot hang or exhaust memory:
+#   - a maximum depth (the requested N is clamped to this ceiling),
+#   - a maximum frontier size per BFS level,
+#   - a visited set that prevents revisiting a node (cycle-safe), and
+#   - a total work budget on edges examined across the whole walk.
+MAX_TRAVERSAL_DEPTH = 5  # ceiling on the requested hop depth
+MAX_TRAVERSAL_FRONTIER = 1000  # nodes admitted per level before the level truncates
+MAX_TRAVERSAL_WORK = 10_000  # edges examined across the whole walk before it stops
+
 
 def max_file_bytes() -> int:
     """The per-file byte cap, honoring ``RAC_MAX_FILE_BYTES`` (REQ-001)."""

@@ -279,3 +279,86 @@ def test_linked_fixtures_validate(artifact, info):
     filename, _ = info
     issues = validate(parse(open(fixture_path("relationships", filename)).read()))
     assert not has_errors(issues), f"{filename} should validate without errors"
+
+
+# --- bounded multi-hop neighbourhood (v0.24, WS-D) ---------------------------
+
+from rac.core.limits import MAX_TRAVERSAL_DEPTH  # noqa: E402
+from rac.services.relationships import (  # noqa: E402
+    Relationship,
+    neighborhood,
+)
+
+
+def _chain(*paths: str) -> tuple[list[Relationship], dict[str, tuple[str, str, str | None]]]:
+    """A directed chain p0 -> p1 -> ... as resolved relationships, plus identities."""
+    rels = [
+        Relationship(
+            source_path=paths[i],
+            relationship="related_decisions",
+            target=paths[i + 1],
+            resolved_path=paths[i + 1],
+            issue=None,
+        )
+        for i in range(len(paths) - 1)
+    ]
+    identity = {p: (f"ID-{p}", "decision", f"Title {p}") for p in paths}
+    return rels, identity
+
+
+def test_neighborhood_walks_both_directions_with_hop_distance():
+    rels, identity = _chain("a", "b", "c", "d")
+    hood = neighborhood(rels, identity, "b", depth=2)
+    # From b: a and c are 1 hop, d is 2 hops; b (origin) is excluded.
+    assert {(n.path, n.hops) for n in hood.nodes} == {("a", 1), ("c", 1), ("d", 2)}
+    assert not hood.truncated
+
+
+def test_neighborhood_depth_one_returns_only_immediate_neighbours():
+    rels, identity = _chain("a", "b", "c", "d")
+    hood = neighborhood(rels, identity, "a", depth=1)
+    assert {n.path for n in hood.nodes} == {"b"}
+
+
+def test_neighborhood_ordered_by_hops_then_type_then_id():
+    rels, identity = _chain("a", "b", "c")
+    hood = neighborhood(rels, identity, "a", depth=2)
+    assert [(n.hops, n.id) for n in hood.nodes] == [(1, "ID-b"), (2, "ID-c")]
+
+
+def test_neighborhood_is_cycle_safe():
+    # a -> b -> c -> a : a visited as origin, so the walk terminates.
+    rels, identity = _chain("a", "b", "c")
+    rels.append(
+        Relationship(
+            source_path="c",
+            relationship="related_decisions",
+            target="a",
+            resolved_path="a",
+            issue=None,
+        )
+    )
+    hood = neighborhood(rels, identity, "a", depth=10)
+    assert {n.path for n in hood.nodes} == {"b", "c"}
+    assert not hood.truncated
+
+
+def test_neighborhood_clamps_depth_to_the_ceiling():
+    paths = [f"p{i}" for i in range(MAX_TRAVERSAL_DEPTH + 5)]
+    rels, identity = _chain(*paths)
+    hood = neighborhood(rels, identity, paths[0], depth=999)
+    # Nothing beyond the clamped ceiling is reached from the origin.
+    assert max(n.hops for n in hood.nodes) == MAX_TRAVERSAL_DEPTH
+
+
+def test_neighborhood_work_budget_truncates_and_flags():
+    rels, identity = _chain("a", "b", "c", "d", "e")
+    hood = neighborhood(rels, identity, "a", depth=5, work_budget=1)
+    assert hood.truncated
+
+
+def test_neighborhood_deterministic_across_runs():
+    rels, identity = _chain("a", "b", "c", "d")
+    first = neighborhood(rels, identity, "b", depth=3)
+    second = neighborhood(rels, identity, "b", depth=3)
+    assert [n.path for n in first.nodes] == [n.path for n in second.nodes]

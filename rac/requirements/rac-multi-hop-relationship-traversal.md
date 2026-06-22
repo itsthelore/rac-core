@@ -8,7 +8,7 @@ tags: [internal, relationships, traversal, mcp, determinism]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — richer relationship answers. Scoped to the v0.24.0
 visibility release (WS-D, Tier 2, cut-first). Extends the existing 1-hop

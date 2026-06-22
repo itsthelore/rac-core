@@ -127,6 +127,13 @@ a decision covers.
 | `get_artifact` | When an artifact ID appears, or before changing anything a decision covers |
 | `get_related` | After retrieving an artifact — finds what else the change could affect |
 
+`get_related` takes an optional `depth` (default `1`, capped at `5`): the default
+returns immediate neighbours only, while `depth>1` additionally returns a
+`neighborhood` array of artifacts two or more hops away, each tagged with its
+`hops` distance — for transitive context such as a decision a requirement's
+roadmap depends on. The walk is bounded (depth, frontier, visited-set, and a work
+budget) and deterministic; a truncation marker is set if any cap stops it.
+
 The tool descriptions contain the trigger language; well-tuned agents call them
 without being told to.
 

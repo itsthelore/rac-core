@@ -50,6 +50,7 @@ from mcp.server.fastmcp import FastMCP
 
 from rac import consent as consent_record
 from rac.core.corpus import walk_corpus
+from rac.core.limits import MAX_TRAVERSAL_DEPTH
 from rac.core.markdown import parse
 from rac.mcp import errors, ping, telemetry
 from rac.mcp.budget import (
@@ -67,6 +68,7 @@ from rac.services.portfolio import build_portfolio_summary
 from rac.services.recency import artifact_provenance
 from rac.services.relationships import (
     incoming_references,
+    neighborhood,
     outgoing_references,
     relationships_from_corpus,
 )
@@ -110,7 +112,9 @@ DESC_GET_RELATED = (
     "knowledge: the references it declares and the artifacts that reference "
     "it. Call this after retrieving an artifact, and before changing anything "
     "it covers, to find the decisions, requirements, designs, and roadmaps the "
-    "change could affect."
+    "change could affect. Pass depth>1 (up to 5) to also return a `neighborhood` "
+    "of artifacts two or more hops out, each tagged with its hop distance, when "
+    "you need transitive context rather than immediate neighbours."
 )
 
 DESC_FIND_DECISIONS = (
@@ -207,7 +211,7 @@ def _find_decisions(root: str, topic: str, budget: int) -> str:
     return serialize(payload, budget)
 
 
-def _get_related(root: str, artifact_id: str, budget: int) -> str:
+def _get_related(root: str, artifact_id: str, budget: int, depth: int = 1) -> str:
     # One corpus walk feeds resolution, outgoing, and incoming, so the whole
     # response reflects a single atomic snapshot of the repository (ADR-032):
     # there is no window in which the relationship view drifts mid-call.
@@ -248,6 +252,19 @@ def _get_related(root: str, artifact_id: str, budget: int) -> str:
         "outgoing": outgoing.by_section,
         "incoming": incoming,
     }
+    # Bounded multi-hop (v0.24, WS-D): depth>1 adds an additive `neighborhood`
+    # field listing artifacts two-or-more hops out, each tagged with its hop
+    # distance (ADR-007). depth=1 leaves the payload byte-identical to before.
+    neighborhood_truncated = False
+    if depth > 1:
+        hood = neighborhood(relationships, identity_by_path, artifact.path, depth=depth)
+        payload["neighborhood"] = [
+            {"id": n.id, "type": n.type, "title": n.title, "path": n.path, "hops": n.hops}
+            for n in hood.nodes
+            if n.hops > 1
+        ]
+        payload["depth"] = min(depth, MAX_TRAVERSAL_DEPTH)
+        neighborhood_truncated = hood.truncated
     # Per-call edge cap overflow (WS4, REQ-007): when collection hit the cap, mark
     # the response truncated up front. The ADR-033 response budget then enforces
     # the character cap on top; if it must drop further incoming entries it
@@ -256,7 +273,7 @@ def _get_related(root: str, artifact_id: str, budget: int) -> str:
     edge_overflow = (incoming_result.total - len(incoming_result.items)) + (
         outgoing.total - outgoing.kept
     )
-    if edge_overflow > 0:
+    if edge_overflow > 0 or neighborhood_truncated:
         payload[MARKER_TRUNCATED] = True
         payload[MARKER_OMITTED] = edge_overflow
         payload[MARKER_HINT] = HINT_RELATED
@@ -310,8 +327,10 @@ def build_server(
         )
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
-    def get_related(id: str) -> str:
-        return telemetry.observe(recorder, "get_related", lambda: _get_related(root, id, budget))
+    def get_related(id: str, depth: int = 1) -> str:
+        return telemetry.observe(
+            recorder, "get_related", lambda: _get_related(root, id, budget, depth)
+        )
 
     @server.tool(name="get_summary", description=DESC_GET_SUMMARY)
     def get_summary() -> str:
