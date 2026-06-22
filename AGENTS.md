@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: b69411ed027089c1eda60e0497db694d5d092afaa85969a79d2202f3f38d9703) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: b95a2921a2b52da24fb1e3632f8d78893f2f7d314c589e2b93f8b16e54c8cac0) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -39,6 +39,7 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KTYZVKZQWD98** — ADR-043: Watchkeeper Revision Materialization _(Technical)_
 - **RAC-KV2E5A5E1F1H** — ADR-044: Onboarding Scaffold Writes One Starter Artifact _(Product)_
 - **RAC-KV2E5B1122YN** — ADR-045: Recency Is Derived From Git, Not Stored In Frontmatter _(Technical)_
+- **RAC-KV2E9HYHVV8G** — ADR-046: CLI Usage Telemetry _(Product)_
 - **RAC-KV2J0GYNCAJF** — ADR-047: Agent Operating-Guidance Documents Are Prompt Artifacts _(Process)_
 - **RAC-KV4ZAGWPAA6X** — ADR-059: Reuse a Single Markdown Parser Instance _(Architecture)_
 - **RAC-KV4ZAHVNGH2J** — ADR-060: Share Structural Validation Across Per-Type Validators _(Architecture)_
