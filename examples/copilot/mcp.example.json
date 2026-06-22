@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "lore": {
+      "type": "stdio",
+      "command": "rac",
+      "args": ["mcp", "--root", "."]
+    }
+  }
+}
