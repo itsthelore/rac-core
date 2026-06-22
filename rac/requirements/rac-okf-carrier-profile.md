@@ -11,7 +11,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 ## Problem
 

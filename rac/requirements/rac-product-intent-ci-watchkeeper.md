@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Previously deferred behind RAC Guide (the v0.10.x series), which has
 shipped through v0.10.6. The capability now proceeds as the v0.12.x
