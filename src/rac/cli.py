@@ -83,10 +83,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from rac import consent
 from rac import output as outputs
+from rac import usage
 from rac.core.classification import score_artifacts
 from rac.core.hooks import (
     DEFAULT_STYLE,
@@ -835,6 +837,25 @@ def cmd_mcp_stats(args: argparse.Namespace) -> int:
         print(outputs.render_mcp_stats_human(summary))
     # An empty or missing log is a valid answer (telemetry is off by default),
     # like `rac find` with no matches.
+    return EXIT_OK
+
+
+def cmd_usage(args: argparse.Namespace) -> int:
+    """Unified read-back over the CLI-usage log and the Guide log (ADR-046, WS-E).
+
+    `rac mcp-stats` stays Guide-only for back-compat; this command summarises
+    both. An empty or missing log is a valid answer (telemetry is off by default).
+    """
+    from rac.mcp.telemetry import summarize as guide_summarize
+
+    summary = usage.summarize_usage()
+    guide = guide_summarize().to_dict()
+    if args.share:
+        print(usage.share_url(summary, guide))
+    elif args.json:
+        print(usage.render_json(summary, guide))
+    else:
+        print(usage.render_human(summary, guide))
     return EXIT_OK
 
 
@@ -1762,6 +1783,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_telemetry.set_defaults(func=cmd_telemetry)
 
+    p_usage = sub.add_parser(
+        "usage",
+        help="Summarize recorded CLI and Guide usage (content-free, local).",
+        parents=[version_parent],
+    )
+    usage_mode = p_usage.add_mutually_exclusive_group()
+    usage_mode.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    usage_mode.add_argument(
+        "--share",
+        action="store_true",
+        help=(
+            "Print a prefilled GitHub usage-report issue URL to review and "
+            "submit in your browser; RAC sends nothing itself."
+        ),
+    )
+    p_usage.set_defaults(func=cmd_usage)
+
     p_new = sub.add_parser(
         "new",
         help="Create a new artifact from its canonical template.",
@@ -2060,7 +2100,21 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    # CLI usage telemetry (ADR-046, WS-E): record one content-free event per
+    # completed command, after dispatch, gated by recorded consent. Write-only
+    # and silent-fail, so it never alters output or exit codes (ADR-032).
+    command = getattr(args, "command", "") or ""
+    start = time.monotonic()
+    outcome = usage.OUTCOME_EXCEPTION
+    try:
+        result = args.func(args)
+        outcome = usage.OUTCOME_OK if result == 0 else usage.OUTCOME_ERROR
+        return result
+    except SystemExit as exc:
+        outcome = usage.OUTCOME_OK if exc.code in (0, None) else usage.OUTCOME_ERROR
+        raise
+    finally:
+        usage.record_command(command, outcome, int((time.monotonic() - start) * 1000))
 
 
 if __name__ == "__main__":

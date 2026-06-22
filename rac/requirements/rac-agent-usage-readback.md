@@ -8,7 +8,7 @@ tags: [user-facing, telemetry, read-back, local-first, privacy]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[user-facing]` — the team can see how agents consult Lore. Scoped to the
 v0.24.0 visibility release (WS-E). Promotes the future placeholder

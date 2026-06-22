@@ -105,6 +105,8 @@ jobs:
             paths: "tests/test_doctor.py"
           - name: coverage-report
             paths: "tests/test_coverage.py"
+          - name: usage
+            paths: "tests/test_usage.py"
           - name: robustness
             paths: "tests/test_robustness.py"
           - name: idempotent

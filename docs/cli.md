@@ -913,6 +913,29 @@ RAC sends nothing itself. `--json` and `--share` are mutually exclusive.
 
 ---
 
+## usage
+
+Summarize recorded **CLI usage** alongside the Guide MCP tools — per-command and
+per-tool call counts, errors, session count, and a recent-activity trend. When
+sharing consent is recorded (`rac telemetry on`), each completed `rac` command
+appends one **content-free** event (subcommand name, outcome, duration — never
+argv, paths, or artifact ids) to a local log; `rac usage` reads it back.
+`rac mcp-stats` stays Guide-only for back-compat; `rac usage` covers both logs
+(ADR-046).
+
+```bash
+rac usage           # human summary of CLI + Guide usage
+rac usage --json    # the same summary as JSON
+rac usage --share   # prefilled GitHub usage-report issue URL (counts only)
+```
+
+An empty or missing log is a valid answer — telemetry is opt-in and off by
+default. `--json` and `--share` are mutually exclusive.
+
+- **Exit code:** always `0` — a read-back of local counts, never a failure.
+
+---
+
 ## telemetry
 
 Show or change anonymous usage-sharing consent (ADR-041). With consent on,
