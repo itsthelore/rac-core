@@ -86,9 +86,8 @@ import sys
 import time
 from pathlib import Path
 
-from rac import consent
+from rac import consent, usage
 from rac import output as outputs
-from rac import usage
 from rac.core.classification import score_artifacts
 from rac.core.hooks import (
     DEFAULT_STYLE,
