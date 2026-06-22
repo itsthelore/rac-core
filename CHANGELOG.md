@@ -4,6 +4,44 @@ User-visible changes to RAC, by release. Follows the spirit of
 [Keep a Changelog](https://keepachangelog.com/): user impact over implementation
 details, release history over commit history.
 
+## 2026.06.1
+
+The first release under **CalVer** (`YYYY.MM.N`, ADR-076): RAC's version now says
+*when* a build was cut, not a SemVer compatibility claim it never kept.
+Compatibility lives on `schema_version` (ADR-007); the roadmap `vX.Y.Z` numbers
+continue as internal planning scope-fences. This is a one-way cutover — every
+prior `vX.Y.Z` tag is retained, and `2026.06.1` supersedes `v0.19.0` as the
+latest release. It also ships the user-facing work accumulated across the
+v0.23–v0.26 scope-fences:
+
+- **A reimagined Explorer (TUI).** Three themes — `lantern` (dark default),
+  `parchment` (warm light), and `high-contrast` — switchable in `/settings` and
+  persisted, with theme-aware, accessible type tags. A portfolio list view
+  (`/list`) gives a dense, sortable table of the whole corpus with live fuzzy
+  search (`ctrl+f`), status filtering, and sort cycling. An optional split
+  master-detail layout pairs that list with a persistent reading pane so scanning
+  and reading happen together.
+
+- **Exportable corpus.** `rac export --documents` emits an ingestion-ready JSONL
+  projection (one Markdown-bodied record per artifact) that any RAG/memory backend
+  consumes directly, and `rac export --graph` hands a graph backend RAC's real,
+  validated relationship topology instead of one inferred from prose.
+
+- **Visible grounding and coverage.** Local, content-free telemetry shows how
+  agents actually consult Lore over time; a coverage view lists where the
+  knowledge graph is incomplete (requirements no roadmap schedules, decisions
+  nothing applies); and `get_related` can return a bounded multi-hop neighbourhood
+  within the response budget.
+
+- **Hardening (from the v0.23 line).** Explainable retrieval (search results show
+  *why* they matched), `rac doctor` for paste-ready corpus fixes, git-derived
+  provenance on `get_artifact`, a documented trust model (`SECURITY.md`), and a
+  gated, deterministic grounding benchmark (`rac eval --check`).
+
+- **Release tooling.** A fail-closed publish gate (`python -m rac.release`)
+  rejects any tag that is not a well-formed `YYYY.MM.N` identifier or that lacks a
+  changelog entry, so a malformed or undocumented release can never reach PyPI.
+
 ## v0.23.0 — Hardening
 
 The release that turns the grounding claim from "trust us" into something proven
