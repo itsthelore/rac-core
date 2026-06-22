@@ -119,6 +119,8 @@ jobs:
             paths: "tests/test_hook.py"
           - name: stats
             paths: "tests/test_stats.py"
+          - name: release
+            paths: "tests/test_release_version.py"
           - name: watchkeeper
             paths: "tests/test_watchkeeper.py tests/test_validate_action.py tests/test_pr_gate_action.py tests/test_gate.py tests/test_no_egress.py"
           # Trust gates (v0.7.9): dogfood validates RAC's own rac/ corpus,
