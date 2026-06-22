@@ -11,6 +11,8 @@ planned or placeholder entries.
 | `rac-artifacts` Claude Code skill | A project-level agent skill that teaches Claude Code to create, validate, and update RAC artifacts using the `rac` CLI | [`.claude/skills/rac-artifacts/`](https://github.com/itsthelore/rac-core/blob/main/.claude/skills/rac-artifacts/SKILL.md) |
 | MCP grounding example | A runnable demo showing an agent connected to RAC Guide over MCP respecting a recorded decision that an unconnected agent violates | [`examples/guide/`](https://github.com/itsthelore/rac-core/blob/main/examples/guide/demo.md) |
 | Amp setup | A worked setup connecting Sourcegraph's Amp to RAC — it reads the generated `AGENTS.md` natively and queries the `lore` MCP server | [`examples/amp/`](https://github.com/itsthelore/rac-core/blob/main/examples/amp/README.md) |
+| Claude Code setup | A worked setup connecting Claude Code to RAC — the generated `CLAUDE.md`, the `lore` MCP server, the `rac-artifacts` skill, and the optional pre-edit veto hook | [`examples/claude-code/`](https://github.com/itsthelore/rac-core/blob/main/examples/claude-code/README.md) |
+| Codex setup | A worked setup connecting OpenAI Codex to RAC — it reads the generated `AGENTS.md` and queries the `lore` MCP server via `config.toml` | [`examples/codex/`](https://github.com/itsthelore/rac-core/blob/main/examples/codex/README.md) |
 
 ## Adding an entry
 
