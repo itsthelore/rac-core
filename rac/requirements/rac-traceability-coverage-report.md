@@ -8,7 +8,7 @@ tags: [user-facing, traceability, coverage, relationships, determinism]
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[user-facing]` — see where the knowledge graph is incomplete. Scoped to the v0.24.0 visibility release (WS-F). A deterministic report of typed traceability gaps over the existing relationship graph; no new schema, no AI, additive output (ADR-007).
 

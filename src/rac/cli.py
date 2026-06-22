@@ -106,6 +106,7 @@ from rac.core.templates import (
 )
 from rac.core.validation import has_errors
 from rac.output.portal import PortalSeamMissing, PortalShellMissing
+from rac.services import coverage as coverage_service
 from rac.services import doctor
 from rac.services import eval as eval_service
 from rac.services.agent_rules import (
@@ -554,6 +555,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         print(doctor.render_doctor_human(report))
     return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
+
+
+def cmd_coverage(args: argparse.Namespace) -> int:
+    """Report typed traceability coverage gaps — advisory, never a build failure.
+
+    Unscheduled requirements, unapplied decisions, and unscoped roadmaps derived
+    from the relationship graph (rac-traceability-coverage-report, WS-F). Coverage
+    is a completeness signal for human judgement, so it always exits 0 (REQ-005).
+    """
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    report = coverage_service.analyze_coverage(args.directory)
+    if args.json:
+        print(coverage_service.render_coverage_json(report))
+    else:
+        print(coverage_service.render_coverage_human(report))
+    return EXIT_OK
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
@@ -1446,6 +1465,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_coverage = sub.add_parser(
+        "coverage",
+        help="Report typed traceability coverage gaps (advisory, never blocking).",
+        parents=[version_parent],
+    )
+    p_coverage.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Directory to analyse recursively for *.md (default: current directory).",
+    )
+    p_coverage.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_coverage.set_defaults(func=cmd_coverage)
 
     p_gate = sub.add_parser(
         "gate",

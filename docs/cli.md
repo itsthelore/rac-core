@@ -378,6 +378,26 @@ so it is safe in CI; it needs git history and is silent outside a git repository
 or on an empty corpus. The framing is capture cadence, not work tracking
 (ADR-017).
 
+## coverage
+
+Report typed **traceability coverage gaps** over the corpus relationship graph —
+where the knowledge graph is incomplete, distinct from `rac doctor`'s integrity
+checks. Three deterministic gap classes: **unscheduled** requirements (no roadmap
+references them), **unapplied** decisions (no requirement or roadmap references
+them), and **unscoped** roadmaps (referencing no requirement).
+
+- **Input:** `rac coverage <directory>` — scanned recursively for `*.md`.
+- **Options:** `--json`
+- **Exit code:** always `0` — coverage is **advisory**, a completeness signal for
+  human judgement, never a build failure (a roadmap may precede its requirements,
+  a decision may be recorded before anything applies it). It stays out of the
+  `rac gate` enforcement path (ADR-049).
+
+```bash
+rac coverage rac/
+rac coverage rac/ --json
+```
+
 ```text
 Repository Review
 =================
