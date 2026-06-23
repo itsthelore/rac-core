@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: b95a2921a2b52da24fb1e3632f8d78893f2f7d314c589e2b93f8b16e54c8cac0) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 5a1211eb5abaa73c98a2cdb4351feadf1e6cdadf26d5f21b4ce2d3c394a74485) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -75,6 +75,8 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KV6KFBDZ4D23** — ADR-065: Artifact Content Is Untrusted Input; the Trust Boundary Is Human PR Review _(Architecture)_
 - **RAC-KV6KFCC8MHTM** — ADR-066: Grounding Eval Scoring Is Deterministic — No Embeddings, No LLM Judge _(Technical)_
 - **RAC-KV80WX94GY8A** — ADR-067: Agent Integration is Context-Supply and Post-Edit Enforcement, Not Pre-Edit Interception _(Architecture)_
+- **RAC-KV8WY8XAJ55S** — ADR-070: Prompt-Complexity Routing Boundary _(Architecture)_
+- **RAC-KV8YZQC7G7NW** — ADR-069: Wayfinder — Prompt-Complexity Routing as a Separate Product _(Product)_
 - **RAC-KVA44MVMDXXX** — ADR-068: Extension, SDK, and Brand Architecture _(Architecture)_
 - **RAC-KVJK92SM2A1R** — ADR-072: Document Ingestion Parser Is markitdown _(Architecture)_
 - **RAC-KVJY1KJEWZ87** — ADR-073: Backend Connectors Are Export-Contract Consumers, Not Per-Provider Repos _(Architecture)_
