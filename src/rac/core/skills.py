@@ -51,7 +51,7 @@ BUNDLED_SKILLS = (
     ),
     SkillSpec(
         name="rac-capture",
-        description="Capture a new decision or requirement from a conversation into one valid Lore (RAC) artifact, with human review.",
+        description="Capture a new decision or requirement into a valid Lore (RAC) artifact.",
     ),
 )
 

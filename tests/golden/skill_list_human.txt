@@ -4,4 +4,4 @@ Bundled agent skills:
 - rac-review     Review a Lore (RAC) corpus and work findings worst-first.
 - rac-ingest     Convert legacy documents into valid, linked Lore (RAC) artifacts.
 - rac-import     Reformat one document into one valid Lore (RAC) artifact, with human review.
-- rac-capture    Capture a new decision or requirement from a conversation into one valid Lore (RAC) artifact, with human review.
+- rac-capture    Capture a new decision or requirement into a valid Lore (RAC) artifact.
