@@ -104,6 +104,21 @@ ADR-065's own words, a legitimate *untrusted* state), and the **pull request is
 reserved for promoting** that draft into the reviewed corpus an agent grounds
 against. Capture stays low-friction without weakening the trust boundary.
 
+### The two-gate write model (every host)
+
+"Approval" in a capture flow is **two distinct gates, on two different actors** —
+a distinction that holds for *every* writing host, not just Slack. **Gate 1** is
+the author confirming, in the host, *"you captured what I meant"* — a
+**data-quality / fidelity** check that is **not a trust boundary** (it is
+self-approval, which separation-of-duties and four-eyes guidance — NIST AC-5,
+OWASP, SLSA two-party review — classify as the absence of a control). **Gate 2**
+is an **independent** maintainer reviewing and merging the pull request — the
+actual trust boundary (ADR-065), enforced by required reviews + a "someone other
+than the author" rule. The corollary binds every host: a writer host or bot only
+ever **proposes** (opens the draft PR) and **never holds approval or merge power**
+— otherwise the second gate collapses back into self-approval. The Slack host
+works this out end to end in `lore-slack-capture-flow`.
+
 ### Four hosts over the one core
 
 Each host is a thin adapter that runs the capture agent and drives the `rac` CLI;
@@ -216,6 +231,10 @@ direction, not a closed decision.
 - **Save is a commit; promotion into the trusted corpus is a PR (ADR-065).** A
   host commits drafts freely but never lets unreviewed content enter the
   agent-grounding corpus except through human PR review.
+- **Two gates, and the writer only proposes.** The author's in-host confirmation
+  is a fidelity gate, not a trust boundary; an *independent* maintainer's PR merge
+  is the trust boundary (ADR-065). A writer host or bot opens the draft PR and
+  must never hold approval or merge power.
 - **Not a content store (ADR-024).** A host emits artifacts to git and stores no
   canonical content of its own.
 - **Installed surfaces are `lore-*` products (ADR-068).** The overlay, the bot,
