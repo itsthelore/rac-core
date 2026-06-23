@@ -7,13 +7,14 @@ type: roadmap
 
 ## Status
 
-Achieved
+Superseded
 
-Achieved by spinning the capability out as the separate **Wayfinder** product
-(ADR-069), rather than shipping it inside RAC. The in-RAC `rac route` prototype
-that explored this has since been removed (its code, tests, CI battery, and
-`docs/cli.md` section); this item is retained as the historical record of the
-exploration. The boundary it established lives on in Wayfinder.
+Superseded by the decision to build routing as the separate **Wayfinder** product
+(ADR-069) rather than inside RAC — see `wayfinder-extraction`. The in-RAC
+`rac route` prototype that explored this has since been removed (its code, tests,
+CI battery, and `docs/cli.md` section). Retired from RAC's roadmap and retained
+only as the historical record of the exploration; the capability now lives in
+`itsthelore/wayfinder-router`.
 
 ## Context
 

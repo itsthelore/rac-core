@@ -7,7 +7,7 @@ type: decision
 
 ## Status
 
-Proposed
+Accepted
 
 ## Category
 
@@ -144,7 +144,3 @@ Full independence is selected.
 ## Related Roadmaps
 
 - wayfinder-extraction
-
-## Related Designs
-
-- prompt-complexity-routing

@@ -7,9 +7,11 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-Unscheduled — captured as future intent, not yet on a release.
+Delivered — Wayfinder shipped as the standalone `itsthelore/wayfinder-router`
+product and `rac route` and the staging `wayfinder/` directory were removed from
+RAC.
 
 ## Context
 
@@ -141,4 +143,3 @@ ADR-064's history-preserving cutover discipline.
 ## Related Roadmaps
 
 - repo-extraction-programme
-- complexity-based-model-routing

@@ -7,7 +7,7 @@ type: decision
 
 ## Status
 
-Proposed
+Accepted
 
 The product home for this capability is now Wayfinder, a separate product
 (ADR-069), and the in-RAC `rac route` prototype this boundary governed has since
@@ -153,11 +153,3 @@ inference to the caller, is selected.
 - adr-002
 - adr-034
 - adr-035
-
-## Related Roadmaps
-
-- complexity-based-model-routing
-
-## Related Designs
-
-- prompt-complexity-routing
