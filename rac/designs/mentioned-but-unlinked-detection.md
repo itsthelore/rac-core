@@ -8,7 +8,7 @@ type: design
 ## Context
 
 This design is the *how* for the `rac-unlinked-reference-detection` requirement
-and the boundary ADR-077 draws: surface body references to other artifacts that
+and the boundary ADR-082 draws: surface body references to other artifacts that
 are not declared as `## Related` edges, as advisory suggestions, deterministically,
 without ever auto-applying an edge.
 
@@ -24,7 +24,7 @@ edges miss."
 **Prior art.** Zero-LLM, deterministic edge extraction from Markdown text is the
 mechanism behind general agent-memory tools such as GBrain. RAC adopts the
 *detection* (pure string/id matching, no model) but not the *auto-wiring*: the
-output is a suggestion a human promotes, never an edge the tool writes (ADR-077).
+output is a suggestion a human promotes, never an edge the tool writes (ADR-082).
 
 ## User Need
 
@@ -103,7 +103,7 @@ diffs are stable. No model, embedding, or network call is on the path
 
 - Offline, AI-optional (ADR-002) and deterministic with no embeddings or LLM
   judge (ADR-066): pure function of corpus bytes.
-- Suggest, never apply (ADR-077): the detector emits findings only; it never
+- Suggest, never apply (ADR-082): the detector emits findings only; it never
   writes an edge. The declared `## Related` sections stay the source of truth
   (ADR-074), and promotion stays a human review act (ADR-065).
 - Advisory severity (ADR-075 gate discipline): findings exit zero and never
@@ -124,7 +124,7 @@ more complete instead of replacing it with an inferred one.
 
 ## Alternatives
 
-- **Auto-promote matches to declared edges.** Rejected by ADR-077: an
+- **Auto-promote matches to declared edges.** Rejected by ADR-082: an
   unreviewed edge is not a validated edge (ADR-074, ADR-065).
 - **Embed artifacts and suggest by similarity.** Rejected: non-deterministic and
   contrary to ADR-002/ADR-066; also lower precision than exact id/ref matching
@@ -132,7 +132,7 @@ more complete instead of replacing it with an inferred one.
 - **Match titles and arbitrary noun phrases too.** Deferred, not adopted: title
   matching trades precision for recall and risks a noisy channel maintainers
   learn to ignore (see Open Questions).
-- **Make it a hard validation error.** Rejected by ADR-077: it would force every
+- **Make it a hard validation error.** Rejected by ADR-082: it would force every
   prose mention into a declared edge and turn a nudge into a merge blocker.
 
 ## Accessibility
@@ -161,7 +161,7 @@ review*, never as an assertion that an edge exists.
 
 ## Related Decisions
 
-- adr-077
+- adr-082
 - adr-074
 - adr-065
 - adr-066
