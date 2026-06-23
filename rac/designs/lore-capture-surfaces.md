@@ -130,14 +130,19 @@ Stack: **Tauri v2**, not native Swift/AppKit. The MVP can ship **macOS-first**
 `collectionBehavior` to cross Spaces), but Tauri keeps **Windows** a cheap
 fast-follow (tray via `Shell_NotifyIcon`, global hotkey via `RegisterHotKey`,
 always-on-top via `WS_EX_TOPMOST`) on one codebase, where native AppKit would
-lock the surface to macOS forever. **Linux is deferred**: on Wayland, global
-hotkeys, always-on-top, and tray icons are all portal-mediated with uneven
-compositor support (KDE better, GNOME gaps), so "always-available" there is a
-per-compositor gamble rather than a guarantee. The distribution tax is real on
-both shipping platforms — Developer ID signing + notarization on macOS,
-Authenticode (increasingly EV / cloud) signing + SmartScreen reputation on
-Windows. The overlay is **where bring-your-own-gateway config lives**, because
-the app itself makes the model call.
+lock the surface to macOS forever. Because Tauri renders in the OS webview
+(`WKWebView` on macOS, **WebView2 / Edge Chromium on Windows**), a Windows build
+carries a **WebView2 runtime dependency** — evergreen on current Windows 11, but
+the installer should bootstrap it for older targets. **Linux is deferred**: on
+Wayland, global hotkeys, always-on-top, and tray icons are all portal-mediated
+with uneven compositor support (KDE better, GNOME gaps), so "always-available"
+there is a per-compositor gamble rather than a guarantee. The distribution tax is
+real on both shipping platforms — Developer ID signing + notarization on macOS,
+and **Authenticode** signing on Windows, where unsigned or low-reputation
+binaries trip **SmartScreen** warnings; the current low-friction path is a cloud
+signing service such as **Azure Trusted Signing**, the modern alternative to
+buying a traditional EV certificate. The overlay is **where bring-your-own-gateway
+config lives**, because the app itself makes the model call.
 
 **Host C — a Slack bot.** Reaches the **whole team, including PMs, with no
 per-user install**, and captures decisions *where they are actually made* — the
