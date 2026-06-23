@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KVSNP0M66V2V
 type: decision
 ---
-# ADR-077: Suggested Relationship Edges Are Advisory and Never Auto-Applied
+# ADR-082: Suggested Relationship Edges Are Advisory and Never Auto-Applied
 
 ## Context
 

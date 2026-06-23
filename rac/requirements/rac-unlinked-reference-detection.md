@@ -26,7 +26,7 @@ consume the graph: both see a sparser graph than the text supports.
 - [REQ-001] RAC SHALL detect, for each artifact, references in that artifact's body to other corpus artifacts — matched by canonical id, declared alias, or filename-style reference (for example `adr-074`) — that are absent from the artifact's declared `## Related <Type>` sections.
 - [REQ-002] RAC SHALL report each mentioned-but-unlinked reference as an advisory finding that names the source artifact, the matched target, the token that matched, and the `## Related <Type>` section that would capture the edge.
 - [REQ-003] Detection SHALL be deterministic and offline: a pure function of corpus bytes with no model, embedding, or network call, such that identical corpora produce byte-identical findings (ADR-002, ADR-066).
-- [REQ-004] RAC SHALL NOT create, write, or modify any relationship edge automatically; a finding is a suggestion a human promotes through review (ADR-065, ADR-077).
+- [REQ-004] RAC SHALL NOT create, write, or modify any relationship edge automatically; a finding is a suggestion a human promotes through review (ADR-065, ADR-082).
 - [REQ-005] The advisory SHALL NOT change the exit code of `rac validate` or `rac relationships --validate`; a mentioned-but-unlinked reference never blocks a merge on its own.
 - [REQ-006] Detection SHALL exclude self-references, targets already declared as edges, fenced code blocks, and the `## Related` sections themselves, and SHALL emit at most one finding per (source artifact, target artifact) pair.
 
@@ -60,7 +60,7 @@ consume the graph: both see a sparser graph than the text supports.
 
 ## Related Decisions
 
-- adr-077
+- adr-082
 - adr-074
 - adr-065
 - adr-066
