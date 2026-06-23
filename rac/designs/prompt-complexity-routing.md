@@ -5,6 +5,14 @@ type: design
 ---
 # Prompt-Complexity Routing
 
+## Status
+
+Deprecated
+
+Retired from RAC — the routing capability and its design now live in the separate
+`itsthelore/wayfinder-router` product (ADR-069). Kept as the record of the
+original in-RAC approach.
+
 ## Context
 
 > **Historical note.** This design described the in-RAC `rac route` prototype,
