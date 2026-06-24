@@ -61,8 +61,10 @@ For each verified capability, `lore-verify` adds a Markdown link line under a
   `## Related *` sections — the exact placement fixed by the RAC-side design
   `capability-verification-evidence`, which owns the declaration site).
 - The link **text** is the human-readable evidence label; the **target** is the
-  test path (or CI/trace URL), using the anchor grammar resolved on the RAC side
-  (`capability-verification-evidence` Open Question — consumed here, not redefined).
+  test path (or CI/trace URL). When pointing at a specific case, it uses a stable
+  `#<case-name>` anchor per the resolved RAC-side rule
+  (`capability-verification-evidence`, *Target and anchor grammar*) — consumed
+  here, not redefined.
 - The edit **MUST NOT** touch the YAML frontmatter, the artifact id, or any other
   section. Only the `## Verified By` section is created or appended.
 

@@ -67,13 +67,14 @@ external evidence:
 ## Verified By
 
 - [checkout-flow e2e](../../tests/e2e/checkout.spec.ts)
-- [cart total assertion](../../tests/e2e/cart.spec.ts#L42)
+- [cart total assertion](../../tests/e2e/cart.spec.ts#cart-shows-two-items)
 - [prod smoke trace](https://ci.example.com/runs/8842/trace)
 ```
 
 - The **link text** is a human-readable evidence label (a suite/case name); the
-  **target** is the evidence — an in-repo test file/path, a path with a line or
-  case anchor, or an external CI/trace URL.
+  **target** is the evidence — an in-repo test file/path, a path with an optional
+  anchor pointing at a specific case, or an external CI/trace URL (see *Target and
+  anchor grammar* below).
 - `## Verified By` is deliberately **distinct from `## Related <Type>`**. The
   `## Related` sections carry artifact↔artifact edges that the relationship
   registry range-checks (ADR-055); `## Verified By` carries artifact↔external
@@ -81,6 +82,29 @@ external evidence:
   range-exempt, parsed on the asset-reference rail, not the edge rail.
 - The section is **optional and additive** (ADR-007): an artifact without it is
   valid, and its absence is exactly what the coverage class reports.
+
+### Target and anchor grammar (resolved)
+
+RAC treats the anchor as **opaque and uninterpreted**, and this design owns the
+rule (it is no longer cross-deferred to the consumer):
+
+- The **path** RAC operates on is the target up to — and not including — the first
+  `#`. The **anchor** is everything from the first `#` onward.
+- RAC **never parses or interprets** the anchor. The in-repo existence check
+  (below) and the `target_kind`/`present` fields in the export (ADR-084) are
+  computed on the path portion only, with the anchor stripped first. The full
+  target, anchor included, is preserved verbatim in the declaration and surfaced
+  literally in `asset_edges.target` (ADR-084) for the consumer to interpret.
+- For a `url` target the whole string is opaque (no existence check, offline,
+  ADR-002).
+
+**Recommended convention (advisory, not enforced).** When pointing at a specific
+case, producers SHOULD prefer a **stable case anchor** (`#<case-name>`, e.g.
+`#cart-shows-two-items`) over a **line anchor** (`#L42`), because line numbers
+drift as the test file changes and a line anchor silently rots while a named-case
+anchor survives a re-format. RAC neither requires nor checks the anchor; the
+convention is guidance for `lore-verify` (which writes it) and humans (who read
+it), so the two sides share one rule rather than each inventing its own.
 
 ### The coverage class — `unverified-capability`
 
@@ -106,8 +130,10 @@ non-retired) carrying no `## Verified By` reference.
 - **In-repo evidence targets** (a test file path) are checkable offline: the
   existing asset-reference validation (ADR-019's "referenced asset exists" future
   consideration) reports a broken in-repo evidence path the same advisory way it
-  reports any broken asset. A missing test file is a stale reference, surfaced for
-  human review.
+  reports any broken asset. The anchor is **stripped before the check** (per
+  *Target and anchor grammar*), so existence is tested on the path alone — a stale
+  `#case` anchor never makes a present file read as missing. A missing test file is
+  a stale reference, surfaced for human review.
 - **External evidence targets** (a CI/trace URL) are **not** network-checked —
   the core is offline (ADR-002). They are recorded and surfaced, never fetched.
 - RAC **never** runs the test, parses its result, stores its video/trace, or
@@ -196,8 +222,11 @@ inference engine.
   would force premature or busywork tests and turn a completeness signal into a
   merge blocker.
 - **Network-check external evidence URLs for liveness.** Rejected by ADR-002:
-  the core is offline; liveness/freshness of external evidence is the consuming
-  product's concern (and a `freshness-and-drift-detection` adjacency).
+  the core is offline; liveness of external `url` evidence is the consuming
+  product's concern. In-repo evidence *drift* (a cited test file changed while the
+  capability did not) is owned by `freshness-and-drift-detection` Initiative 2,
+  which explicitly covers `## Verified By` asset references — this design surfaces
+  only the presence/existence of a reference, not whether the test still passes.
 
 ## Accessibility
 
@@ -219,9 +248,6 @@ and in the Portal (ADR-019 Principle 3). Copy frames an unverified capability as
 - **Which artifact types may declare `## Verified By`.** Requirements are the
   clear first case (capabilities, ADR-020). Whether a roadmap increment or a
   design may also carry evidence is deferred.
-- **Anchor grammar for in-repo targets.** Whether to standardise a `#Lnn` /
-  `#case-name` anchor convention for pointing at a specific test case, or leave
-  the target opaque and let the consuming product interpret it.
 - **Suggested evidence.** Whether `rac doctor` should *suggest* a likely test
   file for an unverified capability (the mentioned-but-unlinked precedent),
   strictly as an advisory suggestion a human promotes.

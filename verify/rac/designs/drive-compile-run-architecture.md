@@ -93,9 +93,12 @@ runner through an interface keeps the open/hosted split honest from day one.
 
 - The intent-extraction strategy in Compile (how observable target state becomes
   stable assertions) — the deepest unknown, to be prototyped first.
-- The anchor grammar a `## Verified By` reference uses to point at a specific
-  compiled test/case (coordinate with the RAC-side design
-  `capability-verification-evidence`).
+
+The anchor grammar for a `## Verified By` target is **resolved** on the RAC side
+(`capability-verification-evidence`, *Target and anchor grammar*): the anchor is
+opaque to RAC, and Compile emits a **stable `#<case-name>` anchor** (not a `#Lnn`
+line anchor, which rots) when pointing at a specific compiled case. This design
+consumes that rule rather than redefining it.
 
 ## Related Decisions
 
