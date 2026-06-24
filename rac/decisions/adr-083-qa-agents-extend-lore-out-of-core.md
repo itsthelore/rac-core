@@ -176,6 +176,10 @@ layered additively over the open core, not a closed replacement for it.
 
 - rac-capability-verification-evidence
 
+## Related Designs
+
+- capability-verification-evidence
+
 ## Related Roadmaps
 
 - capability-verification-coverage

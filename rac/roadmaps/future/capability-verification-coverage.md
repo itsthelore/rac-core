@@ -126,6 +126,10 @@ additive.
 - rac-capability-verification-evidence
 - rac-traceability-coverage-report
 
+## Related Designs
+
+- capability-verification-evidence
+
 ## Related Roadmaps
 
 - freshness-and-drift-detection

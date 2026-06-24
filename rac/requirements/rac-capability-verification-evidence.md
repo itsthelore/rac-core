@@ -122,6 +122,10 @@ human-declared (ADR-074, ADR-065, ADR-082).
 - rac-traceability-coverage-report
 - rac-traceability-self-relationships
 
+## Related Designs
+
+- capability-verification-evidence
+
 ## Related Roadmaps
 
 - capability-verification-coverage
