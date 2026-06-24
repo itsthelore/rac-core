@@ -44,12 +44,21 @@ RELATED_SECTIONS: tuple[str, ...] = (
     "related designs",
 )
 
+# External-target relationship sections (ADR-084): their references point at
+# things *outside* the corpus (test files, trace artifacts), so they are typed
+# graph edges but are exempt from corpus resolution, range, and status checks.
+# ``verified by`` (Proofkeeper's write-back, ADR-083) is the first. Like
+# ``supersedes`` these stay out of the inspect ``relationships`` dict.
+EXTERNAL_SECTIONS: tuple[str, ...] = ("verified by",)
+
 # The full relationship-section vocabulary and its canonical ordering, including
-# ``supersedes``. This module owns the ordering; ``stats`` and the
-# ``relationships`` command both render by-type output in this order. ``supersedes``
-# is the one section that does *not* appear in the inspect ``relationships`` dict:
-# there it stays a top-level scalar for backwards compatibility (ADR-007).
-RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",)
+# ``supersedes`` and the external-target sections. This module owns the ordering;
+# ``stats`` and the ``relationships`` command both render by-type output in this
+# order. ``supersedes`` and the external sections are the ones that do *not*
+# appear in the inspect ``relationships`` dict: there ``supersedes`` stays a
+# top-level scalar for backwards compatibility (ADR-007), and external edges are
+# repository-level relationships, not inspect ``related_*`` links.
+RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS
 
 # A *well-formed* leading Markdown list marker: ``-``, ``*``, ``+``, or ``N.``
 # followed by whitespace. Only these are stripped; any other leading text is
@@ -60,6 +69,17 @@ _LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+\.)\s+")
 
 def _snake(section: str) -> str:
     return section.replace(" ", "_")
+
+
+def _is_external(snake_section: str) -> bool:
+    """True when a snake_case relationship section is an external-target edge.
+
+    External-target edges (ADR-084) carry references to things outside the corpus
+    (test files, traces), so referential integrity, range, and status checks all
+    skip them — an unresolved target is the expected case, not a fault.
+    """
+    edge = edge_spec(snake_section)
+    return edge is not None and edge.external_target
 
 
 def parse_references(body: str) -> list[str]:
@@ -512,6 +532,8 @@ def _resolve_references(
         if spec is None:
             continue
         for section, refs in extract_relationships_full(product, spec).items():
+            if _is_external(section):
+                continue  # external targets never resolve to the corpus (ADR-084)
             for ref in refs:
                 checked += 1
                 targets = [p for p, _ in index.get(ref.casefold(), [])]
@@ -669,8 +691,8 @@ def _validate(
             continue
         for section, refs in extract_relationships_full(product, spec).items():
             edge = edge_spec(section)
-            if edge is None:
-                continue
+            if edge is None or edge.external_target:
+                continue  # external edges have no corpus range (ADR-084)
             for ref in refs:
                 target = _resolved(ref, path)
                 if target is None:
@@ -944,10 +966,25 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
         if spec is None:
             continue
         for section, refs in extract_relationships_full(product, spec).items():
+            external = _is_external(section)
             for ref in refs:
-                targets = [p for p, _ in index.get(ref.casefold(), [])]
                 resolved: str | None = None
                 issue: str | None = None
+                if external:
+                    # External-target edge (ADR-084): the reference points outside
+                    # the corpus, so it is always an unresolved, no-issue edge — a
+                    # typed graph link the export keeps with ``resolved: false``.
+                    relationships.append(
+                        Relationship(
+                            source_path=path,
+                            relationship=section,
+                            target=ref,
+                            resolved_path=None,
+                            issue=None,
+                        )
+                    )
+                    continue
+                targets = [p for p, _ in index.get(ref.casefold(), [])]
                 if not targets:
                     issue = ISSUE_TARGET_NOT_FOUND
                 elif len(targets) > 1:

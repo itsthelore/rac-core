@@ -95,6 +95,7 @@ RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
     "related prompts": "Prompt artifacts this artifact references",
     "related designs": "Design artifacts this artifact references",
     "supersedes": "The artifact this one supersedes",
+    "verified by": "External tests or traces that verify this capability (ADR-083, ADR-084)",
 }
 
 
@@ -119,6 +120,11 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related prompts",
             "related designs",
             "related requirements",
+            # External-target verification links (ADR-083, ADR-084): the tests and
+            # traces that verify this capability. Appended last (order is
+            # append-only, ADR-007); a requirement is the long-lived capability a
+            # verifier attaches to (ADR-020).
+            "verified by",
         ),
         # Lifecycle status (ADR-051): optional, validated-if-present. Status stays
         # a knowledge lifecycle (current vs replaced), never work/delivery state.
@@ -136,6 +142,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "related prompts",
                 "related designs",
                 "related requirements",
+                "verified by",
             ),
         },
         guidance={

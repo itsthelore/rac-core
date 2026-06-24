@@ -38,6 +38,12 @@ class EdgeSpec:
     # decision legitimately points at the one it retires.
     forbids_target_status: bool = True
     cardinality: str = "many"  # declared; not yet enforced
+    # When True, targets are *external* references (test files, trace artifacts),
+    # not corpus artifacts (ADR-084). The relationship engine then skips
+    # referential-integrity resolution, range, and status checks for this edge,
+    # and the graph export always emits it with ``resolved: false`` and the
+    # literal reference text as target. ``verified_by`` is the first such edge.
+    external_target: bool = False
 
 
 def _related(target_type: str) -> EdgeSpec:
@@ -49,7 +55,8 @@ def _related(target_type: str) -> EdgeSpec:
 # Built-in relationship kinds. The five ``related_*`` edges are undirected links
 # whose target must be of the named type; ``supersedes`` is the one directional,
 # acyclic, decision→decision edge, and the only one exempt from the retired-target
-# rule (forbids_target_status=False).
+# rule (forbids_target_status=False). ``verified_by`` is the one external-target
+# edge: it carries no corpus range and its targets never resolve (ADR-084).
 REGISTRY: dict[str, EdgeSpec] = {
     spec.name: spec
     for spec in (
@@ -66,6 +73,15 @@ REGISTRY: dict[str, EdgeSpec] = {
             symmetric=False,
             inverse="superseded-by",
             forbids_target_status=False,
+        ),
+        EdgeSpec(
+            name="verified_by",
+            range=(),  # external targets (tests/traces), no corpus type (ADR-084)
+            directional=True,
+            symmetric=False,
+            inverse="verifies",
+            forbids_target_status=False,  # no corpus target to retire
+            external_target=True,
         ),
     )
 }
