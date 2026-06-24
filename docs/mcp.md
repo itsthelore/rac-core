@@ -80,6 +80,27 @@ Create or edit `.cursor/mcp.json` in your project root:
 
 <!-- TODO: verify against Cursor <version> before release -->
 
+### Omnigent
+
+[Omnigent](https://omnigent.ai) is a meta-harness: its custom agents are defined
+in a `config.yaml`, and an MCP server is a first-class tool type. Add a `lore`
+entry under the agent's `tools:` section:
+
+```yaml
+tools:
+  lore:
+    type: mcp
+    command: rac
+    args: ["mcp", "--root", "/path/to/your/repo"]
+```
+
+The tool travels with the agent definition, so it stays attached whichever
+harness Omnigent routes to. A worked setup — including pointing the agent's
+`instructions` at the generated `AGENTS.md` — is in
+[`examples/omnigent/`](https://github.com/itsthelore/rac-core/blob/main/examples/omnigent/README.md).
+
+<!-- TODO: verify against Omnigent <version> before release -->
+
 ## 3. Point Guide at a repository
 
 `--root` accepts any directory. It does not have to be the top of a Git

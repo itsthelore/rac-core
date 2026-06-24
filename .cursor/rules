@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: 5a1211eb5abaa73c98a2cdb4351feadf1e6cdadf26d5f21b4ce2d3c394a74485) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 3c53edfc4a0edf8ad94ad2fc8718733143fa3cf84add2a16f91338dc49363370) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -58,4 +58,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KVK19NPWFYC9** — ADR-074: The Graph Export Surfaces Typed Relationship Edges _(Technical)_
 - **RAC-KVNM01QPBPXB** — ADR-075: The Pre-Merge Check Tier Is a Required Merge Gate on `main` _(Process)_
 - **RAC-KVPTVX3YZ87K** — ADR-076: Adopt CalVer (`YYYY.MM.N`) for RAC Releases _(Process)_
+- **RAC-KVTS86ZGVJV7** — ADR-077: The Two-Gate Capture Write Model _(Architecture)_
 <!-- END RAC MANAGED BLOCK -->

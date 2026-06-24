@@ -49,6 +49,10 @@ BUNDLED_SKILLS = (
         name="rac-import",
         description="Reformat one document into one valid Lore (RAC) artifact, with human review.",
     ),
+    SkillSpec(
+        name="rac-capture",
+        description="Capture a new decision or requirement into a valid Lore (RAC) artifact.",
+    ),
 )
 
 

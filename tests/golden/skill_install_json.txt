@@ -17,6 +17,10 @@
     {
       "skill": "rac-import",
       "path": ".claude/skills/rac-import/SKILL.md"
+    },
+    {
+      "skill": "rac-capture",
+      "path": ".claude/skills/rac-capture/SKILL.md"
     }
   ]
 }
