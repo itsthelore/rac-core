@@ -45,6 +45,20 @@ The product depends on RAC only through the published contract (`rac export
 --graph`, the `lore` MCP read tools) and never on engine internals (ADR-063),
 exactly as `decisiongrounding` and the extracted clients do.
 
+**Prior art and positioning.** A mature reference point already exists — the
+hand-authored, cross-deployment e2e suite in `RhysSullivan/executor` (compared in
+`docs/research/lore-verify-vs-executor-e2e.md`). It independently arrived at this
+direction's core thesis ("the test is the review artifact") and is already ahead
+on the table-stakes: a `Target`/capabilities interface for multi-deployment runs,
+Playwright, and built-in recording/playback. The lesson for positioning is sharp:
+autonomous browser-driven QA is becoming commodity, so `lore-verify` must **lead
+with coverage of governed intent** — answering "which decided-upon capabilities
+are provably verified?" against the Lore corpus — not with "an agent that drives a
+browser." The durable moat is the **Lore linkage** (the `verified-by` edge and
+coverage), which a general e2e tool cannot replicate without a governed decision
+corpus; the session-to-test **Compile** step is high-upside R&D, not a guaranteed
+differentiator.
+
 ## Outcomes
 
 - `lore-verify` exists as a clean-built product: an agent that, given real
@@ -161,7 +175,11 @@ decisions and is never required for the local path (ADR-035, ADR-083).
   artifact; fidelity is asserted before a test is accepted.
 - **Safety sequencing** (ADR-064): nothing is removed from `rac-core` until
   `lore-verify` lives in its own repo; history is preserved across the move.
-- **Clean build**: no fork of any existing prototype.
+- **Clean build**: no fork of any existing prototype. The clean-build rule governs
+  *code*, not *learning*: the `Target`/capabilities interface in `RhysSullivan/executor`'s
+  `e2e/` suite is a working reference for the runner abstraction (LV-ADR-002) and
+  should be studied rather than reinvented (see
+  `docs/research/lore-verify-vs-executor-e2e.md`).
 
 ## Non-Goals
 
@@ -241,7 +259,16 @@ After extraction, `rac-core`'s `rac validate rac/`, `rac relationships rac/
 
 - **Fidelity gap.** An agent "passes" but the emitted test is flaky or asserts
   nothing. Mitigation: Compile's N-run stability gate is the acceptance bar, not
-  the agent's say-so — the load-bearing engineering and the product's moat.
+  the agent's say-so — the load-bearing engineering.
+- **Auto-compilation may not pay off.** The closest prior art
+  (`RhysSullivan/executor`, see `docs/research/lore-verify-vs-executor-e2e.md`)
+  deliberately *sidesteps* this step by hand-authoring tests, and hand-authored
+  tests are inherently more reliable than auto-compiled ones. If Compile proves too
+  flaky, `lore-verify` collapses toward "executor's e2e plus Lore coverage" — still
+  valuable for the coverage linkage, but not novel on the runtime side. Mitigation:
+  de-risk intent-extraction *first* (v0.1.0 Initiative 1, the design's lead Open
+  Question), and keep a hand-authored-tests-plus-coverage fallback so the product's
+  value does not depend solely on Compile succeeding.
 - **Scope creep back into the core.** Pressure to put a runner or results in
   `rac-core` for convenience. Mitigation: the boundary is recorded in ADR-083 and
   `rac-capability-verification-evidence` REQ-007; this programme keeps all runtime
