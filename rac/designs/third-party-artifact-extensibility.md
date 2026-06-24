@@ -8,7 +8,7 @@ tags: [extensibility, plugins, registry, validation, architecture]
 
 ## Context
 
-ADR-077 decides *that* RAC will discover third-party artifact types through an
+ADR-083 decides *that* RAC will discover third-party artifact types through an
 entry-point group, isolate their failures, load their templates from the
 contributing package, and route them through generic structural validation, while
 keeping custom relationship types deferred (ADR-055) and making `ArtifactSpec` a
@@ -133,7 +133,7 @@ unknown section name.
 
 ### 5. Relationships scope (v1)
 
-Per ADR-077 decision 4 and ADR-055, v1 introduces no new edge kinds. A custom
+Per ADR-083 decision 4 and ADR-055, v1 introduces no new edge kinds. A custom
 artifact may declare the built-in relationship sections (`## Related Decisions`,
 etc.) and reference built-in types — `services/relationships.py::_collect` already
 handles that by iterating `spec.optional`. A custom type is **not** added to any
@@ -198,7 +198,7 @@ plugins happen to be installed.
 - **Collapse the four spec-driven validators into `_validate_generic` now.**
   Deferred: correct eventually, but it churns golden output and erases
   REQ-traceable docstrings; do it as a later cleanup, not inside this change.
-- **A loader callable on the entry point for templates.** Rejected (ADR-077
+- **A loader callable on the entry point for templates.** Rejected (ADR-083
   decision 3): arbitrary code at template time breaks offline determinism.
 - **Exempt custom-type targets from the built-in range check in v1.** Rejected for
   v1: it is a behaviour change to the built-in graph contract; left for the future
@@ -232,7 +232,7 @@ existing readable-prose conventions.
 
 ## Related Decisions
 
-- adr-077
+- adr-083
 - adr-052
 - adr-055
 - adr-062
