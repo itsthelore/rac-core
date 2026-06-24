@@ -107,6 +107,7 @@ human-declared (ADR-074, ADR-065, ADR-082).
 - adr-019
 - adr-020
 - adr-074
+- adr-084
 - adr-065
 - adr-082
 - adr-055

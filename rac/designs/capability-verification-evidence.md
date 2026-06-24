@@ -118,19 +118,28 @@ non-retired) carrying no `## Verified By` reference.
 
 ### The export seam — handing the work to the consuming product
 
-`rac export --graph` surfaces each `## Verified By` reference as an edge from the
-capability node to its evidence target:
+`rac export --graph` surfaces each `## Verified By` reference in a **separate
+`asset_edges` list**, distinct from the registry `edges[]` array — the full wire
+contract is fixed in **ADR-084**, which this design defers to (the
+`corpus-export-shape-contract` design reserved "its own short ADR" for exactly this
+extension):
 
 ```json
 {"source":"RAC-KVW05N861478","target":"tests/e2e/checkout.spec.ts",
- "type":"verified-by","external":true,"resolved":true}
+ "kind":"verified-by","target_kind":"path","present":true}
 ```
 
-- The target is preserved **literally** and flagged `external`; it creates **no
-  artifact node** (matching how the export preserves unresolved/external
-  references — export-shape contract).
+- The target is preserved **literally** and is **never a node** (ADR-074,
+  `rac-corpus-graph-export` REQ-004); it is external to the corpus (ADR-010,
+  ADR-024).
+- It rides `asset_edges`, **not** `edges[]` — the registry-edge array keeps its
+  Accepted `{source, target(canonical id), type, directed}` shape untouched
+  (ADR-084). `present` is `true`/`false` for an in-repo path and `null` for a URL
+  (offline, ADR-002), replacing the registry `resolved` flag whose meaning does not
+  apply to an external target.
 - The default `rac export` payload and the viewer `relates-to` contract are
-  **unchanged** (ADR-007, ADR-074); this is additive.
+  **unchanged**; the `--graph` `schema_version` bumps `"1" → "2"` to advertise
+  `asset_edges` (ADR-007, ADR-074, ADR-084).
 - This is the seam the out-of-core QA product consumes: read the graph, find
   capabilities with no `verified-by` edge, generate tests, open a PR adding
   `## Verified By` lines — which a human reviews and merges (ADR-065, ADR-067,
@@ -223,6 +232,7 @@ and in the Portal (ADR-019 Principle 3). Copy frames an unverified capability as
 ## Related Decisions
 
 - adr-083
+- adr-084
 - adr-019
 - adr-020
 - adr-074
