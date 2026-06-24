@@ -38,6 +38,29 @@ distinction is currently unstated on any public surface:
   withheld). Both overlap Lore's git-native and provenance story; neither
   is a typed requirements/decisions corpus with human-ratified
   supersession (ADR-049, ADR-061).
+- **Adjacent, not competitors** — verified and set aside. Cognee is a
+  distilled store (its `cognify` pipeline uses an LLM to extract
+  entities/relationships at ingest into a graph+vector database, with no
+  human-review workflow on agent-added knowledge). Enterprise search/RAG
+  assistants (Glean, Dust) retrieve over connected company data at query
+  time but are not a versioned knowledge corpus. Per-user assistant
+  memory (ChatGPT's persistent profile; Claude's memory — LLM-distilled
+  for Teams/Enterprise, raw-history retrieval for consumer) is personal
+  and ungoverned. The one native feature that shares Lore's *medium* is
+  coding-assistant **rules** (Cursor `.cursorrules`, Continue) —
+  human-authored, git-versioned, team-shared files — but they are
+  freeform instructions, not a typed, validated, supersession-aware
+  corpus. None of these has a human-ratification gate over shared team
+  knowledge.
+
+Independent research points the same way: a 2026 preprint
+(arxiv.org/abs/2606.01435) reports that deterministic candidate-extraction
+plus version-max logic beats LLM-judgment for memory freshness and
+conflict resolution (+10.8 points on the FC-SH benchmark), and that LLMs
+degrade at tracking which knowledge version is current — external support
+for Lore's deterministic-supersession stance over model-distilled memory.
+The claim is a recent preprint and should be cited as supporting evidence,
+not as a settled result.
 
 A second, sharper problem: the convenient line "the only git-native
 team-knowledge engine" is no longer true now that Mainline and Kage
@@ -54,6 +77,7 @@ whose judgment is **human-ratified and typed**, not LLM-distilled
 - [REQ-004] The section shall NOT claim Lore is the only git-native team-knowledge system, and shall NOT claim Lore is better than any named product; it shall frame the relationship as a different category with a different trust model. Mainline and Kage shall be acknowledged as the closest git-native neighbours rather than diminished.
 - [REQ-005] Every comparative claim in the section shall be verifiable from the named product's own repository or documentation, with the source URLs recorded in an HTML comment adjacent to the claim, and any claim that could not be verified shall be omitted rather than softened.
 - [REQ-006] The section shall not assert capabilities for Lore that contradict recorded decisions — in particular it shall remain consistent with the no-semantic-verdict boundary (ADR-034), the deterministic no-embedding eval (ADR-066), and the git-not-a-database source of truth (ADR-080).
+- [REQ-007] The section shall acknowledge the adjacent-but-not-competing tools honestly rather than ignore them: enterprise-search/RAG assistants (e.g. Glean, Dust), per-user assistant memory (e.g. ChatGPT, Claude), and coding-assistant rules (e.g. Cursor, Continue). It shall specifically note that coding-assistant rules, though git-versioned and human-authored, are freeform instructions rather than a typed, validated, supersession-aware corpus, so the different-category framing reads as accurate rather than dismissive.
 
 ## Success Metrics
 
@@ -94,6 +118,11 @@ whose judgment is **human-ratified and typed**, not LLM-distilled
   the git-native human-reviewed camp well enough to stand in for the
   category; if the reference points shift, the section is revisited rather
   than extended.
+- The category scan is current as of capture: Cognee, Glean, Dust, and
+  native assistant memory (ChatGPT, Claude, Cursor, Continue) were
+  verified as adjacent (distilled stores, RAG assistants, or per-user
+  memory) with no human-ratification gate over shared team knowledge; this
+  closes the coverage gap noted when the category was first surveyed.
 - A README section, rather than a `docs/` page, is the right depth; a
   fuller competitive landscape belongs in the documentation layer or a
   design artifact, not the README.
