@@ -169,6 +169,7 @@ corpus without taking custody of it.
 ## Related Decisions
 
 - adr-083
+- adr-084
 - adr-012
 
 ## Related Roadmaps
