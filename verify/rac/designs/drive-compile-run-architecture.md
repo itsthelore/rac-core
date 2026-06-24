@@ -55,8 +55,10 @@ fast and parallel, and emits the replayable trace artifact.
 
 ### The seam to Lore
 
-Drive's worklist comes from `rac export --graph` / the `lore` MCP (which
-capabilities lack a `verified-by` edge). After Run confirms a faithful test,
+Drive's worklist comes from `rac export --graph` — the `asset_edges` projection
+(RAC ADR-084) shows which capabilities lack a `verified-by` edge. The `lore` MCP
+read tools serve only artifact-level reads, not the worklist, so the worklist
+comes from `--graph`, not MCP. After Run confirms a faithful test,
 `lore-verify` opens a PR proposing `## Verified By` lines; a human merges them,
 closing the matching `unverified-capability` gap in `rac coverage` (LV-ADR-001,
 RAC ADR-065).
@@ -99,6 +101,7 @@ runner through an interface keeps the open/hosted split honest from day one.
 
 - lv-adr-001-product-identity
 - lv-adr-002-pluggable-runner
+- lv-adr-003-runtime-threat-model
 
 ## Related Requirements
 
