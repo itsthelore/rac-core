@@ -90,6 +90,21 @@ the scoped `@itsthelore/lore-verify` is free; the `lore` family brand
 consideration, not specific to verify. If a clash surfaces, choose the
 alternative here before publishing.
 
+**Rename-pass contingency.** The brand is still unratified ("confirm before
+public"), yet the placeholder `lore-verify` / `LV` already threads through the
+corpus and prose. If the branding thread lands a different name, a single rename
+pass must touch, in this order: (1) the PyPI/npm distribution name; (2) the
+`itsthelore/lore-verify` repo name; (3) the CLI command and the import package
+(`lore_verify`); (4) the config file and any env-var prefix; (5) the `verify/`
+subproject's `repository_key` in `.rac/config.yaml`; and (6) — the one that is
+**not** a safe search-replace — the `LV-` artifact id namespace, since RAC ids are
+content-addressed (`LV-…`) and changing the key does not rewrite existing ids. Plan
+(6) as a deliberate re-key (regenerate ids and fix references via
+`rac relationships --validate`), not a `sed`. Doing the rename while the corpus is
+small is the cheap insurance the Wayfinder PyPI clash proved necessary; the
+`verify/` *subdirectory* name can stay generic regardless, so only the published
+brand and the `LV` key are at risk.
+
 ### Initiative 2 — Stand up the `verify/` subproject with its own corpus
 
 Create `verify/` as a self-contained subproject inside `rac-core`, the way
