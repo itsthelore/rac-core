@@ -99,7 +99,7 @@ standalone repository, not a directory in this one:
 - adr-015
 - adr-021
 - adr-024
-- adr-077
+- adr-083
 
 ## Related Designs
 

@@ -4,7 +4,7 @@ id: RAC-KVTSPK4CJHWK
 type: decision
 tags: [extensibility, plugins, schema, sdk, architecture]
 ---
-# ADR-077: Third-Party Artifact Types via Entry-Point Plugins (Schema Composition Over the Code-Defined Core)
+# ADR-083: Third-Party Artifact Types via Entry-Point Plugins (Schema Composition Over the Code-Defined Core)
 
 ## Status
 
