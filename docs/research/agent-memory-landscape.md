@@ -229,9 +229,10 @@ The competitive *positioning* conclusions were distilled into a growth-positioni
 requirement (this document is the reference behind it):
 
 - `rac/requirements/rac-growth-agent-memory-positioning.md` (`RAC-KVWHTV28J65S`) —
-  relate Lore to the agent-memory category in the README; name Mainline and Kage;
-  retire "only git-native"; state the human-ratified + typed differentiator; and
-  acknowledge the adjacents (Glean, Dust, ChatGPT, Claude, Cursor, Continue) honestly.
+  relate Lore to the agent-memory category on a `docs/` comparison page (deliberately
+  not the corpus README); name Mainline and Kage; retire "only git-native"; state the
+  human-ratified + typed differentiator; and acknowledge the adjacents (Glean, Dust,
+  ChatGPT, Claude, Cursor, Continue) honestly.
 
 It complements the broader `team-scale-landscape.md` in this folder, which covers the
 adjacent decision/spec/portal/wiki categories and the freshness-gap thesis.

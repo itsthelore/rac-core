@@ -15,9 +15,11 @@ Proposed
 arriving from it have no recorded answer to the obvious question: is Lore
 another agent-memory store? The README leads with Lore's product identity
 (ADR-036) and relates Lore to spec-driven-development tools and OKF
-(rac-growth-positioning), but says nothing about the memory category, so
-evaluators either misfile Lore as one more LLM-distilled memory store or
-bounce without placing it.
+(rac-growth-positioning), but the agent-memory comparison is deeper and
+more perishable than the README should carry — the corpus README is
+deliberately kept clear of it. The answer belongs on a documentation page,
+which currently has no agent-memory section, so evaluators either misfile
+Lore as one more LLM-distilled memory store or bounce without placing it.
 
 The category splits on an axis Lore sits squarely on one side of, and the
 distinction is currently unstated on any public surface:
@@ -67,11 +69,12 @@ team-knowledge engine" is no longer true now that Mainline and Kage
 exist, and must not appear on any surface. The defensible, still-true
 distinction is narrower — Lore is the git-native team-knowledge engine
 whose judgment is **human-ratified and typed**, not LLM-distilled
-(ADR-049, ADR-065, ADR-080) — and that is what the README must state.
+(ADR-049, ADR-065, ADR-080) — and that is what the documentation page must
+state.
 
 ## Requirements
 
-- [REQ-001] The README shall contain a single `##` section, placed below the fold (after the existing positioning sections and never above the Lore lead, per ADR-036), that relates Lore/RAC to the agent-memory category and states the axis thesis: most agent-memory products are LLM-distilled, mutable, and per-agent; Lore is a git-native, human-ratified, typed knowledge corpus — a different category, not a competing memory store.
+- [REQ-001] A new documentation page `docs/comparisons.md`, registered in the mkdocs `nav` and explicitly NOT the corpus root `README.md` (whose settled first screen, per ADR-036, is left unchanged), shall contain a single `##` section that relates Lore/RAC to the agent-memory category and states the axis thesis: most agent-memory products are LLM-distilled, mutable, and per-agent; Lore is a git-native, human-ratified, typed knowledge corpus — a different category, not a competing memory store.
 - [REQ-002] The section shall name at least one representative LLM-distilled mutable store (Mem0 and/or Zep/Graphiti) and both git-native human-reviewed players (Mainline and Kage) explicitly, and shall not imply the list is exhaustive in a fast-moving space.
 - [REQ-003] The section shall state Lore's two surviving differentiators in plain terms: (1) no LLM distillation of judgment — knowledge is authored and ratified by humans, not extracted by a model at ingest; (2) a human-ratification gate over a typed requirements/decisions corpus with explicit supersession and retained history, versioned in git.
 - [REQ-004] The section shall NOT claim Lore is the only git-native team-knowledge system, and shall NOT claim Lore is better than any named product; it shall frame the relationship as a different category with a different trust model. Mainline and Kage shall be acknowledged as the closest git-native neighbours rather than diminished.
@@ -81,9 +84,10 @@ whose judgment is **human-ratified and typed**, not LLM-distilled
 
 ## Success Metrics
 
-- The README section exists below the fold, satisfies REQ-001 to REQ-006
-  on manual review, and the first screen of the README is byte-identical
-  to its state before the section was added.
+- The section exists on the `docs/` comparison page, is reachable from the
+  mkdocs `nav`, and satisfies REQ-001 to REQ-007 on manual review.
+- The corpus root `README.md` is byte-identical to its state before this
+  work — the comparison did not touch it.
 - Every comparative cell or sentence can be traced to a source URL in the
   adjacent HTML comment, and each URL substantiates the claim it is cited
   for.
@@ -113,7 +117,8 @@ whose judgment is **human-ratified and typed**, not LLM-distilled
 ## Assumptions
 
 - ADR-036's positioning (Lore leads; the README first screen is settled)
-  remains in force; this section is secondary positioning only.
+  remains in force; this comparison is secondary positioning that lives in
+  the documentation layer, deliberately kept off the corpus README.
 - Mem0/Zep represent the LLM-distilled camp and Mainline/Kage represent
   the git-native human-reviewed camp well enough to stand in for the
   category; if the reference points shift, the section is revisited rather
@@ -123,9 +128,10 @@ whose judgment is **human-ratified and typed**, not LLM-distilled
   verified as adjacent (distilled stores, RAG assistants, or per-user
   memory) with no human-ratification gate over shared team knowledge; this
   closes the coverage gap noted when the category was first surveyed.
-- A README section, rather than a `docs/` page, is the right depth; a
-  fuller competitive landscape belongs in the documentation layer or a
-  design artifact, not the README.
+- A `docs/` comparison page, not the corpus README, is the right home: the
+  comparison is deeper and more perishable than the README should carry,
+  and the fuller landscape already lives in
+  `docs/research/agent-memory-landscape.md` as reference.
 - The distinction that matters to evaluators is the trust model
   (human-ratified vs model-distilled), not raw feature count; the section
   is written to that thesis.
