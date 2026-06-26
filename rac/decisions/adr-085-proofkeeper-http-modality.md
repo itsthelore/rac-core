@@ -83,7 +83,7 @@ general-purpose automation.
 
 ## Status
 
-Proposed
+Accepted
 
 ## Category
 
