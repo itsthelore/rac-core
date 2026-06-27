@@ -52,6 +52,7 @@ from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.models import Product
 from rac.core.relationship_types import edge_spec
 
+from .init import load_ticketing_provider
 from .inspect import canonical_value
 from .relationships import relationships_from_corpus
 
@@ -222,7 +223,12 @@ class GraphEdge:
     …) and ``directed`` follows the registry (``supersedes`` is directed; the
     ``related_*`` edges are not). ``resolved`` is False when the reference does
     not resolve uniquely, in which case ``target`` is the literal reference text
-    (no phantom node is invented).
+    (no phantom node is invented). ``external`` is True for an external-reference
+    edge (``related_tickets``, ADR-087) whose target is an external ticket rather
+    than an in-corpus artifact — always unresolved by design, and distinguished
+    from a dangling in-corpus link (unresolved but not external); ``provider``
+    carries the repository's configured ticketing system (ADR-088) for external
+    edges, else None.
     """
 
     source: str
@@ -230,6 +236,8 @@ class GraphEdge:
     type: str
     directed: bool
     resolved: bool
+    external: bool = False
+    provider: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -238,6 +246,8 @@ class GraphEdge:
             "type": self.type,
             "directed": self.directed,
             "resolved": self.resolved,
+            "external": self.external,
+            "provider": self.provider,
         }
 
 
@@ -390,6 +400,8 @@ def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
     False`` rather than dropped (REQ-004). Deterministic — no timestamps.
     """
     entries = list(walk_corpus(directory, recursive=recursive))
+    # The configured ticketing provider tags external edges (ADR-088); read once.
+    provider = load_ticketing_provider(directory)
 
     canonical_by_path: dict[str, str] = {}
     nodes: list[GraphNode] = []
@@ -412,6 +424,7 @@ def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
     edges: list[GraphEdge] = []
     for rel in relationships_from_corpus(entries):
         kind = edge_spec(rel.relationship)
+        external = kind.external if kind else False
         target = (
             canonical_by_path[rel.resolved_path] if rel.resolved_path is not None else rel.target
         )
@@ -422,6 +435,8 @@ def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
                 type=rel.relationship,
                 directed=kind.directional if kind else False,
                 resolved=rel.resolved_path is not None,
+                external=external,
+                provider=provider if external else None,
             )
         )
     edges.sort(key=lambda edge: (edge.source, edge.type, edge.target))
