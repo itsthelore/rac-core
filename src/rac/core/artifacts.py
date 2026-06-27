@@ -95,6 +95,8 @@ RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
     "related prompts": "Prompt artifacts this artifact references",
     "related designs": "Design artifacts this artifact references",
     "supersedes": "The artifact this one supersedes",
+    "related tickets": "External tickets this artifact traces to; provider set by"
+    " .rac/config.yaml ticketing.provider (ADR-087)",
 }
 
 
@@ -119,6 +121,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related prompts",
             "related designs",
             "related requirements",
+            "related tickets",
         ),
         # Lifecycle status (ADR-051): optional, validated-if-present. Status stays
         # a knowledge lifecycle (current vs replaced), never work/delivery state.
@@ -136,6 +139,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "related prompts",
                 "related designs",
                 "related requirements",
+                "related tickets",
             ),
         },
         guidance={
@@ -180,6 +184,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related roadmaps",
             "related designs",
             "related decisions",
+            "related tickets",
         ),
         metadata={
             "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
@@ -192,6 +197,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related roadmaps",
             "related designs",
             "related decisions",
+            "related tickets",
         ),
         guidance={
             "context": (
@@ -233,6 +239,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related prompts",
             "related designs",
             "related roadmaps",
+            "related tickets",
         ),
         # Lifecycle status (ADR-051, ADR-061): Planned is the live state and
         # Achieved is the live terminal state (the intent was delivered, so the
@@ -255,6 +262,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "related prompts",
                 "related designs",
                 "related roadmaps",
+                "related tickets",
             ),
         },
         guidance={
@@ -293,6 +301,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related decisions",
             "related roadmaps",
             "related designs",
+            "related tickets",
         ),
         # Lifecycle status (ADR-051): Active is the live state, Deprecated retired.
         metadata={"status": ("Active", "Deprecated")},
@@ -311,6 +320,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "related decisions",
                 "related roadmaps",
                 "related designs",
+                "related tickets",
             ),
         },
         guidance={
@@ -369,6 +379,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related decisions",
             "related roadmaps",
             "related prompts",
+            "related tickets",
         ),
         # Lifecycle status (ADR-051): same spine as decisions/requirements.
         metadata={"status": ("Proposed", "Accepted", "Superseded", "Deprecated")},
@@ -389,6 +400,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "related decisions",
                 "related roadmaps",
                 "related prompts",
+                "related tickets",
             ),
         },
         guidance={

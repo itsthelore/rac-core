@@ -38,6 +38,12 @@ class EdgeSpec:
     # decision legitimately points at the one it retires.
     forbids_target_status: bool = True
     cardinality: str = "many"  # declared; not yet enforced
+    # External-reference family (ADR-087): the target is an external identifier
+    # (a ticket key or URL), not an in-corpus artifact. External edges are exempt
+    # from range and referential-integrity resolution and are format-linted
+    # instead (the provider is per-repo config, ADR-088); the graph export marks
+    # them external and unresolved.
+    external: bool = False
 
 
 def _related(target_type: str) -> EdgeSpec:
@@ -67,6 +73,13 @@ REGISTRY: dict[str, EdgeSpec] = {
             inverse="superseded-by",
             forbids_target_status=False,
         ),
+        # External-reference family (ADR-087): a single code-defined edge whose
+        # target is an external ticket (a key or URL), not an in-corpus artifact.
+        # No artifact range; format-linted against the per-repo ticketing provider
+        # (ADR-088), never resolved. Organisations standardise on one ticketing
+        # system, so the system is a repo-config choice rather than a per-provider
+        # edge — future external systems reuse this edge, not a sibling one.
+        EdgeSpec(name="related_tickets", range=(), external=True),
     )
 }
 
