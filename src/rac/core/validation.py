@@ -34,13 +34,60 @@ _THEN_RE = re.compile(r"\bthen\b", re.IGNORECASE)
 _HORIZON_VALUES = ("now", "next", "later")
 _QUARTER_RE = re.compile(r"^Q[1-4]\s+\d{4}$")
 
+# External ticketing format-lint (ADR-087). ``## Related Tickets`` carries
+# external ticket identifiers, not artifact references; each entry must be a
+# well-formed key or URL for the repository's configured provider (ADR-088).
+# Pure and offline — the engine never contacts the ticketing system; existence
+# and state checks are a satellite's job (ADR-090). The provider is resolved from
+# ``.rac/config.yaml`` by the services layer and passed into ``validate``; core
+# stays config-free. Organisations standardise on one provider, so exactly one
+# validator is ever active per repository.
+MALFORMED_TICKET_REFERENCE = "malformed-ticket-reference"
+TICKETING_SECTION = "related tickets"  # normalized ## Related Tickets
+
+_TICKET_LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+\.)\s+")
+_URL_RE = re.compile(r"^https?://\S+$")
+_JIRA_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+_LINEAR_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
+_GITHUB_REF_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#\d+$")
+_ADO_REF_RE = re.compile(r"^(?:AB#)?\d+$")
+_SERVICENOW_RE = re.compile(r"^[A-Z]{2,}\d{5,}$")
+
+
+def _ticket_validator(pattern: re.Pattern[str]) -> Callable[[str], bool]:
+    """An entry validator accepting ``pattern`` or any http(s) URL."""
+
+    def is_valid(entry: str) -> bool:
+        return bool(_URL_RE.match(entry) or pattern.match(entry))
+
+    return is_valid
+
+
+# Per ticketing provider: (entry validator, human label for the diagnostic). The
+# key set is the recognised provider vocabulary; ``none`` (no provider) skips the
+# format-lint entirely. Adding a provider is a code change here, not a new ADR.
+TICKETING_PROVIDERS: dict[str, tuple[Callable[[str], bool], str]] = {
+    "jira": (_ticket_validator(_JIRA_KEY_RE), "Jira key (e.g. PROJ-1234) or URL"),
+    "github": (_ticket_validator(_GITHUB_REF_RE), "GitHub issue (e.g. owner/repo#123) or URL"),
+    "linear": (_ticket_validator(_LINEAR_KEY_RE), "Linear key (e.g. ENG-123) or URL"),
+    "azure-devops": (
+        _ticket_validator(_ADO_REF_RE),
+        "Azure DevOps work item (e.g. 1234 or AB#1234) or URL",
+    ),
+    "servicenow": (_ticket_validator(_SERVICENOW_RE), "ServiceNow record (e.g. INC0010023) or URL"),
+}
+
+# The recognised provider names, plus ``none`` — the config layer validates a
+# ticketing.provider value against this set (ADR-088).
+TICKETING_PROVIDER_NAMES: tuple[str, ...] = (*TICKETING_PROVIDERS, "none")
+
 
 def has_errors(issues: list[Issue]) -> bool:
     """True if any issue is error-severity."""
     return any(issue.severity == "error" for issue in issues)
 
 
-def validate(product: Product) -> list[Issue]:
+def validate(product: Product, *, ticketing_provider: str | None = None) -> list[Issue]:
     """Check ``product`` and return all structural and quality findings.
 
     Dispatches on artifact type. Each type with its own schema is routed
@@ -48,8 +95,16 @@ def validate(product: Product) -> list[Issue]:
     backwards-compatibility fallback for Unknown/legacy documents (and RAC's
     original Requirement rules), *not* the long-term model — new artifact types
     must be routed explicitly above it.
+
+    ``ticketing_provider`` enables the external ticket format-lint (ADR-087): when
+    set to a recognised provider, ``## Related Tickets`` entries are checked
+    against that provider's key/URL format. It defaults to ``None`` so the many
+    pure ``validate(product)`` callers are unaffected; the config-aware service
+    layer injects the repository's configured provider (ADR-088). Stays
+    deterministic — a pure function of ``(product, ticketing_provider)``.
     """
     issues = _validate_metadata(product)
+    issues += _validate_ticketing_references(product, ticketing_provider)
     artifact_type = classify(product).type
     if artifact_type == "decision":
         return issues + _validate_decision(product)
@@ -182,6 +237,39 @@ def _validate_metadata(product: Product) -> list[Issue]:
                 "choose one",
             )
         )
+    return issues
+
+
+def _validate_ticketing_references(product: Product, provider: str | None) -> list[Issue]:
+    """Format-lint ``## Related Tickets`` against the configured provider (ADR-087).
+
+    Each entry must be a well-formed key or URL for the repository's ticketing
+    provider. A pure, offline syntax check — the engine never contacts the
+    ticketing system; existence and state checks live in a satellite (ADR-090).
+    No provider (``None`` or ``"none"``) means no lint: the edge still works, it
+    is simply unvalidated. Only an artifact type that declares the section is
+    linted. Overridable per ADR-053 like any rule.
+    """
+    if not provider or provider == "none":
+        return []
+    rule = TICKETING_PROVIDERS.get(provider)
+    if rule is None:
+        return []  # the config layer validates the name; be lenient here
+    spec = spec_for(classify(product).type)
+    if spec is None or TICKETING_SECTION not in spec.optional:
+        return []
+    is_valid, label = rule
+    issues: list[Issue] = []
+    for line in product.sections.get(TICKETING_SECTION, "").splitlines():
+        entry = _TICKET_LIST_MARKER_RE.sub("", line.strip(), count=1).strip()
+        if entry and not is_valid(entry):
+            issues.append(
+                Issue(
+                    "error",
+                    MALFORMED_TICKET_REFERENCE,
+                    f"## Related Tickets entry {entry!r} is not a valid {label}.",
+                )
+            )
     return issues
 
 

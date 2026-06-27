@@ -21,7 +21,7 @@ from rac.core.models import Issue, Product
 from rac.core.overrides import SeverityOverrides, apply_overrides
 from rac.core.validation import has_errors, validate
 
-from .init import load_overrides
+from .init import load_overrides, load_ticketing_provider
 from .okf_conformance import OkfConformanceReport, check_okf_conformance
 from .relationships import RelationshipIssue, validate_document_against_corpus
 
@@ -194,7 +194,11 @@ def validate_product(product: Product, start: str = ".") -> list[Issue]:
     and SDK callers share this one composition, so behind-the-gate analysis never
     drifts from what the interface reports (ADR-015).
     """
-    return apply_overrides(validate(product), classify(product).type, load_overrides(start))
+    return apply_overrides(
+        validate(product, ticketing_provider=load_ticketing_provider(start)),
+        classify(product).type,
+        load_overrides(start),
+    )
 
 
 def validate_directory(
@@ -236,6 +240,9 @@ def validate_corpus(
     """
     if overrides is None:
         overrides = load_overrides(directory)
+    # The external ticket format-lint (ADR-087) reads the repository's configured
+    # provider once for the whole corpus — organisations standardise on one.
+    provider = load_ticketing_provider(directory)
     files: list[FileValidation] = []
     for entry in entries:
         path, product = entry.path, entry.product
@@ -252,7 +259,9 @@ def validate_corpus(
                 )
             )
             continue
-        issues = apply_overrides(validate(product), artifact_type, overrides)
+        issues = apply_overrides(
+            validate(product, ticketing_provider=provider), artifact_type, overrides
+        )
         files.append(
             FileValidation(
                 path=str(path),

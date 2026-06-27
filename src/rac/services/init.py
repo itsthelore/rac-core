@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from rac.services.gate import EnforcementPolicy
 
 from rac.core.overrides import EMPTY, RULE_VALUES, TYPE_VALUES, SeverityOverrides
+from rac.core.validation import TICKETING_PROVIDER_NAMES
 from rac.errors import RACError
 
 # Repository key contract (v0.7.11): uppercase alphanumeric, leading letter,
@@ -44,6 +45,17 @@ class InvalidRepositoryKey(RACError):
         super().__init__(
             f"invalid repository key: {key!r} (expected 2-10 uppercase "
             "alphanumeric characters starting with a letter, e.g. RAC)"
+        )
+
+
+class InvalidTicketingProvider(RACError):
+    """The requested ticketing provider is not a recognised provider (usage error)."""
+
+    def __init__(self, provider: str):
+        self.provider = provider
+        super().__init__(
+            f"invalid ticketing provider: {provider!r} "
+            f"(expected one of {', '.join(TICKETING_PROVIDER_NAMES)})"
         )
 
 
@@ -249,16 +261,61 @@ def _parse_severity_map(
     return parsed
 
 
-def init_repository(directory: str, key: str = DEFAULT_KEY) -> InitResult:
+def load_ticketing_provider(start_dir: str) -> str | None:
+    """Read ``ticketing.provider`` from the nearest config (ADR-087 / ADR-088).
+
+    Returns the configured external ticketing provider (``jira``, ``github``,
+    ``linear``, ``azure-devops``, ``servicenow``, or ``none``), or ``None`` when
+    there is no config file or no ``ticketing`` section. An organisation
+    standardises on one provider, so this is the single value the external
+    ticket format-lint reads (ADR-087). A non-mapping section or an unrecognised
+    provider raises :class:`MalformedRepositoryConfig`, mirroring
+    :func:`load_overrides` — config is never silently ignored.
+    """
+    config_path = find_config_file(start_dir)
+    if config_path is None:
+        return None
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    section = data.get("ticketing") if isinstance(data, dict) else None
+    if section is None:
+        return None
+    if not isinstance(section, dict):
+        raise MalformedRepositoryConfig(str(config_path), "'ticketing' must be a mapping")
+    provider = section.get("provider")
+    if provider is None:
+        return None
+    if not isinstance(provider, str) or provider not in TICKETING_PROVIDER_NAMES:
+        raise MalformedRepositoryConfig(
+            str(config_path),
+            f"'ticketing.provider' must be one of {', '.join(TICKETING_PROVIDER_NAMES)}",
+        )
+    return provider
+
+
+def init_repository(
+    directory: str, key: str = DEFAULT_KEY, ticketing: str | None = None
+) -> InitResult:
     """Establish (or confirm) the repository identity namespace at ``directory``.
 
+    When ``ticketing`` is given (a recognised provider, ADR-087/088), a
+    ``ticketing.provider`` stanza is written alongside ``repository_key`` at
+    creation. It is creation-time configuration, like the key: an already-
+    initialized repository is left untouched (edit ``.rac/config.yaml`` to change
+    a provider later).
+
     Raises :class:`InvalidRepositoryKey` for a bad key,
+    :class:`InvalidTicketingProvider` for an unknown provider,
     :class:`RepositoryKeyConflict` when a different key is already established
     in this exact directory, and :class:`MalformedRepositoryConfig` when an
     existing file cannot be read.
     """
     if not KEY_RE.match(key):
         raise InvalidRepositoryKey(key)
+    if ticketing is not None and ticketing not in TICKETING_PROVIDER_NAMES:
+        raise InvalidTicketingProvider(ticketing)
     config_path = Path(directory) / CONFIG_DIR / CONFIG_FILE
     if config_path.is_file():
         existing = _read_config(config_path)
@@ -266,5 +323,8 @@ def init_repository(directory: str, key: str = DEFAULT_KEY) -> InitResult:
             raise RepositoryKeyConflict(existing.repository_key, key, str(config_path))
         return InitResult(repository_key=key, config_path=str(config_path), created=False)
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(f"repository_key: {key}\n", encoding="utf-8")
+    body = f"repository_key: {key}\n"
+    if ticketing is not None:
+        body += f"ticketing:\n  provider: {ticketing}\n"
+    config_path.write_text(body, encoding="utf-8")
     return InitResult(repository_key=key, config_path=str(config_path), created=True)
