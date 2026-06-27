@@ -40,6 +40,8 @@ Optional Sections:
       Description: Design artifacts this artifact references
   - Related Requirements
       Description: Requirement artifacts this artifact references
+  - Related Tickets
+      Description: External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)
 
 Metadata Fields:
   - Status: Proposed | Accepted | Superseded | Deprecated

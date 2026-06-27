@@ -32,6 +32,104 @@ def test_valid_file_has_no_errors():
     assert codes(issues) == set()  # fully clean: no warnings either
 
 
+# --- External ticketing format-lint (ADR-087, config-driven per ADR-088) ------
+
+_DECISION_WITH_TICKETS = (
+    "# D\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n"
+    "## Consequences\n\nq\n\n## Related Tickets\n\n{entries}\n"
+)
+
+
+def _decision_with(entries: str) -> str:
+    return _DECISION_WITH_TICKETS.format(entries=entries)
+
+
+def _config(tmp_path, provider: str | None) -> None:
+    config_dir = tmp_path / ".rac"
+    config_dir.mkdir(exist_ok=True)
+    body = "repository_key: ACME\n"
+    if provider is not None:
+        body += f"ticketing:\n  provider: {provider}\n"
+    (config_dir / "config.yaml").write_text(body, encoding="utf-8")
+
+
+def test_no_provider_does_not_format_lint_tickets(tmp_path):
+    # Pure validate() never lints (no provider passed), and a repo with no
+    # ticketing stanza leaves ## Related Tickets unvalidated.
+    product = parse(_decision_with("- literally anything"))
+    assert "malformed-ticket-reference" not in codes(validate(product))
+    _config(tmp_path, None)
+    (tmp_path / "d.md").write_text(_decision_with("- literally anything"), encoding="utf-8")
+    assert "malformed-ticket-reference" not in codes(
+        validate_product(parse_file(str(tmp_path / "d.md")), str(tmp_path))
+    )
+
+
+def test_jira_provider_accepts_key_and_url_flags_junk(tmp_path):
+    _config(tmp_path, "jira")
+    (tmp_path / "d.md").write_text(
+        _decision_with("- PROJ-1234\n- https://acme.atlassian.net/browse/AB-9\n- not a key"),
+        encoding="utf-8",
+    )
+    bad = [
+        i
+        for i in validate_product(parse_file(str(tmp_path / "d.md")), str(tmp_path))
+        if i.code == "malformed-ticket-reference"
+    ]
+    assert len(bad) == 1
+    assert bad[0].severity == "error"
+    assert "not a key" in bad[0].message
+
+
+def test_github_provider_rejects_jira_shaped_key(tmp_path):
+    _config(tmp_path, "github")
+    (tmp_path / "d.md").write_text(_decision_with("- owner/repo#42\n- PROJ-1234"), encoding="utf-8")
+    bad = [
+        i
+        for i in validate_product(parse_file(str(tmp_path / "d.md")), str(tmp_path))
+        if i.code == "malformed-ticket-reference"
+    ]
+    assert [i.message for i in bad] and all("PROJ-1234" in i.message for i in bad)
+
+
+def test_linear_jira_key_collision_resolved_by_provider(tmp_path):
+    # ENG-123 matches the Jira *shape*; the configured provider disambiguates —
+    # clean under linear, flagged under github (ADR-087 design point).
+    doc = _decision_with("- ENG-123")
+    _config(tmp_path, "linear")
+    (tmp_path / "d.md").write_text(doc, encoding="utf-8")
+    assert "malformed-ticket-reference" not in codes(
+        validate_product(parse_file(str(tmp_path / "d.md")), str(tmp_path))
+    )
+    _config(tmp_path, "github")
+    assert "malformed-ticket-reference" in codes(
+        validate_product(parse_file(str(tmp_path / "d.md")), str(tmp_path))
+    )
+
+
+def test_ticketing_lint_is_overridable(tmp_path):
+    # ADR-053: malformed-ticket-reference can be downgraded/silenced per repo.
+    config_dir = tmp_path / ".rac"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        "repository_key: ACME\nticketing:\n  provider: jira\n"
+        "validation:\n  rules:\n    malformed-ticket-reference: off\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "d.md").write_text(_decision_with("- not a key"), encoding="utf-8")
+    assert "malformed-ticket-reference" not in codes(
+        validate_product(parse_file(str(tmp_path / "d.md")), str(tmp_path))
+    )
+
+
+def test_directory_validation_applies_ticketing_provider(tmp_path):
+    _config(tmp_path, "jira")
+    (tmp_path / "d.md").write_text(_decision_with("- not a key"), encoding="utf-8")
+    result = validate_directory(str(tmp_path))
+    d = next(f for f in result.files if f.path.endswith("d.md"))
+    assert "malformed-ticket-reference" in {i.code for i in d.issues}
+
+
 def test_minimal_file_is_valid_but_warns_on_optional_sections():
     issues = validate_fixture("valid", "minimal.md")
     assert not has_errors(issues)

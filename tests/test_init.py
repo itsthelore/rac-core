@@ -14,10 +14,12 @@ import pytest
 from rac.cli import main
 from rac.services.init import (
     InvalidRepositoryKey,
+    InvalidTicketingProvider,
     MalformedRepositoryConfig,
     RepositoryKeyConflict,
     init_repository,
     load_repository_config,
+    load_ticketing_provider,
 )
 
 # --- service -----------------------------------------------------------------
@@ -67,6 +69,63 @@ def test_discovery_walks_upward(tmp_path):
     config = load_repository_config(str(nested))
     assert config is not None
     assert config.repository_key == "RAC"
+
+
+# --- external ticketing provider (ADR-087 / ADR-088) -------------------------
+
+
+def test_init_writes_ticketing_provider(tmp_path):
+    result = init_repository(str(tmp_path), key="ACME", ticketing="jira")
+    assert result.created
+    config = (tmp_path / ".rac" / "config.yaml").read_text(encoding="utf-8")
+    assert config == "repository_key: ACME\nticketing:\n  provider: jira\n"
+    assert load_ticketing_provider(str(tmp_path)) == "jira"
+
+
+def test_init_without_ticketing_writes_no_stanza(tmp_path):
+    init_repository(str(tmp_path), key="ACME")
+    assert load_ticketing_provider(str(tmp_path)) is None
+
+
+def test_init_rejects_unknown_provider(tmp_path):
+    with pytest.raises(InvalidTicketingProvider):
+        init_repository(str(tmp_path), key="ACME", ticketing="bugzilla")
+
+
+def test_load_ticketing_provider_absent_when_no_config(tmp_path):
+    assert load_ticketing_provider(str(tmp_path)) is None
+
+
+def test_load_ticketing_provider_rejects_unknown_value(tmp_path):
+    config_dir = tmp_path / ".rac"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        "repository_key: ACME\nticketing:\n  provider: bogus\n", encoding="utf-8"
+    )
+    with pytest.raises(MalformedRepositoryConfig):
+        load_ticketing_provider(str(tmp_path))
+
+
+def test_load_ticketing_provider_rejects_non_mapping(tmp_path):
+    config_dir = tmp_path / ".rac"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        "repository_key: ACME\nticketing: jira\n", encoding="utf-8"
+    )
+    with pytest.raises(MalformedRepositoryConfig):
+        load_ticketing_provider(str(tmp_path))
+
+
+def test_cli_init_ticketing_flag(tmp_path):
+    assert main(["init", str(tmp_path), "--key", "ACME", "--ticketing", "github"]) == 0
+    assert load_ticketing_provider(str(tmp_path)) == "github"
+
+
+def test_cli_init_rejects_unknown_provider(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["init", str(tmp_path), "--key", "ACME", "--ticketing", "bogus"])
+    assert exc.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
 
 
 def test_discovery_returns_none_when_uninitialized(tmp_path):

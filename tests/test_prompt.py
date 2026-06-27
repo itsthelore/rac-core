@@ -165,6 +165,7 @@ def test_schema_reference_shape():
         "related decisions",
         "related roadmaps",
         "related designs",
+        "related tickets",
     ]
 
 
@@ -179,6 +180,7 @@ def test_schema_json_includes_optional_relationship_sections(capsys):
         "related_decisions",
         "related_roadmaps",
         "related_designs",
+        "related_tickets",
     ]
 
 
