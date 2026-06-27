@@ -817,9 +817,14 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     # Imported lazily: the MCP SDK is only needed when serving, and the base
     # CLI must not pay its import cost for every other command. stdout belongs
     # to the MCP protocol, so any diagnostics here go to stderr.
+    from rac.mcp.audit import MalformedAuditConfig
     from rac.mcp.server import run_server
 
-    return run_server(args.root, telemetry_enabled=args.telemetry)
+    try:
+        return run_server(args.root, telemetry_enabled=args.telemetry)
+    except MalformedAuditConfig as exc:  # bad `audit:` stanza (ADR-084)
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
 
 
 def cmd_mcp_stats(args: argparse.Namespace) -> int:
