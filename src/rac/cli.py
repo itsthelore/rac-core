@@ -1080,7 +1080,31 @@ def _maybe_ask_usage_sharing() -> None:
 
 
 def cmd_telemetry(args: argparse.Namespace) -> int:
+    enterprise = getattr(args, "enterprise", False)
+    unlock = getattr(args, "unlock", False)
+    # The enterprise flags are only meaningful with 'off' (ADR-086).
+    if (enterprise or unlock) and args.action != "off":
+        print(
+            "rac: --enterprise/--unlock are only valid with 'rac telemetry off'",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+    if unlock and not enterprise:
+        print(
+            "rac: --unlock requires --enterprise (use 'rac telemetry off --enterprise --unlock')",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+
     if args.action == "on":
+        if consent.load_consent().enterprise_locked:
+            print(
+                "rac: cannot opt in while the enterprise telemetry lock is set; "
+                "remove it with 'rac telemetry off --enterprise --unlock' first "
+                "(ADR-086).",
+                file=sys.stderr,
+            )
+            return EXIT_USAGE
         record = consent.opt_in()
         print(f"Sharing on. Install id: {record.install_id}")
         print(
@@ -1090,15 +1114,40 @@ def cmd_telemetry(args: argparse.Namespace) -> int:
         if not consent.POSTHOG_API_KEY:
             print("Note: this build has no PostHog key configured; nothing will be sent.")
     elif args.action == "off":
-        consent.opt_out()
-        print("Sharing off. Nothing will be sent.")
+        if enterprise and unlock:
+            consent.enterprise_unlock()
+            print(
+                "Enterprise lock removed. Sharing stays off; re-enable with "
+                "'rac telemetry on' (ADR-086)."
+            )
+        elif enterprise:
+            consent.enterprise_lock()
+            print(
+                "Sharing off and enterprise-locked. The daily ping is forced off "
+                "and cannot be re-enabled until unlocked with "
+                "'rac telemetry off --enterprise --unlock' (ADR-086)."
+            )
+        else:
+            consent.opt_out()
+            print("Sharing off. Nothing will be sent.")
     else:  # status
         status = consent.consent_status()
-        print(f"Sharing: {'on' if status.sharing else 'off'}")
+        if status.enterprise_locked:
+            sharing = "locked (enterprise)"
+        elif status.sharing:
+            sharing = "on"
+        else:
+            sharing = "off"
+        print(f"Sharing: {sharing}")
         print(f"Install id: {status.install_id or '(none)'}")
         print(f"Consented at: {status.consented_at or '(never)'}")
         print(f"Consent file: {status.path}")
-        if status.sharing:
+        if status.enterprise_locked:
+            print(
+                "Enterprise lock: on — the daily ping is forced off. Remove with "
+                "'rac telemetry off --enterprise --unlock' (ADR-086)."
+            )
+        elif status.sharing:
             print(
                 "Shared daily: install id, rac version, active-repo count. "
                 "Never paths, queries, or content (ADR-041)."
@@ -1779,6 +1828,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="status",
         choices=["on", "off", "status"],
         help="on: opt in; off: opt out; status: show consent and what is shared (default).",
+    )
+    p_telemetry.add_argument(
+        "--enterprise",
+        action="store_true",
+        help="With 'off': hard-lock the ping off and refuse 'on' until unlocked (ADR-086).",
+    )
+    p_telemetry.add_argument(
+        "--unlock",
+        action="store_true",
+        help="With 'off --enterprise': remove the enterprise hard-lock (ADR-086).",
     )
     p_telemetry.set_defaults(func=cmd_telemetry)
 
