@@ -42,7 +42,7 @@ inputs:
     default: "true"
   rac-version:
     description: >-
-      Exact requirements-as-code version to install from PyPI. Empty
+      Exact rac-core version to install from PyPI. Empty
       installs the latest release. Ignored when `install-from` is `source`.
     required: false
     default: ""
@@ -73,9 +73,9 @@ runs:
           # so this path requires `uses: ./` on a real checkout.
           python -m pip install --quiet "$GITHUB_ACTION_PATH"
         elif [ -n "$RAC_VERSION" ]; then
-          python -m pip install --quiet "requirements-as-code==$RAC_VERSION"
+          python -m pip install --quiet "rac-core==$RAC_VERSION"
         else
-          python -m pip install --quiet requirements-as-code
+          python -m pip install --quiet rac-core
         fi
 
     - name: Resolve base revision

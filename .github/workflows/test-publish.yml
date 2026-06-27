@@ -12,7 +12,7 @@
 #     keeps rehearsal uploads unique per commit (e.g. 0.10.0.dev3).
 #
 # One-time setup before the first run:
-#   1. On test.pypi.org, add a trusted publisher for requirements-as-code
+#   1. On test.pypi.org, add a trusted publisher for rac-core
 #      pointing at this repository, this workflow file (test-publish.yml),
 #      and the `testpypi` environment.
 #   2. In the repository settings, create the `testpypi` environment.
@@ -20,7 +20,7 @@
 # Install a rehearsal build (deps come from real PyPI via the extra index):
 #   pip install --index-url https://test.pypi.org/simple/ \
 #       --extra-index-url https://pypi.org/simple/ \
-#       requirements-as-code==<rehearsal version>
+#       rac-core==<rehearsal version>
 
 name: Test Publish (TestPyPI)
 
@@ -75,7 +75,7 @@ jobs:
 
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/requirements-as-code
+      url: https://test.pypi.org/p/rac-core
 
     steps:
       - name: Retrieve release distributions

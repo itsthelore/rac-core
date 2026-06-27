@@ -38,7 +38,7 @@ on:
         required: false
         default: true
       rac-version:
-        description: "Exact requirements-as-code version from PyPI (empty: latest)."
+        description: "Exact rac-core version from PyPI (empty: latest)."
         type: string
         required: false
         default: ""

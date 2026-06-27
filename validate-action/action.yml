@@ -33,7 +33,7 @@ inputs:
     default: "rac.sarif"
   rac-version:
     description: >-
-      Exact requirements-as-code version to install from PyPI. Empty installs the
+      Exact rac-core version to install from PyPI. Empty installs the
       latest release. Ignored when `install-from` is `source`.
     required: false
     default: ""
@@ -62,9 +62,9 @@ runs:
         if [ "$INSTALL_FROM" = "source" ]; then
           python -m pip install --quiet "$GITHUB_ACTION_PATH/.."
         elif [ -n "$RAC_VERSION" ]; then
-          python -m pip install --quiet "requirements-as-code==$RAC_VERSION"
+          python -m pip install --quiet "rac-core==$RAC_VERSION"
         else
-          python -m pip install --quiet requirements-as-code
+          python -m pip install --quiet rac-core
         fi
 
     # The CLI is the source of truth (ADR-058). `set +e` lets a non-zero exit
