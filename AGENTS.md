@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: b133cd2ff821db8329714794bebe19ca1fef61436f54f237f4f02fe38c835efe) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: ff93c1969a8eee6f49086132c52932b1b271bd9b029584c40a002911822c0cbe) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -62,4 +62,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KW2YW6XK593X** — ADR-084: Read-Access Audit Recorder _(Product)_
 - **RAC-KW47GFBHK31W** — ADR-086: Air-Gap Posture and Enterprise Telemetry Hard-Lock _(Product)_
 - **RAC-KW47GGS85CKG** — ADR-087: External-Reference Relationships (Jira and Beyond) _(Technical)_
+- **RAC-KW47GJ749PKC** — ADR-088: Enterprise Profile Scaffold (`rac init --profile`) _(Product)_
 <!-- END RAC MANAGED BLOCK -->
