@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: 7ff46bfd5bc5da127399bcf1416d9b1cdaf42a3414212529fb231ae01d8700ea) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: b133cd2ff821db8329714794bebe19ca1fef61436f54f237f4f02fe38c835efe) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -86,4 +86,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KVTS86ZGVJV7** — ADR-077: The Two-Gate Capture Write Model _(Architecture)_
 - **RAC-KW2YW6XK593X** — ADR-084: Read-Access Audit Recorder _(Product)_
 - **RAC-KW47GFBHK31W** — ADR-086: Air-Gap Posture and Enterprise Telemetry Hard-Lock _(Product)_
+- **RAC-KW47GGS85CKG** — ADR-087: External-Reference Relationships (Jira and Beyond) _(Technical)_
 <!-- END RAC MANAGED BLOCK -->
