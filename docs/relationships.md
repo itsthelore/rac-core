@@ -34,6 +34,32 @@ is stripped; the rest of the line is the id, matched case-insensitively against 
 relationship section is only recognized on a type that declares it (so an unknown
 document contributes no relationships).
 
+## External references (Jira)
+
+`## Related Jira` links an artifact to a Jira ticket — an *external* reference
+that deliberately does not resolve to an in-corpus artifact (ADR-087). It turns
+change traceability ("this ADR implements PROJ-1234") into corpus data instead of
+prose:
+
+```markdown
+## Related Jira
+- PROJ-1234
+- https://acme.atlassian.net/browse/PROJ-5678
+```
+
+Each entry is a Jira key (`PROJ-1234`) or a full URL. The engine does **format-lint
+only, offline**: `rac validate` flags an entry that is neither a well-formed key
+nor a URL (`malformed-external-reference`, overridable per
+[ADR-053](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-053-validation-severity-overrides.md)),
+and `rac relationships --validate` never reports a Jira entry as a broken reference.
+The engine **never contacts Jira** — checking that a ticket exists or is in an
+allowed state needs a token and lives in the `lore-atlassian` satellite (ADR-090),
+not the engine (ADR-002).
+
+In `rac export --graph` an external edge carries `"external": true` and
+`"resolved": false`, so a graph backend can tell a deliberate Jira link from a
+dangling in-corpus reference (both are unresolved, only the external one is marked).
+
 ## Viewing relationships
 
 ```bash
