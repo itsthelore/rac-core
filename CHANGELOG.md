@@ -4,6 +4,57 @@ User-visible changes to RAC, by release. Follows the spirit of
 [Keep a Changelog](https://keepachangelog.com/): user impact over implementation
 details, release history over commit history.
 
+## 2026.06.5 — the "rename" release
+
+The release that renames the package to match the project. The PyPI distribution
+is now **`rac-core`** (was `requirements-as-code`); the import package `rac` and
+the `rac` CLI are unchanged, so existing code and scripts keep working.
+`pip install requirements-as-code` continues to work through a transitional
+redirect that depends on `rac-core`. This release also lands the first wave of
+enterprise-adoption features — all opt-in, all preserving RAC's offline,
+deterministic, content-free defaults.
+
+### Changed
+
+- **PyPI package renamed `requirements-as-code` → `rac-core`** (ADR-092). Install
+  with `pip install rac-core`. The import name `rac` and the `rac` CLI entry point
+  are unchanged — no code or command changes. The old name still installs via a
+  one-time redirect package that depends on `rac-core`; pinned
+  `requirements-as-code==` installs still resolve to their historical releases.
+- **Wayfinder (prompt-complexity routing) was extracted to its own product**
+  (`wayfinder-router`, ADR-069/070); its subtree is removed from this repository.
+
+### Added
+
+- **Enterprise telemetry hard-lock** (ADR-086). `rac telemetry off --enterprise`
+  forces the anonymous-ping kill state at runtime, refuses `rac telemetry on` while
+  locked, and reports `locked (enterprise)` in `rac telemetry status`; reversible
+  only with the explicit `rac telemetry off --enterprise --unlock`. The air-gap
+  posture is now consolidated and citable.
+- **Read-access audit recorder** (ADR-084). An opt-in, local-only, default-absent
+  recorder of MCP read-tool calls (who queried what, when, and which artifact IDs
+  came back), enabled by an `audit:` stanza in `.rac/config.yaml` (`enabled`,
+  `path`, `on_write_error`) with `RAC_AUDIT_PATH` / `RAC_AUDIT_PRINCIPAL`
+  overrides. It records IDs and query arguments — never artifact bodies — to local
+  JSONL, imports no network code, and is fail-loud. With no `audit:` stanza (the
+  default) nothing is written and RAC's content-free guarantee is byte-for-byte
+  intact.
+- **External ticket references** (ADR-087). A `## Related Tickets` relationship
+  section ties artifacts to external tickets. The provider is per-repo config —
+  `rac init --ticketing <jira|github|linear|azure-devops|servicenow|none>` writes a
+  `ticketing.provider` stanza, and `rac validate` format-lints entries against that
+  provider offline. External edges are exempt from in-corpus resolution and surface
+  in `rac export --graph` marked external with their provider; existence and state
+  checks live in backend connectors, not the engine.
+- **Init profiles** (ADR-088). `rac init --profile <default|enterprise>` scaffolds
+  a named bundle of repository config (severity overrides, enforcement policy,
+  telemetry posture, ticketing) instead of hand-wiring `.rac/config.yaml`; the
+  command reports the files it wrote. A profile sets only existing, committed,
+  versioned knobs — it adds no runtime mode.
+- **`rac-capture` skill.** A guided interview skill that authors RAC artifacts
+  through the two-gate capture write model (ADR-077).
+
+
 ## 2026.06.4 — the "unlock" release
 
 The first release under **CalVer** (`YYYY.MM.N`, ADR-076): RAC's version now says
@@ -41,45 +92,6 @@ v0.23–v0.26 scope-fences:
 - **Release tooling.** A fail-closed publish gate (`python -m rac.release`)
   rejects any tag that is not a well-formed `YYYY.MM.N` identifier or that lacks a
   changelog entry, so a malformed or undocumented release can never reach PyPI.
-
-## v0.23.0 — Hardening
-
-The release that turns the grounding claim from "trust us" into something proven
-and legible. Everything a user feels:
-
-- **Explainable retrieval.** A search result now shows *why* it was retrieved —
-  which field matched, which term, which relationship edge — on
-  `search_artifacts` / `get_related`, and via `rac find --explain`.
-- **`rac doctor`.** One command diagnoses a corpus and emits paste-ready fixes
-  for malformed front matter, broken or cyclic relationships, orphans, duplicate
-  ids, contradictions, and injection-style content.
-- **Provenance on `get_artifact`.** The agent can cite who decided and when:
-  git-derived author and dates plus the reconstructed status history, additive
-  and backward-compatible.
-- **A documented trust model.** `SECURITY.md` records that artifact content is
-  untrusted input made authoritative by human PR review — the read-only server
-  protects the store, the PR gate protects the agent — and `get_artifact`
-  surfaces the reviewed status.
-- **Provably works, and stays working.** A gated grounding benchmark
-  (`rac eval --check`: deterministic Precision@k / Recall@k with a hard-negative
-  check and a committed baseline) and parser/traversal robustness (input caps,
-  graceful degradation, a bounded `get_related`) turn the claim into a CI
-  regression guard. A reproducible obey-demo (`examples/obey-demo/`) captures a
-  real agent declining a forbidden change after consulting Lore.
-
-**What is deferred.** No automated multi-agent CI harness — the obey-demo is a
-manual smoke, never a gate (the agent supplies the judgment, Lore the facts). No
-schema-migration framework (`schema_version: 1` already exists). No resumability
-or crash-safe job machinery. No multi-hop relationship traversal — `get_related`
-stays 1-hop, bounded by the response budget.
-
-**Known limits.** The MCP server is **pull-based and read-only**: the agent must
-consult it — nothing is pushed — and it never writes to or mutates the
-repository. Full CI enforcement of code-vs-decision conflicts is *not* in this
-release: the obey-demo demonstrates the behaviour, but a build does not yet fail
-when code contradicts a decision. That is a future release.
-
-## Unreleased
 
 ### Changed
 
@@ -188,6 +200,43 @@ when code contradicts a decision. That is a future release.
   Certificate of Origin sign-off (`git commit -s`); there is no CLA. Distribution
   names are unchanged (PyPI `requirements-as-code`, CLI `rac`, server identity
   `lore`). See `rac/decisions/adr-071-apache-2-relicense-and-dco.md`.
+
+## v0.23.0 — Hardening
+
+The release that turns the grounding claim from "trust us" into something proven
+and legible. Everything a user feels:
+
+- **Explainable retrieval.** A search result now shows *why* it was retrieved —
+  which field matched, which term, which relationship edge — on
+  `search_artifacts` / `get_related`, and via `rac find --explain`.
+- **`rac doctor`.** One command diagnoses a corpus and emits paste-ready fixes
+  for malformed front matter, broken or cyclic relationships, orphans, duplicate
+  ids, contradictions, and injection-style content.
+- **Provenance on `get_artifact`.** The agent can cite who decided and when:
+  git-derived author and dates plus the reconstructed status history, additive
+  and backward-compatible.
+- **A documented trust model.** `SECURITY.md` records that artifact content is
+  untrusted input made authoritative by human PR review — the read-only server
+  protects the store, the PR gate protects the agent — and `get_artifact`
+  surfaces the reviewed status.
+- **Provably works, and stays working.** A gated grounding benchmark
+  (`rac eval --check`: deterministic Precision@k / Recall@k with a hard-negative
+  check and a committed baseline) and parser/traversal robustness (input caps,
+  graceful degradation, a bounded `get_related`) turn the claim into a CI
+  regression guard. A reproducible obey-demo (`examples/obey-demo/`) captures a
+  real agent declining a forbidden change after consulting Lore.
+
+**What is deferred.** No automated multi-agent CI harness — the obey-demo is a
+manual smoke, never a gate (the agent supplies the judgment, Lore the facts). No
+schema-migration framework (`schema_version: 1` already exists). No resumability
+or crash-safe job machinery. No multi-hop relationship traversal — `get_related`
+stays 1-hop, bounded by the response budget.
+
+**Known limits.** The MCP server is **pull-based and read-only**: the agent must
+consult it — nothing is pushed — and it never writes to or mutates the
+repository. Full CI enforcement of code-vs-decision conflicts is *not* in this
+release: the obey-demo demonstrates the behaviour, but a build does not yet fail
+when code contradicts a decision. That is a future release.
 
 ## v0.19.0 — 2026-06-15
 
