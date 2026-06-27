@@ -222,7 +222,10 @@ class GraphEdge:
     …) and ``directed`` follows the registry (``supersedes`` is directed; the
     ``related_*`` edges are not). ``resolved`` is False when the reference does
     not resolve uniquely, in which case ``target`` is the literal reference text
-    (no phantom node is invented).
+    (no phantom node is invented). ``external`` is True for an external-reference
+    edge (``related_jira``, ADR-087) whose target is a Jira ticket rather than an
+    in-corpus artifact — always unresolved by design, and distinguished from a
+    dangling in-corpus link, which is unresolved but not external.
     """
 
     source: str
@@ -230,6 +233,7 @@ class GraphEdge:
     type: str
     directed: bool
     resolved: bool
+    external: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -238,6 +242,7 @@ class GraphEdge:
             "type": self.type,
             "directed": self.directed,
             "resolved": self.resolved,
+            "external": self.external,
         }
 
 
@@ -422,6 +427,7 @@ def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
                 type=rel.relationship,
                 directed=kind.directional if kind else False,
                 resolved=rel.resolved_path is not None,
+                external=kind.external if kind else False,
             )
         )
     edges.sort(key=lambda edge: (edge.source, edge.type, edge.target))

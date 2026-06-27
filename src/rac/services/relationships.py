@@ -44,12 +44,20 @@ RELATED_SECTIONS: tuple[str, ...] = (
     "related designs",
 )
 
-# The full relationship-section vocabulary and its canonical ordering, including
-# ``supersedes``. This module owns the ordering; ``stats`` and the
-# ``relationships`` command both render by-type output in this order. ``supersedes``
-# is the one section that does *not* appear in the inspect ``relationships`` dict:
-# there it stays a top-level scalar for backwards compatibility (ADR-007).
-RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",)
+# External-reference relationship sections (ADR-087): recognized sections whose
+# target is an external identifier (a Jira ticket), not a peer artifact. They are
+# extracted and graphed like the others but format-linted, not resolved. Kept
+# separate from RELATED_SECTIONS, which is exactly the per-artifact-type vocabulary
+# (one ``related <type>s`` per type).
+EXTERNAL_SECTIONS: tuple[str, ...] = ("related jira",)
+
+# The full relationship-section vocabulary and its canonical ordering: the per-type
+# ``related *`` sections, then ``supersedes``, then the external-reference sections.
+# This module owns the ordering; ``stats`` and the ``relationships`` command both
+# render by-type output in this order. ``supersedes`` is the one section that does
+# *not* appear in the inspect ``relationships`` dict: there it stays a top-level
+# scalar for backwards compatibility (ADR-007).
+RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS
 
 # A *well-formed* leading Markdown list marker: ``-``, ``*``, ``+``, or ``N.``
 # followed by whitespace. Only these are stripped; any other leading text is
@@ -104,9 +112,10 @@ def extract_relationships(product: Product, spec: ArtifactSpec) -> dict[str, lis
     """Cross-artifact references for ``rac inspect``.
 
     Excludes ``supersedes`` — that stays a top-level scalar in inspect output
-    (ADR-007). Order follows ``spec.optional`` (the artifact's own schema order).
+    (ADR-007). External-reference sections (``related jira``) are included. Order
+    follows ``spec.optional`` (the artifact's own schema order).
     """
-    return _collect(product, spec, RELATED_SECTIONS)
+    return _collect(product, spec, RELATED_SECTIONS + EXTERNAL_SECTIONS)
 
 
 def extract_relationships_full(product: Product, spec: ArtifactSpec) -> dict[str, list[str]]:
@@ -512,6 +521,9 @@ def _resolve_references(
         if spec is None:
             continue
         for section, refs in extract_relationships_full(product, spec).items():
+            edge = edge_spec(section)
+            if edge is not None and edge.external:
+                continue  # external refs (ADR-087) are format-linted, not resolved
             for ref in refs:
                 checked += 1
                 targets = [p for p, _ in index.get(ref.casefold(), [])]
@@ -944,10 +956,25 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
         if spec is None:
             continue
         for section, refs in extract_relationships_full(product, spec).items():
+            edge = edge_spec(section)
+            external = edge is not None and edge.external
             for ref in refs:
-                targets = [p for p, _ in index.get(ref.casefold(), [])]
                 resolved: str | None = None
                 issue: str | None = None
+                if external:
+                    # External references (ADR-087) resolve to no in-corpus
+                    # artifact by design — an edge for the graph, never "broken".
+                    relationships.append(
+                        Relationship(
+                            source_path=path,
+                            relationship=section,
+                            target=ref,
+                            resolved_path=None,
+                            issue=None,
+                        )
+                    )
+                    continue
+                targets = [p for p, _ in index.get(ref.casefold(), [])]
                 if not targets:
                     issue = ISSUE_TARGET_NOT_FOUND
                 elif len(targets) > 1:
