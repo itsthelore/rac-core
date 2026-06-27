@@ -30,6 +30,14 @@ a hosted service or a third-party certification (see [Scope](#scope-and-non-goal
   AI-assisted authoring is opt-in and bring-your-own-credentials
   ([ADR-035](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-035-byo-ai-credentials.md));
   nothing phones home on your behalf.
+- **Optional read-access audit, local-only.** Regulated installs can record who
+  consulted which decision over the MCP server — query and returned artifact IDs,
+  never bodies — by enabling an `audit:` stanza in `.rac/config.yaml`
+  ([ADR-084](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-084-read-access-audit-recorder.md)).
+  It is off by default (responses stay byte-identical without it) and the engine
+  never transmits it: the log is a local file, and shipping it to a sink is a
+  separate collector's job. It is a strict addition to the no-egress posture, not
+  an exception to it.
 - **Deterministic, local-only data flow.** The same corpus state yields
   byte-identical JSON and SARIF output, with no timestamps and stable ordering
   (ADR-002). Nothing leaves the machine: input is local Markdown, output is local
@@ -110,4 +118,5 @@ offline posture is out of scope for the project (v0.21.14 Non-Goals).
 - [ADR-002](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-002-ai-optional.md) — deterministic, AI-optional core.
 - [ADR-035](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-035-byo-ai-credentials.md) — bring-your-own AI credentials.
 - [ADR-041](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-041-anonymous-usage-ping.md) — the consent-gated, content-free anonymous ping.
+- [ADR-084](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-084-read-access-audit-recorder.md) — the local-only, default-off read-access audit log.
 - [ADR-086](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-086-air-gap-and-enterprise-telemetry-lock.md) — air-gap posture and the enterprise telemetry hard-lock.

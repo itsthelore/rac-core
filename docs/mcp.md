@@ -302,7 +302,46 @@ network code in RAC): failures are dropped without retries, the socket
 timeout is three seconds, and a build with no endpoint key configured sends
 nothing at all — `rac telemetry status` will say so.
 
-## 8. Troubleshooting
+## 8. Read-access audit log (enterprise, opt-in)
+
+For regulated installs that must record *who consulted which decision, when, and
+which artifact IDs came back* — the audit trail telemetry deliberately does not
+keep — the server can append one JSON line per read-tool call to a local file
+([ADR-084](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-084-read-access-audit-recorder.md)).
+
+It is **content-bearing by design and off by default**: with no `audit:` stanza
+nothing is written and responses are byte-identical to a server with no recorder.
+It is **local-only** — the engine never transmits it; shipping the log to a sink
+(Loki, S3, Elastic) is a separate collector's job. The log records the query and
+the returned artifact IDs, **never artifact bodies**.
+
+Enable it in `.rac/config.yaml` (committed and team-wide, so an auditor has one
+git-diffable artifact to point at):
+
+```yaml
+audit:
+  enabled: true
+  # path: /var/log/lore/audit.jsonl   # optional; default: $XDG_STATE_HOME/rac/audit.jsonl
+  # on_write_error: warn              # warn (default) | block
+```
+
+- **`path`** — where the JSONL is written. Default `$XDG_STATE_HOME/rac/audit.jsonl`;
+  override per machine with the `RAC_AUDIT_PATH` environment variable (for data
+  residency).
+- **`on_write_error`** — `warn` (the default) reports a write failure on stderr
+  and keeps serving; `block` refuses the call with an `audit-unavailable` error
+  rather than returning un-audited content.
+
+Each line records `ts`, a per-process `session`, the `principal`, the `tool`, the
+`query`, the `returned` artifact IDs, `outcome`, and `duration_ms`. The
+**principal is attributable, not authenticated** (ADR-084): it defaults to the git
+`user.name`/`user.email` in the served repository and can be overridden with the
+`RAC_AUDIT_PRINCIPAL` environment variable. The enforced access boundary stays the
+repository ACL plus human pull-request review — the log records who *claimed* to
+query, not a verified identity. When enabled, the server announces it on stderr at
+startup; it is never silent.
+
+## 9. Troubleshooting
 
 ### Server not listed in the client
 
