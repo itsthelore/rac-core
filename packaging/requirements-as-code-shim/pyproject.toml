@@ -1,0 +1,37 @@
+# Transitional redirect package for the rename requirements-as-code -> rac-core
+# (ADR-092). This builds a metadata-only distribution under the OLD name whose
+# only job is to depend on `rac-core`, so existing `pip install requirements-as-code`
+# keeps working. It ships NO code of its own — the `rac` import and CLI come from
+# rac-core. Published once, then frozen; real engine releases go to rac-core.
+#
+# This directory is NOT part of the main rac-core build (that discovers packages
+# under src/ only); it is built and published on its own. See PUBLISHING.md.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "requirements-as-code"
+# Must be strictly greater than the final real requirements-as-code release so an
+# unpinned `pip install requirements-as-code` resolves to this redirect. `==<old>`
+# pins still resolve to the real historical releases. Confirm/bump before publish.
+version = "2026.6.99"
+description = "Renamed to rac-core. Transitional redirect — install rac-core instead."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Tom Ballard", email = "tom@armytage.co" }]
+keywords = ["requirements-as-code", "rac", "rac-core", "moved", "renamed"]
+# The whole point: pulling this in pulls in the renamed package. Pin the floor to
+# the first rac-core release so the redirect can never resolve to nothing
+# (tighten to the exact first rac-core version once it is published).
+dependencies = ["rac-core>=2026.6"]
+
+[project.urls]
+Homepage = "https://github.com/itsthelore/rac-core"
+Repository = "https://github.com/itsthelore/rac-core"
+
+[tool.setuptools]
+# Metapackage: no modules, no packages. The wheel carries metadata + the
+# rac-core dependency only, so it never shadows rac-core's `rac` import.
+packages = []
