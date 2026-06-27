@@ -44,6 +44,7 @@ stdout belongs to the MCP protocol; only stderr carries diagnostics.
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -52,7 +53,7 @@ from rac import consent as consent_record
 from rac.core.corpus import walk_corpus
 from rac.core.limits import MAX_TRAVERSAL_DEPTH
 from rac.core.markdown import parse
-from rac.mcp import errors, ping, telemetry
+from rac.mcp import audit, errors, ping, telemetry
 from rac.mcp.budget import (
     DEFAULT_BUDGET,
     HINT_RELATED,
@@ -297,44 +298,59 @@ def _get_summary(root: str, budget: int) -> str:
 
 
 def build_server(
-    root: str, budget: int = DEFAULT_BUDGET, recorder: TelemetryRecorder | None = None
+    root: str,
+    budget: int = DEFAULT_BUDGET,
+    recorder: TelemetryRecorder | None = None,
+    audit_recorder: audit.AuditRecorder | None = None,
 ) -> FastMCP:
     """Build the Guide MCP server bound to repository ``root``.
 
     ``budget`` is the per-response character cap (ADR-033), configurable here at
     startup; there is no per-call override. ``recorder`` enables opt-in usage
-    telemetry (ADR-040): with ``None`` — the default — nothing is recorded and
-    every call is exactly the bare tool body. The returned :class:`FastMCP`
-    instance has the five pinned tools registered and is ready to run over any
-    transport — the CLI runs it over stdio.
+    telemetry (ADR-040) and ``audit_recorder`` enables the read-access audit log
+    (ADR-084): with both ``None`` — the default — nothing is recorded and every
+    call is exactly the bare tool body. The returned :class:`FastMCP` instance
+    has the five pinned tools registered and is ready to run over any transport —
+    the CLI runs it over stdio.
     """
     server: FastMCP = FastMCP(SERVER_NAME)
 
+    def observed(tool: str, args: dict, call: Callable[[], str]) -> str:
+        # Audit (content-bearing, ADR-084) runs innermost so its duration is the
+        # pure call time; telemetry (content-free, ADR-040) wraps it and still
+        # sees the unchanged payload. Each is a no-op when its recorder is None,
+        # so the default response stays byte-identical.
+        return telemetry.observe(
+            recorder, tool, lambda: audit.observe(audit_recorder, tool, args, call)
+        )
+
     @server.tool(name="get_artifact", description=DESC_GET_ARTIFACT)
     def get_artifact(id: str) -> str:
-        return telemetry.observe(recorder, "get_artifact", lambda: _get_artifact(root, id, budget))
+        return observed("get_artifact", {"id": id}, lambda: _get_artifact(root, id, budget))
 
     @server.tool(name="search_artifacts", description=DESC_SEARCH_ARTIFACTS)
     def search_artifacts(query: str, type: str | None = None) -> str:
-        return telemetry.observe(
-            recorder, "search_artifacts", lambda: _search_artifacts(root, query, type, budget)
+        return observed(
+            "search_artifacts",
+            {"query": query, "type": type},
+            lambda: _search_artifacts(root, query, type, budget),
         )
 
     @server.tool(name="find_decisions", description=DESC_FIND_DECISIONS)
     def find_decisions_tool(topic: str) -> str:
-        return telemetry.observe(
-            recorder, "find_decisions", lambda: _find_decisions(root, topic, budget)
+        return observed(
+            "find_decisions", {"topic": topic}, lambda: _find_decisions(root, topic, budget)
         )
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
     def get_related(id: str, depth: int = 1) -> str:
-        return telemetry.observe(
-            recorder, "get_related", lambda: _get_related(root, id, budget, depth)
+        return observed(
+            "get_related", {"id": id, "depth": depth}, lambda: _get_related(root, id, budget, depth)
         )
 
     @server.tool(name="get_summary", description=DESC_GET_SUMMARY)
     def get_summary() -> str:
-        return telemetry.observe(recorder, "get_summary", lambda: _get_summary(root, budget))
+        return observed("get_summary", {}, lambda: _get_summary(root, budget))
 
     return server
 
@@ -411,6 +427,19 @@ def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool 
             f"(no arguments, no content) to {recorder.path}",
             file=sys.stderr,
         )
+    # The read-access audit log is config-driven (ADR-084), not a flag: enabled
+    # by an ``audit:`` stanza in .rac/config.yaml. Default-absent — no stanza,
+    # no recorder, no file, and the response stays byte-identical.
+    audit_recorder = audit.create_recorder(audit.load_audit_config(root), root)
+    if audit_recorder is not None:
+        print(
+            "rac mcp: audit on — appending one line per read-tool call "
+            "(principal, query, returned artifact ids; never content) to "
+            f"{audit_recorder.path}",
+            file=sys.stderr,
+        )
     _maybe_start_sharing(root)
-    build_server(root, budget=budget, recorder=recorder).run(transport="stdio")
+    build_server(root, budget=budget, recorder=recorder, audit_recorder=audit_recorder).run(
+        transport="stdio"
+    )
     return 0
