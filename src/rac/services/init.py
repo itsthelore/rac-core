@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 from rac.core.overrides import EMPTY, RULE_VALUES, TYPE_VALUES, SeverityOverrides
 from rac.core.validation import TICKETING_PROVIDER_NAMES
 from rac.errors import RACError
+from rac.services.profiles import PROFILE_NAMES, get_profile, write_mcp_configs
 
 # Repository key contract (v0.7.11): uppercase alphanumeric, leading letter,
 # 2-10 characters. The key is the human-recognizable ID prefix, e.g. RAC.
@@ -56,6 +57,16 @@ class InvalidTicketingProvider(RACError):
         super().__init__(
             f"invalid ticketing provider: {provider!r} "
             f"(expected one of {', '.join(TICKETING_PROVIDER_NAMES)})"
+        )
+
+
+class InvalidProfile(RACError):
+    """The requested init profile is not a recognised built-in profile (usage error)."""
+
+    def __init__(self, profile: str):
+        self.profile = profile
+        super().__init__(
+            f"invalid profile: {profile!r} (expected one of {', '.join(PROFILE_NAMES)})"
         )
 
 
@@ -103,6 +114,10 @@ class InitResult:
     repository_key: str
     config_path: str
     created: bool  # False when init was idempotent (key already established)
+    # The applied profile (ADR-088), and the extra files it wrote (e.g. .mcp.json).
+    # Additive contract fields (ADR-007): null/empty when no profile was used.
+    profile: str | None = None
+    files_written: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -110,6 +125,8 @@ class InitResult:
             "repository_key": self.repository_key,
             "config_path": self.config_path,
             "created": self.created,
+            "profile": self.profile,
+            "files_written": list(self.files_written),
         }
 
 
@@ -296,7 +313,10 @@ def load_ticketing_provider(start_dir: str) -> str | None:
 
 
 def init_repository(
-    directory: str, key: str = DEFAULT_KEY, ticketing: str | None = None
+    directory: str,
+    key: str = DEFAULT_KEY,
+    ticketing: str | None = None,
+    profile: str | None = None,
 ) -> InitResult:
     """Establish (or confirm) the repository identity namespace at ``directory``.
 
@@ -306,8 +326,17 @@ def init_repository(
     initialized repository is left untouched (edit ``.rac/config.yaml`` to change
     a provider later).
 
+    When ``profile`` is given (a built-in profile name, ADR-088), the profile's
+    config-only bundle is layered on a fresh init: its ``.rac/config.yaml``
+    stanza is appended after the key, and its client wiring (``.mcp.json`` and
+    ``.cursor/mcp.json``) is written without ever overwriting an existing file.
+    Like the key and ticketing, a profile applies only at creation — an
+    already-initialized repository is left untouched. A profile writes
+    *configuration only*, never authored prose (ADR-024, ADR-044, ADR-085).
+
     Raises :class:`InvalidRepositoryKey` for a bad key,
     :class:`InvalidTicketingProvider` for an unknown provider,
+    :class:`InvalidProfile` for an unknown profile,
     :class:`RepositoryKeyConflict` when a different key is already established
     in this exact directory, and :class:`MalformedRepositoryConfig` when an
     existing file cannot be read.
@@ -316,6 +345,11 @@ def init_repository(
         raise InvalidRepositoryKey(key)
     if ticketing is not None and ticketing not in TICKETING_PROVIDER_NAMES:
         raise InvalidTicketingProvider(ticketing)
+    resolved_profile = None
+    if profile is not None:
+        resolved_profile = get_profile(profile)
+        if resolved_profile is None:
+            raise InvalidProfile(profile)
     config_path = Path(directory) / CONFIG_DIR / CONFIG_FILE
     if config_path.is_file():
         existing = _read_config(config_path)
@@ -326,5 +360,16 @@ def init_repository(
     body = f"repository_key: {key}\n"
     if ticketing is not None:
         body += f"ticketing:\n  provider: {ticketing}\n"
+    if resolved_profile is not None and resolved_profile.config_stanza:
+        body += resolved_profile.config_stanza
     config_path.write_text(body, encoding="utf-8")
-    return InitResult(repository_key=key, config_path=str(config_path), created=True)
+    files_written: tuple[str, ...] = ()
+    if resolved_profile is not None and resolved_profile.mcp_wiring:
+        files_written = tuple(write_mcp_configs(directory))
+    return InitResult(
+        repository_key=key,
+        config_path=str(config_path),
+        created=True,
+        profile=resolved_profile.name if resolved_profile is not None else None,
+        files_written=files_written,
+    )
