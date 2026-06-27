@@ -1049,16 +1049,32 @@ configuration, not artifact meaning — it never dictates folder structure.
 
 - **Input:** `rac init [directory]` — defaults to the current directory.
 - **Options:** `--key KEY` (default `RAC`; 2–10 uppercase alphanumeric
-  characters starting with a letter) · `--ticketing PROVIDER` · `--json`
+  characters starting with a letter) · `--ticketing PROVIDER` · `--profile NAME`
+  · `--json`
 - **`--ticketing PROVIDER`** records the external ticketing system for
   `## Related Tickets` references (ADR-087) as `ticketing.provider` in
   `.rac/config.yaml` — one of `jira`, `github`, `linear`, `azure-devops`,
   `servicenow`, or `none`. Omit it to leave the provider unset (tickets stay
   unvalidated). Written at creation; edit `.rac/config.yaml` to change it later.
   See [relationships](relationships.md#external-tickets).
+- **`--profile NAME`** applies a built-in **configuration** profile on a fresh
+  init (ADR-088) — `default` or `enterprise`. It writes *configuration only*,
+  never authored prose, and **never overwrites an existing file**:
+  - `default` — writes the lore MCP client wiring for Claude Code (`.mcp.json`)
+    and Cursor (`.cursor/mcp.json`).
+  - `enterprise` — the client wiring **plus** an `enforcement:` policy stanza
+    (ADR-049) committing relationship-integrity findings as gate-blocking, so the
+    policy is auditable. Requirement-quality severities stay at their defaults —
+    escalate per repo with `validation:` overrides (ADR-053) if desired.
+
+  Profiles are creation-time configuration, composable with `--key`/`--ticketing`
+  and the [`quickstart`](#quickstart) scaffold. Plain `rac init` (no `--profile`)
+  is unchanged. A parent-corpus line is added once corpus federation ships
+  (ADR-089); until then the enterprise profile is hollow on it.
 - **Exit codes:** `0` initialized, or already initialized with the same key
   (idempotent) · `1` a different key is already established (never silently
-  rewritten) · `2` invalid key, unknown ticketing provider, or not a directory
+  rewritten) · `2` invalid key, unknown ticketing provider, unknown profile, or
+  not a directory
 
 After a successful init on a real terminal, `rac init` asks one one-time
 question — "Share anonymous usage to help shape Lore? [y/N]" — defaulting to
@@ -1069,6 +1085,7 @@ never appears with `--json`, in pipes, or in CI. See `rac telemetry`.
 rac init
 rac init --key PROJ
 rac init --key ACME --ticketing jira
+rac init --key ACME --profile enterprise
 rac init docs/ --json
 ```
 
@@ -1077,7 +1094,9 @@ rac init docs/ --json
   "schema_version": "1",
   "repository_key": "PROJ",
   "config_path": ".rac/config.yaml",
-  "created": true
+  "created": true,
+  "profile": "enterprise",
+  "files_written": [".mcp.json", ".cursor/mcp.json"]
 }
 ```
 
