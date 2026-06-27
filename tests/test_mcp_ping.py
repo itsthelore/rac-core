@@ -335,3 +335,100 @@ def test_sharing_on_without_key_says_nothing_will_be_sent(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "no PostHog key configured" in captured.err
     assert "nothing will be sent" in captured.err
+
+
+# --- Enterprise hard-lock (ADR-086) ---------------------------------------------
+
+
+def test_off_enterprise_records_lock_and_turns_sharing_off(capsys):
+    main(["telemetry", "on"])
+    capsys.readouterr()
+    assert main(["telemetry", "off", "--enterprise"]) == 0
+    assert "enterprise-locked" in capsys.readouterr().out
+    record = load_consent()
+    assert record.enterprise_locked is True
+    assert record.share_usage is False
+    # The install id survives so a later unlock-and-opt-in stays continuous.
+    assert record.install_id
+
+
+def test_on_is_refused_while_enterprise_locked(capsys):
+    main(["telemetry", "on"])
+    main(["telemetry", "off", "--enterprise"])
+    capsys.readouterr()
+    assert main(["telemetry", "on"]) == 2
+    assert "enterprise telemetry lock" in capsys.readouterr().err
+    # Refusal does not flip the record back on.
+    record = load_consent()
+    assert record.share_usage is False
+    assert record.enterprise_locked is True
+
+
+def test_ping_thread_suppressed_while_locked(monkeypatch):
+    # Even with consent, an install id, and a configured key, the lock wins.
+    monkeypatch.setattr(consent, "POSTHOG_API_KEY", "phc_test")
+    locked = Consent(share_usage=True, install_id="d" * 32, salt="e" * 32, enterprise_locked=True)
+    assert start_ping_thread(locked) is None
+
+
+def test_server_does_not_start_sharing_while_locked(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(consent, "POSTHOG_API_KEY", "phc_test")
+    monkeypatch.setattr(ping, "_tick", lambda install_id: None)
+    # A hand-edited record with sharing on but locked: the lock still wins.
+    save_consent(
+        Consent(share_usage=True, install_id="d" * 32, salt="e" * 32, enterprise_locked=True)
+    )
+    server._maybe_start_sharing(str(tmp_path))
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""  # nothing announced, nothing started
+
+
+def test_unlock_removes_lock_and_allows_opt_in(capsys):
+    main(["telemetry", "off", "--enterprise"])
+    capsys.readouterr()
+    assert main(["telemetry", "off", "--enterprise", "--unlock"]) == 0
+    assert "lock removed" in capsys.readouterr().out.lower()
+    assert load_consent().enterprise_locked is False
+    assert main(["telemetry", "on"]) == 0
+    assert load_consent().share_usage is True
+
+
+def test_plain_off_preserves_enterprise_lock(capsys):
+    main(["telemetry", "off", "--enterprise"])
+    capsys.readouterr()
+    # A plain 'off' must never silently clear the lock.
+    assert main(["telemetry", "off"]) == 0
+    assert load_consent().enterprise_locked is True
+
+
+def test_status_reports_locked_enterprise(capsys):
+    main(["telemetry", "off", "--enterprise"])
+    capsys.readouterr()
+    assert main(["telemetry"]) == 0
+    out = capsys.readouterr().out
+    assert "Sharing: locked (enterprise)" in out
+    assert "Enterprise lock: on" in out
+
+
+def test_unlock_requires_enterprise(capsys):
+    assert main(["telemetry", "off", "--unlock"]) == 2
+    assert "--unlock requires --enterprise" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("action", ["on", "status"])
+def test_enterprise_flags_rejected_outside_off(action, capsys):
+    assert main(["telemetry", action, "--enterprise"]) == 2
+    assert "only valid with 'rac telemetry off'" in capsys.readouterr().err
+
+
+def test_consent_round_trip_preserves_enterprise_lock():
+    saved = Consent(
+        share_usage=False,
+        install_id="a" * 32,
+        salt="b" * 32,
+        consented_at="t",
+        enterprise_locked=True,
+    )
+    save_consent(saved)
+    assert load_consent() == saved
