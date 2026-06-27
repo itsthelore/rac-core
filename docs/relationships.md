@@ -34,6 +34,59 @@ is stripped; the rest of the line is the id, matched case-insensitively against 
 relationship section is only recognized on a type that declares it (so an unknown
 document contributes no relationships).
 
+## External tickets
+
+`## Related Tickets` links an artifact to a ticket in your tracker — an *external*
+reference that deliberately does **not** resolve to an in-corpus artifact (ADR-087).
+It turns change traceability ("this ADR implements PROJ-1234") into corpus data
+instead of prose, and the same heading works in every repository:
+
+```markdown
+## Related Tickets
+- PROJ-1234
+- https://acme.atlassian.net/browse/PROJ-5678
+```
+
+**Pick your tracker once, at init.** Organisations standardise on a single
+ticketing system, so the *provider* is repository configuration rather than a
+choice per reference — set it with `rac init --ticketing <provider>` (or edit
+`.rac/config.yaml`):
+
+```yaml
+# .rac/config.yaml
+ticketing:
+  provider: jira      # jira | github | linear | azure-devops | servicenow | none
+```
+
+Each entry is a provider-specific key or a full URL:
+
+| Provider | Key example | also accepts |
+| --- | --- | --- |
+| `jira` | `PROJ-1234` | any `https://…` URL |
+| `github` | `owner/repo#123` | any `https://…` URL |
+| `linear` | `ENG-123` | any `https://…` URL |
+| `azure-devops` | `1234` or `AB#1234` | any `https://…` URL |
+| `servicenow` | `INC0010023` | any `https://…` URL |
+
+The engine does **format-lint only, offline**: `rac validate` flags an entry that
+is not a well-formed key or URL for the configured provider
+(`malformed-ticket-reference`, overridable per
+[ADR-053](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-053-validation-severity-overrides.md)),
+and `rac relationships --validate` never reports a ticket as a broken reference.
+With no provider configured the section still works, simply unvalidated. Because
+the provider is named in config, shape-identical keys across trackers (Linear's
+`ENG-123` and Jira's `PROJ-1234` match the same pattern) are never ambiguous — the
+engine validates against exactly one format.
+
+The engine **never contacts the tracker**: checking that a ticket exists or is in
+an allowed state needs a token and lives in a satellite (`lore-atlassian` for Jira,
+ADR-090), not the engine (ADR-002).
+
+In `rac export --graph` an external edge carries `"external": true`,
+`"resolved": false`, and the configured `"provider"`, so a graph backend can tell a
+deliberate ticket link from a dangling in-corpus reference (both are unresolved,
+only the external one is marked).
+
 ## Viewing relationships
 
 ```bash

@@ -1049,10 +1049,16 @@ configuration, not artifact meaning — it never dictates folder structure.
 
 - **Input:** `rac init [directory]` — defaults to the current directory.
 - **Options:** `--key KEY` (default `RAC`; 2–10 uppercase alphanumeric
-  characters starting with a letter) · `--json`
+  characters starting with a letter) · `--ticketing PROVIDER` · `--json`
+- **`--ticketing PROVIDER`** records the external ticketing system for
+  `## Related Tickets` references (ADR-087) as `ticketing.provider` in
+  `.rac/config.yaml` — one of `jira`, `github`, `linear`, `azure-devops`,
+  `servicenow`, or `none`. Omit it to leave the provider unset (tickets stay
+  unvalidated). Written at creation; edit `.rac/config.yaml` to change it later.
+  See [relationships](relationships.md#external-tickets).
 - **Exit codes:** `0` initialized, or already initialized with the same key
   (idempotent) · `1` a different key is already established (never silently
-  rewritten) · `2` invalid key or not a directory
+  rewritten) · `2` invalid key, unknown ticketing provider, or not a directory
 
 After a successful init on a real terminal, `rac init` asks one one-time
 question — "Share anonymous usage to help shape Lore? [y/N]" — defaulting to
@@ -1062,6 +1068,7 @@ never appears with `--json`, in pipes, or in CI. See `rac telemetry`.
 ```bash
 rac init
 rac init --key PROJ
+rac init --key ACME --ticketing jira
 rac init docs/ --json
 ```
 
