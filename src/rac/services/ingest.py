@@ -102,10 +102,7 @@ _EXTRA_FOR_SUFFIX = {
 
 def _missing_extra_message(suffix: str) -> str:
     extra = _EXTRA_FOR_SUFFIX.get(suffix.lower(), "ingest")
-    return (
-        f"converting '{suffix}' needs the {extra} extra: "
-        f"pip install 'requirements-as-code[{extra}]'"
-    )
+    return f"converting '{suffix}' needs the {extra} extra: pip install 'rac-core[{extra}]'"
 
 
 def _is_missing_dependency(exc: Exception) -> bool:

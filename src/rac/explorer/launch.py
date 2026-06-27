@@ -15,9 +15,7 @@ from rac.errors import RACError
 if TYPE_CHECKING:  # pragma: no cover — typing only, never at runtime
     from rac.explorer.app import ExplorerApp
 
-MISSING_EXTRA_HINT = (
-    "explorer needs the explorer extra: pip install 'requirements-as-code[explorer]'"
-)
+MISSING_EXTRA_HINT = "explorer needs the explorer extra: pip install 'rac-core[explorer]'"
 
 
 class ExplorerUnavailable(RACError):

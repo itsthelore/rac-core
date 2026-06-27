@@ -5,10 +5,10 @@
   "metadata": {
     "component": {
       "type": "library",
-      "name": "requirements-as-code",
-      "version": "0.19.1.dev105+g1942d0d88.d20260616",
-      "bom-ref": "requirements-as-code@0.19.1.dev105+g1942d0d88.d20260616",
-      "purl": "pkg:pypi/requirements-as-code@0.19.1.dev105+g1942d0d88.d20260616"
+      "name": "rac-core",
+      "version": "2026.6.5.dev62+g6a8e6675f.d20260627",
+      "bom-ref": "rac-core@2026.6.5.dev62+g6a8e6675f.d20260627",
+      "purl": "pkg:pypi/rac-core@2026.6.5.dev62+g6a8e6675f.d20260627"
     }
   },
   "components": [
@@ -22,9 +22,9 @@
     {
       "type": "library",
       "name": "mcp",
-      "version": "1.27.2",
-      "bom-ref": "mcp@1.27.2",
-      "purl": "pkg:pypi/mcp@1.27.2"
+      "version": "1.28.1",
+      "bom-ref": "mcp@1.28.1",
+      "purl": "pkg:pypi/mcp@1.28.1"
     },
     {
       "type": "library",

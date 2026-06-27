@@ -3,7 +3,7 @@ requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "requirements-as-code"
+name = "rac-core"
 # Version is derived from the git tag by setuptools-scm (see [tool.setuptools_scm]).
 # Release flow: tag vX.Y.Z -> the build is version X.Y.Z. No manual edits.
 dynamic = ["version"]

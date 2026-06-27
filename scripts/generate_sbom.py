@@ -35,7 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 SBOM_PATH = REPO_ROOT / "sbom.json"
 
-PACKAGE_NAME = "requirements-as-code"
+PACKAGE_NAME = "rac-core"
 
 # A PEP 508 requirement string starts with the distribution name; strip any
 # version specifier, extras, or environment marker to recover the bare name.
