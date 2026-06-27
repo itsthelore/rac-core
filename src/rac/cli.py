@@ -105,7 +105,7 @@ from rac.core.templates import (
     TemplateResourceMissing,
     available_templates,
 )
-from rac.core.validation import has_errors
+from rac.core.validation import TICKETING_PROVIDER_NAMES, has_errors
 from rac.output.portal import PortalSeamMissing, PortalShellMissing
 from rac.services import coverage as coverage_service
 from rac.services import doctor
@@ -136,6 +136,7 @@ from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.init import (
     DEFAULT_KEY,
     InvalidRepositoryKey,
+    InvalidTicketingProvider,
     MalformedRepositoryConfig,
     RepositoryKeyConflict,
     init_repository,
@@ -1008,8 +1009,8 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"rac: not a directory: {args.directory}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
     try:
-        result = init_repository(args.directory, key=args.key)
-    except InvalidRepositoryKey as exc:
+        result = init_repository(args.directory, key=args.key, ticketing=args.ticketing)
+    except (InvalidRepositoryKey, InvalidTicketingProvider) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE) from None
     except (RepositoryKeyConflict, MalformedRepositoryConfig) as exc:
@@ -1909,6 +1910,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_KEY,
         help="Repository key used as the artifact ID prefix (default: RAC; "
         "2-10 uppercase alphanumeric characters starting with a letter).",
+    )
+    p_init.add_argument(
+        "--ticketing",
+        choices=TICKETING_PROVIDER_NAMES,
+        default=None,
+        metavar="PROVIDER",
+        help="External ticketing provider for ## Related Tickets references "
+        f"(one of: {', '.join(TICKETING_PROVIDER_NAMES)}). Writes ticketing.provider "
+        "to .rac/config.yaml; omit to leave it unset (ADR-087).",
     )
     p_init.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."
