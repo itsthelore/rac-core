@@ -18,10 +18,11 @@ import pytest
 from conftest import fixture_path
 
 from rac.cli import main
+from rac.core.artifacts import spec_for
 from rac.core.markdown import parse
 from rac.core.validation import has_errors, validate
 from rac.services.inspect import inspect_file, inspect_text
-from rac.services.relationships import parse_references
+from rac.services.relationships import extract_relationships, parse_references
 from rac.services.stats import collect_stats
 
 # Each fixture and the relationship keys (snake_case) it should expose via inspect.
@@ -72,6 +73,20 @@ def test_parse_references_preserves_non_marker_text():
 
 def test_parse_references_drops_blank_lines():
     assert parse_references("\n- ADR-004\n\n- ADR-012\n") == ["ADR-004", "ADR-012"]
+
+
+# --- external ticket extraction (ADR-087) -----------------------------------
+
+
+def test_related_tickets_section_is_extracted():
+    spec = spec_for("decision")
+    assert spec is not None
+    body = (
+        "# D\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n"
+        "## Consequences\n\nq\n\n## Related Tickets\n\n- PROJ-1234\n- owner/repo#7\n"
+    )
+    rels = extract_relationships(parse(body), spec)
+    assert rels["related_tickets"] == ["PROJ-1234", "owner/repo#7"]
 
 
 # --- inspect: extraction across all five artifact types (amendment 7) --------

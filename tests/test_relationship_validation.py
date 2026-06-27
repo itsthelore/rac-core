@@ -73,6 +73,23 @@ def test_self_type_broken_reference_is_reported(tmp_path):
     assert report.validation_issues == 1
 
 
+# --- external ticket references (ADR-087) -----------------------------------
+
+
+def test_external_ticket_reference_is_never_broken(tmp_path):
+    # A ## Related Tickets entry resolves to no in-corpus artifact by design, so
+    # it is exempt from referential integrity — never reported not-found, and not
+    # counted among the resolved references (it is format-linted by `rac validate`).
+    (tmp_path / "adr-001.md").write_text(
+        _DECISION.format(t="A1") + "\n## Related Tickets\n\n- PROJ-1234\n- some-external-ref\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    assert report.relationships_checked == 0
+    assert ISSUE_TARGET_NOT_FOUND not in {i.code for i in report.issues}
+
+
 # --- resolved repository (REQ-003 / REQ-005) --------------------------------
 
 

@@ -48,6 +48,7 @@ def test_registry_declares_built_in_edges():
         "related_prompts",
         "related_designs",
         "supersedes",
+        "related_tickets",
     }
     supersedes = edge_spec("supersedes")
     assert supersedes is not None
@@ -55,6 +56,11 @@ def test_registry_declares_built_in_edges():
     assert supersedes.forbids_target_status is False  # the exemption is data-driven
     assert edge_spec("related_decisions").range == ("decision",)
     assert edge_spec("related_decisions").forbids_target_status is True
+    # External-reference edge (ADR-087): no artifact range, format-linted not resolved.
+    tickets = edge_spec("related_tickets")
+    assert tickets is not None
+    assert tickets.external is True
+    assert tickets.range == ()
 
 
 # --- range -------------------------------------------------------------------

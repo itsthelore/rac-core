@@ -79,6 +79,45 @@ def test_build_graph_deterministic():
     assert first == second
 
 
+# --- external ticket edges (ADR-087) -----------------------------------------
+
+
+def _corpus_with_tickets(tmp_path, provider: str | None) -> None:
+    config = tmp_path / ".rac"
+    config.mkdir()
+    body = "repository_key: ACME\n"
+    if provider is not None:
+        body += f"ticketing:\n  provider: {provider}\n"
+    (config / "config.yaml").write_text(body, encoding="utf-8")
+    (tmp_path / "adr-001.md").write_text(
+        "# A1\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n\n"
+        "## Related Tickets\n\n- PROJ-1234\n",
+        encoding="utf-8",
+    )
+
+
+def test_external_ticket_edge_is_marked_and_invents_no_node(tmp_path):
+    _corpus_with_tickets(tmp_path, "jira")
+    graph = build_graph_export(str(tmp_path))
+    ticket_edges = [e for e in graph.edges if e.type == "related_tickets"]
+    assert len(ticket_edges) == 1
+    edge = ticket_edges[0]
+    assert edge.target == "PROJ-1234"
+    assert edge.external is True
+    assert edge.resolved is False
+    assert edge.provider == "jira"
+    # The external target is never promoted to a node.
+    assert "PROJ-1234" not in {n.id for n in graph.nodes}
+
+
+def test_external_ticket_provider_is_none_when_unset(tmp_path):
+    _corpus_with_tickets(tmp_path, None)
+    graph = build_graph_export(str(tmp_path))
+    edge = next(e for e in graph.edges if e.type == "related_tickets")
+    assert edge.external is True and edge.resolved is False
+    assert edge.provider is None
+
+
 # --- CLI ---------------------------------------------------------------------
 
 
