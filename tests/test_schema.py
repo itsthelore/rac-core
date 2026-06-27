@@ -100,6 +100,7 @@ def test_schema_json_requirement_shape(capsys):
         "related_prompts",
         "related_designs",
         "related_requirements",
+        "related_jira",
     ]
     assert "success_metrics" in payload["descriptions"]
     assert "success_metrics" in payload["guidance"]
@@ -118,6 +119,7 @@ def test_schema_json_decision_metadata_values(capsys):
         "related_roadmaps",
         "related_designs",
         "related_decisions",
+        "related_jira",
     ]
     assert payload["metadata"]["status"] == [
         "Proposed",

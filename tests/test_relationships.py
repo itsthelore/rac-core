@@ -59,6 +59,17 @@ def test_parse_references_strips_well_formed_markers():
     assert parse_references(body) == ["ADR-004", "ADR-012", "ADR-020", "ADR-030"]
 
 
+def test_inspect_extracts_related_jira():
+    # External-reference family (ADR-087): a recognized relationship section whose
+    # entries are kept verbatim (Jira keys / URLs), like any other Related section.
+    body = (
+        "# D\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n"
+        "\n## Related Jira\n\n- PROJ-1234\n- PROJ-5678\n"
+    )
+    result = inspect_text(body)
+    assert result.relationships["related_jira"] == ["PROJ-1234", "PROJ-5678"]
+
+
 def test_parse_references_preserves_non_marker_text():
     # A hyphen mid-token and a leading dash without a following space are NOT
     # list markers, so the text is preserved verbatim.

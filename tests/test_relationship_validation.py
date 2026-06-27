@@ -64,6 +64,19 @@ def test_self_type_relationships_resolve(tmp_path):
     assert report.ok
 
 
+def test_related_jira_is_not_a_broken_reference(tmp_path):
+    # External references (ADR-087) resolve to no in-corpus artifact by design;
+    # they are format-linted by `rac validate`, never reported as not-found here.
+    (tmp_path / "adr-001.md").write_text(
+        _DECISION.format(t="A1")
+        + "\n## Related Jira\n\n- PROJ-1234\n- https://acme.atlassian.net/browse/AB-9\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    assert all(i.code != ISSUE_TARGET_NOT_FOUND for i in report.issues)
+
+
 def test_self_type_broken_reference_is_reported(tmp_path):
     (tmp_path / "v2.md").write_text(
         _ROADMAP.format(t="Two") + "\n## Related Roadmaps\n\n- v-missing\n", encoding="utf-8"

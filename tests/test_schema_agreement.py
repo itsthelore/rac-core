@@ -35,7 +35,11 @@ from rac.core.markdown import parse
 from rac.core.metadata import ArtifactMetadata
 from rac.core.schema import available_schemas, schema_reference
 from rac.services.portfolio import build_portfolio_summary
-from rac.services.relationships import RELATED_SECTIONS, RELATIONSHIP_SECTIONS
+from rac.services.relationships import (
+    EXTERNAL_SECTIONS,
+    RELATED_SECTIONS,
+    RELATIONSHIP_SECTIONS,
+)
 
 # --- single sources of truth -------------------------------------------------
 
@@ -116,9 +120,10 @@ def test_status_enums_agree_across_consumers():
 
 
 def test_relationship_kinds_agree_across_consumers():
-    # The vocabulary is RELATED_SECTIONS (the per-type "related X" kinds) plus the
-    # standalone "supersedes"; get_related keys its `outgoing` object by it.
-    assert RELATIONSHIP_SECTIONS == RELATED_SECTIONS + ("supersedes",)
+    # The vocabulary is RELATED_SECTIONS (the per-type "related X" kinds), the
+    # standalone "supersedes", then the external-reference sections (ADR-087);
+    # get_related keys its `outgoing` object by it.
+    assert RELATIONSHIP_SECTIONS == RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS
 
     # No spec invents a relationship section outside the vocabulary, and none of
     # the vocabulary is orphaned: the relationship sections appearing across the

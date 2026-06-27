@@ -42,6 +42,21 @@ def test_edges_are_typed_and_sorted():
     assert keys == sorted(keys)
 
 
+def test_related_jira_edge_is_external_and_unresolved(tmp_path):
+    (tmp_path / "adr-001.md").write_text(
+        "# D\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n"
+        "## Consequences\n\nq\n\n## Related Jira\n\n- PROJ-1234\n",
+        encoding="utf-8",
+    )
+    graph = build_graph_export(str(tmp_path))
+    jira = [e for e in graph.edges if e.type == "related_jira"]
+    assert len(jira) == 1
+    assert jira[0].target == "PROJ-1234"
+    assert jira[0].resolved is False
+    assert jira[0].external is True  # distinct from a dangling in-corpus link
+    assert "PROJ-1234" not in {n.id for n in graph.nodes}  # no phantom node
+
+
 def test_unresolved_reference_kept_and_flagged():
     graph = build_graph_export(fixture_path("export"))
     by_target = {e.target: e for e in graph.edges}

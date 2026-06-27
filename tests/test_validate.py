@@ -32,6 +32,29 @@ def test_valid_file_has_no_errors():
     assert codes(issues) == set()  # fully clean: no warnings either
 
 
+# --- External-reference format-lint (ADR-087) --------------------------------
+
+_DECISION_FOR_JIRA = (
+    "# D\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n"
+)
+
+
+def test_related_jira_valid_key_and_url_are_not_flagged():
+    body = (
+        _DECISION_FOR_JIRA
+        + "\n## Related Jira\n\n- PROJ-1234\n- https://acme.atlassian.net/browse/AB-9\n"
+    )
+    assert "malformed-external-reference" not in codes(validate(parse(body)))
+
+
+def test_related_jira_malformed_entry_is_an_error():
+    body = _DECISION_FOR_JIRA + "\n## Related Jira\n\n- PROJ-1234\n- not a key\n"
+    bad = [i for i in validate(parse(body)) if i.code == "malformed-external-reference"]
+    assert len(bad) == 1
+    assert bad[0].severity == "error"
+    assert "not a key" in bad[0].message
+
+
 def test_minimal_file_is_valid_but_warns_on_optional_sections():
     issues = validate_fixture("valid", "minimal.md")
     assert not has_errors(issues)
