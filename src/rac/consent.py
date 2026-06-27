@@ -51,6 +51,10 @@ class Consent:
     install_id: str = ""
     salt: str = ""
     consented_at: str = ""
+    # The enterprise hard-lock (ADR-086). When true, the daily ping is forced
+    # off at runtime regardless of share_usage or the PostHog key, and opting
+    # in is refused until it is explicitly unlocked.
+    enterprise_locked: bool = False
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,7 @@ class ConsentStatus:
     consented_at: str
     path: str
     endpoint_configured: bool
+    enterprise_locked: bool = False
 
 
 def consent_path() -> Path:
@@ -88,6 +93,7 @@ def load_consent() -> Consent:
         install_id=str(data.get("install_id", defaults.install_id)),
         salt=str(data.get("salt", defaults.salt)),
         consented_at=str(data.get("consented_at", defaults.consented_at)),
+        enterprise_locked=bool(data.get("enterprise_locked", defaults.enterprise_locked)),
     )
 
 
@@ -102,13 +108,20 @@ def save_consent(consent: Consent) -> None:
 
 
 def opt_in() -> Consent:
-    """Record consent, minting ids only where none exist yet."""
+    """Record consent, minting ids only where none exist yet.
+
+    The enterprise lock is preserved, never cleared here (ADR-086): turning
+    sharing on does not remove a hard-lock — only ``enterprise_unlock`` does.
+    Callers refuse opting in while locked; preserving the flag keeps the
+    runtime ping gate safe even if that guard is bypassed.
+    """
     existing = load_consent()
     consent = Consent(
         share_usage=True,
         install_id=existing.install_id or secrets.token_hex(16),
         salt=existing.salt or secrets.token_hex(16),
         consented_at=datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        enterprise_locked=existing.enterprise_locked,
     )
     save_consent(consent)
     return consent
@@ -122,6 +135,40 @@ def opt_out() -> Consent:
         install_id=existing.install_id,
         salt=existing.salt,
         consented_at=existing.consented_at,
+        enterprise_locked=existing.enterprise_locked,
+    )
+    save_consent(consent)
+    return consent
+
+
+def enterprise_lock() -> Consent:
+    """Force the ping off and hard-lock it (ADR-086).
+
+    Sharing is turned off and the lock is recorded; the ids are kept so a later
+    unlock-and-opt-in stays continuous. While locked, the runtime ping gate
+    returns nothing and ``opt_in`` is refused by the CLI.
+    """
+    existing = load_consent()
+    consent = Consent(
+        share_usage=False,
+        install_id=existing.install_id,
+        salt=existing.salt,
+        consented_at=existing.consented_at,
+        enterprise_locked=True,
+    )
+    save_consent(consent)
+    return consent
+
+
+def enterprise_unlock() -> Consent:
+    """Remove the enterprise hard-lock (ADR-086); sharing stays off until opt-in."""
+    existing = load_consent()
+    consent = Consent(
+        share_usage=existing.share_usage,
+        install_id=existing.install_id,
+        salt=existing.salt,
+        consented_at=existing.consented_at,
+        enterprise_locked=False,
     )
     save_consent(consent)
     return consent
@@ -142,4 +189,5 @@ def consent_status() -> ConsentStatus:
         consented_at=consent.consented_at,
         path=str(consent_path()),
         endpoint_configured=bool(POSTHOG_API_KEY),
+        enterprise_locked=consent.enterprise_locked,
     )

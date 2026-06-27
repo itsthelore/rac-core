@@ -189,9 +189,13 @@ def start_ping_thread(consent: Consent) -> threading.Thread | None:
     """Start the daily-ping daemon thread, or return None when nothing may send.
 
     Requires recorded consent, a minted install id, and a configured key (the
-    empty-key kill switch, ADR-041). The thread dies with the process; there
-    is no shutdown choreography.
+    empty-key kill switch, ADR-041), and that the enterprise hard-lock is not
+    set (ADR-086) — the lock forces the ping off at runtime regardless of
+    consent or key. The thread dies with the process; there is no shutdown
+    choreography.
     """
+    if consent.enterprise_locked:
+        return None
     if not (consent.share_usage and consent.install_id and consent_record.POSTHOG_API_KEY):
         return None
 

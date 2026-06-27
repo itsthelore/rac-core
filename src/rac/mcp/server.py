@@ -372,7 +372,7 @@ def _maybe_start_sharing(root: str) -> None:
     announced, never silent.
     """
     consent = consent_record.load_consent()
-    if not consent.share_usage:
+    if consent.enterprise_locked or not consent.share_usage:
         return
     ping.record_active_repo(root, consent.salt)
     thread = ping.start_ping_thread(consent)
