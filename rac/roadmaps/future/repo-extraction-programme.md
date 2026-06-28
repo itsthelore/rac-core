@@ -12,6 +12,16 @@ Planned
 
 ## Context
 
+> **Superseded by ADR-092; re-planned as the `v0.31.x-repo-topology` series.**
+> This programme sequenced the *first* (`lore-*` / one-repo-per-component)
+> extraction topology, and its low-risk moves landed (`decisiongrounding`,
+> v0.22.4; the TypeScript stack → `rac-sdk-ts` + `lore-vscode`, v0.22.5).
+> ADR-092 then replaced that topology with *one repo per concern* under uniform
+> `rac-*` naming. The remaining work — consolidating those already-extracted
+> repos into `rac-connectors` / `rac-sdk` / `rac-benchmarks` / `rac-editors` and
+> the actions into `rac-ci` — is carried by the `v0.31.x-repo-topology` series.
+> This item is retained as the record of the original programme.
+
 ADR-064 records the decision to adopt a small multi-repo topology under the
 `itsthelore` organisation: extract the standalone components and keep the
 engine, its shipped resources, and its governing corpus in `itsthelore/rac-core`
