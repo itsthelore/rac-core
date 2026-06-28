@@ -22,7 +22,7 @@
 <a href="https://pypi.org/project/rac-core/"><img src="https://img.shields.io/pypi/v/rac-core" alt="PyPI"></a>
 <a href="https://pypi.org/project/rac-core/"><img src="https://img.shields.io/pypi/pyversions/rac-core" alt="Python"></a>
 <a href="https://mypy-lang.org/"><img src="https://img.shields.io/badge/types-Mypy-blue.svg" alt="Typed"></a>
-<a href="https://github.com/itsthelore/rac-core/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/rac-core" alt="License: Apache 2.0"></a>
+<a href="https://github.com/itsthelore/rac-core/blob/main/LICENSE"><img src="https://img.shields.io/github/license/itsthelore/rac-core" alt="License: Apache 2.0"></a>
 </p>
 
 > **Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.**
