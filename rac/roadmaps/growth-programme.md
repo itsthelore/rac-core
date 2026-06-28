@@ -5,6 +5,10 @@ type: roadmap
 ---
 # Growth Programme
 
+## Status
+
+Planned
+
 ## Outcomes
 
 Grow adoption of Lore and the RAC engine without altering the recorded
@@ -85,3 +89,7 @@ traceability work from real corpus usage.
 
 - growth-demo-gif
 - growth-essay-mapping
+
+## Related Tickets
+
+- itsthelore/rac-core#230
