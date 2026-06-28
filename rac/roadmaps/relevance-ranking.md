@@ -125,3 +125,7 @@ the committed baseline before the ranking change ships.
 ## Related Designs
 
 - deterministic-relevance-ranking
+
+## Related Tickets
+
+- itsthelore/rac-core#226

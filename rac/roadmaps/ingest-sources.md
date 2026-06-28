@@ -117,3 +117,7 @@ the candidate-link review step.
 ## Related Designs
 
 - note-tool-ingest-sources
+
+## Related Tickets
+
+- itsthelore/rac-core#227

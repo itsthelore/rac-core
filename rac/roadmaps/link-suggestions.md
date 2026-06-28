@@ -126,3 +126,7 @@ is advisory, and how to promote a suggestion to a declared edge.
 ## Related Designs
 
 - mentioned-but-unlinked-detection
+
+## Related Tickets
+
+- itsthelore/rac-core#225

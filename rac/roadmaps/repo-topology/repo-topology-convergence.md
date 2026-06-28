@@ -112,3 +112,7 @@ Each initiative is its own item in this series, executed independently:
 ## Related Requirements
 
 - rac-growth-extensibility
+
+## Related Tickets
+
+- itsthelore/rac-core#228
