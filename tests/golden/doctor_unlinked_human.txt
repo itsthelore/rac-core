@@ -1,0 +1,17 @@
+Repository health: tests/fixtures/doctor/unlinked
+
+0 error(s), 3 warning(s)
+
+WARNING  tests/fixtures/doctor/unlinked/adr-001-alpha.md
+  [orphaned-artifact] no other artifact references this one (orphaned)
+  fix: Reference it from a related artifact (a `## Related ...` section), or confirm it is intentionally standalone.
+
+WARNING  tests/fixtures/doctor/unlinked/adr-001-alpha.md
+  [unlinked-reference] body references adr-002 but declares no Related Decisions link to it
+  fix: Add `- adr-002` under `## Related Decisions` if the link is intended — a suggestion to review; RAC writes no edge (ADR-082).
+
+WARNING  tests/fixtures/doctor/unlinked/adr-002-beta.md
+  [orphaned-artifact] no other artifact references this one (orphaned)
+  fix: Reference it from a related artifact (a `## Related ...` section), or confirm it is intentionally standalone.
+
+✓ No errors (warnings are advisory).

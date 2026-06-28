@@ -1,0 +1,33 @@
+{
+  "schema_version": "1",
+  "directory": "tests/fixtures/doctor/unlinked",
+  "hub_threshold": 20,
+  "ok": true,
+  "summary": {
+    "errors": 0,
+    "warnings": 3
+  },
+  "findings": [
+    {
+      "path": "tests/fixtures/doctor/unlinked/adr-001-alpha.md",
+      "code": "orphaned-artifact",
+      "severity": "warning",
+      "problem": "no other artifact references this one (orphaned)",
+      "fix": "Reference it from a related artifact (a `## Related ...` section), or confirm it is intentionally standalone."
+    },
+    {
+      "path": "tests/fixtures/doctor/unlinked/adr-001-alpha.md",
+      "code": "unlinked-reference",
+      "severity": "warning",
+      "problem": "body references adr-002 but declares no Related Decisions link to it",
+      "fix": "Add `- adr-002` under `## Related Decisions` if the link is intended — a suggestion to review; RAC writes no edge (ADR-082)."
+    },
+    {
+      "path": "tests/fixtures/doctor/unlinked/adr-002-beta.md",
+      "code": "orphaned-artifact",
+      "severity": "warning",
+      "problem": "no other artifact references this one (orphaned)",
+      "fix": "Reference it from a related artifact (a `## Related ...` section), or confirm it is intentionally standalone."
+    }
+  ]
+}

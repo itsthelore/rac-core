@@ -106,6 +106,10 @@ CASES = [
     ("mcp_stats_human", ["mcp-stats"], 0),
     ("mcp_stats_json", ["mcp-stats", "--json"], 0),
     ("mcp_stats_share", ["mcp-stats", "--share"], 0),
+    # Advisory unlinked-reference finding (link-suggestions, ADR-082): a body
+    # mention with no declared edge, surfaced as a warning that exits zero.
+    ("doctor_unlinked_human", ["doctor", "tests/fixtures/doctor/unlinked"], 0),
+    ("doctor_unlinked_json", ["doctor", "tests/fixtures/doctor/unlinked", "--json"], 0),
 ]
 
 

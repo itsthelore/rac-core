@@ -199,6 +199,29 @@ def test_clean_corpus_has_no_injection_false_positive(tmp_path):
     assert doctor.CODE_INJECTION_CONTENT not in _codes(report)
 
 
+def test_unlinked_reference_warns_but_run_still_exits_zero(tmp_path):
+    root = _clean(tmp_path)
+    # A new decision whose body names decision-alpha but declares no edge to it.
+    _decision(
+        root,
+        "decision-mentions",
+        "RAC-MMMMMMMMMMMM",
+        context="This extends the choice recorded in decision-alpha.",
+    )
+    report = doctor.diagnose(str(root))
+    unlinked = [f for f in report.findings if f.code == doctor.CODE_UNLINKED_REFERENCE]
+    assert any(f.path.endswith("decision-mentions.md") for f in unlinked)
+    assert all(f.severity == "warning" for f in unlinked)
+    assert any("decision-alpha" in f.fix for f in unlinked)
+    # No error-severity finding -> the advisory still exits zero (ADR-082, ADR-075).
+    assert report.ok
+
+
+def test_clean_corpus_has_no_unlinked_false_positive(tmp_path):
+    report = doctor.diagnose(str(_clean(tmp_path)))
+    assert doctor.CODE_UNLINKED_REFERENCE not in _codes(report)
+
+
 # --- contract: fixes, drift, determinism, exit codes -------------------------
 
 
