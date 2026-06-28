@@ -70,14 +70,17 @@ non-schema sections. Down to 2 live instances (others archived).
 ## 4. Machine-readable lifecycle / gate status — PARTIAL
 
 **Partially closed:** ADR-061 gave roadmaps a validated lifecycle vocabulary
-(Planned / Achieved / Superseded / Abandoned). **Still open:** requirements
-carry free-text Status (Proposed / Accepted / Deferred) with no validated
-vocabulary, and GATE-1/GATE-2 blocks are free-text lines nothing can enumerate.
+(Planned / Achieved / Superseded / Abandoned), and per-type **Status is already a
+validated enum** for requirements/decisions/designs/prompts (a value off the
+allowed set is an error). **Still open (narrowed):** the enum has no `Deferred`
+(parked) state distinct from `Proposed`, no structured `Blocked` state, and
+GATE-1/GATE-2 blocks are free-text lines nothing can enumerate.
 
-- Current instances: `rac-growth-adoption` (Proposed), `rac-growth-positioning`
-  (Proposed), `rac-growth-contribution-policy` (Proposed, GATE-2 in prose).
-- Minimal addition: a validated Status vocabulary for requirements with one
-  reason line for a Blocked/Deferred state.
+- Current instances: `rac-growth-contribution-policy` (GATE-2 in prose),
+  `rac-growth-positioning` (GATE-1 in prose), parked work reading `Proposed`
+  with no `Deferred` state.
+- Minimal addition: append `Deferred` / `Blocked` to the status enums plus a
+  structured gate-reason, so blocked artifacts are enumerable by gate.
 
 ## 5. Supersession outside decisions — PARTIAL
 
@@ -152,8 +155,20 @@ produce findings instead of silent passes.
 
 Four schema gaps remain squarely open (1, 3, 6, 7) and three are partial (2, 4,
 5). Each is specific enough to design a schema change from, which is the audit's
-purpose (growth-programme success measure). The pattern for promoting a ripe gap
-to a designable corpus record is `rac-traceability-self-relationships` (a
-requirement enumerating the gap, its evidence, and the contracts a fix must
-preserve); the open gaps above are candidates for the same treatment when
-scheduled.
+purpose (growth-programme success measure).
+
+## Recorded as corpus intent
+
+The open/partial gaps are now promoted to the trusted corpus (the pattern set by
+`rac-traceability-self-relationships`): the `relationship-vocabulary` roadmap with
+a requirement per gap, tracked under epic **itsthelore/rac-core#236**.
+
+| Gap(s) | Requirement |
+| --- | --- |
+| 1 + 2 | `rac-external-and-file-references` |
+| 5 | `rac-roadmap-supersession` |
+| 3 | `rac-typed-relationship-edges` |
+| 6 | `rac-relationship-back-references` |
+| 7 | `rac-decision-applies-to-scope` |
+| 4 | `rac-artifact-status-vocabulary` |
+| (closed) self-type | `rac-traceability-self-relationships` |
