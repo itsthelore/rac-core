@@ -36,6 +36,7 @@ from typing import Any
 
 from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusCache, CorpusEntry
+from rac.services.links import detect_unlinked_references
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_RELATIONSHIP_CYCLE,
@@ -61,6 +62,7 @@ CODE_INVALID_ARTIFACT = "invalid-artifact"
 CODE_ORPHANED_ARTIFACT = "orphaned-artifact"
 CODE_HIGH_FAN_OUT_HUB = "high-fan-out-hub"
 CODE_INJECTION_CONTENT = "injection-style-content"
+CODE_UNLINKED_REFERENCE = "unlinked-reference"
 
 # Heuristic injection-style idioms (REQ-005): instruction overrides, role/system
 # impersonation, concealment from the user, and steering away from recorded
@@ -180,6 +182,7 @@ def diagnose(
     findings.extend(_relationship_findings(directory, recursive, cache))
     findings.extend(_degree_findings(entries, hub_threshold))
     findings.extend(_injection_findings(entries))
+    findings.extend(_unlinked_reference_findings(directory, entries, recursive))
     # Deterministic order: errors before warnings, then path, code, problem.
     findings.sort(key=lambda f: (_SEVERITY_RANK[f.severity], f.path, f.code, f.problem))
     return DoctorReport(directory=directory, hub_threshold=hub_threshold, findings=findings)
@@ -304,6 +307,36 @@ def _degree_findings(entries: list[CorpusEntry], hub_threshold: int) -> list[Doc
                     ),
                 )
             )
+    return findings
+
+
+def _unlinked_reference_findings(
+    directory: str, entries: list[CorpusEntry], recursive: bool
+) -> list[DoctorFinding]:
+    """Body references to other artifacts with no declared edge (ADR-082).
+
+    Advisory WARNINGs that suggest a `## Related` link the prose already implies;
+    the detector writes nothing (suggest, never apply). Reuses the shared corpus
+    snapshot so no second walk happens.
+    """
+    findings: list[DoctorFinding] = []
+    for ref in detect_unlinked_references(directory, entries=entries, recursive=recursive):
+        findings.append(
+            DoctorFinding(
+                path=ref.source_path,
+                code=CODE_UNLINKED_REFERENCE,
+                severity=SEVERITY_WARNING,
+                problem=(
+                    f"body references {ref.matched_token} but declares no "
+                    f"{ref.related_section} link to it"
+                ),
+                fix=(
+                    f"Add `{ref.suggested_line}` under `## {ref.related_section}` "
+                    "if the link is intended — a suggestion to review; RAC writes "
+                    "no edge (ADR-082)."
+                ),
+            )
+        )
     return findings
 
 
