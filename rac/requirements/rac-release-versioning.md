@@ -36,9 +36,11 @@ two concerns are separated cleanly rather than overloaded onto one identifier.
 This requirement is `Accepted` and adopted by ADR-076. The release cadence is
 monthly rather than daily, so the identifier is month-granular with a
 within-month counter (`YYYY.MM.N`) rather than a full calendar date. The
-versioned roadmap series (`vX.Y.Z`) stand, now explicitly as **internal
-scope-fences** decoupled from release identifiers; the pre-cutover SemVer tags
-stand immutably.
+versioned roadmap series (`vX.Y.Z`) were, at the time of the CalVer cutover,
+explicitly **internal scope-fences** decoupled from release identifiers (ADR-094
+later retired that scheme for *live* roadmaps in favour of codenames; shipped and
+historical series keep their versioned names as the record); the pre-cutover
+SemVer tags stand immutably.
 
 ## Requirements
 
@@ -110,3 +112,4 @@ how RAC labels its own releases, not what `rac validate` or `rac relationships
 
 - ADR-007
 - ADR-076
+- ADR-094

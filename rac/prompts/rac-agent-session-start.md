@@ -31,7 +31,7 @@ families include Requirements, Decisions, Roadmaps, Prompts, and Design.
 - Deterministic classification.
 - Structural validation, not semantic scoring unless explicitly planned.
 - CLI contracts matter: human output, JSON output, exit codes, and templates must be specified.
-- Version numbers are scope fences.
+- Roadmaps are identified by codename, not a version; release versions are CalVer dates (ADR-094, ADR-076).
 - Prefer schema/artifact-spec-driven behavior over artifact-specific branches.
 - Keep classification separate from validation.
 - Invalid but recognizable artifacts may still classify as their artifact type, then fail validation.

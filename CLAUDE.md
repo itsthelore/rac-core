@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: 6d6744e61bad8dfd623d6fff733ed9f339145b8b8d75e50cbd071eac8727bd3c) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: f34044b0a7ab94f78fd3932cf090ddc8c993c3c0bd9f864b97aef20fe354abd9) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -91,4 +91,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KW47GN4SB403** — ADR-090: Enterprise Integration Surfaces and Boundaries _(Architecture)_
 - **RAC-KW5A03ZHXN9F** — ADR-092: Repository Topology — One Repo Per Concern, rac-* Naming _(Architecture)_
 - **RAC-KW6HY8W1CBK6** — ADR-093: Roadmap Intent Lives in the Corpus; Execution Is Tracked in GitHub Issues _(Process)_
+- **RAC-KW6NQ4Y814N7** — ADR-094: Roadmaps Are Identified by Stable Codename, Not a vX.Y.Z Scope-Fence _(Process)_
 <!-- END RAC MANAGED BLOCK -->

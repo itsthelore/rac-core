@@ -117,7 +117,9 @@ The goal is not commit quantity; it is preserving the implementation story.
 
 ### References
 
-Roadmap work — use `[roadmap:vX.Y.Z]`:
+Roadmap work — use `[roadmap:<codename>]` (a live roadmap's codename, e.g.
+`[roadmap:rac-ci]`, per ADR-094; a frozen/historical series may still cite its
+`vX.Y.Z` fence):
 
 ```text
 feat(relationships): add validation command [roadmap:v0.7.2]

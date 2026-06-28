@@ -54,8 +54,9 @@ issues; the two are linked by `## Related Tickets`.
   deterministic (ADR-002, ADR-032); the edge is a reference, not a sync.
 - **Ordering is the board's job, not the roadmap number's.** Because the project
   board carries execution order, the `vX.Y.Z` scope-fence label no longer needs to
-  imply sequence; it remains a stable identifier (whether to drop the numeric
-  scheme entirely is a separate decision, not settled here).
+  imply sequence; it remains a stable identifier (ADR-094 subsequently settled the
+  open question — the numeric scheme is retired for live roadmaps in favour of
+  codenames; shipped/historical series keep their versioned names).
 
 This operationalises ADR-017 for roadmaps: the corpus answers "what capability,
 and why"; GitHub answers "what's being worked, by whom, in what order, now."
