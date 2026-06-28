@@ -71,7 +71,6 @@ code.claude.com/docs/en/skills). RAC should ship one.
 
 ## Related Roadmaps
 
-- v1.4-claude-skills
 - v0.10.5-bundled-agent-skill
 - v0.10.5-review-and-ingest-skills
 - v0.17.0-single-document-import-skill
