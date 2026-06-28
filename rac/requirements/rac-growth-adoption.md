@@ -30,10 +30,15 @@ should make first value fast, observable, and repeatable.
 
 - [REQ-005] `rac quickstart` offers a guided first-run path that establishes the repository identity and scaffolds a first artifact in one step, reducing the cold-start command count from three (`rac init`, `rac new`, `rac validate`) to one before the validation check; it writes a single starter artifact only into an empty corpus and refuses otherwise (ADR-044). Delivered by the v0.13.0 roadmap.
 
+- [REQ-006] Beyond the human-inclusive five-minute budget (REQ-002), the *machine* cold start — install through a first `rac validate` pass, excluding human reading and editing — completes in under 30 seconds on a typical environment (warm package cache), recorded against a released package. RAC's own commands (`rac quickstart` and `rac validate`) contribute well under one second of that budget — the part RAC controls and the part the cold-start contract test guards; package install and venv creation are not RAC's to bound and are reported, not gated.
+
 ## Success Metrics
 
-- Measured cold start (install → first `rac validate` pass) under five
-  minutes on a clean environment, recorded with timings.
+- Human-inclusive cold start (install → first `rac validate` pass) under
+  five minutes on a clean environment, recorded with timings (REQ-002).
+- Machine cold start (install → first `rac validate` pass, excluding human
+  reading/editing) under 30 seconds on a typical environment, recorded;
+  RAC's own commands sub-second (REQ-006).
 - Both `pipx` and `uv tool` installs verified to produce a working `rac`
   command with no further configuration.
 - README demo GIF present, ≤20 seconds, showing init → author →
