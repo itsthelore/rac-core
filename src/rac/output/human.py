@@ -1028,6 +1028,17 @@ def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
                 where = f"{m.section}: " if m.section else ""
                 attribution += f" [{where}{m.snippet}]"
             lines.append(f"{indent}• {attribution}")
+            # Relevance-score breakdown (ADR-078): the fused score and the
+            # per-signal contributions behind the ordering, when present.
+            components = m.evidence.get("components")
+            if components is not None:
+                lines.append(
+                    f"{indent}  score={m.evidence['score']} "
+                    f"bm25={components['bm25']} "
+                    f"lexical_rank={components['lexical_rank']} "
+                    f"graph_rank={components['graph_rank']} "
+                    f"inbound={components['inbound']}"
+                )
     lines.append("")
     lines.append(f"{result.match_count} match(es) for {result.query!r}.")
     return "\n".join(lines)
