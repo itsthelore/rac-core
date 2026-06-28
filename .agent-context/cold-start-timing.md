@@ -45,12 +45,19 @@ artifact itself), so the old `mkdir -p` step is gone.
 The transitional `requirements-as-code` shim still resolves to `rac-core`, so the
 pre-rename install instructions keep working.
 
-## Verdict
+## Verdict — two bars (REQ-002 human, REQ-006 machine)
 
-Machine time is ~14 s end to end; the five-minute budget is consumed almost
-entirely by human reading and editing. The under-five-minutes, zero-configuration
-cold start (`rac-growth-adoption` REQ-001/REQ-002) holds against the released
-package with a wide margin, on `pip`, the shim, and `uv tool`.
+- **Human-inclusive (REQ-002, ≤5 min):** holds with a wide margin — the budget is
+  consumed almost entirely by human reading and editing, not tooling.
+- **Machine (REQ-006, <30 s):** install → first `rac validate` pass is **≈14 s**
+  end to end (`pip` ~9 s + venv ~4.6 s dominate), comfortably under 30 s; with
+  `uv tool` the install leg is ~1 s. **RAC's own commands** — `rac quickstart`
+  (0.21 s) + `rac validate` (0.21 s) = **≈0.42 s**, the sub-second part RAC
+  controls and the cold-start contract test guards. Package install and venv
+  creation are environment/network costs, reported here, not RAC's to bound.
+
+Both bars hold against the released `rac-core==2026.6.5`, on `pip`, the
+`requirements-as-code` shim, and `uv tool`.
 
 ## Caveats
 
