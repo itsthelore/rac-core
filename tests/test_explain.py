@@ -69,8 +69,13 @@ def _evidence_for(root: Path, query: str) -> dict:
 # --- one case per tier (Acceptance: id/title/path/heading/body) --------------
 
 
+def _tier_evidence(ev: dict) -> dict:
+    """The field/terms/tier subset, ignoring the additive ADR-078 score keys."""
+    return {k: ev[k] for k in ("field", "terms", "tier")}
+
+
 def test_title_tier_evidence(tmp_path):
-    assert _evidence_for(_corpus(tmp_path), "photosynthesis") == {
+    assert _tier_evidence(_evidence_for(_corpus(tmp_path), "photosynthesis")) == {
         "field": "title",
         "terms": ["photosynthesis"],
         "tier": 1,
@@ -79,7 +84,7 @@ def test_title_tier_evidence(tmp_path):
 
 def test_path_tier_evidence(tmp_path):
     # "catalog" is only in the directory path — not the id, title, headings, or body.
-    assert _evidence_for(_corpus(tmp_path), "catalog") == {
+    assert _tier_evidence(_evidence_for(_corpus(tmp_path), "catalog")) == {
         "field": "path",
         "terms": ["catalog"],
         "tier": 2,
@@ -217,8 +222,11 @@ def test_explain_json_matches_mcp_evidence_shape(tmp_path, capsys):
     code, out = _run(["find", "photosynthesis", root, "--explain", "--json"], capsys)
     assert code == 0
     payload = json.loads(out)
-    assert payload["matches"][0]["evidence"] == {
+    evidence = payload["matches"][0]["evidence"]
+    assert _tier_evidence(evidence) == {
         "field": "title",
         "terms": ["photosynthesis"],
         "tier": 1,
     }
+    # The score components (ADR-078) ride alongside the tier evidence, additively.
+    assert set(evidence) == {"field", "terms", "tier", "score", "components"}

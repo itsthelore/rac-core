@@ -168,8 +168,8 @@ def test_topic_with_no_match_is_empty_not_an_error(repo):
 
 
 def test_ranking_is_deterministic(repo, tmp_path):
-    # A second live decision whose *title* matches ranks above a body-only match,
-    # and equal-tier ties break by sorted path — the existing tiered ladder.
+    # A second live decision also matching "cache": the relevance score (ADR-078)
+    # orders the two deterministically, and the order is reproducible across runs.
     second = """---
 schema_version: 1
 id: RAC-CACHE0000002
@@ -197,8 +197,10 @@ Accepted
     first = find_decisions(str(repo), "cache").matches
     again = find_decisions(str(repo), "cache").matches
     assert [m.id for m in first] == [m.id for m in again]  # deterministic
-    # The title hit (RAC-CACHE0000002) outranks the body hit (RAC-CACHE0000001).
-    assert [m.id for m in first] == ["RAC-CACHE0000002", "RAC-CACHE0000001"]
+    # Deterministic relevance ordering (ADR-078): the on-topic decision
+    # ("Cache invalidation strategy") outscores the contrived title hit. Both
+    # are returned; the order is a pure, reproducible function of the bytes.
+    assert [m.id for m in first] == ["RAC-CACHE0000001", "RAC-CACHE0000002"]
 
 
 # --- CLI face: `rac find <topic> --decisions [--json]` ------------------------

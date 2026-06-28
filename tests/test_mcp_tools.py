@@ -132,9 +132,10 @@ def test_search_artifacts_shape_and_order():
     assert payload["type"] is None
     assert payload["match_count"] == 3
     for match in payload["matches"]:
-        # WS2: search results carry an additive `evidence` object (always present).
+        # WS2: search results carry an additive `evidence` object (always present),
+        # now also carrying the ADR-078 relevance-score components.
         assert list(match) == ["id", "type", "title", "path", "evidence"]
-        assert set(match["evidence"]) == {"field", "terms", "tier"}
+        assert set(match["evidence"]) == {"field", "terms", "tier", "score", "components"}
     assert "truncated" not in payload
 
 
@@ -182,11 +183,13 @@ def test_search_artifacts_metadata_match_omits_snippet_fields():
     assert [m["id"] for m in payload["matches"]] == [REQ]
     # No section/snippet on a metadata match; `evidence` is still additive.
     assert list(payload["matches"][0]) == ["id", "type", "title", "path", "evidence"]
-    assert payload["matches"][0]["evidence"] == {
+    evidence = payload["matches"][0]["evidence"]
+    assert {k: evidence[k] for k in ("field", "terms", "tier")} == {
         "field": "title",
         "terms": ["decoupled"],
         "tier": 1,
     }
+    assert set(evidence) == {"field", "terms", "tier", "score", "components"}
 
 
 def test_search_snippet_match_truncates_as_whole_item():

@@ -156,10 +156,11 @@ def test_search_id_matches_rank_before_title_matches(repo):
 
 
 def test_search_order_is_deterministic(repo):
+    # Order is the deterministic relevance score (ADR-078), not sorted path; the
+    # contract is that identical bytes and query yield the identical order.
     a = find_artifacts(str(repo), "decisions/").matches
     b = find_artifacts(str(repo), "decisions/").matches
     assert [m.path for m in a] == [m.path for m in b]
-    assert [m.path for m in a] == sorted(m.path for m in a)
 
 
 def test_search_empty_repository_valid_no_match(tmp_path):
@@ -498,3 +499,93 @@ def test_unresolved_reference_renders_without_label(repo, capsys):
     out = capsys.readouterr().out
     assert "  - ADR-404\n" in out + "\n"
     assert "ADR-404 —" not in out
+
+
+# --- relevance ranking (ADR-078): BM25 + RRF + bounded graph boost --------------
+
+_RANK_DECISION = (
+    "---\nschema_version: 1\nid: {id}\ntype: decision\n---\n"
+    "# {title}\n\n## Status\n\nAccepted\n\n## Context\n\n{body}\n\n"
+    "## Decision\n\nd\n\n## Consequences\n\nq\n"
+)
+
+
+def _rank_decision(root, name, aid, *, title="Topic", body="x", related=None):
+    text = _RANK_DECISION.format(id=aid, title=title, body=body)
+    if related:
+        text += "## Related Decisions\n\n" + "\n".join(f"- {r}" for r in related) + "\n"
+    (root / f"{name}.md").write_text(text, encoding="utf-8")
+
+
+def test_bm25_ranks_higher_term_frequency_first(tmp_path):
+    # Higher term frequency wins on lexical relevance, even when its path sorts
+    # last — proving order is BM25, not alphabetical (both isolated, so the graph
+    # signal ties).
+    _rank_decision(tmp_path, "z-high", "RAC-AAAAAAAAAAAA", title="One", body="alpha alpha")
+    _rank_decision(tmp_path, "a-low", "RAC-BBBBBBBBBBBB", title="Two", body="alpha gamma")
+    order = [m.path.split("/")[-1] for m in find_artifacts(str(tmp_path), "alpha").matches]
+    assert order[0] == "z-high.md"
+
+
+def test_graph_boost_breaks_lexical_tie(tmp_path):
+    # Two equally-relevant artifacts; the one with an inbound reference ranks
+    # above the isolated one, overriding the path tiebreak (a-isolated sorts
+    # first by path).
+    _rank_decision(tmp_path, "z-popular", "RAC-AAAAAAAAAAAA", title="Topic", body="alpha")
+    _rank_decision(tmp_path, "a-isolated", "RAC-BBBBBBBBBBBB", title="Topic", body="alpha")
+    _rank_decision(
+        tmp_path, "ref", "RAC-CCCCCCCCCCCC", title="Ref", body="zz", related=["RAC-AAAAAAAAAAAA"]
+    )
+    order = [m.path.split("/")[-1] for m in find_artifacts(str(tmp_path), "alpha").matches]
+    assert order.index("z-popular.md") < order.index("a-isolated.md")
+
+
+def test_graph_does_not_override_clear_lexical_winner(tmp_path):
+    # A strong lexical match with no inbound edges beats a weak lexical match
+    # with many — the graph boost is bounded, not dominant (REQ-004).
+    _rank_decision(
+        tmp_path, "strong", "RAC-AAAAAAAAAAAA", title="Alpha Alpha", body="alpha alpha alpha"
+    )
+    _rank_decision(tmp_path, "weak", "RAC-BBBBBBBBBBBB", title="Other", body="alpha")
+    for suffix in ("CCCCCCCCCCCC", "DDDDDDDDDDDD", "EEEEEEEEEEEE", "FFFFFFFFFFFF"):
+        _rank_decision(
+            tmp_path, f"ref-{suffix}", f"RAC-{suffix}", body="zz", related=["RAC-BBBBBBBBBBBB"]
+        )
+    order = [m.path.split("/")[-1] for m in find_artifacts(str(tmp_path), "alpha").matches]
+    assert order[0] == "strong.md"
+
+
+def test_equal_relevance_breaks_by_path(tmp_path):
+    # Identical relevance and zero inbound on both: the documented tiebreak is
+    # sorted path, so order is total and byte-stable.
+    _rank_decision(tmp_path, "b-two", "RAC-AAAAAAAAAAAA", title="Topic", body="alpha")
+    _rank_decision(tmp_path, "a-one", "RAC-BBBBBBBBBBBB", title="Topic", body="alpha")
+    order = [m.path.split("/")[-1] for m in find_artifacts(str(tmp_path), "alpha").matches]
+    assert order == ["a-one.md", "b-two.md"]
+
+
+def test_ranking_preserves_and_semantics(tmp_path):
+    # Ranking only reorders the matched set; AND matching is unchanged.
+    _rank_decision(tmp_path, "both", "RAC-AAAAAAAAAAAA", title="Alpha", body="beta here")
+    _rank_decision(tmp_path, "one", "RAC-BBBBBBBBBBBB", title="Alpha", body="gamma here")
+    names = {m.path.split("/")[-1] for m in find_artifacts(str(tmp_path), "alpha beta").matches}
+    assert names == {"both.md"}
+
+
+def test_evidence_carries_score_components(tmp_path):
+    # Explainability is additive: evidence keeps {field, terms, tier} and gains
+    # the fused score and its per-signal components (ADR-007).
+    _rank_decision(tmp_path, "d", "RAC-AAAAAAAAAAAA", title="Topic", body="alpha")
+    m = find_artifacts(str(tmp_path), "alpha").matches[0]
+    assert set(m.evidence) == {"field", "terms", "tier", "score", "components"}
+    assert set(m.evidence["components"]) == {"bm25", "lexical_rank", "graph_rank", "inbound"}
+    # Default (no --explain) shape omits evidence entirely — byte-stable contract.
+    assert "evidence" not in m.to_dict(include_evidence=False)
+
+
+def test_ranking_is_byte_stable_across_runs(tmp_path):
+    _rank_decision(tmp_path, "one", "RAC-AAAAAAAAAAAA", title="Topic", body="alpha alpha")
+    _rank_decision(tmp_path, "two", "RAC-BBBBBBBBBBBB", title="Topic", body="alpha")
+    a = find_artifacts(str(tmp_path), "alpha").to_dict()
+    b = find_artifacts(str(tmp_path), "alpha").to_dict()
+    assert json.dumps(a) == json.dumps(b)

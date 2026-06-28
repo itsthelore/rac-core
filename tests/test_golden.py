@@ -96,6 +96,8 @@ CASES = [
     ),
     ("find_human", ["find", "markdown", "tests/fixtures/resolve"], 0),
     ("find_json", ["find", "markdown", "tests/fixtures/resolve", "--json"], 0),
+    # Relevance-score components surface under --explain (ADR-078, additive).
+    ("find_explain_json", ["find", "markdown", "tests/fixtures/resolve", "--json", "--explain"], 0),
     ("relationships_resolved_human", ["relationships", "tests/fixtures/resolve"], 0),
     ("migrate_dry_run_human", ["migrate", "metadata", "tests/fixtures/migrate", "--dry-run"], 0),
     (

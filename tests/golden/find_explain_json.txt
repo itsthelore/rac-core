@@ -1,0 +1,50 @@
+{
+  "schema_version": "1",
+  "query": "markdown",
+  "type": null,
+  "match_count": 2,
+  "matches": [
+    {
+      "id": "RAC-01JY4M8X2QZ7",
+      "type": "decision",
+      "title": "Markdown Is the Canonical Source Format",
+      "path": "tests/fixtures/resolve/markdown-first.md",
+      "evidence": {
+        "field": "id",
+        "terms": [
+          "markdown"
+        ],
+        "tier": 0,
+        "score": 0.024458,
+        "components": {
+          "bm25": 0.160562,
+          "lexical_rank": 1,
+          "graph_rank": 2,
+          "inbound": 0
+        }
+      }
+    },
+    {
+      "id": "v0-canonical-format",
+      "type": "roadmap",
+      "title": "Canonical Format Roadmap",
+      "path": "tests/fixtures/resolve/v0-canonical-format.md",
+      "section": "Initiatives",
+      "snippet": "Adopt Markdown everywhere.",
+      "evidence": {
+        "field": "body",
+        "terms": [
+          "markdown"
+        ],
+        "tier": 4,
+        "score": 0.024326,
+        "components": {
+          "bm25": 0.105266,
+          "lexical_rank": 2,
+          "graph_rank": 1,
+          "inbound": 1
+        }
+      }
+    }
+  ]
+}
