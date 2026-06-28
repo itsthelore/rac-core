@@ -1227,21 +1227,31 @@ rac resolve adr-015 rac/ --json
 
 ## find
 
-Search artifacts by ID, title, filename, or path — a deterministic,
-case-insensitive substring match (no ranking heuristics). Results are ordered
-by match field (ID, then title, then filename/path) with sorted path as the
-tiebreak. An empty result is a valid outcome, not an error.
+Search artifacts by ID, title, filename, path, heading, or body — deterministic,
+case-insensitive token-boundary matching (ADR-037); a multi-term query requires
+every term to match somewhere. Results are ordered by a **deterministic relevance
+score** (ADR-078): a field-weighted BM25 lexical score and a bounded
+inbound-reference graph boost, fused with Reciprocal Rank Fusion, with sorted
+path as the tiebreak. No embeddings or semantic scoring — identical bytes and
+query yield a byte-identical order. An empty result is a valid outcome, not an
+error.
 
 - **Input:** `rac find <query> [directory]` — directory defaults to the
   current directory.
 - **Options:** `--type TYPE` (only match one artifact type) · `--json` ·
-  `--top-level` · `--recursive`
+  `--explain` · `--top-level` · `--recursive`
 - **Exit codes:** `0` search completed (matches or none) · `2` not a directory
+
+`--explain` adds, per match, the matched field/terms/tier plus the relevance
+score and its components (`bm25`, `lexical_rank`, `graph_rank`, `inbound`), so a
+caller can see why one result outranks another. It is additive: the default
+output (without `--explain`) is unchanged, and `schema_version` stays `1`.
 
 ```bash
 rac find markdown rac/
 rac find explorer rac/ --type decision
 rac find "canonical format" rac/ --json
+rac find markdown rac/ --explain        # show the relevance-score breakdown
 ```
 
 ```json
