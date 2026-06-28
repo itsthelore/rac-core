@@ -76,11 +76,14 @@ def test_unknown_for_empty():
 
 
 def test_dogfood_repo_artifacts():
-    # RAC against RAC: an ADR is a Decision; a roadmap spec is a Requirement.
+    # RAC against RAC: an ADR is a Decision, a roadmap spec is a Roadmap,
+    # and a product capability is a Requirement.
     adr = REPO_ROOT / "rac/decisions/adr-010-documents-are-not-artifacts.md"
     roadmap = REPO_ROOT / "rac/roadmaps/v0.4.x-intelligence/v0.4-inspect.md"
+    requirement = REPO_ROOT / "rac/requirements/rac-growth-agent-skill.md"
     assert inspect_file(str(adr)).type == "decision"
-    assert inspect_file(str(roadmap)).type == "requirement"
+    assert inspect_file(str(roadmap)).type == "roadmap"
+    assert inspect_file(str(requirement)).type == "requirement"
 
 
 # --- synonyms ---------------------------------------------------------------
