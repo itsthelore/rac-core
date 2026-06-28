@@ -90,6 +90,10 @@ traceability work from real corpus usage.
 - growth-demo-gif
 - growth-essay-mapping
 
+## Related Roadmaps
+
+- relationship-vocabulary
+
 ## Related Tickets
 
 - itsthelore/rac-core#230
