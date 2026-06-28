@@ -996,6 +996,21 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
     return relationships
 
 
+def inbound_counts_from_corpus(entries: list[CorpusEntry]) -> dict[str, int]:
+    """``{artifact path -> count of resolved edges that point at it}``.
+
+    The canonical inbound-degree signal: resolved, unique, non-self edges only
+    (the same definition ``rac doctor``'s orphan/hub pass and the search graph
+    boost both consume, so they cannot drift). Artifacts with no inbound edge are
+    absent (count 0).
+    """
+    counts: dict[str, int] = {}
+    for rel in relationships_from_corpus(entries):
+        if rel.resolved_path is not None:
+            counts[rel.resolved_path] = counts.get(rel.resolved_path, 0) + 1
+    return counts
+
+
 # --- 1-hop neighborhood (get_related) ----------------------------------------
 #
 # The references an artifact declares (outgoing) and the artifacts whose

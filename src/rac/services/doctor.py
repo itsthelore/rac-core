@@ -42,6 +42,7 @@ from rac.services.relationships import (
     ISSUE_RELATIONSHIP_CYCLE,
     RELATIONSHIP_SEVERITY,
     RelationshipIssue,
+    inbound_counts_from_corpus,
     relationships_from_corpus,
     validate_relationships,
 )
@@ -265,15 +266,16 @@ def _degree_findings(entries: list[CorpusEntry], hub_threshold: int) -> list[Doc
     a known artifact that is never a resolved target — so it cannot drift.
     """
     known_paths = {str(e.path) for e in entries if spec_for(e.artifact_type) is not None}
-    inbound: dict[str, int] = {p: 0 for p in known_paths}
+    # Inbound is the shared canonical signal (also the search graph boost, ADR-078)
+    # so the orphan count cannot drift from it; outbound is doctor's own one pass.
+    counts = inbound_counts_from_corpus(entries)
+    inbound: dict[str, int] = {p: counts.get(p, 0) for p in known_paths}
     outbound: dict[str, int] = {p: 0 for p in known_paths}
     for rel in relationships_from_corpus(entries):
         if rel.resolved_path is None:  # only resolved (unique, non-self) edges
             continue
         if rel.source_path in outbound:
             outbound[rel.source_path] += 1
-        if rel.resolved_path in inbound:
-            inbound[rel.resolved_path] += 1
 
     findings: list[DoctorFinding] = []
     for path in known_paths:
