@@ -293,3 +293,23 @@ def test_cold_start_three_command_path(tmp_path, monkeypatch):
     # The scaffold is structurally valid as written (the TODO placeholders are
     # content, not structure); editing is for meaning, not to pass validate.
     assert main(["validate", "rac/requirements/login-flow.md"]) == 0
+
+
+def test_cold_start_machine_time_within_budget(tmp_path, monkeypatch):
+    # REQ-006: RAC's own cold-start commands are sub-second in practice (~0.4s);
+    # this guards against a gross machine-time regression in the part RAC
+    # controls — not pip/venv, which are environment costs reported, not gated.
+    # The ceiling is generous so the check never flakes on a loaded CI runner
+    # while still catching a catastrophic slowdown (e.g. an accidental network
+    # call on the cold-start path). The sub-second figure itself is evidenced by
+    # the recorded measurement, not asserted here.
+    import time
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    start = time.perf_counter()
+    assert main(["quickstart"]) == 0
+    assert main(["validate", "rac/requirements/first-requirement.md"]) == 0
+    elapsed = time.perf_counter() - start
+    assert elapsed < 5.0, f"RAC cold-start commands took {elapsed:.2f}s; expected sub-second"
