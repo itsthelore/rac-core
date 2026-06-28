@@ -16,6 +16,14 @@ Architecture
 
 ## Context
 
+> **Topology superseded by ADR-092.** The multi-repo, one-repo-per-component
+> strategy recorded here (a standalone `decisiongrounding`, a single
+> `rac-actions`) is replaced by ADR-092's *one repo per concern, subdir per
+> member* model under uniform `rac-*` naming — `rac-ci` (CI delivery),
+> `rac-connectors`, `rac-sdk`, `rac-benchmarks`, `rac-editors`. ADR-092 governs
+> where the two differ; this ADR remains the record of the first topology.
+> Execution is re-planned in the `v0.31.x-repo-topology` series.
+
 `requirements-as-code` has moved from a personal GitHub account
 (`tcballard`) into the `itsthelore` organisation. The repository is a
 monorepo for **Lore** (the product) whose engine is **RAC** — the
@@ -178,6 +186,7 @@ Lift the web viewer in the same pass.
 - adr-039
 - adr-058
 - adr-062
+- adr-092
 
 ## Related Requirements
 

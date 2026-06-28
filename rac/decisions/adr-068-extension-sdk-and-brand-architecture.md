@@ -16,6 +16,15 @@ Architecture
 
 ## Context
 
+> **Topology and naming superseded by ADR-092.** The `lore-*` (install) /
+> `rac-*` (engine) prefix split and the per-client / per-action repositories
+> recorded here are replaced by ADR-092's *one repo per concern, subdir per
+> member* model with uniform `rac-*` naming — the brand "Lore" lives at the org
+> and the marketplace listings, not in repository slugs. ADR-068's
+> non-topology decisions still hold: the single shared-VSIX client surface, and
+> the Python SDK staying inside `rac-core` (ADR-062). ADR-092 governs where the
+> two differ; execution is re-planned in the `v0.31.x-repo-topology` series.
+
 ADR-064 settled the first repository topology for the `itsthelore`
 organisation: extract `decisiongrounding` and the GitHub Actions, keep the
 engine, its shipped resources, the dogfood corpus, and `examples/` in
@@ -213,6 +222,7 @@ Lift the Python SDK out of the engine package into a `rac-sdk-py` repo.
 - adr-058
 - adr-062
 - adr-063
+- adr-092
 
 ## Related Roadmaps
 

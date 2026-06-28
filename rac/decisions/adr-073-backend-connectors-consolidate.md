@@ -7,6 +7,14 @@ type: decision
 
 ## Context
 
+> **Renamed and generalised by ADR-092.** `lore-connectors` is now
+> `rac-connectors`, and ADR-092 broadens this one-repo consolidation to cover
+> inbound (`rac ingest`) and outbound (`rac export`) integrations and provider
+> suites alike — Atlassian is a subdir, not its own repo. The decision below —
+> connectors are export-contract consumers, consolidated, never one repo per
+> provider — is unchanged; it is the pattern ADR-092 generalises across the
+> `rac-*` family. Execution is planned in the `v0.31.x-repo-topology` series.
+
 The export-to-RAG work (the umbrella roadmap `corpus-export-to-rag-backends`, the
 interplay design `lore-supermemory-interplay`, and the wire-shape design
 `corpus-export-shape-contract`) introduces *connectors* that push the corpus into
@@ -115,6 +123,7 @@ real code. `lore-connectors` is the home for that; recipes cover the rest.
 - adr-064
 - adr-066
 - adr-068
+- adr-092
 
 ## Related Designs
 
