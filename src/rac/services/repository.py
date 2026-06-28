@@ -73,6 +73,10 @@ class Artifact:
     # lets the repository model serve body-tier `rac find` searches through the
     # shared resolver seam without a second walk. Not part of any JSON contract.
     search_sections: tuple[SearchSection, ...] = ()
+    # Inbound resolved-edge count, the graph signal the relevance ranker fuses
+    # (ADR-078); carried so a repository-model search ranks like every other
+    # surface. Not part of any JSON contract.
+    inbound_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -236,6 +240,7 @@ def repository_from_corpus(
             status=status_by_path[entry.path],
             missing_recommended=missing_by_path.get(entry.path, ()),
             search_sections=tuple(entry.search_sections),
+            inbound_count=entry.inbound_count,
         )
         for entry in index.artifacts
     ]
