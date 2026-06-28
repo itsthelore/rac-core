@@ -378,6 +378,56 @@ so it is safe in CI; it needs git history and is silent outside a git repository
 or on an empty corpus. The framing is capture cadence, not work tracking
 (ADR-017).
 
+## doctor
+
+One front door for **corpus health**. `rac doctor` runs validation and
+relationship-integrity checks in a single pass and adds the diagnostics no other
+command provides, returning one verdict with a paste-ready fix per finding. It is
+deterministic and offline (no AI, no network) and never edits content — every
+finding is a report or a suggestion you act on (ADR-065).
+
+- **Input:** `rac doctor <directory>` — scanned recursively for `*.md`.
+- **Options:** `--json` · `--hub-threshold N` (default 20) · `--top-level` ·
+  `--recursive`
+- **Exit codes:** `0` no errors (warnings are advisory and do not fail) · `1` a
+  structural-validation or relationship-integrity **error** · `2` not a directory
+
+```bash
+rac doctor rac/
+rac doctor rac/ --json
+```
+
+Finding codes (the `error`-severity ones set the exit code; `warning`-severity
+ones are advisory and exit `0`):
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `invalid-artifact` | error | structural validation failed (see `rac validate`) |
+| `relationship-*` | error / warning | relationship-integrity issues (see `rac relationships --validate`) |
+| `orphaned-artifact` | warning | nothing references this artifact |
+| `high-fan-out-hub` | warning | more resolved edges than `--hub-threshold` |
+| `injection-style-content` | warning | instruction-like content flagged for review |
+| `unlinked-reference` | warning | the body names another artifact with no declared edge |
+
+### unlinked-reference
+
+An artifact's body often names another artifact in prose — an ADR id such as
+`adr-074`, or a filename stem — without a matching `## Related` edge. The link is
+real and intended; the declared graph just does not carry it. `unlinked-reference`
+surfaces each such mention as an advisory suggestion with a paste-ready line, so
+the validated graph gets as complete as the prose already implies (ADR-082).
+
+It **suggests, never applies** (ADR-082): the detector writes no edge — promotion
+stays a reviewed human edit (ADR-074, ADR-065), so it never changes the
+`rac validate` / `rac relationships --validate` contract and always exits `0`.
+Matching is deterministic and offline (ADR-002, ADR-066): a mention is a body
+token that resolves — through the same resolver validation uses — to another
+artifact by **canonical id, `<letters>-<digits>` filename ref, or declared
+alias**. The `## Related` sections themselves, fenced code blocks, and
+self-references are excluded; title and free-text matching are out of scope. To
+promote a suggestion, add its line (for example `- adr-074`) under the named
+`## Related <Type>` section.
+
 ## coverage
 
 Report typed **traceability coverage gaps** over the corpus relationship graph —
