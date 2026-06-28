@@ -22,6 +22,7 @@ snippet fields (the matched heading and the matching line, as stored).
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -56,6 +57,8 @@ class SearchableArtifact(Protocol):
     def aliases(self) -> Sequence[str]: ...
     @property
     def search_sections(self) -> Sequence[SearchSection]: ...
+    @property
+    def inbound_count(self) -> int: ...
 
 
 # Match-field priority for search ordering (lower ranks first); the ladder
@@ -272,6 +275,33 @@ def _evidence(match: _Match) -> dict:
     return {"field": _RANK_NAMES[match.rank], "terms": list(match.terms), "tier": match.rank}
 
 
+def _score_evidence(
+    match: _Match,
+    *,
+    fused: float,
+    bm25: float,
+    lexical_rank: int,
+    graph_rank: int,
+    inbound: int,
+) -> dict:
+    """The match evidence plus the additive relevance-score components (ADR-078).
+
+    Extends ``{field, terms, tier}`` with the fused score and its per-signal
+    contributions, so ``--explain`` and the JSON show why one hit outranks
+    another. ``schema_version`` is unchanged; the existing keys are untouched
+    (ADR-007).
+    """
+    evidence = _evidence(match)
+    evidence["score"] = round(fused, 6)
+    evidence["components"] = {
+        "bm25": round(bm25, 6),
+        "lexical_rank": lexical_rank,
+        "graph_rank": graph_rank,
+        "inbound": inbound,
+    }
+    return evidence
+
+
 def _id_tokens(entry: SearchableArtifact) -> list[str]:
     tokens: list[str] = []
     for alias in entry.aliases:
@@ -416,6 +446,128 @@ def find_decisions(directory: str, topic: str, recursive: bool = True) -> Search
     return result
 
 
+# --- Deterministic relevance ranking (ADR-078): BM25 + RRF + graph boost -----
+#
+# Ordering replaces the old "best tier, then path" sort with a fused relevance
+# score. Two deterministic signals — a field-weighted BM25 lexical score and a
+# bounded graph boost (inbound resolved-edge count) — are combined with
+# Reciprocal Rank Fusion. No embeddings, no semantic scoring (ADR-038, ADR-066);
+# the matched set and the {field, terms, tier} evidence are unchanged, and the
+# score components are additive under `--explain` (ADR-007).
+
+_RRF_K = 60  # the conventional RRF constant, the one recorded tunable (ADR-078).
+# The graph signal is bounded below lexical relevance (REQ-004: a connected
+# artifact ranks higher only *at equal lexical relevance*), so its fused
+# contribution is weighted down — it breaks near-ties, never overrides a clear
+# lexical winner. This is the design's "capped, not dominant" graph boost.
+_GRAPH_WEIGHT = 0.5
+_BM25_K1 = 1.2  # term-frequency saturation.
+_BM25_B = 0.75  # field-length normalisation strength.
+# Field boosts mirror the old tier order (id/title heaviest, body lightest),
+# turning the hard tier cutoff into a graded BM25F contribution.
+_FIELD_BOOSTS: dict[str, float] = {
+    "id": 4.0,
+    "title": 3.0,
+    "path": 2.0,
+    "heading": 1.5,
+    "body": 1.0,
+}
+
+
+def _field_tokens(entry: SearchableArtifact) -> dict[str, list[str]]:
+    """Match tokens per scorable field, using the same tokeniser as matching."""
+    headings: list[str] = []
+    body: list[str] = []
+    for sec in entry.search_sections:
+        headings.extend(tokenize(sec.heading))
+        for line in sec.lines:
+            body.extend(tokenize(line))
+    return {
+        "id": _id_tokens(entry),
+        "title": tokenize(entry.title or ""),
+        "path": tokenize(entry.path),
+        "heading": headings,
+        "body": body,
+    }
+
+
+def _tf(term: str, tokens: Sequence[str]) -> int:
+    """Term frequency under ADR-037 matching (equality or prefix), not substring."""
+    return sum(1 for token in tokens if token == term or token.startswith(term))
+
+
+def _corpus_stats(
+    entries: Sequence[SearchableArtifact], terms: Sequence[str]
+) -> tuple[int, dict[str, int], dict[str, float], dict[str, dict[str, list[str]]]]:
+    """Document count, per-term document frequency, mean field length, field tokens.
+
+    Computed once over the whole corpus so IDF and length normalisation are
+    global (standard BM25), and the per-entry field tokens are cached for reuse
+    by the scorer.
+    """
+    field_tokens_by_path: dict[str, dict[str, list[str]]] = {}
+    length_sums: dict[str, int] = dict.fromkeys(_FIELD_BOOSTS, 0)
+    df: dict[str, int] = dict.fromkeys(terms, 0)
+    n = 0
+    for entry in entries:
+        n += 1
+        fields = _field_tokens(entry)
+        field_tokens_by_path[entry.path] = fields
+        for name in _FIELD_BOOSTS:
+            length_sums[name] += len(fields[name])
+        for term in terms:
+            if any(_tf(term, fields[name]) for name in _FIELD_BOOSTS):
+                df[term] += 1
+    avglen = {name: (length_sums[name] / n if n else 0.0) for name in _FIELD_BOOSTS}
+    return n, df, avglen, field_tokens_by_path
+
+
+def _bm25f(
+    fields: dict[str, list[str]],
+    terms: Sequence[str],
+    n: int,
+    df: dict[str, int],
+    avglen: dict[str, float],
+) -> float:
+    """A field-weighted BM25 score for one artifact over the query terms."""
+    score = 0.0
+    for term in terms:
+        d = df.get(term, 0)
+        if d == 0:
+            continue
+        idf = math.log(1 + (n - d + 0.5) / (d + 0.5))
+        weighted_tf = 0.0
+        for name, boost in _FIELD_BOOSTS.items():
+            tokens = fields.get(name, [])
+            tf = _tf(term, tokens)
+            if tf == 0:
+                continue
+            mean = avglen.get(name, 0.0)
+            denom = 1.0 - _BM25_B + _BM25_B * (len(tokens) / mean) if mean > 0 else 1.0
+            weighted_tf += boost * (tf / denom)
+        if weighted_tf > 0:
+            score += idf * (weighted_tf / (_BM25_K1 + weighted_tf))
+    return score
+
+
+def _competition_ranks(scores: dict[str, float]) -> dict[str, int]:
+    """1-based ranks (higher score → better), ties sharing a rank, by path order.
+
+    Equal scores get the same rank so a signal never leaks path order onto
+    candidates it does not actually distinguish (e.g. equal inbound counts).
+    """
+    ordered = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
+    ranks: dict[str, int] = {}
+    previous: float | None = None
+    rank = 0
+    for position, (path, score) in enumerate(ordered, start=1):
+        if previous is None or score != previous:
+            rank = position
+            previous = score
+        ranks[path] = rank
+    return ranks
+
+
 def search_index(
     entries: Sequence[SearchableArtifact],
     query: str,
@@ -423,26 +575,55 @@ def search_index(
 ) -> SearchResult:
     """Search already-discovered entries with `rac find` semantics (v0.8.1).
 
-    Identical matching and ordering to :func:`find_artifacts`; the seam lets
-    a loaded repository model serve searches without another directory walk.
+    Matching is unchanged (ADR-037/038): a multi-term query requires every term
+    to hit somewhere, and the result carries the same `{field, terms, tier}`
+    evidence. Ordering is the deterministic relevance score (ADR-078): a
+    field-weighted BM25 lexical signal and a bounded inbound-reference graph
+    signal, fused by RRF, tie-broken by sorted path. The seam lets a loaded
+    repository model serve searches without another directory walk.
     """
     terms = tokenize(query)
-    ranked: list[tuple[int, str, SearchableArtifact, _Match]] = []
+    matched: list[tuple[SearchableArtifact, _Match]] = []
     if terms:  # an all-punctuation query tokenizes to nothing: no matches.
         for entry in entries:
             if artifact_type is not None and entry.type != artifact_type:
                 continue
             match = _match_entry(entry, terms)
             if match is not None:
-                ranked.append((match.rank, entry.path, entry, match))
-    ranked.sort(key=lambda r: (r[0], r[1]))
+                matched.append((entry, match))
+    if not matched:
+        return SearchResult(query=query, artifact_type=artifact_type, matches=[])
+
+    # Corpus-wide BM25 statistics (global IDF and mean field length, ADR-078).
+    n, df, avglen, field_tokens_by_path = _corpus_stats(entries, terms)
+    bm25 = {e.path: _bm25f(field_tokens_by_path[e.path], terms, n, df, avglen) for e, _ in matched}
+    inbound = {e.path: float(getattr(e, "inbound_count", 0)) for e, _ in matched}
+    lexical_rank = _competition_ranks(bm25)
+    graph_rank = _competition_ranks(inbound)
+    fused = {
+        path: 1.0 / (_RRF_K + lexical_rank[path]) + _GRAPH_WEIGHT / (_RRF_K + graph_rank[path])
+        for path in bm25
+    }
+
+    # Fused score descending, ties broken by sorted path: total and byte-stable.
+    matched.sort(key=lambda em: (-round(fused[em[0].path], 12), em[0].path))
     return SearchResult(
         query=query,
         artifact_type=artifact_type,
         matches=[
             ResolvedArtifact.from_entry(
-                e, section=m.section, snippet=m.snippet, evidence=_evidence(m)
+                e,
+                section=m.section,
+                snippet=m.snippet,
+                evidence=_score_evidence(
+                    m,
+                    fused=fused[e.path],
+                    bm25=bm25[e.path],
+                    lexical_rank=lexical_rank[e.path],
+                    graph_rank=graph_rank[e.path],
+                    inbound=int(inbound[e.path]),
+                ),
             )
-            for _, _, e, m in ranked
+            for e, m in matched
         ],
     )

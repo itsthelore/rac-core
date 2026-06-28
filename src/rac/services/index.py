@@ -46,6 +46,10 @@ class IndexEntry:
     # serialized: the index JSON contract is unchanged (id/type/title/path/
     # aliases only).
     search_sections: list[SearchSection] = field(default_factory=list)
+    # Count of resolved relationship edges pointing at this artifact (v2026.6,
+    # additive): the deterministic graph signal the relevance ranker fuses
+    # (ADR-078). Not serialized — the index JSON contract is unchanged.
+    inbound_count: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -97,7 +101,14 @@ def index_from_corpus(
 
     Same result as :func:`build_repository_index`; the snapshot lets one walk
     feed several analyses (repository model, future incremental refresh).
+
+    Each entry also carries its inbound resolved-edge count — the graph signal
+    the relevance ranker fuses (ADR-078) — computed once from the same snapshot.
+    The import is deferred to keep the index → relationships dependency one-way.
     """
+    from rac.services.relationships import inbound_counts_from_corpus
+
+    inbound = inbound_counts_from_corpus(entries)
     artifacts: list[IndexEntry] = []
     for entry in entries:
         path, product = entry.path, entry.product
@@ -110,6 +121,7 @@ def index_from_corpus(
                 path=str(path),
                 aliases=artifact_identifiers(product, spec, str(path)),
                 search_sections=product.search_sections,
+                inbound_count=inbound.get(str(path), 0),
             )
         )
     return RepositoryIndex(directory=directory, recursive=recursive, artifacts=artifacts)
