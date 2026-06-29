@@ -84,6 +84,7 @@ GitHub→other-platform work is in the thin wrappers, not the engine.
 - adr-049
 - adr-058
 - adr-090
+- adr-096
 
 ## Related Roadmaps
 

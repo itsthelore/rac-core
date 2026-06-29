@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: c441ea04601aa8f4721362e40e4025b41f6dd750045fa582178c4884b3a98975) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 18448b7e44c1831d497e6985ee48990d7a78cd0753acc8155c8aa136a6a2e7f3) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -68,4 +68,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KW6HY8W1CBK6** — ADR-093: Roadmap Intent Lives in the Corpus; Execution Is Tracked in GitHub Issues _(Process)_
 - **RAC-KW6NQ4Y814N7** — ADR-094: Roadmaps Are Identified by Stable Codename, Not a vX.Y.Z Scope-Fence _(Process)_
 - **RAC-KW8ZTVEQJ366** — ADR-095: rac-connectors Repackage, PyPI Rename, and Outbound Field Rename _(Architecture)_
+- **RAC-KWA4ZD9Q6EPZ** — ADR-096: rac-ci Consolidation — Capability × Platform, Source-Install Dogfood, v1 Tagging _(Architecture)_
 <!-- END RAC MANAGED BLOCK -->
