@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lore Capture</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <h1>Capture a decision</h1>
+
+      <!-- Step 1: brain-dump the intent. -->
+      <section id="capture">
+        <textarea id="intent" rows="5"
+          placeholder="Say what you decided, in your own words — the gist and why."></textarea>
+        <div class="row">
+          <button id="propose" class="primary">Draft it →</button>
+        </div>
+      </section>
+
+      <!-- Gate 1 — fidelity: the author confirms the draft. -->
+      <section id="review" hidden>
+        <p class="hint">
+          Does this capture what you meant? You can edit it. Nothing lands until an
+          <strong>independent maintainer</strong> reviews and merges the pull request.
+        </p>
+        <label>Title <input id="title" type="text" /></label>
+        <div class="bodyfield">
+          <div class="bodyhead">
+            <span class="lbl">Body</span>
+            <div class="seg" role="tablist" aria-label="Body view">
+              <button id="tab-preview" class="seg-btn" role="tab" aria-selected="true">Preview</button>
+              <button id="tab-edit" class="seg-btn" role="tab" aria-selected="false">Edit</button>
+            </div>
+          </div>
+          <!-- Rendered view (default): the drafted markdown as normal text. -->
+          <div id="body-preview" class="rendered"></div>
+          <!-- Raw view: the editable source of truth. -->
+          <textarea id="body" rows="10" hidden></textarea>
+        </div>
+        <div class="row">
+          <button id="back">← Edit intent</button>
+          <button id="publish" class="primary">Looks right — open draft PR</button>
+        </div>
+      </section>
+
+      <p id="result" role="status"></p>
+
+      <!-- Read-only: where this capture will land (repo · branch · mode). -->
+      <footer id="dest" class="dest" hidden>
+        <span class="dest-repo" id="dest-repo"></span>
+        <span class="dest-sep">·</span>
+        <span class="dest-branch" id="dest-branch"></span>
+        <span class="dest-sep">·</span>
+        <span class="dest-mode" id="dest-mode"></span>
+      </footer>
+    </main>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

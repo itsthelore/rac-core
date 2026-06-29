@@ -1,0 +1,18 @@
+{
+  "name": "lore-capture-overlay-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Frontend for the Lore capture overlay (provisional name). Authored scaffold; add a bundler (Vite) before running.",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "dompurify": "^3",
+    "markdown-it": "^14"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

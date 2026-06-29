@@ -1,0 +1,18 @@
+[package]
+name = "lore-capture-core"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+description = "Platform-agnostic capture core for the Lore overlay: draft a typed artifact through a bring-your-own gateway, validate it with rac, and PROPOSE it as a draft pull request (never lands it)."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Real network seams (gateway + GitHub) are only compiled for the desktop app,
+# not for the hermetic core tests, so `cargo test` stays fast and offline.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
+base64 = { version = "0.22", optional = true }
+
+[features]
+default = []
+net = ["dep:reqwest", "dep:base64"]
