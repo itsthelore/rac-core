@@ -72,17 +72,18 @@ History is preserved across the move (the package directory rename is a tracked
 
 ### Negative
 
-- A PyPI registration for `rac-connectors` is required, and the old
-  `lore-connectors` repo/name must be archived with a redirect.
-- The outbound-field rename is a contract break: records already pushed to a
-  backend under `lore_id` would need a re-push, and any downstream reader keyed on
-  `lore_id` updated. Accepted because it lands before broad adoption.
+- `rac-connectors` is a fresh PyPI registration. `lore-connectors` was never
+  published to PyPI, so no transitional shim or PyPI redirect is needed; the old
+  GitHub repository is simply archived.
+- The outbound-field rename is, in principle, a contract change; in practice it
+  ships before the first release, so there are no adopters or already-pushed
+  `lore_id`-keyed records to migrate.
 
 ### Risks
 
-- A backend already holds `lore_id`-keyed records in production. Mitigation: do
-  the rename now, ahead of adoption; if such data exists, re-push and update
-  readers as a one-time migration.
+- The outbound field name is effectively frozen once `rac-connectors` is published
+  and adopted. Mitigation: the `rac_id` rename lands now — before any release — so
+  no migration is ever required.
 
 ## Status
 
