@@ -118,6 +118,49 @@ def test_external_ticket_provider_is_none_when_unset(tmp_path):
     assert edge.provider is None
 
 
+# --- external-target verification edges (ADR-096) ----------------------------
+
+
+def _corpus_with_verified_by(tmp_path, provider: str | None) -> None:
+    """A requirement declaring ## Verified By, with an optional ticketing provider."""
+    config = tmp_path / ".rac"
+    config.mkdir()
+    body = "repository_key: ACME\n"
+    if provider is not None:
+        body += f"ticketing:\n  provider: {provider}\n"
+    (config / "config.yaml").write_text(body, encoding="utf-8")
+    (tmp_path / "req-001.md").write_text(
+        "# Cap\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] r\n\n"
+        "## Verified By\n\n- `tests/cap.spec.ts`\n",
+        encoding="utf-8",
+    )
+
+
+def test_verified_by_edge_is_external_directed_and_invents_no_node(tmp_path):
+    _corpus_with_verified_by(tmp_path, None)
+    graph = build_graph_export(str(tmp_path))
+    edges = [e for e in graph.edges if e.type == "verified_by"]
+    assert len(edges) == 1
+    edge = edges[0]
+    assert edge.target == "`tests/cap.spec.ts`"  # literal reference text
+    assert edge.external is True
+    assert edge.resolved is False
+    assert edge.directed is True  # capability -> verifier (ADR-096)
+    # The external file target is never promoted to a node.
+    assert "`tests/cap.spec.ts`" not in {n.id for n in graph.nodes}
+
+
+def test_verified_by_edge_is_never_tagged_with_the_ticketing_provider(tmp_path):
+    # verified_by is external but its target is a file path, not a ticket — so
+    # even when a ticketing provider is configured it must stay unprovidered
+    # (distinct from related_tickets, ADR-096).
+    _corpus_with_verified_by(tmp_path, "jira")
+    graph = build_graph_export(str(tmp_path))
+    edge = next(e for e in graph.edges if e.type == "verified_by")
+    assert edge.external is True
+    assert edge.provider is None
+
+
 # --- CLI ---------------------------------------------------------------------
 
 

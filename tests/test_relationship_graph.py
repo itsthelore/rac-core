@@ -49,6 +49,7 @@ def test_registry_declares_built_in_edges():
         "related_designs",
         "supersedes",
         "related_tickets",
+        "verified_by",
     }
     supersedes = edge_spec("supersedes")
     assert supersedes is not None
@@ -61,6 +62,15 @@ def test_registry_declares_built_in_edges():
     assert tickets is not None
     assert tickets.external is True
     assert tickets.range == ()
+    assert tickets.external_provider is True  # ticket targets carry the provider
+    # External-target verification edge (ADR-096): external like a ticket, but its
+    # target is a file path with no ticketing provider, and it is directional.
+    verified = edge_spec("verified_by")
+    assert verified is not None
+    assert verified.external is True
+    assert verified.range == ()
+    assert verified.external_provider is False
+    assert verified.directional is True
 
 
 # --- range -------------------------------------------------------------------

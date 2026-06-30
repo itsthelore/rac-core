@@ -90,6 +90,49 @@ def test_external_ticket_reference_is_never_broken(tmp_path):
     assert ISSUE_TARGET_NOT_FOUND not in {i.code for i in report.issues}
 
 
+# --- external-target verification references (ADR-096) ----------------------
+
+_REQUIREMENT = "# {t}\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] r\n"
+
+
+def test_verified_by_reference_is_never_broken(tmp_path):
+    # A ## Verified By entry targets an external test/trace path, so like a
+    # ticket it is exempt from referential integrity — never not-found, never
+    # counted among resolved references (ADR-096).
+    (tmp_path / "req-001.md").write_text(
+        _REQUIREMENT.format(t="Cap") + "\n## Verified By\n\n- `tests/cap.spec.ts`\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    assert report.relationships_checked == 0
+    assert ISSUE_TARGET_NOT_FOUND not in {i.code for i in report.issues}
+
+
+def test_verified_by_on_non_requirement_is_unsupported(tmp_path):
+    # `verified by` is requirement-only (capabilities, ADR-020); a decision
+    # declaring it is an illegal edge (ADR-049 edge-legality).
+    (tmp_path / "adr-001.md").write_text(
+        _DECISION.format(t="A1") + "\n## Verified By\n\n- `tests/x.spec.ts`\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert [i.code for i in report.issues] == [ISSUE_EDGE_UNSUPPORTED]
+    issue = report.issues[0]
+    assert issue.relationship == "verified_by"
+
+
+def test_verified_by_on_requirement_is_supported(tmp_path):
+    # A requirement MAY declare `verified by`; it must not be edge-unsupported.
+    (tmp_path / "req-001.md").write_text(
+        _REQUIREMENT.format(t="Cap") + "\n## Verified By\n\n- `tests/cap.spec.ts`\n",
+        encoding="utf-8",
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    assert ISSUE_EDGE_UNSUPPORTED not in [i.code for i in report.issues]
+
+
 # --- resolved repository (REQ-003 / REQ-005) --------------------------------
 
 

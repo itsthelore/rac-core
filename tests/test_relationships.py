@@ -89,6 +89,20 @@ def test_related_tickets_section_is_extracted():
     assert rels["related_tickets"] == ["PROJ-1234", "owner/repo#7"]
 
 
+# --- external-target verification extraction (ADR-096) ----------------------
+
+
+def test_verified_by_section_is_extracted():
+    spec = spec_for("requirement")
+    assert spec is not None
+    body = (
+        "# Cap\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] r\n\n"
+        "## Verified By\n\n- `tests/cap.spec.ts`\n- `traces/cap.zip`\n"
+    )
+    rels = extract_relationships(parse(body), spec)
+    assert rels["verified_by"] == ["`tests/cap.spec.ts`", "`traces/cap.zip`"]
+
+
 # --- inspect: extraction across all five artifact types (amendment 7) --------
 
 

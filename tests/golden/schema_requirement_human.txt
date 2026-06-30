@@ -42,6 +42,8 @@ Optional Sections:
       Description: Requirement artifacts this artifact references
   - Related Tickets
       Description: External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)
+  - Verified By
+      Description: External tests or traces that verify this capability; targets are file paths, not in-corpus artifacts (ADR-096)
 
 Metadata Fields:
   - Status: Proposed | Accepted | Superseded | Deprecated
