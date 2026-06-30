@@ -50,7 +50,7 @@ RELATED_SECTIONS: tuple[str, ...] = (
 # ticketing provider, ADR-088), never resolved. Kept separate from
 # RELATED_SECTIONS, which is exactly the per-artifact-type vocabulary (one
 # ``related <type>s`` per type).
-EXTERNAL_SECTIONS: tuple[str, ...] = ("related tickets",)
+EXTERNAL_SECTIONS: tuple[str, ...] = ("related tickets", "verified by")
 
 # The full relationship-section vocabulary and its canonical ordering: the per-type
 # ``related *`` sections, then ``supersedes``, then the external-reference sections.

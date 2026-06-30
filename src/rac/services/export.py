@@ -436,7 +436,7 @@ def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
                 directed=kind.directional if kind else False,
                 resolved=rel.resolved_path is not None,
                 external=external,
-                provider=provider if external else None,
+                provider=provider if (kind and kind.external_provider) else None,
             )
         )
     edges.sort(key=lambda edge: (edge.source, edge.type, edge.target))

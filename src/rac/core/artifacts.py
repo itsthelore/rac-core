@@ -97,6 +97,8 @@ RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
     "supersedes": "The artifact this one supersedes",
     "related tickets": "External tickets this artifact traces to; provider set by"
     " .rac/config.yaml ticketing.provider (ADR-087)",
+    "verified by": "External tests or traces that verify this capability; targets"
+    " are file paths, not in-corpus artifacts (ADR-096)",
 }
 
 
@@ -122,6 +124,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related requirements",
             "related tickets",
+            "verified by",
         ),
         # Lifecycle status (ADR-051): optional, validated-if-present. Status stays
         # a knowledge lifecycle (current vs replaced), never work/delivery state.
@@ -140,6 +143,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "related designs",
                 "related requirements",
                 "related tickets",
+                "verified by",
             ),
         },
         guidance={

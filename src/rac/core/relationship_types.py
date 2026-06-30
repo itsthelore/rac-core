@@ -44,6 +44,11 @@ class EdgeSpec:
     # instead (the provider is per-repo config, ADR-088); the graph export marks
     # them external and unresolved.
     external: bool = False
+    # Whether an external edge's target lives in the repository's configured
+    # external *provider* (ticketing, ADR-088), so the graph export tags it with
+    # that provider. ``related_tickets`` sets this; ``verified_by`` (ADR-096) does
+    # not — its targets are test/trace file paths, which have no provider.
+    external_provider: bool = False
 
 
 def _related(target_type: str) -> EdgeSpec:
@@ -79,7 +84,21 @@ REGISTRY: dict[str, EdgeSpec] = {
         # (ADR-088), never resolved. Organisations standardise on one ticketing
         # system, so the system is a repo-config choice rather than a per-provider
         # edge — future external systems reuse this edge, not a sibling one.
-        EdgeSpec(name="related_tickets", range=(), external=True),
+        EdgeSpec(name="related_tickets", range=(), external=True, external_provider=True),
+        # External-target verification edge (ADR-096): a capability (requirement,
+        # ADR-020) points at the external tests/traces that verify it. Like an
+        # external ticket it skips resolution, range, and status checks, but its
+        # target is a file path with no ticketing provider, so it is external
+        # without being provider-tagged. Directional capability→verifier; the
+        # consumer is Proofkeeper's coverage read-model (ADR-074).
+        EdgeSpec(
+            name="verified_by",
+            range=(),
+            external=True,
+            directional=True,
+            symmetric=False,
+            inverse="verifies",
+        ),
     )
 }
 
