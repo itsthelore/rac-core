@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from conftest import fixture_path
 
 from rac import __version__
 from rac.cli import main
+
+REPO_ROOT = Path(__file__).parent.parent
 
 
 @pytest.mark.parametrize(
@@ -84,3 +89,29 @@ def test_diff_json_shape(capsys):
     assert [r["id"] for r in payload["added_requirements"]] == ["REQ-004"]
     assert [r["id"] for r in payload["removed_requirements"]] == ["REQ-003"]
     assert [c["id"] for c in payload["modified_requirements"]] == ["REQ-002"]
+
+
+def test_broken_pipe_exits_quietly():
+    # A downstream consumer closing the pipe early (`rac export … | head`) must
+    # not dump a BrokenPipeError traceback: stderr stays clean, the process
+    # exits non-zero without "Exception ignored" shutdown noise. Runs in a
+    # subprocess because EPIPE only occurs on a real OS pipe.
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "from rac.cli import main; raise SystemExit(main(['export', 'rac', '--json']))",
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert proc.stdout is not None and proc.stderr is not None
+    proc.stdout.read(1024)  # consume a little, like `head`
+    proc.stdout.close()  # then hang up
+    stderr = proc.stderr.read().decode(errors="replace")
+    proc.stderr.close()
+    rc = proc.wait()
+    assert rc == 1
+    assert "Traceback" not in stderr
+    assert "BrokenPipeError" not in stderr

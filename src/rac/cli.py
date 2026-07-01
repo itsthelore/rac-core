@@ -82,6 +82,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -2200,6 +2201,15 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:
         outcome = usage.OUTCOME_OK if exc.code in (0, None) else usage.OUTCOME_ERROR
         raise
+    except BrokenPipeError:
+        # The downstream consumer closed the pipe (e.g. `rac export … | head`):
+        # die quietly instead of dumping a traceback. Pointing stdout's fd at
+        # devnull absorbs the interpreter's exit-time flush of the dead pipe,
+        # which would otherwise print "Exception ignored" noise to stderr.
+        outcome = usage.OUTCOME_ERROR
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        return 1
     finally:
         usage.record_command(command, outcome, int((time.monotonic() - start) * 1000))
 
