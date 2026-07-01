@@ -44,9 +44,15 @@ if TYPE_CHECKING:
 
 
 def render_validation_json(product: Product, issues: list[Issue]) -> str:
+    """JSON single-file `rac validate` output (stable contract, ADR-007).
+
+    Carries the same ``schema_version`` stamp as the directory and stdin-corpus
+    forms, so every `rac validate --json` shape is version-gated.
+    """
     errors = [asdict(i) for i in issues if i.severity == "error"]
     warnings = [asdict(i) for i in issues if i.severity == "warning"]
     payload = {
+        "schema_version": "1",
         "file": product.source_path or None,
         "valid": not errors,
         "errors": errors,

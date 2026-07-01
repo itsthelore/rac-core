@@ -294,6 +294,19 @@ def test_cli_single_file_behavior_unchanged(capsys):
     assert rc == 1
 
 
+def test_cli_single_file_json_contract(capsys):
+    # The single-file JSON shape carries the same schema_version stamp as the
+    # directory and stdin-corpus forms (ADR-007), so every `--json` shape is
+    # version-gated.
+    rc = main(["validate", fixture_path("valid", "feature.md"), "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "1"
+    assert payload["file"] == fixture_path("valid", "feature.md")
+    assert payload["valid"] is True
+    assert payload["errors"] == []
+
+
 # --- validate_product (v0.20.0: single-file composition behind the gate) ------
 
 

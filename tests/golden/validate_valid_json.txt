@@ -1,4 +1,5 @@
 {
+  "schema_version": "1",
   "file": "tests/fixtures/valid/feature.md",
   "valid": true,
   "errors": [],
