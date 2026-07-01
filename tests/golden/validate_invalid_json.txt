@@ -1,4 +1,5 @@
 {
+  "schema_version": "1",
   "file": "tests/fixtures/invalid/duplicate_ids.md",
   "valid": false,
   "errors": [
