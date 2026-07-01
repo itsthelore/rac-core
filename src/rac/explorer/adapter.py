@@ -821,7 +821,10 @@ class ExplorerAdapter:
     def write_import(self, preview: ImportPreview) -> str:
         """Write a confirmed import; never overwrites (Initiative 4)."""
         path = Path(preview.target)
-        if path.exists():
+        # is_symlink() catches a dangling symlink, which exists() reports as
+        # absent — writing there would follow the link and create a file at
+        # its target, outside the path the user confirmed.
+        if path.is_symlink() or path.exists():
             return f"Refusing to overwrite existing file: {preview.target}"
         try:
             if path.parent != Path():

@@ -462,6 +462,23 @@ def test_write_import_writes_and_refuses_overwrite(tmp_path):
     assert "Refusing to overwrite" in again
 
 
+def test_write_import_refuses_dangling_symlink_target(tmp_path):
+    from rac.explorer.state import ImportPreview
+
+    # A dangling symlink reports exists() False, but writing through it would
+    # follow the link and create a file at its target — outside the path the
+    # user confirmed. The write must be refused and the link target untouched.
+    elsewhere = tmp_path / "elsewhere.md"
+    target = tmp_path / "link.md"
+    target.symlink_to(elsewhere)
+    preview = ImportPreview(
+        source="src.md", converter="markdown", target=str(target), markdown="# Hi\n"
+    )
+    message = ExplorerAdapter(str(tmp_path)).write_import(preview)
+    assert "Refusing to overwrite" in message
+    assert not elsewhere.exists()
+
+
 def test_export_recommendations_renders_markdown_without_writing():
     from rac.explorer.state import ImportPreview
 
