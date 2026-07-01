@@ -14,6 +14,7 @@ timestamps are emitted, so the same corpus state yields a byte-identical documen
 from __future__ import annotations
 
 import json
+from urllib.parse import quote
 
 from rac import __version__
 from rac.services.gate import GateReport
@@ -43,7 +44,11 @@ _LEVEL = {"error": "error", "warning": "warning", "info": "note"}
 
 
 def _result(rule_id: str, level: str, message: str, uri: str, line: int | None) -> dict:
-    location: dict = {"physicalLocation": {"artifactLocation": {"uri": uri}}}
+    # SARIF artifactLocation.uri is an RFC 3986 URI, not a raw path: a filename
+    # with a space or a non-ASCII character must be percent-encoded or Code
+    # Scanning may reject or mislocate the finding. Path separators stay literal.
+    encoded = quote(uri, safe="/")
+    location: dict = {"physicalLocation": {"artifactLocation": {"uri": encoded}}}
     if line is not None:
         location["physicalLocation"]["region"] = {"startLine": line}
     return {

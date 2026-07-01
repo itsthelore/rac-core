@@ -88,6 +88,22 @@ def test_sarif_deterministic(tmp_path):
     assert render_validate_sarif(result) == render_validate_sarif(result)
 
 
+def test_sarif_uris_are_percent_encoded(tmp_path):
+    # artifactLocation.uri is an RFC 3986 URI, not a raw path: a filename with
+    # a space (or non-ASCII) must be percent-encoded or Code Scanning may
+    # reject or mislocate the finding. Path separators stay literal.
+    (tmp_path / "bad decision.md").write_text(BAD_DECISION, encoding="utf-8")
+    doc = json.loads(render_validate_sarif(validate_directory(str(tmp_path))))
+    uris = {
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        for r in doc["runs"][0]["results"]
+    }
+    assert uris, "expected at least one finding for the invalid decision"
+    assert all(" " not in uri for uri in uris)
+    assert any(uri.endswith("bad%20decision.md") for uri in uris)
+    assert all("/" in uri for uri in uris)  # separators are not encoded
+
+
 def test_sarif_omits_suppressed_findings(tmp_path):
     (tmp_path / ".rac").mkdir()
     (tmp_path / ".rac" / "config.yaml").write_text(
