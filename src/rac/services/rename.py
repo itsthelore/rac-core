@@ -251,8 +251,11 @@ def _replace_token(text: str, old_ref: str, new_ref: str) -> str | None:
     start, so only a reference that *names* ``old_ref`` is rewritten. Returns the
     rewritten text, or None when ``text`` does not begin with the token.
     """
+    # Fold exactly the prefix that is sliced off below: casefold can change a
+    # string's length (ß → ss), so folding all of ``text`` and slicing by
+    # ``len(old_ref)`` could split mid-token and corrupt the reference.
     folded_old = old_ref.casefold()
-    if not text.casefold().startswith(folded_old):
+    if text[: len(old_ref)].casefold() != folded_old:
         return None
     rest = text[len(old_ref) :]
     # The token must be whole: the next character (if any) must not be an

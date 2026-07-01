@@ -25,6 +25,7 @@ from rac.services.rename import (
     REASON_OLD_AMBIGUOUS,
     REASON_OLD_FILENAME_ONLY,
     REASON_OLD_NOT_FOUND,
+    _replace_token,
     apply_rename,
     compute_rename,
 )
@@ -287,3 +288,14 @@ def test_cli_not_a_directory_is_usage_error(tmp_path: Path):
     with pytest.raises(SystemExit) as exc:
         main(["rename", "ADR-001", "ADR-099", str(target)])
     assert exc.value.code == 2
+
+
+def test_replace_token_folds_only_the_sliced_prefix():
+    # casefold can change a string's length (ß → ss). Folding all of the text
+    # but slicing by the unfolded token length would split mid-token: here the
+    # old behavior matched "ß" against "ss", sliced two characters ("ß "), and
+    # returned a corrupted "REQ-002(kept)". The prefix that is compared must be
+    # exactly the prefix that is sliced.
+    assert _replace_token("ß (kept)", "ss", "REQ-002") is None
+    # Case-insensitive ASCII matching is unchanged.
+    assert _replace_token("adr-001 (kept)", "ADR-001", "ADR-100") == "ADR-100 (kept)"
