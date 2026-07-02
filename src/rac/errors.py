@@ -1,21 +1,22 @@
-"""Exception hierarchy for the RAC Python SDK.
+"""The shared exception root for the RAC Python SDK.
 
-Every error raised by a public RAC service derives from :class:`RACError`, so an
-SDK consumer can catch the whole family with a single ``except rac.RACError``
-without importing each service's exception module (ADR-062). The concrete
-subclasses keep their own names and messages and live next to the service that
-raises them; this module only owns the shared root.
+RAC exposes many services, each with its own failure conditions. Rather than
+make a consumer import and enumerate every service's exception type, every public
+failure inherits from a single root, :class:`RACError`, so a caller can guard a
+whole workflow with one ``except rac.RACError`` (ADR-062). The concrete
+exceptions live beside the service that raises them; this module owns only the
+root they share.
 """
 
 from __future__ import annotations
 
 
 class RACError(Exception):
-    """Base class for every error a RAC service raises.
+    """Root of the RAC exception hierarchy.
 
-    Catch this to handle any RAC failure generically; catch a concrete subclass
-    (for example :class:`rac.services.create.OutputPathExists`) to handle a
-    specific condition. The hierarchy is part of the SDK's public surface, so new
-    service errors are expected to inherit from it rather than from
-    :class:`Exception` directly.
+    Every error a public RAC service raises derives from this class, so a caller
+    can treat any RAC failure uniformly, or narrow to a concrete subclass (such as
+    :class:`rac.services.create.OutputPathExists`) for a single condition. New
+    service errors inherit from here rather than from :class:`Exception` directly,
+    which keeps them part of the SDK's advertised surface.
     """

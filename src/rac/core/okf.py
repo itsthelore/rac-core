@@ -1,17 +1,21 @@
 """OKF v0.1 carrier-profile constants (ADR-048).
 
-The RAC ``type`` → OKF ``type`` mapping and OKF's reserved filenames live here,
-in core, so the OKF bundle export (``output/okf.py``) and the write-time OKF
-conformance check (``services/okf_conformance.py``) share one definition
-(ADR-002: a single deterministic source of truth). ADR-048 makes OKF an
-informative carrier profile; these constants are the checkable part of it.
+OKF (Open Knowledge Format) is an *informative* carrier profile for a RAC
+corpus. The two mechanically checkable facts about it live here in core so the
+bundle exporter (:mod:`rac.output.okf`) and the write-time conformance gate
+(:mod:`rac.services.okf_conformance`) read one deterministic definition rather
+than each restating it (ADR-002):
+
+* how each RAC ``type`` names its OKF counterpart, and
+* which filenames OKF generates and therefore reserves.
 """
 
 from __future__ import annotations
 
-# RAC ``type`` → OKF ``type`` (ADR-048; docs/okf-profile.md is the normative
-# statement). The five enumerated RAC types map one-to-one. A registered RAC type
-# absent here is an OKF conformance error, never a silent drop from the bundle.
+# RAC ``type`` -> OKF ``type`` label (docs/okf-profile.md is the normative
+# statement). Every registered RAC type must have an entry: a type missing here
+# would be dropped silently from an exported bundle, so conformance treats the
+# omission as an error rather than accepting it. Order follows the profile doc.
 OKF_TYPE = {
     "requirement": "Requirement",
     "decision": "ADR",
@@ -20,9 +24,9 @@ OKF_TYPE = {
     "prompt": "Prompt",
 }
 
-# OKF reserves these filenames for generated entry points: ``index.md`` for
-# progressive disclosure and ``log.md`` for chronological history. A *typed
-# artifact* at one of these paths would collide with the generated bundle file
-# (a conformance error); an *untyped* document at index.md/log.md is a legitimate
-# reserved entry point and is left alone (ADR-010).
+# Filenames OKF generates for a bundle -- ``index.md`` (progressive-disclosure
+# entry point) and ``log.md`` (chronological history). A *typed* artifact placed
+# at one of these paths collides with the generated file and is flagged; an
+# *untyped* document there is a legitimate hand-authored entry point (ADR-010)
+# and is left untouched.
 RESERVED_FILENAMES = ("index.md", "log.md")

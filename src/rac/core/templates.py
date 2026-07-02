@@ -1,16 +1,18 @@
-"""Canonical artifact template registry — `rac new` / `rac templates` (v0.7.10).
+"""Canonical artifact template registry -- `rac new` / `rac templates` (v0.7.10).
 
-The supported template set is derived from :data:`rac.core.artifacts.ARTIFACT_SPECS`
-— the same registry that drives classification and validation — so the CLI never
-maintains its own list (REQ: one canonical registry). Template content ships as
-package resources under :mod:`rac.templates` and is loaded with
-``importlib.resources``, so generation works from an installed wheel without the
-dogfood repository (ADR-021) and without AI or network access (ADR-002).
+The supported template set is the artifact-spec set: it is derived from
+:data:`rac.core.artifacts.ARTIFACT_SPECS`, the same registry that drives
+classification and validation, so the CLI never keeps a second list to drift out
+of sync. Template bodies ship as package resources under :mod:`rac.templates`
+and load through ``importlib.resources``, so generation works from an installed
+wheel with no dogfood repository (ADR-021) and no AI or network (ADR-002).
 
-Two failure modes are deliberately distinct: an *unsupported artifact type* is a
-caller error (:class:`TemplateNotFound` → CLI usage exit), while a *registered
-type whose packaged resource is missing* is a broken installation
-(:class:`TemplateResourceMissing` → operational error).
+Two failure modes stay deliberately distinct:
+
+* an *unsupported artifact type* is a caller mistake -- :class:`TemplateNotFound`,
+  which the CLI maps to a usage exit; while
+* a *registered type whose packaged resource is missing* is a broken install --
+  :class:`TemplateResourceMissing`, an operational error.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from rac.errors import RACError
 class TemplateNotFound(RACError):
     """The requested artifact type has no canonical template (usage error)."""
 
-    def __init__(self, artifact_type: str):
+    def __init__(self, artifact_type: str) -> None:
         self.artifact_type = artifact_type
         super().__init__(
             f"unsupported artifact type: {artifact_type} "
@@ -35,7 +37,7 @@ class TemplateNotFound(RACError):
 class TemplateResourceMissing(RACError):
     """A registered type's packaged template is absent (operational error)."""
 
-    def __init__(self, artifact_type: str):
+    def __init__(self, artifact_type: str) -> None:
         self.artifact_type = artifact_type
         super().__init__(
             f"packaged template missing for artifact type: {artifact_type}; "
@@ -44,15 +46,16 @@ class TemplateResourceMissing(RACError):
 
 
 def available_templates() -> list[str]:
-    """Canonical template names, in spec registry order."""
+    """Canonical template names, in spec-registry order."""
     return [spec.name for spec in ARTIFACT_SPECS]
 
 
 def load_template(artifact_type: str) -> str:
-    """Return the canonical template body for ``artifact_type``.
+    """Return the canonical template body (text) for ``artifact_type``.
 
-    Raises :class:`TemplateNotFound` for unregistered types and
-    :class:`TemplateResourceMissing` when the packaged resource is absent.
+    Raises :class:`TemplateNotFound` for an unregistered type and
+    :class:`TemplateResourceMissing` when the registered type's packaged
+    resource cannot be found.
     """
     if artifact_type not in available_templates():
         raise TemplateNotFound(artifact_type)

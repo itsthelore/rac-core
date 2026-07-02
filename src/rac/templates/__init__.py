@@ -1,8 +1,8 @@
-"""Bundled canonical artifact templates (v0.7.10).
+"""Bundled canonical artifact templates (rac.templates).
 
-One ``<artifact-type>.md`` per supported artifact spec. These files are the
-canonical generation source for ``rac new`` (ADR-021): packaged with the
-distribution and loaded via ``importlib.resources``, never from the dogfood
-repository. ``rac.core.templates`` owns discovery and loading; tests pin each
-file to the spec-derived render so templates cannot drift from validators.
+Each supported artifact spec ships one ``<artifact-type>.md`` under this package
+-- the canonical generation source for ``rac new`` (ADR-021), loaded via
+``importlib.resources`` rather than from the dogfood repository. Discovery and
+loading live in :mod:`rac.core.templates`; a test pins every packaged file to
+the spec-derived render so a template can never drift from its validators.
 """

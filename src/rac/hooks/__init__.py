@@ -1,6 +1,7 @@
-"""Bundled git hook scripts (rac.hooks).
+"""Bundled git-hook scripts (rac.hooks).
 
-Shipped as package resources and installed by ``rac hook install`` via
-importlib.resources, never read from the repository (mirrors rac.skills and
-rac.templates).
+Each bundled hook ships as ``<style>.sh`` under this package, installed by
+``rac hook install`` via ``importlib.resources`` rather than read from the
+repository -- the same distribution pattern as :mod:`rac.skills` and
+:mod:`rac.templates`. Discovery and loading live in :mod:`rac.core.hooks`.
 """

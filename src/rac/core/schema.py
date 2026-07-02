@@ -1,8 +1,19 @@
-"""Schema reference service — expose registered artifact schemas directly.
+"""Public schema reference and starter-template derivation.
 
-`rac schema` answers "what should this artifact look like?" without requiring an
-existing file. It consumes :mod:`rac.core.artifacts` as the single source of truth and
-derives human/JSON/template data from registered :class:`ArtifactSpec` objects.
+``rac schema`` answers "what should this artifact look like?" without needing an
+existing file. This module is the read-only projection of :mod:`rac.core.artifacts`
+that the CLI, the output renderers, and the Explorer adapter consume:
+
+* :class:`SchemaReference` is the public, list-based view of one
+  :class:`~rac.core.artifacts.ArtifactSpec` (tuples become lists; ``to_dict``
+  snake-cases section names for JSON).
+* :class:`TemplateSection` and :func:`template_sections` derive a *structurally
+  valid* starter — required and recommended sections only, each with a
+  placeholder body that passes validation on its own.
+
+The starter bodies here are byte-pinned: they are compared against the packaged
+``rac/templates/*.md`` resources by the template drift guard, so any wording change
+must be regenerated into those files in lockstep.
 """
 
 from __future__ import annotations
@@ -14,7 +25,12 @@ from .artifacts import ARTIFACT_SPECS, ArtifactSpec, spec_for
 
 @dataclass
 class SchemaReference:
-    """Public reference view for one registered artifact schema."""
+    """Public reference view of one registered artifact schema.
+
+    Mirrors an :class:`ArtifactSpec` with lists instead of tuples so consumers can
+    treat it as plain data. ``display`` is carried for human rendering but is
+    deliberately absent from :meth:`to_dict` (the JSON contract exposes ``type``).
+    """
 
     type: str
     display: str
@@ -26,6 +42,7 @@ class SchemaReference:
     metadata: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """JSON-shaped view: section names snake-cased, ``display`` omitted."""
         return {
             "type": self.type,
             "required": [_snake(s) for s in self.required],
@@ -43,7 +60,7 @@ class SchemaReference:
 
 @dataclass
 class TemplateSection:
-    """One Markdown section in a structurally valid starter template."""
+    """One Markdown section of a structurally valid starter template."""
 
     name: str
     body: str
@@ -57,7 +74,7 @@ def available_schemas() -> list[str]:
 
 
 def schema_reference(name: str) -> SchemaReference | None:
-    """Return a public schema reference for ``name``, or None if unknown."""
+    """Return the public schema reference for ``name``, or ``None`` if unknown."""
     spec = spec_for(name)
     if spec is None:
         return None
@@ -65,15 +82,17 @@ def schema_reference(name: str) -> SchemaReference | None:
 
 
 def template_sections(ref: SchemaReference) -> list[TemplateSection]:
-    """Full starter template sections: required first, then recommended.
+    """Starter-template sections: required first, then recommended.
 
-    Optional sections are intentionally omitted from the starter, while remaining
-    visible in the human and JSON schema reference.
+    Optional sections (relationship links) are omitted from the starter while
+    staying visible in the human and JSON schema reference — a fresh artifact
+    declares its own structure before it links out to others.
     """
     return [_template_section(ref, section) for section in ref.required + ref.recommended]
 
 
 def _reference_from_spec(spec: ArtifactSpec) -> SchemaReference:
+    """Copy a spec's tuple/dict data into the list-based public view."""
     return SchemaReference(
         type=spec.name,
         display=spec.display,
@@ -97,7 +116,13 @@ def _template_section(ref: SchemaReference, section: str) -> TemplateSection:
 
 
 def _starter_body(ref: SchemaReference, section: str, metadata_values: list[str]) -> str:
-    """Validation-safe starter body for one section."""
+    """A placeholder body that keeps the emitted template passing validation.
+
+    A constrained field must open on a valid enum value; the requirement's
+    ``requirements`` section must carry a real ``[REQ-NNN]`` line or the artifact
+    fails validation; design phrasings differ enough to warrant their own table.
+    Everything else falls back to the shared free-text TODOs.
+    """
     if metadata_values:
         return _metadata_default(section, metadata_values)
     if ref.type == "requirement" and section == "requirements":
@@ -108,6 +133,7 @@ def _starter_body(ref: SchemaReference, section: str, metadata_values: list[str]
 
 
 def _metadata_default(section: str, values: list[str]) -> str:
+    """Pick the safe default enum value: the live/neutral one when it exists."""
     if section == "status" and "Proposed" in values:
         return "Proposed"
     if section == "category" and "Other" in values:
@@ -116,6 +142,7 @@ def _metadata_default(section: str, values: list[str]) -> str:
 
 
 def _free_text_todo(section: str) -> str:
+    """Shared placeholder prose per section, with a generic fallback."""
     messages = {
         "problem": "TODO: describe the problem being solved and who experiences it.",
         "success metrics": "TODO: describe how success will be measured.",
@@ -144,6 +171,7 @@ def _free_text_todo(section: str) -> str:
 
 
 def _design_free_text_todo(section: str) -> str:
+    """Design-specific placeholder prose, falling back to the shared table."""
     messages = {
         "context": "TODO: describe the design context and why this design exists.",
         "user need": ("TODO: describe who this design is for and what they need to accomplish."),
@@ -164,4 +192,5 @@ def _design_free_text_todo(section: str) -> str:
 
 
 def _snake(section: str) -> str:
+    """Normalized section name -> JSON key: ``"user need"`` -> ``"user_need"``."""
     return section.replace(" ", "_")

@@ -1,9 +1,9 @@
-"""Bundled Claude Code agent skills (v0.10.4).
+"""Bundled Claude Code agent skills (rac.skills).
 
-One ``<skill-name>/SKILL.md`` per bundled skill. These files are the canonical
-installation source for ``rac skill install``: packaged with the distribution
-and loaded via ``importlib.resources`` (the ADR-021 pattern), never from the
-dogfood repository. ``rac.core.skills`` owns discovery and loading; a test pins
-each packaged file byte-for-byte against the repository's dogfood copy under
-``.claude/skills/`` so the two instances cannot drift (REQ-007).
+Each bundled skill ships as ``<skill-name>/SKILL.md`` under this package -- the
+canonical install source for ``rac skill install``, loaded via
+``importlib.resources`` (the ADR-021 pattern) rather than from the dogfood
+repository. Discovery and loading live in :mod:`rac.core.skills`; a test pins
+every packaged file byte-for-byte against the repository's dogfood copy under
+``.claude/skills/`` so the two surfaces cannot drift (REQ-007).
 """

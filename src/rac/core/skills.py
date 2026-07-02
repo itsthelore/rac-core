@@ -1,17 +1,20 @@
-"""Bundled agent skill registry — `rac skill` (v0.10.5).
+"""Bundled agent-skill registry -- `rac skill` (v0.10.5).
 
-The bundled skill set is a static registry of named skills with one-line
-descriptions, surfaced by `rac skill list` and installable by name. Skill
-content ships as package resources under :mod:`rac.skills` and is loaded with
+A static registry of named Claude Code skills, each with a one-line description,
+surfaced by ``rac skill list`` and installable by name. Skill content ships as
+package resources under :mod:`rac.skills` and loads through
 ``importlib.resources``, mirroring how canonical templates ship under
 :mod:`rac.templates` (ADR-021), so installation works from an installed wheel
-without the dogfood repository and without AI or network access.
+with no dogfood repository and no AI or network.
 
-Two failure modes are deliberately distinct, mirroring
-:mod:`rac.core.templates`: an *unregistered skill name* is a caller error
-(:class:`SkillNotFound` → CLI usage exit), while a *registered skill whose
-packaged resource is absent* is a broken installation
-(:class:`SkillResourceMissing` → operational error).
+The two failure modes mirror :mod:`rac.core.templates`: an *unregistered skill
+name* is a caller mistake (:class:`SkillNotFound`, a usage exit), while a
+*registered skill whose packaged resource is absent* is a broken install
+(:class:`SkillResourceMissing`, an operational error).
+
+``load_skill`` and ``available_skills`` read the module-level
+:data:`BUNDLED_SKILLS` at call time, so tests that monkeypatch it (to inject a
+resource-less skill) see their change.
 """
 
 from __future__ import annotations
@@ -30,8 +33,9 @@ class SkillSpec:
     description: str
 
 
-# Bundled skills, in registry order. `rac skill install` with no name installs
-# all of them; `rac skill list` enumerates them.
+# The bundled skills, in registry order. ``rac skill install`` with no name
+# installs every one; ``rac skill list`` enumerates them. Descriptions are
+# user-visible (golden-pinned), so treat them as fixed text.
 BUNDLED_SKILLS = (
     SkillSpec(
         name="rac-artifacts",
@@ -59,7 +63,7 @@ BUNDLED_SKILLS = (
 class SkillNotFound(RACError):
     """The requested skill is not in the bundled registry (usage error)."""
 
-    def __init__(self, skill_name: str):
+    def __init__(self, skill_name: str) -> None:
         self.skill_name = skill_name
         super().__init__(
             f"unknown skill: {skill_name} (available: {', '.join(available_skills())})"
@@ -69,7 +73,7 @@ class SkillNotFound(RACError):
 class SkillResourceMissing(RACError):
     """A registered skill's packaged resource is absent (operational error)."""
 
-    def __init__(self, skill_name: str):
+    def __init__(self, skill_name: str) -> None:
         self.skill_name = skill_name
         super().__init__(
             f"packaged skill missing: {skill_name}; the RAC installation appears to be broken"
@@ -87,12 +91,11 @@ def skill_specs() -> list[SkillSpec]:
 
 
 def load_skill(skill_name: str) -> bytes:
-    """Return the packaged ``SKILL.md`` content for ``skill_name``.
+    """Return the packaged ``SKILL.md`` content for ``skill_name`` as raw bytes.
 
-    Bytes, not text: the installed file must be byte-identical to the
-    packaged resource (REQ-007). Raises :class:`SkillNotFound` for
-    unregistered names and :class:`SkillResourceMissing` when the packaged
-    resource is absent.
+    Bytes, not text: the installed file must be byte-identical to the packaged
+    resource (REQ-007). Raises :class:`SkillNotFound` for an unregistered name
+    and :class:`SkillResourceMissing` when the packaged resource is absent.
     """
     if skill_name not in available_skills():
         raise SkillNotFound(skill_name)

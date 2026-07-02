@@ -1,21 +1,22 @@
-"""Relationship-type registry — the edge schema for Layer-3 graph integrity (ADR-055).
+"""Relationship-type registry -- the edge schema for Layer-3 graph integrity (ADR-055).
 
-Edge *legality by source type* (domain) stays where v0.14.0 put it:
-``ArtifactSpec.optional`` (the sections a type may declare). This registry adds
-the *graph* properties of each relationship kind — target type (``range``),
-directionality, acyclicity, and whether the edge forbids a retired target — so
-the Layer-3 checks (range, acyclicity, status-consistency) read one declarative
-source instead of hard-coded special cases.
+Which relationship sections a *source* type may declare (the edge domain) stays
+in ``ArtifactSpec.optional``. This registry adds the complementary *graph*
+properties of each relationship kind -- its target type (``range``),
+directionality, acyclicity, and whether it forbids pointing at a retired target
+-- so the Layer-3 checks (range, acyclicity, status-consistency) read one
+declarative table instead of hard-coding each edge as a special case.
 
-The registry is **code-defined**. Custom, repo-declared relationship types are
-deferred (ADR-052 defers the analogous custom artifact types); the built-in
-vocabulary is ``rac.services.relationships.RELATIONSHIP_SECTIONS`` keyed in its
-snake_case form (``related_decisions``, ``supersedes``), matching the keys
-``extract_relationships_full`` produces.
+The registry is code-defined; repo-declared custom relationship types are
+deferred (ADR-052 defers the analogous custom artifact types). Keys are the
+snake_case edge names (``related_decisions``, ``supersedes``) that
+``extract_relationships_full`` produces and that
+``rac.services.relationships.RELATIONSHIP_SECTIONS`` mirrors.
 
-``range``, ``acyclic``, and ``forbids_target_status`` are enforced today.
-``symmetric``/``inverse``/``cardinality`` are declared for display and forward
-compatibility (a viewer can label inverse edges) and are not yet enforced.
+Enforced today: ``range``, ``acyclic``, ``forbids_target_status``. The
+``symmetric`` / ``inverse`` / ``cardinality`` fields are declared for display
+and forward compatibility (a viewer can label the inverse edge) but are not yet
+enforced.
 """
 
 from __future__ import annotations
@@ -31,36 +32,37 @@ class EdgeSpec:
     range: tuple[str, ...]  # artifact types a target may be (enforced)
     directional: bool = False  # supersedes is directional; related_* are not
     acyclic: bool = False  # cycles are illegal for this kind (enforced)
-    symmetric: bool = True  # an undirected "relates-to" link (declared)
+    symmetric: bool = True  # an undirected "relates-to" link (declared only)
     inverse: str | None = None  # inverse edge label (declared, display only)
-    # When True, a live source must not point at a retired target via this edge
-    # (the status-consistency rule). supersedes sets False — the replacing
-    # decision legitimately points at the one it retires.
+    # When True, a live source may not point at a retired target through this
+    # edge (the status-consistency rule). ``supersedes`` sets False: the
+    # replacing decision legitimately points at the decision it retires.
     forbids_target_status: bool = True
     cardinality: str = "many"  # declared; not yet enforced
     # External-reference family (ADR-087): the target is an external identifier
-    # (a ticket key or URL), not an in-corpus artifact. External edges are exempt
-    # from range and referential-integrity resolution and are format-linted
-    # instead (the provider is per-repo config, ADR-088); the graph export marks
-    # them external and unresolved.
+    # (a ticket key or URL) rather than an in-corpus artifact. External edges
+    # skip range and referential-integrity resolution and are format-linted
+    # instead; the graph export marks them external and unresolved.
     external: bool = False
-    # Whether an external edge's target lives in the repository's configured
-    # external *provider* (ticketing, ADR-088), so the graph export tags it with
-    # that provider. ``related_tickets`` sets this; ``verified_by`` (ADR-096) does
-    # not — its targets are test/trace file paths, which have no provider.
+    # For an external edge, whether its target lives in the repository's
+    # configured ticketing *provider* (ADR-088), so the export can tag it with
+    # that provider. ``related_tickets`` sets this; ``verified_by`` does not --
+    # its targets are file paths, which have no provider.
     external_provider: bool = False
 
 
 def _related(target_type: str) -> EdgeSpec:
-    """An undirected ``related_<type>s`` edge whose range is ``target_type``."""
+    """Build the undirected ``related_<type>s`` edge whose range is ``target_type``."""
     name = f"related_{target_type}s"
     return EdgeSpec(name=name, range=(target_type,), inverse=name)
 
 
-# Built-in relationship kinds. The five ``related_*`` edges are undirected links
-# whose target must be of the named type; ``supersedes`` is the one directional,
-# acyclic, decision→decision edge, and the only one exempt from the retired-target
-# rule (forbids_target_status=False).
+# The built-in relationship kinds, keyed by edge name.
+#
+# The five ``related_*`` edges are undirected links whose target must be of the
+# named type. ``supersedes`` is the sole directional, acyclic decision->decision
+# edge and the only one exempt from the retired-target rule. The two external
+# edges (``related_tickets``, ``verified_by``) carry no artifact range.
 REGISTRY: dict[str, EdgeSpec] = {
     spec.name: spec
     for spec in (
@@ -78,19 +80,18 @@ REGISTRY: dict[str, EdgeSpec] = {
             inverse="superseded-by",
             forbids_target_status=False,
         ),
-        # External-reference family (ADR-087): a single code-defined edge whose
-        # target is an external ticket (a key or URL), not an in-corpus artifact.
-        # No artifact range; format-linted against the per-repo ticketing provider
-        # (ADR-088), never resolved. Organisations standardise on one ticketing
-        # system, so the system is a repo-config choice rather than a per-provider
-        # edge — future external systems reuse this edge, not a sibling one.
+        # One code-defined external-ticket edge (ADR-087): its target is a ticket
+        # key or URL, never an in-corpus artifact, so it is format-linted against
+        # the per-repo ticketing provider (ADR-088) rather than resolved.
+        # Organisations standardise on a single ticketing system, so this is one
+        # provider-configured edge, not a family of per-provider siblings.
         EdgeSpec(name="related_tickets", range=(), external=True, external_provider=True),
-        # External-target verification edge (ADR-096): a capability (requirement,
-        # ADR-020) points at the external tests/traces that verify it. Like an
-        # external ticket it skips resolution, range, and status checks, but its
-        # target is a file path with no ticketing provider, so it is external
-        # without being provider-tagged. Directional capability→verifier; the
-        # consumer is Proofkeeper's coverage read-model (ADR-074).
+        # External-target verification edge (ADR-096): a capability (a
+        # requirement, ADR-020) points at the external tests or traces that verify
+        # it. Like a ticket it skips resolution, range, and status checks, but its
+        # target is a file path with no ticketing provider -- external yet not
+        # provider-tagged, and directional capability->verifier. Consumed by
+        # Proofkeeper's coverage read-model (ADR-074).
         EdgeSpec(
             name="verified_by",
             range=(),
@@ -104,5 +105,5 @@ REGISTRY: dict[str, EdgeSpec] = {
 
 
 def edge_spec(name: str) -> EdgeSpec | None:
-    """The :class:`EdgeSpec` for a snake_case relationship kind, or None."""
+    """Return the :class:`EdgeSpec` for a snake_case relationship kind, or None."""
     return REGISTRY.get(name)

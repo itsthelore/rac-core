@@ -1,20 +1,25 @@
-"""Artifact type definitions — the shared schema source for RAC.
+"""The artifact schema — RAC's single source of truth for artifact structure.
 
-An *artifact* is a structured kind of knowledge (a Requirement, a Decision, ...)
-recognized by the sections it contains. This module owns those definitions and
-nothing else: `rac inspect` (v0.4) *consumes* them, and future capabilities
-(`improve`, artifact-aware `validate`, `normalize`) will import the same specs so
-there is a single source of truth.
+Every artifact type (Requirement, Decision, Roadmap, Prompt, Design) is described
+once here as an :class:`ArtifactSpec`: the sections that define it, the sections
+that are merely encouraged, the constrained metadata fields, and the authoring
+guidance. Classification, validation, the ``rac schema`` reference, starter
+templates, ``rac improve``, statistics, and the relationship layer all read these
+specs rather than hard-coding any type's shape. Add a type or move a section here
+and every consumer follows.
 
-Section names are normalized (stripped + casefolded) for matching; ``display``
-holds the human-facing label.
+Two conventions the rest of the codebase depends on:
 
-Five artifact types have a concrete schema today: Requirement (RAC's own format /
-validator), Decision (the ADR format used in this repository), Roadmap (outcome- and
-initiative-focused knowledge, added in v0.6.0), and Prompt (structured AI prompts as
-knowledge, added in v0.6.2), and Design (UX and interaction knowledge, added in
-v0.6.3). Meeting is intentionally deferred until its schema is formalized — see
-rac/roadmaps/.
+* Section names are stored *normalized* — lowercase, single-spaced (``"success
+  metrics"``, ``"user need"``, ``"alternatives considered"``). Human-facing casing
+  is produced downstream with :meth:`str.title`; it is never stored.
+* Ordering is a compatibility contract. Section tuples grow append-only (ADR-007),
+  and the relationship (``related *``) sections are kept in lockstep with
+  ``relationship_types.REGISTRY`` and ``services.relationships`` — the
+  schema-agreement gate fails loudly if they drift.
+
+Meeting has no schema yet; it is deliberately deferred until its structure is
+settled (see ``rac/roadmaps/``).
 """
 
 from __future__ import annotations
@@ -24,70 +29,87 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class ArtifactSpec:
-    """The expected structure of one artifact type."""
+    """The declared structure of one artifact type.
 
-    name: str  # canonical key, e.g. "requirement"
-    display: str  # human label, e.g. "Requirement"
-    required: tuple[str, ...]  # normalized section names that define the type
-    recommended: tuple[str, ...] = ()  # expected-but-optional sections
-    # Truly optional sections: recognized and extracted, but never scored and
-    # never reported as "missing" (e.g. a Decision's "supersedes" reference).
+    Immutable: the specs are process-wide shared data, so nothing may mutate one
+    after construction.
+    """
+
+    name: str
+    """Canonical lowercase key, e.g. ``"requirement"``. The identity every consumer
+    keys on."""
+
+    display: str
+    """Human label, e.g. ``"Requirement"``."""
+
+    required: tuple[str, ...]
+    """Sections that define the type. Their presence drives classification and
+    their absence is a validation error."""
+
+    recommended: tuple[str, ...] = ()
+    """Expected-but-optional sections. They count toward classification fit (at
+    half weight) but are only a warning when missing, never an error."""
+
     optional: tuple[str, ...] = ()
-    # Constrained metadata fields: {normalized section name -> allowed values}.
-    # A value present in one of these sections that is not in its allowed set is
-    # a validation error; a missing section is not (metadata stays optional).
+    """Recognized and extracted, but never scored, never templated, and never
+    reported as missing — the mechanism relationship sections ride on."""
+
     metadata: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    # Lifecycle status values that mark an artifact as retired (ADR-051): a subset
-    # of ``metadata["status"]``. The single, declarative source of truth the
-    # status-consistency rule reads to decide a target is no longer live. Empty
-    # when the type declares no status enum.
+    """Constrained fields: ``{normalized section -> allowed values}``. A present
+    value outside its allowed set is an error; an absent section is not (metadata
+    stays optional)."""
+
     retired_status: tuple[str, ...] = ()
-    # Short authoring hints per normalized section name, surfaced by `rac improve
-    # --template` as guidance comments. Optional; sections without a hint render
-    # without one.
+    """The subset of ``metadata["status"]`` marking a retired artifact (ADR-051).
+    The one declarative source the status-consistency rule reads to decide a
+    target is no longer live; empty when the type declares no status enum. The
+    subset invariant is gate-enforced."""
+
     descriptions: dict[str, str] = field(default_factory=dict)
-    # Prompting questions per normalized section name. This is informational
-    # metadata only: improve renders it, but classification, validation, and
-    # statistics must not use it.
+    """One-line section descriptions surfaced by ``rac schema``. These strings are
+    golden-pinned."""
+
     guidance: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    # Synonyms: alternate normalized headings that map onto a canonical section
-    # name (e.g. "success criteria" -> "success metrics"). Applied before
-    # matching, so synonyms contribute to confidence. Matching is deterministic
-    # (dict lookup) and case-insensitive (headings are normalized first).
+    """Prompting questions per section, rendered by ``rac improve`` and ``rac
+    schema``. Informational only: classification, validation, and statistics must
+    never read it. A type earns improve support by carrying guidance for every
+    ``expected`` section."""
+
     synonyms: dict[str, str] = field(default_factory=dict)
-    # Canonical-identifier section (v0.7.2 relationship validation): the normalized
-    # section name whose value is this artifact type's identifier, consulted by
-    # ``rac.core.identity.artifact_identifier`` before falling back to the filename
-    # stem. A forward hook — no spec sets it today; relationship resolution works
-    # from the ``## ID`` section and filename stem until a type opts in.
+    """Alternate normalized headings mapped onto a canonical section, applied
+    before matching so a synonym contributes to classification fit. Scoped to this
+    spec only (see ``classification._mapped``): a roadmap's ``"success metrics" ->
+    "success measures"`` never touches the requirement's canonical ``"success
+    metrics"``."""
+
     id_field: str | None = None
+    """Forward hook (unused by design). No spec sets it today; ``identity``'s
+    legacy-identifier path reads ``spec.id_field`` and falls back to the filename
+    stem when it is ``None``. Kept because removing it changes the dataclass
+    shape."""
 
     @property
     def expected(self) -> tuple[str, ...]:
-        """Sections that count toward fit (required + recommended).
+        """Sections that count toward classification fit: required then recommended.
 
-        ``optional`` sections are deliberately excluded — they are extracted but
-        never scored, so they never show up as "missing".
+        ``optional`` is excluded on purpose — those sections are extracted but never
+        scored, so they can never register as "missing".
         """
         return self.required + self.recommended
 
 
-# --- Relationship metadata (v0.7.0) -----------------------------------------
+# --- Relationship sections ---------------------------------------------------
 #
-# Relationships are explicit Markdown sections that reference other artifacts
-# (ADR-016). They ride the existing ``optional`` mechanism: recognized and
-# extracted, but never scored, never templated, never reported as missing
-# (REQ-002). v0.7.0 treats them as metadata only — RAC extracts and counts the
-# references but does not resolve, validate, or graph them.
+# Relationship sections (``related decisions``, ``supersedes``, ``verified by``, …)
+# are explicit Markdown headings that point at other artifacts (ADR-016). They ride
+# the ``optional`` mechanism: extracted and counted, but never scored, templated, or
+# reported as missing. This module owns only their human-facing descriptions; the
+# canonical vocabulary and edge semantics live in ``relationship_types`` and
+# ``services.relationships``, and the three must move together (the schema-agreement
+# gate enforces this).
 #
-# The relationship-section vocabulary and its canonical ordering live in
-# :mod:`rac.services.relationships` (the module that owns relationship logic). This module
-# only owns the human-facing ``descriptions`` for those sections, which the specs
-# below consume.
-
-# One-line descriptions for every relationship section, surfaced by `rac schema`.
-# Relationship sections deliberately carry no ``guidance`` — guidance gates
-# `rac improve`, and relationships must stay out of improve and templates.
+# Deliberately no ``guidance`` here: guidance gates ``rac improve`` and templates,
+# and relationships must stay out of both.
 RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
     "related requirements": "Requirement artifacts this artifact references",
     "related decisions": "Decision artifacts this artifact references",
@@ -103,20 +125,21 @@ RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
 
 
 def _relationship_descriptions(*sections: str) -> dict[str, str]:
-    """Descriptions for the given relationship ``sections`` (declaration order)."""
+    """Select relationship descriptions for ``sections``, preserving their order."""
     return {section: RELATIONSHIP_DESCRIPTIONS[section] for section in sections}
 
 
+# The registry. Order is contract: ``ARTIFACT_SPECS`` order is the tie-break order
+# for classification and the display order for ``rac schema --list``.
 ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec(
         name="requirement",
         display="Requirement",
         required=("problem", "requirements"),
         recommended=("success metrics", "risks", "assumptions"),
-        # Relationship sections (v0.7.0): metadata only — extracted and counted,
-        # never scored or templated (REQ-003). ``related requirements`` lets a
-        # requirement reference the requirements it depends on; appended last
-        # because section order is append-only (ADR-007).
+        # Relationship sections are append-only (ADR-007); ``related requirements``
+        # (a requirement pointing at its dependencies) landed after the rest, so it
+        # sits late in the tuple rather than beside the other ``related *`` kinds.
         optional=(
             "related decisions",
             "related roadmaps",
@@ -126,8 +149,8 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related tickets",
             "verified by",
         ),
-        # Lifecycle status (ADR-051): optional, validated-if-present. Status stays
-        # a knowledge lifecycle (current vs replaced), never work/delivery state.
+        # Status is a knowledge lifecycle (current vs replaced), never delivery
+        # state (ADR-017/ADR-051).
         metadata={"status": ("Proposed", "Accepted", "Superseded", "Deprecated")},
         retired_status=("Superseded", "Deprecated"),
         descriptions={
@@ -179,9 +202,8 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         display="Decision",
         required=("context", "decision", "consequences"),
         recommended=("status", "category", "alternatives considered"),
-        # ``supersedes`` stays first (the original v0.4.2 entry). The remaining
-        # relationship sections are added in v0.7.0 (REQ-004). All are metadata
-        # only; ``supersedes`` is also surfaced as a top-level scalar by inspect.
+        # ``supersedes`` predates the general relationship sections and stays first;
+        # inspect also surfaces it as a top-level scalar.
         optional=(
             "supersedes",
             "related requirements",
@@ -195,6 +217,8 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "category": ("Architecture", "Product", "Process", "Technical", "Other"),
         },
         retired_status=("Superseded", "Deprecated"),
+        # Decisions describe their canonical sections in prose, not here; only the
+        # relationship sections carry a schema description.
         descriptions=_relationship_descriptions(
             "supersedes",
             "related requirements",
@@ -233,10 +257,6 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         display="Roadmap",
         required=("outcomes", "initiatives"),
         recommended=("success measures", "assumptions", "risks"),
-        # Relationship sections are recognized but never scored or templated; they
-        # let a roadmap reference Decisions/Requirements/Prompts/Designs as text.
-        # The first two predate v0.7.0; ``related prompts``/``related designs`` are
-        # added in v0.7.0 (REQ-005). Order is append-only (ADR-007).
         optional=(
             "related decisions",
             "related requirements",
@@ -245,13 +265,10 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related roadmaps",
             "related tickets",
         ),
-        # Lifecycle status (ADR-051, ADR-061): Planned is the live state and
-        # Achieved is the live terminal state (the intent was delivered, so the
-        # item is now a realized record — still valid to reference, not retired).
-        # Superseded / Abandoned mark replaced or dropped *intent*. All four are
-        # knowledge states, not delivery tracking (ADR-017): a terminal "the
-        # intent was realized" marker set at release is knowledge currency, while
-        # per-milestone work progress stays out.
+        # ADR-051/ADR-061: Planned is live, Achieved is the live terminal state
+        # (delivered intent — still valid to reference, so not retired), while
+        # Superseded/Abandoned mark replaced or dropped intent. All four are
+        # knowledge states, not per-milestone work tracking (ADR-017).
         metadata={"status": ("Planned", "Achieved", "Superseded", "Abandoned")},
         retired_status=("Superseded", "Abandoned"),
         descriptions={
@@ -285,9 +302,6 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "assumptions": ("What must be true for this roadmap to remain valid?",),
             "risks": ("What could prevent these outcomes from being achieved?",),
         },
-        # Artifact-scoped: this only normalizes "success metrics" when scoring a
-        # document against the Roadmap spec (see rac.core.classification._mapped), so it
-        # never affects the Requirement spec's canonical "success metrics" section.
         synonyms={
             "success metrics": "success measures",
         },
@@ -297,9 +311,6 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         display="Prompt",
         required=("objective", "input", "instructions", "output"),
         recommended=("constraints", "examples", "evaluation"),
-        # Relationship sections are recognized but never scored or templated; they
-        # let a Prompt reference other artifacts as text. ``related designs`` is
-        # added in v0.7.0 (REQ-006); order is append-only (ADR-007).
         optional=(
             "related requirements",
             "related decisions",
@@ -307,7 +318,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related tickets",
         ),
-        # Lifecycle status (ADR-051): Active is the live state, Deprecated retired.
+        # ADR-051: Active is live, Deprecated is retired.
         metadata={"status": ("Active", "Deprecated")},
         retired_status=("Deprecated",),
         descriptions={
@@ -317,7 +328,6 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "output": "The expected response format or result",
             "constraints": "Boundaries or restrictions the response must respect",
             "examples": "Example inputs and outputs that clarify intended behavior",
-            # Human criteria for judging a response — not automated testing or scoring.
             "evaluation": "Human criteria for judging whether a response is good",
             **_relationship_descriptions(
                 "related requirements",
@@ -354,10 +364,9 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "How can the user tell whether the prompt worked?",
             ),
         },
-        # Artifact-scoped (see rac.core.classification._mapped): these only normalize
-        # headings when scoring against the Prompt spec, so they never affect other
-        # artifact types. They aid classification and improve (both synonym-aware);
-        # validation still expects the canonical headings, like Decision/Roadmap.
+        # Scoped synonyms: these normalize headings only when scoring against the
+        # Prompt spec. They aid classification and improve, but validation still
+        # expects the canonical headings.
         synonyms={
             "expected output": "output",
             "output specification": "output",
@@ -375,9 +384,6 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "style guidance",
             "open questions",
         ),
-        # Relationship sections are recognized but never scored or templated; they
-        # let a Design reference other artifacts as text without RAC analyzing
-        # those links (relationship analysis is v0.7.x).
         optional=(
             "related requirements",
             "related decisions",
@@ -385,7 +391,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related prompts",
             "related tickets",
         ),
-        # Lifecycle status (ADR-051): same spine as decisions/requirements.
+        # ADR-051: shares the requirement/decision status spine.
         metadata={"status": ("Proposed", "Accepted", "Superseded", "Deprecated")},
         retired_status=("Superseded", "Deprecated"),
         descriptions={
@@ -450,7 +456,10 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
 
 
 def spec_for(name: str) -> ArtifactSpec | None:
-    """Return the :class:`ArtifactSpec` with canonical ``name``, or None."""
+    """Return the :class:`ArtifactSpec` whose ``name`` matches, or ``None``.
+
+    A linear scan over five specs; ``None`` for an unknown or empty ``name``.
+    """
     for spec in ARTIFACT_SPECS:
         if spec.name == name:
             return spec

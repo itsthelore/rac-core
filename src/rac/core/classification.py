@@ -1,14 +1,14 @@
-"""Artifact classification — the shared heuristic over a parsed document.
+"""Best-fit artifact classification over a parsed document.
 
-Scores a :class:`~rac.core.models.Product` against the artifact schemas in
-:mod:`rac.core.artifacts` and picks the best-fit type (or Unknown). This is a pure,
-AI-optional function (ADR-002): it looks only at which ``##`` sections a document
-contains. It is the single home for classification, consumed by ``inspect``,
-``validate``, ``stats``, and future commands so they never reach it through one
-another.
+Given a :class:`~rac.core.models.Product`, score it against every schema in
+:mod:`rac.core.artifacts` and pick the closest-fitting type, or report
+``"unknown"`` when nothing fits well enough. The heuristic is deterministic and
+AI-free (ADR-002): it reads only which ``##`` sections a document declares,
+never their prose, so identical section sets always classify identically.
 
-Classification works off ``product.sections`` (the canonical section map from the
-parser); it never re-parses the Markdown.
+Classification stays separate from validation. A recognisable-but-broken
+artifact still classifies as its type here; whether it is *valid* is decided
+later by :mod:`rac.core.validation`.
 """
 
 from __future__ import annotations
@@ -18,96 +18,101 @@ from dataclasses import dataclass
 from .artifacts import ARTIFACT_SPECS, ArtifactSpec
 from .models import Product
 
-# Below this best-fit score, the document is reported as Unknown rather than
-# forced into a type. Unknown is a valid, successful outcome — not an error.
+# A best fit at or above this threshold is confident enough to name a type;
+# below it the document is "unknown", which is a successful outcome, not a
+# failure. Imported by rac.output.human, so the value is part of the contract.
 CONFIDENCE_THRESHOLD = 0.5
 
 
 @dataclass
 class TypeScore:
-    """How well a document fits one artifact type — the explainable breakdown."""
+    """One type's fit against a document, with the breakdown that explains the
+    number: which sections matched and which of the expected ones are absent."""
 
     name: str
     display: str
     matched_required: list[str]
     matched_recommended: list[str]
     missing: list[str]
-    points: float  # matched_required + 0.5 * matched_recommended
-    ceiling: float  # |required| + 0.5 * |recommended|
-    fit: float  # points / ceiling, 0.0 – 1.0 (unrounded)
+    points: float  # matched required + 0.5 per matched recommended
+    ceiling: float  # the most points this spec could award
+    fit: float  # points / ceiling, unrounded
 
 
 @dataclass
 class Classification:
-    """The chosen artifact type for a document (or Unknown)."""
+    """The type chosen for a document (or ``"unknown"``).
 
-    type: str  # artifact name, or "unknown"
-    confidence: float  # 0.0 – 1.0 (rounded to 2dp)
+    ``present_sections`` carries two meanings by design (relied on by
+    ``inspect``): for a classified document it is the matched required +
+    recommended sections; for an unknown document it is *every* section the
+    document declares, so a caller can still show what was found.
+    """
+
+    type: str  # an artifact name, or "unknown"
+    confidence: float  # fit rounded to 2 decimal places
     present_sections: list[str]
     missing_sections: list[str]
 
 
 def _mapped(product: Product, spec: ArtifactSpec) -> set[str]:
-    """The document's ``##`` headings, with this spec's synonyms applied.
+    """The document's headings with ``spec``'s synonyms folded to canonical
+    names. The single place synonyms are applied, so scoring and
+    :func:`missing_sections` agree on what "present" means."""
+    return {spec.synonyms.get(heading, heading) for heading in product.sections}
 
-    The single source of synonym-aware section matching, shared by scoring
-    (:func:`score_artifacts`) and the scoring-independent :func:`missing_sections`.
-    """
-    return {spec.synonyms.get(h, h) for h in product.sections}
+
+def _score(product: Product, spec: ArtifactSpec) -> TypeScore:
+    """Score one document against one spec."""
+    mapped = _mapped(product, spec)
+    matched_required = [section for section in spec.required if section in mapped]
+    matched_recommended = [section for section in spec.recommended if section in mapped]
+    # A recommended section is worth half a required one; this weighting is what
+    # the pinned numeric anchors (e.g. prompt 3-of-4 required -> 3/5.5) rely on.
+    points = len(matched_required) + 0.5 * len(matched_recommended)
+    ceiling = len(spec.required) + 0.5 * len(spec.recommended)
+    return TypeScore(
+        name=spec.name,
+        display=spec.display,
+        matched_required=matched_required,
+        matched_recommended=matched_recommended,
+        missing=[section for section in spec.expected if section not in mapped],
+        points=points,
+        ceiling=ceiling,
+        fit=points / ceiling if ceiling else 0.0,
+    )
 
 
 def missing_sections(product: Product, spec: ArtifactSpec) -> tuple[list[str], list[str]]:
     """Return ``(missing_required, missing_recommended)`` for ``spec``.
 
-    Synonym-aware and in schema declaration order. Independent of confidence
-    scoring (no :class:`TypeScore`) so callers like ``improve`` depend only on the
-    schema, not on classification internals.
+    Synonym-aware and in declaration order, read straight off the schema with no
+    scoring involved — callers such as ``improve`` depend only on the schema,
+    not on classification internals.
     """
     mapped = _mapped(product, spec)
     return (
-        [s for s in spec.required if s not in mapped],
-        [s for s in spec.recommended if s not in mapped],
+        [section for section in spec.required if section not in mapped],
+        [section for section in spec.recommended if section not in mapped],
     )
 
 
 def score_artifacts(product: Product) -> list[TypeScore]:
-    """Score the document against every artifact type, best fit first.
-
-    Synonyms (e.g. "success criteria" -> "success metrics") are applied before
-    matching, so they contribute to the score deterministically.
-    """
-    scores: list[TypeScore] = []
-    for spec in ARTIFACT_SPECS:
-        mapped = _mapped(product, spec)
-        matched_required = [s for s in spec.required if s in mapped]
-        matched_recommended = [s for s in spec.recommended if s in mapped]
-        missing = [s for s in spec.expected if s not in mapped]
-        points = len(matched_required) + 0.5 * len(matched_recommended)
-        ceiling = len(spec.required) + 0.5 * len(spec.recommended)
-        fit = points / ceiling if ceiling else 0.0
-        scores.append(
-            TypeScore(
-                name=spec.name,
-                display=spec.display,
-                matched_required=matched_required,
-                matched_recommended=matched_recommended,
-                missing=missing,
-                points=points,
-                ceiling=ceiling,
-                fit=fit,
-            )
-        )
-    # Best fit first; ties broken by more required matches, then ARTIFACT_SPECS
-    # order (stable sort preserves it).
-    scores.sort(key=lambda t: (t.fit, len(t.matched_required)), reverse=True)
+    """Score the document against every artifact type, best fit first."""
+    scores = [_score(product, spec) for spec in ARTIFACT_SPECS]
+    # Order by fit, then by number of required matches. A stable sort leaves
+    # ties in ARTIFACT_SPECS order, which pins the winner when fits are equal.
+    scores.sort(key=lambda score: (score.fit, len(score.matched_required)), reverse=True)
     return scores
 
 
 def classify(product: Product) -> Classification:
-    """Pick the best-fit artifact type for ``product`` (or Unknown)."""
-    scores = score_artifacts(product)
-    best = scores[0] if scores else None
+    """Pick the best-fit artifact type for ``product``, or ``"unknown"``."""
+    best = score_artifacts(product)[0] if ARTIFACT_SPECS else None
 
+    # Unknown when nothing scored, when the best fit is below threshold, or when
+    # not one required section matched — a document can only *be* a type if it
+    # carries at least one of that type's defining sections.
     if best is None or best.fit < CONFIDENCE_THRESHOLD or not best.matched_required:
         return Classification(
             type="unknown",

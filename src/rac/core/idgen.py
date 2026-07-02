@@ -1,15 +1,17 @@
-"""Opaque artifact ID generation (ADR-026, v0.7.11).
+"""Opaque artifact ID generation (ADR-026).
 
-Branch-safe and offline: no shared allocation state, no network, no git. An ID
-is ``<REPOSITORY_KEY>-<SUFFIX>`` where the suffix is 12 characters of Crockford
-base32 (uppercase, no I/L/O/U): an 8-character millisecond-timestamp segment
-(time-sortable, ULID-style) followed by a 4-character CSPRNG segment. Two
-artifacts created in the same millisecond collide with probability 2^-20;
-callers that can see the repository index (``rac new``) additionally check and
-regenerate.
+An ID is ``<REPOSITORY_KEY>-<SUFFIX>``. The 12-character suffix is Crockford
+base32 (uppercase, no I/L/O/U) split into two segments: an 8-character
+millisecond timestamp (ULID-style, so IDs sort by creation time) followed by a
+4-character CSPRNG segment. Generation is branch-safe and offline — no shared
+allocation state, no git, no network — so two branches can mint IDs without
+coordinating. Within a single millisecond the 20 random bits give a 2^-20
+collision probability; a caller that can see the repository index (``rac new``)
+additionally checks and regenerates on the rare clash.
 
-``clock`` and ``entropy`` are injectable so tests are deterministic; the
-defaults are the real wall clock and ``secrets``.
+``clock`` and ``entropy`` are injected (defaulting to the real wall clock and
+``secrets``) so callers and tests can make generation fully deterministic
+without the generator itself reaching for global state.
 """
 
 from __future__ import annotations
@@ -18,20 +20,30 @@ import secrets
 import time
 from collections.abc import Callable
 
-# Crockford base32: no I, L, O, U (visually ambiguous).
+# Crockford base32 — the four visually ambiguous letters I, L, O, U are omitted.
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-_TIME_CHARS = 8  # 40 bits of millisecond timestamp (wraps ~every 34 years)
-_RANDOM_CHARS = 4  # 20 bits of CSPRNG entropy per millisecond tick
+# Suffix layout. Each base32 character carries 5 bits, so the timestamp segment
+# holds 40 bits of milliseconds (wraps roughly every 34 years) and the random
+# segment holds 20 bits of entropy per millisecond tick.
+_TIME_CHARS = 8
+_RANDOM_CHARS = 4
+_BITS_PER_CHAR = 5
 SUFFIX_LENGTH = _TIME_CHARS + _RANDOM_CHARS
 
 
 def _encode(value: int, chars: int) -> str:
-    out = []
+    """Big-endian Crockford base32: ``value`` as exactly ``chars`` characters.
+
+    The low 5 bits map to the least-significant (rightmost) character, so the
+    digits are produced right-to-left and reversed into most-significant-first
+    order — which is what keeps the timestamp segment lexicographically sortable.
+    """
+    digits: list[str] = []
     for _ in range(chars):
-        out.append(ALPHABET[value & 0x1F])
-        value >>= 5
-    return "".join(reversed(out))
+        digits.append(ALPHABET[value & 0x1F])
+        value >>= _BITS_PER_CHAR
+    return "".join(reversed(digits))
 
 
 def generate_id(
@@ -40,12 +52,14 @@ def generate_id(
     clock: Callable[[], float] = time.time,
     entropy: Callable[[int], int] = secrets.randbits,
 ) -> str:
-    """One new opaque artifact ID under ``repository_key``.
+    """Mint one new opaque artifact ID under ``repository_key``.
 
-    The caller is responsible for key validity (``rac init`` owns that
-    contract) and for uniqueness against an existing repository where it can
-    check one.
+    The caller owns key validity (``rac init`` defines the contract) and owns
+    within-millisecond uniqueness where it can see an index; the generator only
+    guarantees distinct IDs across distinct millisecond ticks.
     """
-    millis = int(clock() * 1000) & ((1 << (_TIME_CHARS * 5)) - 1)
-    random_bits = entropy(_RANDOM_CHARS * 5)
-    return f"{repository_key}-{_encode(millis, _TIME_CHARS)}{_encode(random_bits, _RANDOM_CHARS)}"
+    time_bits = _TIME_CHARS * _BITS_PER_CHAR
+    millis = int(clock() * 1000) & ((1 << time_bits) - 1)
+    random_bits = entropy(_RANDOM_CHARS * _BITS_PER_CHAR)
+    suffix = _encode(millis, _TIME_CHARS) + _encode(random_bits, _RANDOM_CHARS)
+    return f"{repository_key}-{suffix}"
