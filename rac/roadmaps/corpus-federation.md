@@ -15,9 +15,9 @@ is now satisfied — the additive enterprise ADRs it was scheduled behind
 (ADR-084, ADR-086 through ADR-088, ADR-090, ADR-091) have landed — and the
 design-partner scenario ADR-089 anticipated is real: an adopting
 organisation with a genuine firm-wide standards corpus is expanding Lore
-toward multi-thousand-seat scale. Execution is tracked in a GitHub issue
-per initiative when work is picked up (ADR-093); a `## Related Tickets`
-entry is added then.
+toward multi-thousand-seat scale. Execution is tracked in GitHub (ADR-093): the
+epic in `## Related Tickets` carries ordering and task state, with a
+sub-issue per initiative.
 
 ## Context
 
@@ -194,3 +194,7 @@ by PR (ADR-065).
 - rac-parent-corpus-inheritance
 - rac-federated-resolution-provenance
 - rac-export-source-identity
+
+## Related Tickets
+
+- itsthelore/rac-core#267
