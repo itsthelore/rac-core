@@ -8,6 +8,9 @@ verbatim from that design; changing them is a contract change (ADR-030).
 v0.21.16 adds ``find_decisions`` — the live decision query (ADR-067):
 deterministic retrieval of the Accepted, non-retired decisions binding a topic,
 so an agent consults what the team already settled instead of re-litigating it.
+ADR-098 adds ``decisions_for_path`` — scoped grounding: the live decisions whose
+declared ``## Applies To`` scopes govern a queried file or directory, so the
+right decision surfaces at the point of work.
 
 The server is a *consumer* of RAC Core (ADR-015, ADR-031): every tool calls
 read-only service functions — resolution, search, relationships, portfolio —
@@ -76,6 +79,7 @@ from rac.services.relationships import (
 from rac.services.resolve import (
     OUTCOME_RESOLVED,
     ResolutionResult,
+    decisions_for_path,
     find_decisions,
     resolve_in_index,
     search_index,
@@ -129,6 +133,18 @@ DESC_FIND_DECISIONS = (
     "which decisions bind the topic; read them and judge for yourself — it does "
     "not decide whether a change contradicts them. Use get_artifact to read a "
     "decision's full text."
+)
+
+DESC_DECISIONS_FOR_PATH = (
+    "Find the team's already-settled decisions that govern a specific file or "
+    "directory. Call this before editing code — with the repository-relative "
+    "path you are about to change (for example src/auth/ or src/rac/cli.py) — "
+    "so the decisions scoped to that code surface at the point of work. Returns "
+    "the live (Accepted, non-retired) decisions whose declared ## Applies To "
+    "scopes match the path, each with its identifier, title, status, path, and "
+    "the matching scopes. It tells you which decisions bind the path; read them "
+    "and judge for yourself — it does not decide whether a change contradicts "
+    "them. Use get_artifact to read a decision's full text."
 )
 
 DESC_GET_SUMMARY = (
@@ -208,6 +224,21 @@ def _find_decisions(root: str, topic: str, budget: int) -> str:
     payload = result.to_dict()
     # Make the live-decision intent explicit on the wire (additive, ADR-007): the
     # type is always "decision" and the result is filtered to live decisions.
+    payload["filter"] = "live-decisions"
+    return serialize(payload, budget)
+
+
+def _decisions_for_path(root: str, path: str, budget: int) -> str:
+    """Live decisions whose declared scopes govern ``path`` (ADR-098).
+
+    Calls the same ``decisions_for_path`` service the CLI ``rac decisions`` face
+    uses (one source of truth): declared, validated scope matching, no verdicts
+    (ADR-067). The payload mirrors ``find_decisions`` — the ``filter`` key makes
+    the live-decision intent explicit on the wire (additive, ADR-007) — and the
+    ``matches`` list inherits whole-item budget truncation (ADR-033).
+    """
+    result = decisions_for_path(root, path, recursive=True)
+    payload = result.to_dict()
     payload["filter"] = "live-decisions"
     return serialize(payload, budget)
 
@@ -310,7 +341,7 @@ def build_server(
     telemetry (ADR-040) and ``audit_recorder`` enables the read-access audit log
     (ADR-084): with both ``None`` — the default — nothing is recorded and every
     call is exactly the bare tool body. The returned :class:`FastMCP` instance
-    has the five pinned tools registered and is ready to run over any transport —
+    has the six pinned tools registered and is ready to run over any transport —
     the CLI runs it over stdio.
     """
     server: FastMCP = FastMCP(SERVER_NAME)
@@ -340,6 +371,14 @@ def build_server(
     def find_decisions_tool(topic: str) -> str:
         return observed(
             "find_decisions", {"topic": topic}, lambda: _find_decisions(root, topic, budget)
+        )
+
+    @server.tool(name="decisions_for_path", description=DESC_DECISIONS_FOR_PATH)
+    def decisions_for_path_tool(path: str) -> str:
+        return observed(
+            "decisions_for_path",
+            {"path": path},
+            lambda: _decisions_for_path(root, path, budget),
         )
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)

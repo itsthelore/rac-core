@@ -29,6 +29,7 @@ EXPECTED_TOOLS = {
     "get_artifact",
     "search_artifacts",
     "find_decisions",
+    "decisions_for_path",
     "get_related",
     "get_summary",
 }
@@ -53,6 +54,7 @@ def test_tool_descriptions_ship_verbatim():
     assert tools["get_artifact"].description == mcp_server.DESC_GET_ARTIFACT
     assert tools["search_artifacts"].description == mcp_server.DESC_SEARCH_ARTIFACTS
     assert tools["find_decisions"].description == mcp_server.DESC_FIND_DECISIONS
+    assert tools["decisions_for_path"].description == mcp_server.DESC_DECISIONS_FOR_PATH
     assert tools["get_related"].description == mcp_server.DESC_GET_RELATED
     assert tools["get_summary"].description == mcp_server.DESC_GET_SUMMARY
 
