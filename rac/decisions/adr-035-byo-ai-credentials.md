@@ -294,3 +294,8 @@ Evidence that this decision is succeeding may include:
 ## Review Date
 
 Review at v1.0.0 or upon introduction of the first AI-assisted capability within RAC Core.
+
+## Applies To
+
+- RAC Core
+- open-source extensions

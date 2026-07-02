@@ -200,3 +200,7 @@ Evidence that this decision is working:
 
 Review before v1.0.0, or if RAC begins publishing a supported Python API (as opposed to
 its CLI and JSON contracts), which would warrant a deliberate deprecation policy.
+
+## Applies To
+
+- src/rac/
