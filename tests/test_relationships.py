@@ -103,6 +103,89 @@ def test_verified_by_section_is_extracted():
     assert rels["verified_by"] == ["`tests/cap.spec.ts`", "`traces/cap.zip`"]
 
 
+_SCOPED_DECISION = (
+    "# Scope\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n\n"
+    "## Status\n\nAccepted\n\n## Applies To\n\n- src/auth/\n- the login surface\n"
+)
+
+
+def test_applies_to_section_is_extracted():
+    spec = spec_for("decision")
+    assert spec is not None
+    rels = extract_relationships(parse(_SCOPED_DECISION), spec)
+    assert rels["applies_to"] == ["src/auth/", "the login surface"]
+
+
+# --- applies-to advisory (ADR-098): visible, never blocking -------------------
+
+
+def _scoped_repo(tmp_path, *, config: bool, scope: str = "src/auth/"):
+    """A corpus with one scoped decision; optionally a repo root with a tree."""
+    root = tmp_path / "repo"
+    corpus = root / "rac"
+    corpus.mkdir(parents=True)
+    (corpus / "scoped.md").write_text(
+        _SCOPED_DECISION.replace("- src/auth/", f"- {scope}"), encoding="utf-8"
+    )
+    if config:
+        (root / ".rac").mkdir()
+        (root / ".rac" / "config.yaml").write_text("repository_key: RAC\n", encoding="utf-8")
+        (root / "src" / "auth").mkdir(parents=True)
+        (root / "src" / "auth" / "login.py").write_text("", encoding="utf-8")
+    return corpus
+
+
+def test_matched_scope_produces_no_advisory(tmp_path):
+    from rac.services.relationships import validate_relationships
+
+    result = validate_relationships(str(_scoped_repo(tmp_path, config=True)))
+    assert result.advisories == []
+    assert result.ok
+
+
+def test_unmatched_scope_is_advisory_and_never_blocking(tmp_path):
+    from rac.services.relationships import ISSUE_APPLIES_TO_UNMATCHED, validate_relationships
+
+    corpus = _scoped_repo(tmp_path, config=True, scope="src/billing/")
+    result = validate_relationships(str(corpus))
+    assert [a.code for a in result.advisories] == [ISSUE_APPLIES_TO_UNMATCHED]
+    assert result.advisories[0].target == "src/billing/"
+    # The load-bearing assertion (ADR-098): advisory can never mean blocking.
+    assert result.ok
+    assert result.validation_issues == 0
+    assert main(["relationships", str(corpus), "--validate"]) == 0
+
+
+def test_advisory_pass_is_skipped_without_a_repo_config(tmp_path):
+    from rac.services.relationships import validate_relationships
+
+    # No .rac/config.yaml anywhere above the corpus: a bare corpus (like most
+    # test fixtures) never walks a tree and never emits advisories.
+    result = validate_relationships(str(_scoped_repo(tmp_path, config=False)))
+    assert result.advisories == []
+
+
+def test_advisory_appears_in_validate_output_only_when_present(tmp_path, capsys):
+    corpus = _scoped_repo(tmp_path, config=True, scope="src/billing/")
+    main(["relationships", str(corpus), "--validate", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["validation_issues"] == 0
+    assert [a["code"] for a in payload["advisories"]] == ["applies-to-unmatched-path"]
+
+    matched = _scoped_repo(tmp_path / "other", config=True)
+    main(["relationships", str(matched), "--validate", "--json"])
+    assert "advisories" not in json.loads(capsys.readouterr().out)
+
+
+def test_component_labels_never_produce_advisories(tmp_path):
+    from rac.services.relationships import validate_relationships
+
+    # "the login surface" is a label; it is recorded, never tree-checked.
+    corpus = _scoped_repo(tmp_path, config=True)
+    result = validate_relationships(str(corpus))
+    assert all(a.target != "the login surface" for a in result.advisories)
+
+
 # --- inspect: extraction across all five artifact types (amendment 7) --------
 
 

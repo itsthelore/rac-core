@@ -1,0 +1,4 @@
+1 live decision(s) govern 'src/auth/login.py':
+
+RAC-F1XTVREAVTH0  Accepted  Auth module boundaries
+                            ↳ tests/fixtures/applies_to/auth-boundaries.md  via src/auth/

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "path": "src/auth/login.py",
+  "type": "decision",
+  "match_count": 1,
+  "matches": [
+    {
+      "id": "RAC-F1XTVREAVTH0",
+      "type": "decision",
+      "title": "Auth module boundaries",
+      "status": "Accepted",
+      "path": "tests/fixtures/applies_to/auth-boundaries.md",
+      "scopes": [
+        "src/auth/"
+      ]
+    }
+  ]
+}
