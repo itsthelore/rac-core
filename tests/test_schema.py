@@ -121,6 +121,7 @@ def test_schema_json_decision_metadata_values(capsys):
         "related_designs",
         "related_decisions",
         "related_tickets",
+        "applies_to",
     ]
     assert payload["metadata"]["status"] == [
         "Proposed",

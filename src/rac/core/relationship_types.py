@@ -99,6 +99,20 @@ REGISTRY: dict[str, EdgeSpec] = {
             symmetric=False,
             inverse="verifies",
         ),
+        # Applies-to scope edge (ADR-098): a decision declares the code paths or
+        # components it governs. Targets are repo-relative path globs or free
+        # component labels — never in-corpus artifacts — so like ``verified_by``
+        # it skips resolution, range, and status checks and carries no provider.
+        # Directional decision→scope; the consumer is the path→decisions lookup
+        # and, later, the freshness drift gate.
+        EdgeSpec(
+            name="applies_to",
+            range=(),
+            external=True,
+            directional=True,
+            symmetric=False,
+            inverse="governs",
+        ),
     )
 }
 
