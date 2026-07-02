@@ -1,10 +1,11 @@
-"""Git hook installation — `rac hook install` (v0.13.4).
+"""Git-hook installation — `rac hook install` (v0.13.4).
 
-``install_hook`` is the reusable installation capability: it owns resource
-loading, the git-directory check, the never-overwrite check, and the result
-model, so the CLI stays a thin adapter. It writes the bundled script for one
-style into ``<dir>/.git/hooks/<style>`` and makes it executable, mirroring
-``rac skill install`` (ADR-021 resource loading; never-overwrite posture).
+:func:`install_hook` is the reusable capability behind the CLI adapter: it owns
+resource loading, the git-directory check, the never-overwrite refusal, and the
+result model. It writes one bundled script into ``<dir>/.git/hooks/<style>``
+and marks it executable — note the installed name has no ``.sh`` suffix even
+though the packaged resource does. Mirrors ``rac skill install`` (ADR-021
+resource loading; never-overwrite posture).
 
 Failure contract:
 
@@ -12,7 +13,7 @@ Failure contract:
 - no .git directory      → :class:`NotAGitWorkTree` (usage error, exit 2)
 - hook file exists       → :class:`HookFileExists` (refused; exit 1; untouched)
 - missing packaged hook  → :class:`~rac.core.hooks.HookResourceMissing`
-  (operational; broken installation)
+  (operational; a broken installation)
 """
 
 from __future__ import annotations
@@ -23,6 +24,10 @@ from pathlib import Path
 
 from rac.core.hooks import DEFAULT_STYLE, HookNotFound, available_hooks, load_hook
 from rac.errors import RACError
+
+# The executable bits git requires on a hook script: rwxr-xr-x, applied on top
+# of whatever mode the freshly written file already carries.
+_EXECUTABLE_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
 
 
 class NotAGitWorkTree(RACError):
@@ -52,6 +57,8 @@ class InstalledHook:
     bytes_written: int
 
     def to_dict(self) -> dict:
+        # bytes_written is tracked for callers but deliberately absent from the
+        # JSON shape (pinned by test_installation_json_contract).
         return {
             "schema_version": "1",
             "installed": True,
@@ -75,14 +82,12 @@ def install_hook(target_dir: str, style: str = DEFAULT_STYLE) -> InstalledHook:
     if not git_dir.is_dir():
         raise NotAGitWorkTree(target_dir)
 
-    content = load_hook(style)  # validates the installation (cheap)
-    hooks_dir = git_dir / "hooks"
-    dest = hooks_dir / style
+    content = load_hook(style)  # cheap, and validates the packaged resource
+    dest = git_dir / "hooks" / style
     if dest.exists():
         raise HookFileExists(str(dest))
 
-    hooks_dir.mkdir(parents=True, exist_ok=True)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(content)
-    # Make the hook executable (rwxr-xr-x), as git requires.
-    dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    dest.chmod(dest.stat().st_mode | _EXECUTABLE_BITS)
     return InstalledHook(style=style, path=str(dest), bytes_written=len(content))

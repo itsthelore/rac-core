@@ -1,21 +1,21 @@
-"""Mentioned-but-unlinked reference detection (link-suggestions, ADR-082).
+"""Mentioned-but-unlinked reference detection (link suggestions, ADR-082).
 
-A surface-agnostic detector: for each artifact, find the references its *body*
-makes to other corpus artifacts that are not declared as ``## Related`` edges,
-and return them as advisory suggestions. ``rac doctor`` is the first surface;
-``rac coverage`` is a candidate second one (left as a design open question).
+For each artifact, find the references its *body* makes to other corpus
+artifacts that are not declared as ``## Related`` edges, and return them as
+advisory suggestions. ``rac doctor`` is the first surface for these.
 
-Boundaries this honours:
+The boundaries this honours:
 
-- **Suggest, never apply (ADR-082).** The detector emits findings only; it
-  writes no edge. The declared ``## Related`` sections stay the source of truth
+* **Suggest, never apply (ADR-082).** The detector emits findings only — it
+  writes no edge. Declared ``## Related`` sections remain the source of truth
   (ADR-074) and promotion stays a human review act (ADR-065).
-- **Deterministic and offline (ADR-002, ADR-066).** A pure function of corpus
-  bytes: same corpus, byte-identical findings. No model, embedding, or network.
-- **Reuse, don't reinvent.** Resolution goes through the same resolver
-  validation uses (:func:`resolve_in_index`), the body comes from the shared
-  parser's sections, the declared graph from :func:`relationships_from_corpus`,
-  and the relationship-section vocabulary from :data:`RELATIONSHIP_SECTIONS`.
+* **Deterministic and offline (ADR-002, ADR-066).** A pure function of corpus
+  bytes: identical bytes yield byte-identical findings. No model, no network.
+* **Reuse the existing machinery.** Resolution goes through the same resolver
+  validation uses (:func:`resolve_in_index`), the body text comes from the
+  shared parser's sections, the declared graph from
+  :func:`relationships_from_corpus`, and the relationship vocabulary from
+  :data:`RELATIONSHIP_SECTIONS`.
 """
 
 from __future__ import annotations
@@ -29,21 +29,20 @@ from rac.services.index import index_from_corpus
 from rac.services.relationships import RELATIONSHIP_SECTIONS, relationships_from_corpus
 from rac.services.resolve import OUTCOME_RESOLVED, resolve_in_index
 
-# A reference candidate is a maximal run of alphanumerics with internal single
-# hyphens kept, so ``adr-074`` and ``RAC-KW47GGS85CKG`` each survive as one
-# token. ``tokenize`` (ADR-037) would split these on the hyphen; here the hyphen
-# is part of the token, and any other character is a boundary — so matching stays
-# on token boundaries without substring false positives.
+# A candidate reference is a run of alphanumerics with internal single hyphens
+# kept, so ``adr-074`` and ``RAC-KW47GGS85CKG`` each survive as one token. The
+# search tokenizer (ADR-037) would split on the hyphen; here the hyphen is part
+# of the token and every other character is a boundary, so matching stays on
+# token boundaries without substring false positives.
 _CANDIDATE_RE = re.compile(r"[0-9A-Za-z]+(?:-[0-9A-Za-z]+)*")
 
-# Canonical short reference for a target in a suggested line: a
-# ``<letters>-<digits>`` alias such as ``adr-074`` when one exists (the form the
-# corpus writes for decisions), otherwise the filename stem (the form it writes
-# for every other artifact type).
+# The corpus-idiomatic short reference for a decision — ``<letters>-<digits>``,
+# e.g. ``adr-074``. When a target has no such alias the filename stem is used
+# instead (the form every non-decision type writes).
 _NUMBERED_REF_RE = re.compile(r"^[A-Za-z]+-\d+$")
 
-# Relationship-section headings, normalized, that must not be scanned for
-# mentions — their references are the *declared* edges, not body mentions.
+# Relationship-section headings, normalized. Their contents are *declared* edges,
+# not body mentions, so these sections are never scanned for suggestions.
 _RELATIONSHIP_HEADINGS = frozenset(RELATIONSHIP_SECTIONS)
 
 
@@ -51,8 +50,9 @@ _RELATIONSHIP_HEADINGS = frozenset(RELATIONSHIP_SECTIONS)
 class UnlinkedReference:
     """One advisory suggestion: a body mention with no declared edge.
 
-    ``A``'s body names ``B`` (by id, filename-style ref, or alias), ``B != A``,
-    and ``B`` is not already a declared ``## Related`` target of ``A``.
+    ``source``'s body names ``target`` (by id, filename-style ref, or alias),
+    ``target != source``, and ``target`` is not already a declared ``## Related``
+    edge of ``source``.
     """
 
     source_path: str
@@ -85,15 +85,15 @@ def detect_unlinked_references(
 
     ``entries`` lets a caller (such as ``rac doctor``) pass an already-walked
     corpus snapshot so the corpus is parsed once; when omitted the directory is
-    walked here. The result is sorted by ``(source_path, target_id)`` so output
-    is byte-stable.
+    walked here. Findings are sorted by ``(source_path, target_id)`` so the
+    output is byte-stable.
     """
     if entries is None:
         entries = list(walk_corpus(directory, recursive=recursive))
     index = index_from_corpus(directory, entries, recursive=recursive).artifacts
     by_path = {entry.path: entry for entry in index}
 
-    # Declared edges, keyed by source, using the same resolution validation uses
+    # Declared edges keyed by source, using the same resolution validation uses
     # (resolved, unique targets only) so "already linked" cannot drift.
     declared: dict[str, set[str]] = {}
     for rel in relationships_from_corpus(entries):
@@ -112,12 +112,12 @@ def detect_unlinked_references(
                 for match in _CANDIDATE_RE.finditer(line):
                     token = match.group(0)
                     if token.casefold() in self_aliases:
-                        continue  # self-reference
+                        continue  # a self-reference is not a missing link
                     result = resolve_in_index(index, token)
                     if result.outcome != OUTCOME_RESOLVED:
                         continue  # not a unique corpus artifact
                     target = result.artifact
-                    assert target is not None  # resolved outcome implies an artifact
+                    assert target is not None  # a resolved outcome carries the artifact
                     if target.path == source.path or target.path in already:
                         continue
                     if target.path in seen_targets:

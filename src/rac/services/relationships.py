@@ -1,23 +1,32 @@
-"""Relationship metadata service — extract cross-artifact references (v0.7.0).
+"""Cross-artifact relationships: extraction, validation, graph, neighbourhood.
 
 Relationships are explicit Markdown sections (``## Related Decisions``,
-``## Supersedes``, ...) that reference other artifacts (ADR-016). This module is
-the single home for turning those sections into reference strings, shared by
-``rac inspect`` (which exposes them as the additive ``relationships`` field) and
-``rac stats`` (which counts their presence).
+``## Supersedes``, ``## Related Tickets``, ...) whose body lines reference other
+artifacts (ADR-016). This module is the single home for turning those sections
+into edges, and it layers four responsibilities on one primitive — section text
+to reference strings:
 
-It is pure and deterministic (ADR-002 / ADR-016): it parses section text only and
-never resolves, validates, or graphs the references — v0.7.0 is metadata only.
+1. **Extraction** — the parse of a section body into references, plus the
+   spec-driven views ``rac inspect`` and ``rac stats`` consume.
+2. **Repository report** — ``rac relationships`` (what edges exist, counted).
+3. **Validation** — ``rac relationships --validate`` (which edges are broken,
+   illegal, or graph-inconsistent), the SARIF/gate severity map, and the
+   pre-edit-hook seam.
+4. **Graph objects** — the navigable :class:`Relationship` list plus the
+   ``get_related`` outgoing/incoming/neighbourhood views.
 
-Recognition is spec-driven (REQ-002): only the relationship sections an artifact
-type declares in :attr:`ArtifactSpec.optional` are considered, so a section is
-recognized exactly where its schema allows it.
+Everything here is pure and deterministic (ADR-002 / ADR-016): it parses corpus
+bytes and never resolves by inference, only against declared identifiers. The
+raw reference text stays the source of truth; resolution reuses the one identity
+model (ADR-026) so a reference resolves in the graph exactly when validation
+reports no integrity issue for it.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
@@ -33,9 +42,15 @@ from rac.core.markdown import parse_file
 from rac.core.models import Product
 from rac.core.relationship_types import REGISTRY, edge_spec
 
-# The cross-artifact "Related X" sections. These populate the ``relationships``
-# dict in ``rac inspect`` output. ``related designs`` is included so every peer
-# artifact type can be referenced.
+# --- Vocabulary --------------------------------------------------------------
+#
+# The relationship-section vocabulary is a single source of truth mirrored by
+# core.relationship_types.REGISTRY and by each type's ArtifactSpec.optional
+# (test_schema_agreement pins the three in lockstep).
+
+# The per-artifact-type ``related <type>s`` sections — exactly one per artifact
+# type, so every peer type can be referenced. These populate the ``relationships``
+# dict in ``rac inspect``.
 RELATED_SECTIONS: tuple[str, ...] = (
     "related requirements",
     "related decisions",
@@ -44,26 +59,23 @@ RELATED_SECTIONS: tuple[str, ...] = (
     "related designs",
 )
 
-# External-reference relationship sections (ADR-087): recognized sections whose
-# target is an external identifier (a ticket), not a peer artifact. They are
-# extracted and graphed like the others but format-linted (against the per-repo
-# ticketing provider, ADR-088), never resolved. Kept separate from
-# RELATED_SECTIONS, which is exactly the per-artifact-type vocabulary (one
-# ``related <type>s`` per type).
+# External-reference sections (ADR-087 / ADR-096): the target is an external
+# identifier — a ticket key or a file/trace path — not a peer artifact. They are
+# extracted and graphed like the rest but format-linted, never resolved, so they
+# are kept separate from RELATED_SECTIONS (the per-type vocabulary).
 EXTERNAL_SECTIONS: tuple[str, ...] = ("related tickets", "verified by")
 
-# The full relationship-section vocabulary and its canonical ordering: the per-type
-# ``related *`` sections, then ``supersedes``, then the external-reference sections.
-# This module owns the ordering; ``stats`` and the ``relationships`` command both
-# render by-type output in this order. ``supersedes`` is the one section that does
-# *not* appear in the inspect ``relationships`` dict: there it stays a top-level
-# scalar for backwards compatibility (ADR-007).
+# The full vocabulary and its canonical ordering: the per-type ``related *``
+# sections, then ``supersedes``, then the external sections. This module owns the
+# order; ``stats`` and ``rac relationships`` render by-type output in it.
+# ``supersedes`` is the one section absent from the ``rac inspect`` relationships
+# dict — there it stays a top-level scalar for backwards compatibility (ADR-007).
 RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS
 
-# A *well-formed* leading Markdown list marker: ``-``, ``*``, ``+``, or ``N.``
-# followed by whitespace. Only these are stripped; any other leading text is
-# preserved verbatim, so references like "REQ-001 (blocked)" or a path beginning
-# with "../" survive intact (the whole line is the reference, per ADR-016).
+# A *well-formed* leading Markdown list marker (``-``, ``*``, ``+``, or ``N.``
+# then whitespace). Only these are stripped; any other leading text is kept
+# verbatim, so ``REQ-001 (blocked)``, ``../decisions/adr-004.md``, and
+# ``-no-space`` all survive intact — the whole line is the reference (ADR-016).
 _LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+\.)\s+")
 
 
@@ -71,12 +83,15 @@ def _snake(section: str) -> str:
     return section.replace(" ", "_")
 
 
+# --- Extraction primitives ---------------------------------------------------
+
+
 def parse_references(body: str) -> list[str]:
     """Split a relationship section body into individual reference strings.
 
     One reference per non-empty line. A well-formed leading list marker is
-    stripped; otherwise the line is preserved verbatim. No ID parsing and no
-    resolution — the line text *is* the reference.
+    stripped; otherwise the line is kept verbatim. No ID parsing and no
+    resolution — the line text *is* the reference (ADR-016).
     """
     references: list[str] = []
     for line in body.splitlines():
@@ -92,9 +107,9 @@ def _collect(
 ) -> dict[str, list[str]]:
     """References for the relationship sections in ``spec.optional`` ∩ ``allowed``.
 
-    Returns ``{snake_section -> [references]}`` in ``spec.optional`` order (each
-    artifact's own schema order), including only sections present with at least
-    one parsed reference. The single core behind the two public extractors.
+    Returns ``{snake_section -> [references]}`` in the artifact's own
+    ``spec.optional`` order, keeping only sections present with at least one
+    parsed reference. The single core behind the two public extractors.
     """
     relationships: dict[str, list[str]] = {}
     for section in spec.optional:
@@ -113,8 +128,8 @@ def extract_relationships(product: Product, spec: ArtifactSpec) -> dict[str, lis
     """Cross-artifact references for ``rac inspect``.
 
     Excludes ``supersedes`` — that stays a top-level scalar in inspect output
-    (ADR-007). External-reference sections (``related tickets``) are included.
-    Order follows ``spec.optional`` (the artifact's own schema order).
+    (ADR-007). External sections (``related tickets``, ``verified by``) are
+    included. Order follows ``spec.optional``.
     """
     return _collect(product, spec, RELATED_SECTIONS + EXTERNAL_SECTIONS)
 
@@ -122,8 +137,8 @@ def extract_relationships(product: Product, spec: ArtifactSpec) -> dict[str, lis
 def extract_relationships_full(product: Product, spec: ArtifactSpec) -> dict[str, list[str]]:
     """Cross-artifact references for ``rac relationships`` — *including* Supersedes.
 
-    The repository-level relationship command treats Supersedes as a first-class
-    relationship (REQ-003), so it is reported here alongside the ``related_*``
+    The repository-level command treats Supersedes as a first-class relationship
+    (REQ-003), so it is reported alongside the ``related_*`` and external
     sections. Order follows ``spec.optional``.
     """
     return _collect(product, spec, RELATIONSHIP_SECTIONS)
@@ -132,10 +147,10 @@ def extract_relationships_full(product: Product, spec: ArtifactSpec) -> dict[str
 def present_relationship_sections(product: Product, spec: ArtifactSpec) -> list[str]:
     """Relationship sections ``product`` declares *and* populates.
 
-    Spec-driven and inclusive of ``supersedes`` (unlike
-    :func:`extract_relationships`). A section counts only when present with at
-    least one parsed reference (REQ-011). Returns the normalized section names in
-    ``spec.optional`` order, for ``rac stats`` declared-presence counts.
+    Spec-driven and inclusive of ``supersedes``: a section counts only when
+    present with at least one parsed reference (REQ-011). Returns the normalized
+    (space-form) section names in ``spec.optional`` order, for ``rac stats``
+    declared-presence counts.
     """
     present: list[str] = []
     for section in spec.optional:
@@ -151,10 +166,10 @@ def unsupported_relationship_sections(product: Product, spec: ArtifactSpec) -> l
     """Relationship sections ``product`` declares that its type does not support.
 
     A ``## Related <Type>`` / ``## Supersedes`` section present with at least one
-    reference whose name is *not* in this type's ``spec.optional`` produces no edge
-    today and is silently dropped (ADR-049 edge-legality;
-    ``rac-cross-artifact-enforcement`` REQ-004). Returns the canonical section
-    names in :data:`RELATIONSHIP_SECTIONS` order so the finding is deterministic.
+    reference whose name is *not* in this type's ``spec.optional`` produces no
+    edge and must not be silently dropped (ADR-049 edge-legality). Returns the
+    canonical (space-form) section names in :data:`RELATIONSHIP_SECTIONS` order,
+    so the finding is deterministic.
     """
     unsupported: list[str] = []
     for section in RELATIONSHIP_SECTIONS:
@@ -166,20 +181,125 @@ def unsupported_relationship_sections(product: Product, spec: ArtifactSpec) -> l
     return unsupported
 
 
-# --- Repository-level relationship inspection (v0.7.1) -----------------------
+# --- Materialised corpus items -----------------------------------------------
 #
-# `rac relationships <path>` discovers the explicit relationships declared across
-# a tree of artifacts (ADR-015: repository intelligence in Core, exposed via CLI +
-# JSON for future consumers). It is read-only and deterministic: it reports the
-# references that exist, but never resolves, validates, or graphs them.
+# Every analysis below works over ``(path, product, spec)`` triples in the
+# corpus's sorted-path order (``walk_corpus`` is deterministic). ``spec is None``
+# marks an Unknown document (ADR-010): it is still a valid *target* but declares
+# no relationships of its own.
+
+_Item = tuple[str, Product, ArtifactSpec | None]
+
+
+def _parsed_items(paths: list[str]) -> list[_Item]:
+    """Parse and classify each path into ``(path, product, spec)``."""
+    items: list[_Item] = []
+    for path in paths:
+        product = parse_file(str(path))
+        spec = spec_for(classify(product).type)
+        items.append((str(path), product, spec))
+    return items
+
+
+def _corpus_items(directory: str, recursive: bool) -> list[_Item]:
+    """Every document under ``directory`` as ``(path, product, spec)`` (one walk)."""
+    return _entry_items(list(walk_corpus(directory, recursive=recursive)))
+
+
+def _entry_items(entries: list[CorpusEntry]) -> list[_Item]:
+    """An already-walked corpus snapshot as ``(path, product, spec)`` items."""
+    return [(str(entry.path), entry.product, spec_for(entry.artifact_type)) for entry in entries]
+
+
+# --- Identity indexes --------------------------------------------------------
+#
+# Two indexes over the same items, both keyed by casefolded identifier to
+# ``[(path, display_ident), ...]``:
+#   * the *identifier* index — canonical id only, one entry per file, so only a
+#     canonical identifier can collide (duplicate detection, ADR-026);
+#   * the *resolution* index — canonical id plus every legacy alias, so a
+#     human-readable reference (``ADR-015``) keeps resolving after an artifact
+#     adopts a canonical frontmatter id (migration support).
+
+_IdentIndex = dict[str, list[tuple[str, str]]]
+
+
+def _build_resolution_index(items: list[_Item]) -> _IdentIndex:
+    """Reference-resolution index: canonical identifiers plus legacy aliases.
+
+    Kept as a standalone helper because ``rac rename`` and the graph builders
+    resolve references through the same alias index (one identity model).
+    """
+    index: _IdentIndex = {}
+    for path, product, spec in items:
+        for ident in artifact_identifiers(product, spec, path):
+            index.setdefault(ident.casefold(), []).append((path, ident))
+    return index
+
+
+def _build_indexes(items: list[_Item]) -> tuple[_IdentIndex, _IdentIndex]:
+    """The identifier and resolution indexes in a single pass over ``items``.
+
+    Duplicate detection reads the identifier index (canonical only); reference
+    resolution reads the resolution index (canonical + aliases). Building both in
+    one walk keeps ``_validate`` to a single pass while preserving each index's
+    exact contents.
+    """
+    identifier_index: _IdentIndex = {}
+    resolution_index: _IdentIndex = {}
+    for path, product, spec in items:
+        canonical = artifact_identifier(product, spec, path)
+        identifier_index.setdefault(canonical.casefold(), []).append((path, canonical))
+        for ident in artifact_identifiers(product, spec, path):
+            resolution_index.setdefault(ident.casefold(), []).append((path, ident))
+    return identifier_index, resolution_index
+
+
+def _unique_target(index: _IdentIndex, ref: str, source_path: str) -> str | None:
+    """The path ``ref`` resolves to uniquely and non-self, or None.
+
+    Unresolved, ambiguous, and self references all return None — the graph
+    checks reason only about real directed edges; referential integrity owns the
+    rest.
+    """
+    targets = [p for p, _ in index.get(ref.casefold(), [])]
+    if len(targets) == 1 and targets[0] != source_path:
+        return targets[0]
+    return None
+
+
+def _classify_reference(
+    index: _IdentIndex, ref: str, source_path: str
+) -> tuple[str | None, str | None]:
+    """Resolve ``ref`` to ``(resolved_path, issue_code)`` — exactly one is set.
+
+    A unique non-self match yields ``(path, None)``; every other outcome yields
+    ``(None, code)`` with the stable integrity code. The one place the
+    not-found / ambiguous / self-reference distinction is drawn.
+    """
+    targets = [p for p, _ in index.get(ref.casefold(), [])]
+    if not targets:
+        return None, ISSUE_TARGET_NOT_FOUND
+    if len(targets) > 1:
+        return None, ISSUE_TARGET_AMBIGUOUS
+    if targets[0] == source_path:
+        return None, ISSUE_SELF_REFERENCE
+    return targets[0], None
+
+
+# --- Repository-level relationship inspection (`rac relationships`) -----------
+#
+# Discovers the explicit relationships declared across a tree (ADR-015):
+# read-only and deterministic — it reports the references that exist but never
+# resolves, validates, or graphs them.
 
 
 @dataclass
 class ArtifactRelationships:
     """One artifact's relationships in a repository report.
 
-    ``relationships`` includes Supersedes (unlike ``rac inspect``) and is keyed by
-    snake_case section name in the artifact's own ``spec.optional`` order.
+    ``relationships`` includes Supersedes (unlike ``rac inspect``) and is keyed
+    by snake_case section name in the artifact's own ``spec.optional`` order.
     """
 
     path: str
@@ -192,9 +312,9 @@ class RelationshipReport:
     """Repository-level relationship inspection result (ADR-003).
 
     ``total_files`` counts every Markdown file considered — including files with
-    no relationships and Unknown artifacts. ``artifacts`` lists only those with at
-    least one relationship. Counts are *reference* counts (each declared target is
-    one relationship), aggregated by type in the canonical
+    no relationships and Unknown artifacts. ``artifacts`` lists only those with
+    at least one relationship. Counts are *reference* counts (each declared
+    target is one relationship), aggregated by type in canonical
     :data:`RELATIONSHIP_SECTIONS` order.
     """
 
@@ -202,11 +322,10 @@ class RelationshipReport:
     recursive: bool
     total_files: int
     artifacts: list[ArtifactRelationships] = field(default_factory=list)
-    # Human-friendly resolution (v0.7.12): {casefold(ref) -> "Title (type · ID)"}
-    # for every reference that resolves uniquely. Presentation context only —
-    # the stored reference remains the source of truth, and JSON output does
-    # not include labels (ADR-007: resolved fields would be an additive,
-    # explicitly versioned change).
+    # Human-friendly resolution: {casefold(ref) -> "Title (type · canonical_id)"}
+    # for every reference that resolves uniquely. Presentation context only — the
+    # stored reference stays the source of truth, and JSON never includes labels
+    # (ADR-007: resolved fields would be an additive, explicitly versioned change).
     labels: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -233,14 +352,13 @@ class RelationshipReport:
 
 
 def _resolution_labels(
-    artifacts: list[ArtifactRelationships],
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    artifacts: list[ArtifactRelationships], items: list[_Item]
 ) -> dict[str, str]:
-    """Human-friendly labels for every uniquely-resolved reference (v0.7.12).
+    """Human-friendly labels for every uniquely-resolved reference.
 
-    Resolution runs over the same alias index relationship validation uses
-    (one identity model); ambiguous and unknown references get no label —
-    `--validate` is the place that reports them.
+    Resolution runs over the same alias index ``--validate`` uses (one identity
+    model); ambiguous and unknown references get no label — ``--validate`` is the
+    place that reports them.
     """
     index = _build_resolution_index(items)
     info = {
@@ -254,8 +372,7 @@ def _resolution_labels(
                 key = ref.casefold()
                 if key in labels:
                     continue
-                entries = index.get(key, [])
-                paths = {p for p, _ in entries}
+                paths = {p for p, _ in index.get(key, [])}
                 if len(paths) != 1:
                     continue
                 canonical, spec, title = info[next(iter(paths))]
@@ -264,11 +381,7 @@ def _resolution_labels(
     return labels
 
 
-def _build_report(
-    directory: str,
-    items: list[tuple[str, Product, ArtifactSpec | None]],
-    recursive: bool,
-) -> RelationshipReport:
+def _build_report(directory: str, items: list[_Item], recursive: bool) -> RelationshipReport:
     """Assemble a :class:`RelationshipReport` from ``items`` (already ordered)."""
     artifacts: list[ArtifactRelationships] = []
     for path, product, spec in items:
@@ -298,55 +411,51 @@ def build_relationship_report(directory: str, recursive: bool = True) -> Relatio
 def report_from_corpus(
     directory: str, entries: list[CorpusEntry], recursive: bool = True
 ) -> RelationshipReport:
-    """Inspect relationships in an already-walked corpus snapshot (v0.8.0).
+    """Inspect relationships in an already-walked corpus snapshot.
 
-    Same result as :func:`build_relationship_report`; the snapshot lets one
-    walk feed several analyses (repository model, future incremental refresh).
+    Same result as :func:`build_relationship_report`; the snapshot lets one walk
+    feed several analyses (repository model, incremental refresh).
     """
     return _build_report(directory, _entry_items(entries), recursive)
 
 
 def build_relationship_report_file(path: str) -> RelationshipReport:
-    """Inspect relationships in a single file (REQ-009).
-
-    Same model as a directory report, with one file and ``recursive=False``.
-    """
+    """Inspect relationships in a single file (REQ-009), ``recursive=False``."""
     return _build_report(path, _parsed_items([path]), recursive=False)
 
 
-# --- Relationship validation (v0.7.2) ----------------------------------------
+# --- Relationship validation (`rac relationships --validate`) -----------------
 #
-# `rac relationships <path> --validate` resolves every explicit reference against
-# the identifiers of artifacts discovered in the repository, reporting missing,
-# ambiguous, and self-referencing targets plus duplicate identifiers. Read-only
-# and deterministic; no resolution heuristics, inference, or graphs (ADR-016).
+# Resolves every explicit reference against the identifiers of artifacts in the
+# repository and reports missing / ambiguous / self / superseded targets, illegal
+# and out-of-range edges, cycles, and duplicate identifiers — deterministically,
+# read-only, no inference (ADR-016).
 
 # Stable issue codes (part of the JSON contract).
 ISSUE_DUPLICATE_IDENTIFIER = "duplicate-artifact-identifier"
 ISSUE_TARGET_NOT_FOUND = "relationship-target-not-found"
 ISSUE_TARGET_AMBIGUOUS = "relationship-target-ambiguous"
 ISSUE_SELF_REFERENCE = "relationship-self-reference"
-# Edge-legality (v0.14.0, ADR-049): a relationship section the artifact's type
-# does not declare produces no edge and is reported, not silently dropped.
+# Edge-legality (ADR-049): a relationship section the artifact's type does not
+# declare produces no edge and is reported, not silently dropped.
 ISSUE_EDGE_UNSUPPORTED = "relationship-edge-unsupported"
-# Status-consistency (v0.14.1, ADR-049; generalised in v0.16.0/ADR-051): a live
-# artifact references a target the team has retired, other than via ``supersedes``.
+# Status-consistency (ADR-049, generalised under ADR-051): a live artifact
+# references a target the team has retired, other than via ``supersedes``.
 ISSUE_TARGET_SUPERSEDED = "relationship-target-superseded"
-# Range (v0.16.0, ADR-055): a resolved target whose type is not in the edge's range
+# Range (ADR-055): a resolved target whose type is not in the edge's range
 # (e.g. a ``## Related Decisions`` reference that resolves to a requirement).
 ISSUE_TARGET_TYPE_MISMATCH = "relationship-target-type-mismatch"
-# Acyclicity (v0.16.0, ADR-055): a cycle in a directional, acyclic edge kind
-# (``supersedes``), which an ordering/replacement relationship must not contain.
+# Acyclicity (ADR-055): a cycle in a directional, acyclic edge kind (``supersedes``).
 ISSUE_RELATIONSHIP_CYCLE = "relationship-cycle"
 
-# Canonical intrinsic severity per relationship finding (v0.21.14). Referential
-# integrity and graph-shape breakages are errors; advisory consistency findings
-# (self-reference, unsupported edge, retired-target reference) are warnings. This
-# is the single source of truth for the annotation severity: the SARIF renderer
-# and the `rac gate` enforcement layer both read it, so they can never disagree.
-# It is the *intrinsic* severity only — relationship findings still fail
-# `--validate` (and gate, by default) regardless of severity; the enforcement
-# class is decided separately under the corpus policy (ADR-049).
+# Canonical intrinsic severity per finding. Referential-integrity and
+# graph-shape breakages are errors; advisory consistency findings (self-reference,
+# unsupported edge, retired-target reference) are warnings. Single source of
+# truth for the annotation severity — the SARIF renderer and the ``rac gate``
+# enforcement layer both read it, so they cannot disagree. It is the *intrinsic*
+# severity only: relationship findings still fail ``--validate`` (and gate, by
+# default) regardless of severity; the enforcement class is decided separately
+# under the corpus policy (ADR-049).
 RELATIONSHIP_SEVERITY: dict[str, str] = {
     ISSUE_TARGET_NOT_FOUND: "error",
     ISSUE_TARGET_AMBIGUOUS: "error",
@@ -363,7 +472,8 @@ def _is_retired_artifact(product: Product, spec: ArtifactSpec | None) -> bool:
     """True when ``product``'s ``## Status`` is one of its type's retired states.
 
     Spec-driven (ADR-051): reads ``spec.retired_status`` rather than a hard-coded
-    set, so every type's retired states are honoured. Matches case-insensitively
+    set, so every type's retired states are honoured (and a live terminal status
+    like an Achieved roadmap, ADR-061, is not retired). Matches case-insensitively
     against the first non-empty status line — the same first-line rule
     ``rac inspect`` uses, inlined to avoid importing ``inspect`` (which imports
     this module).
@@ -381,9 +491,10 @@ def _is_retired_artifact(product: Product, spec: ArtifactSpec | None) -> bool:
 class RelationshipIssue:
     """One relationship-validation finding (ADR-003).
 
-    ``to_dict`` emits only the keys relevant to ``code``: duplicate-identifier
-    issues carry ``identifier``/``paths``; reference issues carry
-    ``source_path``/``relationship``/``target``.
+    ``to_dict`` emits only the keys relevant to ``code`` (ADR-007): a duplicate
+    carries ``identifier``/``paths``, an unsupported edge carries
+    ``source_path``/``relationship``, a cycle carries ``relationship``/``paths``,
+    and every reference finding carries ``source_path``/``relationship``/``target``.
     """
 
     code: str
@@ -393,13 +504,9 @@ class RelationshipIssue:
     identifier: str | None = None
     paths: list[str] | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         if self.code == ISSUE_DUPLICATE_IDENTIFIER:
-            return {
-                "identifier": self.identifier,
-                "paths": self.paths,
-                "code": self.code,
-            }
+            return {"identifier": self.identifier, "paths": self.paths, "code": self.code}
         if self.code == ISSUE_EDGE_UNSUPPORTED:
             return {
                 "source_path": self.source_path,
@@ -407,11 +514,7 @@ class RelationshipIssue:
                 "code": self.code,
             }
         if self.code == ISSUE_RELATIONSHIP_CYCLE:
-            return {
-                "relationship": self.relationship,
-                "paths": self.paths,
-                "code": self.code,
-            }
+            return {"relationship": self.relationship, "paths": self.paths, "code": self.code}
         return {
             "source_path": self.source_path,
             "relationship": self.relationship,
@@ -424,9 +527,9 @@ class RelationshipIssue:
 class RelationshipValidation:
     """Repository-level relationship validation result (REQ-006).
 
-    ``relationships_checked`` counts every reference examined. ``validation_issues``
-    counts *all* findings — missing/ambiguous/self references and duplicate
-    identifiers — because each makes the declared relationship metadata unreliable.
+    ``relationships_checked`` counts every reference examined (external edges are
+    not checked). ``validation_issues`` counts *all* findings, since each makes
+    the declared relationship metadata unreliable.
     """
 
     directory: str
@@ -443,111 +546,65 @@ class RelationshipValidation:
         return not self.issues
 
 
-def _parsed_items(paths: list) -> list[tuple[str, Product, ArtifactSpec | None]]:
-    """Parse and classify each path into ``(path, product, spec)``."""
-    items: list[tuple[str, Product, ArtifactSpec | None]] = []
-    for path in paths:
-        product = parse_file(str(path))
-        spec = spec_for(classify(product).type)
-        items.append((str(path), product, spec))
-    return items
+def _extract_by_path(items: list[_Item]) -> dict[str, dict[str, list[str]]]:
+    """Extract each typed item's full relationships once, keyed by path.
 
-
-def _corpus_items(
-    directory: str, recursive: bool
-) -> list[tuple[str, Product, ArtifactSpec | None]]:
-    """Every document under ``directory`` as ``(path, product, spec)`` (one walk)."""
-    return _entry_items(list(walk_corpus(directory, recursive=recursive)))
-
-
-def _entry_items(
-    entries: list[CorpusEntry],
-) -> list[tuple[str, Product, ArtifactSpec | None]]:
-    """An already-walked corpus snapshot as ``(path, product, spec)`` items."""
-    return [(str(entry.path), entry.product, spec_for(entry.artifact_type)) for entry in entries]
-
-
-# Identifier index: {casefold(ident) -> [(path, display_ident), ...]}
-_IdentIndex = dict[str, list[tuple[str, str]]]
-
-
-def _build_identifier_index(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
-) -> _IdentIndex:
-    """Canonical-identifier index over *all* files (Unknown included).
-
-    One entry per file — duplicate-identity detection runs over this index,
-    so only the canonical identifier can collide (ADR-026).
+    The graph and integrity passes below each reason over the same extraction;
+    computing it once (rather than re-parsing per pass) keeps large-corpus
+    validation cheap without changing any result.
     """
-    index: _IdentIndex = {}
-    for path, product, spec in items:
-        ident = artifact_identifier(product, spec, path)
-        index.setdefault(ident.casefold(), []).append((path, ident))
-    return index
-
-
-def _build_resolution_index(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
-) -> _IdentIndex:
-    """Reference-resolution index: canonical identifiers plus legacy aliases.
-
-    Migration support (v0.7.11, Initiative 7): an artifact that adopts a
-    canonical frontmatter ID keeps answering to its legacy identifiers
-    (``## ID`` value, filename prefix, stem), so existing human-readable
-    references like ``ADR-015`` continue to resolve.
-    """
-    index: _IdentIndex = {}
-    for path, product, spec in items:
-        for ident in artifact_identifiers(product, spec, path):
-            index.setdefault(ident.casefold(), []).append((path, ident))
-    return index
+    return {
+        path: extract_relationships_full(product, spec)
+        for path, product, spec in items
+        if spec is not None
+    }
 
 
 def _resolve_references(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    items: list[_Item],
     index: _IdentIndex,
+    extracted: dict[str, dict[str, list[str]]],
 ) -> tuple[int, list[RelationshipIssue], set[str]]:
-    """Resolve every explicit reference in ``items`` against ``index``.
+    """Resolve every explicit (non-external) reference against ``index``.
 
     Returns ``(checked, issues, resolved_target_paths)`` where
-    ``resolved_target_paths`` is the set of paths that appear as a *resolved*
-    target of at least one uniquely-matched reference — used by
-    ``summarize_relationships`` for orphan detection.
+    ``resolved_target_paths`` is every path that is the *resolved* target of at
+    least one uniquely-matched reference — used by ``summarize_relationships`` for
+    orphan detection.
     """
     issues: list[RelationshipIssue] = []
     resolved_targets: set[str] = set()
     checked = 0
 
-    for path, product, spec in items:
+    for path, _product, spec in items:
         if spec is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in extracted[path].items():
             edge = edge_spec(section)
             if edge is not None and edge.external:
-                continue  # external refs (ADR-087) are format-linted, not resolved
+                continue  # external refs (ADR-087/096) are format-linted, not resolved
             for ref in refs:
                 checked += 1
-                targets = [p for p, _ in index.get(ref.casefold(), [])]
-                if not targets:
-                    code = ISSUE_TARGET_NOT_FOUND
-                elif len(targets) > 1:
-                    code = ISSUE_TARGET_AMBIGUOUS
-                elif targets == [path]:
-                    code = ISSUE_SELF_REFERENCE
-                else:
-                    resolved_targets.add(targets[0])
-                    continue  # resolved uniquely to another artifact
-                issues.append(
-                    RelationshipIssue(code=code, source_path=path, relationship=section, target=ref)
-                )
+                resolved, code = _classify_reference(index, ref, path)
+                if resolved is not None:
+                    resolved_targets.add(resolved)
+                    continue
+                # ``resolved is None`` means ``_classify_reference`` set a code.
+                if code is not None:
+                    issues.append(
+                        RelationshipIssue(
+                            code=code, source_path=path, relationship=section, target=ref
+                        )
+                    )
 
     return checked, issues, resolved_targets
 
 
 def _acyclic_adjacency(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    items: list[_Item],
     resolution_index: _IdentIndex,
     kind: str,
+    extracted: dict[str, dict[str, list[str]]],
 ) -> dict[str, list[str]]:
     """``{source_path -> sorted unique target paths}`` for edge ``kind``.
 
@@ -555,14 +612,14 @@ def _acyclic_adjacency(
     are owned by referential integrity), so the graph reflects real directed edges.
     """
     adjacency: dict[str, list[str]] = {}
-    for path, product, spec in items:
+    for path, _product, spec in items:
         if spec is None:
             continue
         targets: set[str] = set()
-        for ref in extract_relationships_full(product, spec).get(kind, []):
-            resolved = [p for p, _ in resolution_index.get(ref.casefold(), [])]
-            if len(resolved) == 1 and resolved[0] != path:
-                targets.add(resolved[0])
+        for ref in extracted[path].get(kind, []):
+            resolved = _unique_target(resolution_index, ref, path)
+            if resolved is not None:
+                targets.add(resolved)
         if targets:
             adjacency[path] = sorted(targets)
     return adjacency
@@ -572,8 +629,8 @@ def _cyclic_components(adjacency: dict[str, list[str]]) -> list[list[str]]:
     """Strongly-connected components of size > 1, each a sorted node list.
 
     A cycle exists exactly within an SCC larger than one node (self-loops are
-    already excluded upstream). Deterministic: nodes and neighbours are visited in
-    sorted order (Tarjan), and the components are returned sorted.
+    excluded upstream). Deterministic: Tarjan with sorted node/neighbour
+    visitation, and the components returned sorted by first node.
     """
     indices: dict[str, int] = {}
     lowlink: dict[str, int] = {}
@@ -613,13 +670,14 @@ def _cyclic_components(adjacency: dict[str, list[str]]) -> list[list[str]]:
 
 
 def _cycle_issues(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    items: list[_Item],
     resolution_index: _IdentIndex,
+    extracted: dict[str, dict[str, list[str]]],
 ) -> list[RelationshipIssue]:
     """One ``relationship-cycle`` per cyclic component of each acyclic edge kind."""
     issues: list[RelationshipIssue] = []
     for kind in sorted(name for name, edge in REGISTRY.items() if edge.acyclic):
-        adjacency = _acyclic_adjacency(items, resolution_index, kind)
+        adjacency = _acyclic_adjacency(items, resolution_index, kind, extracted)
         for component in _cyclic_components(adjacency):
             issues.append(
                 RelationshipIssue(code=ISSUE_RELATIONSHIP_CYCLE, relationship=kind, paths=component)
@@ -627,29 +685,34 @@ def _cycle_issues(
     return issues
 
 
-def _validate(
-    directory: str,
-    items: list[tuple[str, Product, ArtifactSpec | None]],
-    recursive: bool,
-) -> RelationshipValidation:
-    index = _build_identifier_index(items)
+def _validate(directory: str, items: list[_Item], recursive: bool) -> RelationshipValidation:
+    """The whole validation pass, with test-visible issue ordering.
+
+    Findings are appended in fixed order so the report is deterministic:
+    (1) duplicate identifiers, (2) unsupported edges, (3) range/type mismatch,
+    (4) retired-target references, (5) cycles, (6) per-reference integrity.
+    """
+    identifier_index, resolution_index = _build_indexes(items)
+    extracted = _extract_by_path(items)
+    by_path = {path: (product, spec) for path, product, spec in items}
 
     issues: list[RelationshipIssue] = []
 
-    # Duplicate identifiers (repo-level), emitted first, sorted by identifier.
+    # (1) Duplicate identifiers (repo-level), sorted by identifier casefold; each
+    # entry's paths sorted, and the display casing taken from the min-path file.
     duplicates: list[tuple[str, list[str]]] = []
-    for entries in index.values():
+    for entries in identifier_index.values():
         if len(entries) > 1:
-            display = min(entries, key=lambda e: e[0])[1]  # first path's casing
+            display = min(entries, key=lambda e: e[0])[1]
             duplicates.append((display, sorted(p for p, _ in entries)))
     for display, dup_paths in sorted(duplicates, key=lambda d: d[0].casefold()):
         issues.append(
             RelationshipIssue(code=ISSUE_DUPLICATE_IDENTIFIER, identifier=display, paths=dup_paths)
         )
 
-    # Edge-legality (v0.14.0, ADR-049): report relationship sections an artifact's
-    # type does not declare instead of silently dropping them. Deterministic —
-    # items in sorted-path order, sections in canonical RELATIONSHIP_SECTIONS order.
+    # (2) Edge-legality (ADR-049): report relationship sections an artifact's type
+    # does not declare instead of dropping them. Items are already in sorted-path
+    # order; sections come back in canonical RELATIONSHIP_SECTIONS order.
     for path, product, spec in items:
         if spec is None:
             continue
@@ -660,37 +723,23 @@ def _validate(
                 )
             )
 
-    resolution_index = _build_resolution_index(items)
-    by_path = {path: (product, spec) for path, product, spec in items}
-
-    def _resolved(ref: str, source_path: str) -> str | None:
-        """The unique non-self target path for ``ref``, or None.
-
-        Unresolved/ambiguous/self references are owned by referential integrity;
-        the graph checks below only reason about uniquely-resolved edges.
-        """
-        targets = [p for p, _ in resolution_index.get(ref.casefold(), [])]
-        if len(targets) != 1 or targets[0] == source_path:
-            return None
-        return targets[0]
-
-    # Range (v0.16.0, ADR-055): a resolved target whose type is not in the edge's
-    # declared range is an illegal edge — e.g. a ``## Related Decisions`` reference
-    # that resolves to a requirement. Deterministic (sorted-path / spec.optional).
-    for path, product, spec in items:
+    # (3) Range (ADR-055): a resolved target whose type is not in the edge's
+    # declared range is an illegal edge. External edges carry no artifact range;
+    # an untyped target (ADR-010) is not a range violation.
+    for path, _product, spec in items:
         if spec is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in extracted[path].items():
             edge = edge_spec(section)
             if edge is None or edge.external:
-                continue  # external edges (ADR-087) carry no artifact range
+                continue
             for ref in refs:
-                target = _resolved(ref, path)
+                target = _unique_target(resolution_index, ref, path)
                 if target is None:
                     continue
                 _, target_spec = by_path[target]
                 if target_spec is None:
-                    continue  # untyped document (ADR-010) — not a range violation
+                    continue
                 if target_spec.name not in edge.range:
                     issues.append(
                         RelationshipIssue(
@@ -701,19 +750,20 @@ def _validate(
                         )
                     )
 
-    # Status-consistency (v0.14.1, generalised in v0.16.0/ADR-051): a live artifact
-    # must not reference a retired target, except via an edge that permits it
-    # (``supersedes``, ``forbids_target_status=False``). Reads the resolved
-    # target's status from the materialised items — no second walk.
+    # (4) Status-consistency (ADR-049/ADR-051): a live artifact must not reference
+    # a retired target, except through an edge that permits it (``supersedes`` /
+    # external, ``forbids_target_status=False``). A retired *source* is exempt —
+    # its outbound references are a historical chain. Target status is read from
+    # the materialised items, so there is no second walk.
     for path, product, spec in items:
         if spec is None or _is_retired_artifact(product, spec):
-            continue  # unknown file, or a retired source (historical chains exempt)
-        for section, refs in extract_relationships_full(product, spec).items():
+            continue
+        for section, refs in extracted[path].items():
             edge = edge_spec(section)
             if edge is None or edge.external or not edge.forbids_target_status:
-                continue  # supersedes/external edges never gate on target status
+                continue
             for ref in refs:
-                target = _resolved(ref, path)
+                target = _unique_target(resolution_index, ref, path)
                 if target is None:
                     continue
                 target_product, target_spec = by_path[target]
@@ -727,12 +777,12 @@ def _validate(
                         )
                     )
 
-    # Acyclicity (v0.16.0, ADR-055): a cycle in a directional, acyclic edge kind
-    # (today ``supersedes``) is illegal — an ordering/replacement edge must not
-    # form a loop. Reported per strongly-connected component, deterministically.
-    issues.extend(_cycle_issues(items, resolution_index))
+    # (5) Acyclicity (ADR-055): a cycle in a directional, acyclic edge kind
+    # (today ``supersedes``), reported per strongly-connected component.
+    issues.extend(_cycle_issues(items, resolution_index, extracted))
 
-    checked, ref_issues, _ = _resolve_references(items, resolution_index)
+    # (6) Per-reference integrity: not-found / ambiguous / self-reference.
+    checked, ref_issues, _ = _resolve_references(items, resolution_index, extracted)
     issues.extend(ref_issues)
 
     return RelationshipValidation(
@@ -748,25 +798,24 @@ def validate_relationships(
 ) -> RelationshipValidation:
     """Validate explicit relationship references across a directory.
 
-    When a per-invocation ``cache`` is supplied, the corpus is served through it
-    so artifacts already parsed in an earlier phase of the same run are not
-    reparsed (WS8); the result is byte-identical to the uncached walk.
+    When a per-invocation ``cache`` is supplied the corpus is served through it,
+    so artifacts parsed in an earlier phase of the same run are not reparsed
+    (WS8); the result is byte-identical to the uncached walk.
     """
     if cache is not None:
         return validation_from_corpus(
             directory, cache.collect(directory, recursive=recursive), recursive
         )
-    items = _corpus_items(directory, recursive)
-    return _validate(directory, items, recursive)
+    return _validate(directory, _corpus_items(directory, recursive), recursive)
 
 
 def validation_from_corpus(
     directory: str, entries: list[CorpusEntry], recursive: bool = True
 ) -> RelationshipValidation:
-    """Validate relationships in an already-walked corpus snapshot (v0.8.0).
+    """Validate relationships in an already-walked corpus snapshot.
 
     Same result as :func:`validate_relationships`; the snapshot lets one walk
-    feed several analyses (repository model, future incremental refresh).
+    feed several analyses.
     """
     return _validate(directory, _entry_items(entries), recursive)
 
@@ -774,8 +823,8 @@ def validation_from_corpus(
 def validate_relationships_file(path: str) -> RelationshipValidation:
     """Validate a single file (REQ-009).
 
-    The identifier index contains only this file, so cross-file references will not
-    resolve — repository validation needs a directory.
+    The identifier index contains only this file, so cross-file references will
+    not resolve — repository validation needs a directory.
     """
     return _validate(path, _parsed_items([path]), recursive=False)
 
@@ -788,47 +837,34 @@ def validate_document_against_corpus(
 ) -> RelationshipValidation:
     """Resolve one *proposed* document's outbound references against a live corpus.
 
-    The single seam the Claude Code ``PreToolUse`` pre-edit hook needs
-    (v0.21.17, ADR-067): a document held only in memory — typically piped to
-    ``rac validate - --corpus`` from the hook before the edit lands — has its
-    cross-artifact references resolved against the *whole* corpus index, so a
-    reference to a retired (superseded/deprecated) or missing decision is
-    reported even though the proposed document is not yet on disk.
+    The seam the Claude Code ``PreToolUse`` pre-edit hook needs (ADR-067): a
+    document held only in memory has its cross-artifact references resolved
+    against the whole corpus index, so a reference to a retired or missing
+    decision is reported even though the proposed document is not yet on disk.
 
-    This reuses the existing repository resolution (:func:`_validate`) rather
-    than reimplementing it (ADR-016 / ADR-063): the proposed document is folded
-    into the corpus snapshot as ``(source_path, product, spec)`` and the run's
-    findings are then filtered to those whose ``source_path`` is the proposed
-    document — pre-existing corpus issues are not the pre-edit hook's concern,
-    only the references the edit introduces.
+    It reuses the repository resolution (:func:`_validate`) rather than
+    reimplementing it (ADR-016 / ADR-063): the proposed document is folded into
+    the corpus snapshot, and the findings are filtered to those anchored on the
+    proposed document — pre-existing corpus issues are not the hook's concern,
+    only the references this edit introduces.
 
-    Identifier collision (editing an existing artifact): the proposed document
-    usually shares its canonical identifier with the on-disk artifact being
-    edited. The on-disk counterpart is *excluded* from the corpus snapshot
-    (matched on canonical identifier, case-insensitively), so the proposed
-    document stands in for it. This prevents two spurious findings — a
-    ``duplicate-artifact-identifier`` against the very file being edited, and a
-    ``relationship-self-reference`` when the proposed document references its own
-    identity — and means an edit is validated *as if* it replaces the committed
-    version. A brand-new document (no identifier match) simply joins the corpus.
+    Editing an existing artifact, the proposed document usually shares its
+    canonical identifier with the on-disk artifact. That on-disk counterpart is
+    *excluded* from the snapshot (matched on canonical identifier, casefolded), so
+    the proposed document stands in for it. That prevents two spurious findings —
+    a duplicate identifier against the file being edited, and a self-reference
+    when the document references its own identity — and validates the edit *as if*
+    it replaces the committed version. A brand-new document matches nothing here
+    and simply joins the corpus.
     """
-    corpus = _corpus_items(directory, recursive)
     spec = spec_for(classify(product).type)
     proposed_ident = artifact_identifier(product, spec, source_path).casefold()
-    # Drop the on-disk counterpart of the document being edited (same canonical
-    # identity) so the proposed document replaces it rather than colliding with
-    # it. A new artifact matches nothing here and the corpus is unchanged.
     kept = [
         item
-        for item in corpus
+        for item in _corpus_items(directory, recursive)
         if artifact_identifier(item[1], item[2], item[0]).casefold() != proposed_ident
     ]
-    items = [*kept, (source_path, product, spec)]
-    result = _validate(directory, items, recursive)
-    # Only the proposed document's own outbound references are the hook's
-    # concern; pre-existing corpus findings (and repo-level duplicate/cycle
-    # findings not anchored to this document) are filtered out so the pre-edit
-    # signal is exactly "what this edit introduces".
+    result = _validate(directory, [*kept, (source_path, product, spec)], recursive)
     own = [issue for issue in result.issues if issue.source_path == source_path]
     return RelationshipValidation(
         directory=directory,
@@ -838,28 +874,21 @@ def validate_document_against_corpus(
     )
 
 
-# --- Repository relationship summary (v0.7.3) ---------------------------------
-#
-# Aggregate relationship health for ``rac portfolio``. Returns counts and an
-# orphan count. An artifact is *orphaned* when no other artifact references it
-# with a successfully-resolved relationship — it may still declare outbound
-# relationships, but nothing points back to it. Coverage is the fraction of
-# non-unknown artifacts that declare at least one relationship.
+# --- Repository relationship summary (`rac portfolio`) ------------------------
 
 
 @dataclass
 class RelationshipSummary:
     """Repository-level relationship health for ``PortfolioSummary``.
 
-    ``total`` counts every declared reference (same unit as
-    ``RelationshipReport.relationship_count``).  ``broken`` counts references
-    that could not be uniquely resolved (target-not-found, ambiguous, or
-    self-reference).  ``orphaned`` counts artifacts that are not the target of
-    any resolved reference.  ``coverage`` is the fraction of known (non-unknown)
-    artifacts that declare at least one outbound relationship; 1.0 when there
-    are no known artifacts.  ``issues`` holds the per-reference resolution
-    findings (``broken == len(issues)``); consumers like ``rac portfolio`` turn
-    them into attention items without a second relationship walk.
+    ``total`` counts every checked reference; ``broken`` counts those that could
+    not be uniquely resolved (not-found, ambiguous, or self-reference), with
+    ``valid = total - broken``. ``orphaned`` counts known artifacts that are the
+    target of no resolved reference. ``coverage`` is the fraction of known
+    (non-unknown) artifacts declaring at least one outbound relationship — 1.0
+    when there are no known artifacts. ``issues`` holds the per-reference findings
+    (``broken == len(issues)``), so consumers turn them into attention items
+    without a second walk.
     """
 
     total: int
@@ -871,45 +900,35 @@ class RelationshipSummary:
 
 
 def summarize_relationships(directory: str, recursive: bool = True) -> RelationshipSummary:
-    """Aggregate relationship health across a directory (v0.7.3)."""
+    """Aggregate relationship health across a directory."""
     return _summarize(_corpus_items(directory, recursive))
 
 
 def summary_from_corpus(entries: list[CorpusEntry]) -> RelationshipSummary:
-    """Aggregate relationship health for an already-walked snapshot (v0.8.0).
+    """Aggregate relationship health for an already-walked snapshot.
 
-    Same result as :func:`summarize_relationships`; the snapshot lets one walk
-    feed several analyses (repository model, future incremental refresh).
+    Same result as :func:`summarize_relationships`.
     """
     return _summarize(_entry_items(entries))
 
 
-def _summarize(items: list[tuple[str, Product, ArtifactSpec | None]]) -> RelationshipSummary:
+def _summarize(items: list[_Item]) -> RelationshipSummary:
     if not items:
         return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
 
     index = _build_resolution_index(items)
-    checked, ref_issues, resolved_targets = _resolve_references(items, index)
+    extracted = _extract_by_path(items)
+    checked, ref_issues, resolved_targets = _resolve_references(items, index, extracted)
 
     broken = len(ref_issues)
-    valid = checked - broken
-
-    # Orphan = known (spec is not None) artifact whose path never appears as a
-    # resolved target of another artifact's reference.
-    all_known_paths = {path for path, _, spec in items if spec is not None}
-    orphaned = len(all_known_paths - resolved_targets)
-
-    # Coverage = fraction of known artifacts that declare >=1 outbound relationship.
-    artifacts_with_rels = sum(
-        1
-        for path, product, spec in items
-        if spec is not None and extract_relationships_full(product, spec)
-    )
-    coverage = artifacts_with_rels / len(all_known_paths) if all_known_paths else 1.0
+    known_paths = {path for path, _, spec in items if spec is not None}
+    orphaned = len(known_paths - resolved_targets)
+    with_rels = sum(1 for path in known_paths if extracted.get(path))
+    coverage = with_rels / len(known_paths) if known_paths else 1.0
 
     return RelationshipSummary(
         total=checked,
-        valid=valid,
+        valid=checked - broken,
         broken=broken,
         orphaned=orphaned,
         coverage=round(coverage, 4),
@@ -917,23 +936,22 @@ def _summarize(items: list[tuple[str, Product, ArtifactSpec | None]]) -> Relatio
     )
 
 
-# --- Relationship objects for the repository model (v0.8.0) -------------------
+# --- Relationship objects for the repository model ---------------------------
 #
-# The repository model (rac.services.repository) needs every declared reference
-# as one navigable object: where it points from, what it says, and where it
-# resolves to. The raw reference text remains the source of truth (ADR-016);
-# resolution reuses the same alias index as `--validate`, so a reference is
-# resolved here exactly when validation reports no issue for it.
+# The repository model needs every declared reference as one navigable object:
+# where it points from, what it says, and where it resolves to. The raw text
+# stays the source of truth (ADR-016); resolution reuses the ``--validate`` alias
+# index, so a reference resolves here exactly when validation reports no issue.
 
 
 @dataclass(frozen=True)
 class Relationship:
     """One declared cross-artifact reference, with its resolution outcome.
 
-    ``resolved_path`` is set only when the reference resolves uniquely to
-    another artifact; otherwise ``issue`` carries the stable validation code
-    (:data:`ISSUE_TARGET_NOT_FOUND`, :data:`ISSUE_TARGET_AMBIGUOUS`, or
-    :data:`ISSUE_SELF_REFERENCE`).
+    ``resolved_path`` is set only when the reference resolves uniquely to another
+    artifact; otherwise ``issue`` carries the stable code (not-found / ambiguous /
+    self-reference). An external edge (ADR-087/096) has neither: it resolves to no
+    in-corpus artifact by design and is never "broken".
     """
 
     source_path: str
@@ -944,11 +962,10 @@ class Relationship:
 
 
 def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
-    """Every declared reference in a corpus snapshot as :class:`Relationship`.
+    """Every declared reference in a corpus snapshot as a :class:`Relationship`.
 
-    Ordering is deterministic: source artifacts in snapshot (sorted path)
-    order, sections in each artifact's own schema order, references in
-    declaration order — matching ``_resolve_references``.
+    Deterministic order: source artifacts in snapshot (sorted-path) order,
+    sections in each artifact's own schema order, references in declaration order.
     """
     items = _entry_items(entries)
     index = _build_resolution_index(items)
@@ -960,30 +977,10 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
             edge = edge_spec(section)
             external = edge is not None and edge.external
             for ref in refs:
-                resolved: str | None = None
-                issue: str | None = None
                 if external:
-                    # External references (ADR-087) resolve to no in-corpus
-                    # artifact by design — an edge for the graph, never "broken".
-                    relationships.append(
-                        Relationship(
-                            source_path=path,
-                            relationship=section,
-                            target=ref,
-                            resolved_path=None,
-                            issue=None,
-                        )
-                    )
-                    continue
-                targets = [p for p, _ in index.get(ref.casefold(), [])]
-                if not targets:
-                    issue = ISSUE_TARGET_NOT_FOUND
-                elif len(targets) > 1:
-                    issue = ISSUE_TARGET_AMBIGUOUS
-                elif targets == [path]:
-                    issue = ISSUE_SELF_REFERENCE
+                    resolved, issue = None, None
                 else:
-                    resolved = targets[0]
+                    resolved, issue = _classify_reference(index, ref, path)
                 relationships.append(
                     Relationship(
                         source_path=path,
@@ -997,12 +994,12 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
 
 
 def inbound_counts_from_corpus(entries: list[CorpusEntry]) -> dict[str, int]:
-    """``{artifact path -> count of resolved edges that point at it}``.
+    """``{artifact path -> count of resolved edges pointing at it}``.
 
-    The canonical inbound-degree signal: resolved, unique, non-self edges only
-    (the same definition ``rac doctor``'s orphan/hub pass and the search graph
-    boost both consume, so they cannot drift). Artifacts with no inbound edge are
-    absent (count 0).
+    The canonical inbound-degree signal: resolved, unique, non-self edges only —
+    the same definition ``rac doctor``'s orphan/hub pass and the search graph
+    boost consume, so they cannot drift. Artifacts with no inbound edge are absent
+    (count 0).
     """
     counts: dict[str, int] = {}
     for rel in relationships_from_corpus(entries):
@@ -1011,19 +1008,17 @@ def inbound_counts_from_corpus(entries: list[CorpusEntry]) -> dict[str, int]:
     return counts
 
 
-# --- 1-hop neighborhood (get_related) ----------------------------------------
+# --- Bounded neighbourhood (get_related) -------------------------------------
 #
 # The references an artifact declares (outgoing) and the artifacts whose
-# references resolve to it (incoming). This is the single source of truth for
-# the ``get_related`` MCP tool's view and for the grounding-eval benchmark that
-# guards it (ADR-031, ADR-067): both consume these functions, so the scored
-# surface cannot drift from the served one. Resolution stays Core-owned — an
-# incoming edge exists exactly when a reference resolved uniquely to the target.
-
+# references resolve to it (incoming), plus the bounded multi-hop neighbourhood.
+# This is the single source of truth for the ``get_related`` MCP tool and the
+# grounding-eval benchmark that guards it (ADR-031, ADR-067): both consume these
+# functions, so the scored surface cannot drift from the served one.
 
 # Canonical relationship-section order (snake_case), for deterministic
-# get_related ordering (WS4, REQ-006): incoming edges sort by their section's
-# position in the artifact's spec/section vocabulary, then ascending id.
+# get_related ordering (REQ-006): edges sort by their section's position in the
+# vocabulary, then ascending id.
 _RELATIONSHIP_ORDER: dict[str, int] = {
     _snake(section): index for index, section in enumerate(RELATIONSHIP_SECTIONS)
 }
@@ -1039,8 +1034,8 @@ class IncomingReference:
     """An artifact whose declared reference resolves to a target artifact.
 
     The ``get_related`` ``incoming`` shape: the referencing artifact's identity,
-    the snake_case relationship section the reference sits in, and ``target`` —
-    the reference text as stored (WS2 evidence: the edge that surfaced it).
+    the snake_case section the reference sits in, and ``target`` — the reference
+    text as stored (the edge that surfaced it).
     """
 
     id: str
@@ -1053,11 +1048,11 @@ class IncomingReference:
 
 @dataclass(frozen=True)
 class IncomingReferences:
-    """Capped, ordered incoming edges plus the full pre-cap count (WS4).
+    """Capped, ordered incoming edges plus the full pre-cap count (REQ-004/007).
 
-    ``items`` is ordered by relationship type then ascending id (REQ-006) and
-    capped at the per-call edge limit (REQ-007); ``total`` is the full count so a
-    caller can signal overflow via the truncation marker.
+    ``items`` is ordered by relationship type then ascending id and capped at the
+    per-call edge limit; ``total`` is the full count so a caller can signal
+    overflow via the truncation marker.
     """
 
     items: list[IncomingReference]
@@ -1066,7 +1061,7 @@ class IncomingReferences:
 
 @dataclass(frozen=True)
 class OutgoingReferences:
-    """Capped outgoing references grouped by section, plus the full count (WS4)."""
+    """Capped outgoing references grouped by section, plus the full count."""
 
     by_section: dict[str, list[str]]
     total: int
@@ -1087,9 +1082,10 @@ def outgoing_references(
     Keys are snake_case section names in the source artifact's own spec order
     (``relationships_from_corpus`` yields references in that order, so a
     first-seen-wins dict preserves it). References are the raw stored text — the
-    source of truth (ADR-016). Collection stops after ``limit`` edges so a
-    pathological artifact cannot build an unbounded list (WS4, REQ-007); the
-    default resolves to :data:`MAX_RELATED_EDGES` at call time.
+    source of truth (ADR-016). Collection stops storing after ``limit`` edges so a
+    pathological artifact cannot build an unbounded list (REQ-007), while the full
+    count is still tallied. ``limit=None`` resolves to :data:`MAX_RELATED_EDGES`
+    *read from the module global at call time* — the value tests monkeypatch.
     """
     if limit is None:
         limit = MAX_RELATED_EDGES
@@ -1117,11 +1113,11 @@ def incoming_references(
 
     ``identity_by_path`` maps each artifact path to ``(id, type, title)`` (the
     caller builds it from the repository index). Self-references are excluded.
-    Collection stops storing after ``limit`` edges to bound work (WS4, REQ-007),
-    while the full count is still tallied so overflow can be signalled; the kept
-    edges are ordered by relationship type then ascending id (REQ-006) so
-    tail-truncation drops the lowest-priority edges deterministically (REQ-008).
-    The default resolves to :data:`MAX_RELATED_EDGES` at call time.
+    Collection stops storing after ``limit`` edges to bound work (REQ-007), while
+    the full count is still tallied; the kept edges are ordered by relationship
+    type then ascending id (REQ-006), so tail-truncation drops the lowest-priority
+    edges deterministically (REQ-008). ``limit=None`` resolves to
+    :data:`MAX_RELATED_EDGES` *read from the module global at call time*.
     """
     if limit is None:
         limit = MAX_RELATED_EDGES
@@ -1154,7 +1150,7 @@ def incoming_references(
 
 @dataclass(frozen=True)
 class NeighborhoodNode:
-    """One artifact reachable from the origin, with its hop distance (v0.24, WS-D)."""
+    """One artifact reachable from the origin, with its hop distance."""
 
     id: str
     type: str
@@ -1167,10 +1163,10 @@ class NeighborhoodNode:
 class Neighborhood:
     """The bounded multi-hop neighbourhood of an origin artifact.
 
-    ``nodes`` excludes the origin and is ordered deterministically by
-    ``(hops, type, id)`` so response-budget truncation drops the farthest,
-    lowest-priority artifacts first. ``truncated`` is True when any traversal
-    cap stopped the walk early.
+    ``nodes`` excludes the origin and is ordered by ``(hops, type, id)`` so
+    response-budget truncation drops the farthest, lowest-priority artifacts
+    first. ``truncated`` is True when the work budget or a frontier cap stopped
+    the walk from expanding fully.
     """
 
     nodes: list[NeighborhoodNode]
@@ -1186,20 +1182,26 @@ def neighborhood(
     max_frontier: int = MAX_TRAVERSAL_FRONTIER,
     work_budget: int = MAX_TRAVERSAL_WORK,
 ) -> Neighborhood:
-    """Artifacts within ``depth`` hops of ``origin_path`` (v0.24, WS-D).
+    """Artifacts within ``depth`` hops of ``origin_path`` (breadth-first).
 
-    A breadth-first walk over resolved relationship edges in both directions,
-    bounded by the four caps from ``rac-parser-traversal-robustness`` REQ-010:
-    the requested ``depth`` is clamped to :data:`MAX_TRAVERSAL_DEPTH`, each level
-    admits at most ``max_frontier`` nodes, a visited set makes the walk
-    cycle-safe, and ``work_budget`` caps the edges examined across the whole
-    walk. The origin is never included. Deterministic and offline (ADR-002):
-    identical corpus bytes yield a byte-identical, ordered result.
+    A BFS over resolved relationship edges in both directions, bounded by the
+    traversal caps (``rac-parser-traversal-robustness`` REQ-010): the requested
+    ``depth`` is clamped to :data:`MAX_TRAVERSAL_DEPTH` (read from the module
+    global at call time), a visited set makes the walk cycle-safe, and
+    ``work_budget`` caps the edges examined across the whole walk.
+
+    ``max_frontier`` is an *expansion* cap, not an output cap: every discovered
+    neighbour is emitted into ``nodes`` and marked visited, but only the first
+    ``max_frontier`` of a level are pushed onto the next frontier to expand.
+    Hitting either the work budget or a frontier cap flips ``truncated``.
+
+    Deterministic and offline (ADR-002): identical corpus bytes yield a
+    byte-identical, ordered result.
     """
     depth = max(0, min(depth, MAX_TRAVERSAL_DEPTH))
 
-    # Undirected adjacency over resolved edges; each entry carries the relationship
-    # rank of the edge so discovery order is deterministic (REQ-004).
+    # Undirected adjacency over resolved edges; each entry carries the edge's
+    # relationship rank so discovery order is deterministic (REQ-004).
     adjacency: dict[str, list[tuple[str, int]]] = {}
     for rel in relationships:
         if rel.resolved_path is None or rel.source_path == rel.resolved_path:
@@ -1209,10 +1211,14 @@ def neighborhood(
         adjacency.setdefault(rel.resolved_path, []).append((rel.source_path, rank))
 
     visited: set[str] = {origin_path}
-    discovered: list[tuple[int, int, str, str]] = []  # (hops, rank, id, path)
+    # (hops, rank, id, path): discovery order is keyed on rank/id/path first so
+    # tail-truncation under the response budget is deterministic; the emitted
+    # nodes are re-sorted by (hops, type, id) below.
+    discovered: list[tuple[int, int, str, str]] = []
     frontier = [origin_path]
     work = 0
     truncated = False
+    budget_exhausted = False
 
     for current_depth in range(1, depth + 1):
         next_frontier: list[str] = []
@@ -1221,6 +1227,7 @@ def neighborhood(
                 work += 1
                 if work > work_budget:
                     truncated = True
+                    budget_exhausted = True
                     break
                 if neighbor_path in visited:
                     continue
@@ -1229,17 +1236,18 @@ def neighborhood(
                 if identity is None:  # pragma: no cover — every edge target is indexed
                     continue
                 discovered.append((current_depth, rank, identity[0], neighbor_path))
+                # Emit the node regardless; only bound how many expand next hop.
                 if len(next_frontier) >= max_frontier:
                     truncated = True
                 else:
                     next_frontier.append(neighbor_path)
-            if truncated and work > work_budget:
+            if budget_exhausted:
                 break
         frontier = next_frontier
         if not frontier:
             break
 
-    discovered.sort()  # (hops, rank, id, path) — deterministic, stable truncation
+    discovered.sort()
     nodes = [
         NeighborhoodNode(
             id=identity_by_path[path][0],

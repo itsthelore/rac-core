@@ -23,7 +23,7 @@ from rac.core.corpus import CorpusEntry, collect_corpus
 from rac.core.models import SearchSection
 from rac.core.operations import CancelToken, Progress, ProgressCallback, checkpoint
 
-from .index import index_from_corpus
+from .index import IndexEntry, index_from_corpus
 from .portfolio import PortfolioSummary, portfolio_from_corpus
 from .relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
@@ -71,7 +71,8 @@ class Artifact:
     missing_recommended: tuple[str, ...] = ()
     # Searchable section headings/body lines, original text preserved (v0.10.3):
     # lets the repository model serve body-tier `rac find` searches through the
-    # shared resolver seam without a second walk. Not part of any JSON contract.
+    # shared resolver seam (SearchableArtifact) without a second walk. Not part
+    # of any JSON contract.
     search_sections: tuple[SearchSection, ...] = ()
     # Inbound resolved-edge count, the graph signal the relevance ranker fuses
     # (ADR-078); carried so a repository-model search ranks like every other
@@ -166,6 +167,45 @@ def _relationship_diagnostic(issue: RelationshipIssue, identifiers: dict[str, st
     )
 
 
+def _missing_recommended(entries: list[CorpusEntry]) -> dict[str, tuple[str, ...]]:
+    """Per-path schema-recommended sections each artifact leaves unfilled.
+
+    Keyed by the corpus path in string form so it joins the index entries by
+    ``path``. Unknown documents (no spec) are absent, hence carry no
+    completeness — the index lookup falls back to an empty tuple.
+    """
+    missing: dict[str, tuple[str, ...]] = {}
+    for entry in entries:
+        spec = spec_for(entry.artifact_type)
+        if spec is None:
+            continue
+        _, recommended = missing_sections(entry.product, spec)
+        missing[str(entry.path)] = tuple(recommended)
+    return missing
+
+
+def _artifacts(
+    index_entries: list[IndexEntry],
+    status_by_path: dict[str, str],
+    missing_by_path: dict[str, tuple[str, ...]],
+) -> list[Artifact]:
+    """Join the index inventory with validation status and completeness."""
+    return [
+        Artifact(
+            id=entry.id,
+            type=entry.type,
+            title=entry.title,
+            path=entry.path,
+            aliases=tuple(entry.aliases),
+            status=status_by_path[entry.path],
+            missing_recommended=missing_by_path.get(entry.path, ()),
+            search_sections=tuple(entry.search_sections),
+            inbound_count=entry.inbound_count,
+        )
+        for entry in index_entries
+    ]
+
+
 def load_repository(
     directory: str,
     *,
@@ -222,28 +262,7 @@ def repository_from_corpus(
     portfolio = portfolio_from_corpus(directory, entries, recursive=recursive)
     phase_done("portfolio")
 
-    missing_by_path: dict[str, tuple[str, ...]] = {}
-    for corpus_entry in entries:
-        spec = spec_for(corpus_entry.artifact_type)
-        if spec is None:
-            continue
-        _, missing_recommended = missing_sections(corpus_entry.product, spec)
-        missing_by_path[str(corpus_entry.path)] = tuple(missing_recommended)
-
-    artifacts = [
-        Artifact(
-            id=entry.id,
-            type=entry.type,
-            title=entry.title,
-            path=entry.path,
-            aliases=tuple(entry.aliases),
-            status=status_by_path[entry.path],
-            missing_recommended=missing_by_path.get(entry.path, ()),
-            search_sections=tuple(entry.search_sections),
-            inbound_count=entry.inbound_count,
-        )
-        for entry in index.artifacts
-    ]
+    artifacts = _artifacts(index.artifacts, status_by_path, _missing_recommended(entries))
 
     diagnostics: list[Diagnostic] = [
         Diagnostic(

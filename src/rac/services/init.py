@@ -1,15 +1,17 @@
-"""Repository identity configuration — `rac init` (v0.7.11).
+"""Repository identity + config loaders — `rac init` (v0.7.11).
 
 ``rac init`` establishes the repository identity namespace (ADR-026): a
-``.rac/config.yaml`` holding the ``repository_key`` that prefixes every
-generated artifact ID. The key is configuration, not artifact meaning — it
-never determines folder structure, and changing an established key is an
-error, never a silent rewrite (re-running with the same key is idempotent).
+``.rac/config.yaml`` holding the ``repository_key`` that prefixes every generated
+artifact ID. The key is configuration, not artifact meaning — it never determines
+folder structure, and changing an established key is an error, never a silent
+rewrite (re-running with the same key is idempotent).
 
-``load_repository_config`` is the discovery counterpart: it walks upward from
-a starting directory toward the filesystem root and returns the first
-configuration found, so ``rac new`` works from any subdirectory of an
-initialized repository.
+This module is also the single reader of every ``.rac/config.yaml`` stanza:
+identity (``load_repository_config``), validation severity overrides
+(``load_overrides``), the ``rac gate`` enforcement policy
+(``load_enforcement_policy``), and the external ticketing provider
+(``load_ticketing_provider``). All four resolve the file with the same upward
+walk, so any command works from a subdirectory of an initialized repository.
 """
 
 from __future__ import annotations
@@ -99,7 +101,7 @@ class RepositoryConfig:
     repository_key: str
     config_path: str  # the .rac/config.yaml this came from
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         return {
             "schema_version": "1",
             "repository_key": self.repository_key,
@@ -114,12 +116,12 @@ class InitResult:
     repository_key: str
     config_path: str
     created: bool  # False when init was idempotent (key already established)
-    # The applied profile (ADR-088), and the extra files it wrote (e.g. .mcp.json).
+    # The applied profile (ADR-088) and the extra files it wrote (e.g. .mcp.json).
     # Additive contract fields (ADR-007): null/empty when no profile was used.
     profile: str | None = None
     files_written: tuple[str, ...] = ()
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         return {
             "schema_version": "1",
             "repository_key": self.repository_key,
@@ -130,7 +132,41 @@ class InitResult:
         }
 
 
+def find_config_file(start_dir: str) -> Path | None:
+    """The nearest ``.rac/config.yaml`` at or above ``start_dir``, or None.
+
+    The shared discovery walk: the identity read and every section loader resolve
+    the same file from any subdirectory of an initialized repository.
+    """
+    current = Path(start_dir).resolve()
+    for directory in (current, *current.parents):
+        config_path = directory / CONFIG_DIR / CONFIG_FILE
+        if config_path.is_file():
+            return config_path
+    return None
+
+
+def _read_config_data(start_dir: str) -> tuple[Path, object] | None:
+    """Locate and parse the nearest config for a section loader.
+
+    Returns ``(config_path, parsed_yaml)`` or None when no config file exists.
+    A YAML syntax error is wrapped as :class:`MalformedRepositoryConfig` — the
+    one place the section loaders (overrides, enforcement, ticketing) share their
+    read-and-parse. The identity read (:func:`_read_config`) stays separate: it
+    additionally enforces the ``repository_key`` contract.
+    """
+    config_path = find_config_file(start_dir)
+    if config_path is None:
+        return None
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    return config_path, data
+
+
 def _read_config(config_path: Path) -> RepositoryConfig:
+    """The identity read: parse and validate the ``repository_key`` contract."""
     try:
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
@@ -143,21 +179,6 @@ def _read_config(config_path: Path) -> RepositoryConfig:
     if not KEY_RE.match(key):
         raise MalformedRepositoryConfig(str(config_path), f"invalid repository_key: {key!r}")
     return RepositoryConfig(repository_key=key, config_path=str(config_path))
-
-
-def find_config_file(start_dir: str) -> Path | None:
-    """The nearest ``.rac/config.yaml`` at or above ``start_dir``, or None.
-
-    The shared discovery walk: identity (``load_repository_config``) and the
-    validation overrides loader both resolve the same file from any
-    subdirectory of an initialized repository.
-    """
-    current = Path(start_dir).resolve()
-    for directory in (current, *current.parents):
-        config_path = directory / CONFIG_DIR / CONFIG_FILE
-        if config_path.is_file():
-            return config_path
-    return None
 
 
 def load_repository_config(start_dir: str) -> RepositoryConfig | None:
@@ -173,13 +194,10 @@ def load_overrides(start_dir: str) -> SeverityOverrides:
     ``validation`` section. Malformed shapes or unknown severity values raise
     :class:`MalformedRepositoryConfig` — overrides are never silently ignored.
     """
-    config_path = find_config_file(start_dir)
-    if config_path is None:
+    found = _read_config_data(start_dir)
+    if found is None:
         return EMPTY
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    config_path, data = found
     section = data.get("validation") if isinstance(data, dict) else None
     if section is None:
         return EMPTY
@@ -210,17 +228,14 @@ def load_enforcement_policy(start_dir: str) -> EnforcementPolicy:
     non-list key, or a non-string entry) raise :class:`MalformedRepositoryConfig`,
     mirroring :func:`load_overrides` — policy is never silently ignored.
     """
-    # Imported lazily to avoid a cycle: gate.py imports this loader, and the
+    # Imported lazily to break a cycle: gate.py imports this loader, and the
     # policy model lives alongside the gate service.
     from rac.services.gate import EMPTY_POLICY, EnforcementPolicy
 
-    config_path = find_config_file(start_dir)
-    if config_path is None:
+    found = _read_config_data(start_dir)
+    if found is None:
         return EMPTY_POLICY
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    config_path, data = found
     section = data.get("enforcement") if isinstance(data, dict) else None
     if section is None:
         return EMPTY_POLICY
@@ -236,6 +251,37 @@ def load_enforcement_policy(start_dir: str) -> EnforcementPolicy:
     return EnforcementPolicy(
         blocking=frozenset(blocking), advisory=frozenset(advisory), off=frozenset(off)
     )
+
+
+def load_ticketing_provider(start_dir: str) -> str | None:
+    """Read ``ticketing.provider`` from the nearest config (ADR-087 / ADR-088).
+
+    Returns the configured external ticketing provider (``jira``, ``github``,
+    ``linear``, ``azure-devops``, ``servicenow``, or ``none``), or ``None`` when
+    there is no config file or no ``ticketing`` section. An organisation
+    standardises on one provider, so this is the single value the external
+    ticket format-lint reads (ADR-087). A non-mapping section or an unrecognised
+    provider raises :class:`MalformedRepositoryConfig`, mirroring
+    :func:`load_overrides` — config is never silently ignored.
+    """
+    found = _read_config_data(start_dir)
+    if found is None:
+        return None
+    config_path, data = found
+    section = data.get("ticketing") if isinstance(data, dict) else None
+    if section is None:
+        return None
+    if not isinstance(section, dict):
+        raise MalformedRepositoryConfig(str(config_path), "'ticketing' must be a mapping")
+    provider = section.get("provider")
+    if provider is None:
+        return None
+    if not isinstance(provider, str) or provider not in TICKETING_PROVIDER_NAMES:
+        raise MalformedRepositoryConfig(
+            str(config_path),
+            f"'ticketing.provider' must be one of {', '.join(TICKETING_PROVIDER_NAMES)}",
+        )
+    return provider
 
 
 def _parse_code_list(config_path: Path, value: object, where: str) -> list[str]:
@@ -266,7 +312,7 @@ def _parse_severity_map(
         # YAML 1.1 resolves the bare word ``off`` to ``False`` (likewise on/yes/no
         # to booleans). ``off`` is the natural suppression keyword, so coerce a
         # bool back to text rather than forcing users to quote it; the membership
-        # check below rejects ``on``/``yes`` (True) where they are not allowed.
+        # check below still rejects ``on``/``yes`` (True) where not allowed.
         if isinstance(sev, bool):
             sev = "off" if sev is False else "on"
         if not isinstance(name, str) or not isinstance(sev, str) or sev not in allowed:
@@ -276,40 +322,6 @@ def _parse_severity_map(
             )
         parsed[name] = sev
     return parsed
-
-
-def load_ticketing_provider(start_dir: str) -> str | None:
-    """Read ``ticketing.provider`` from the nearest config (ADR-087 / ADR-088).
-
-    Returns the configured external ticketing provider (``jira``, ``github``,
-    ``linear``, ``azure-devops``, ``servicenow``, or ``none``), or ``None`` when
-    there is no config file or no ``ticketing`` section. An organisation
-    standardises on one provider, so this is the single value the external
-    ticket format-lint reads (ADR-087). A non-mapping section or an unrecognised
-    provider raises :class:`MalformedRepositoryConfig`, mirroring
-    :func:`load_overrides` — config is never silently ignored.
-    """
-    config_path = find_config_file(start_dir)
-    if config_path is None:
-        return None
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
-    section = data.get("ticketing") if isinstance(data, dict) else None
-    if section is None:
-        return None
-    if not isinstance(section, dict):
-        raise MalformedRepositoryConfig(str(config_path), "'ticketing' must be a mapping")
-    provider = section.get("provider")
-    if provider is None:
-        return None
-    if not isinstance(provider, str) or provider not in TICKETING_PROVIDER_NAMES:
-        raise MalformedRepositoryConfig(
-            str(config_path),
-            f"'ticketing.provider' must be one of {', '.join(TICKETING_PROVIDER_NAMES)}",
-        )
-    return provider
 
 
 def init_repository(
@@ -327,8 +339,8 @@ def init_repository(
     a provider later).
 
     When ``profile`` is given (a built-in profile name, ADR-088), the profile's
-    config-only bundle is layered on a fresh init: its ``.rac/config.yaml``
-    stanza is appended after the key, and its client wiring (``.mcp.json`` and
+    config-only bundle is layered on a fresh init: its ``.rac/config.yaml`` stanza
+    is appended after the key, and its client wiring (``.mcp.json`` and
     ``.cursor/mcp.json``) is written without ever overwriting an existing file.
     Like the key and ticketing, a profile applies only at creation — an
     already-initialized repository is left untouched. A profile writes
@@ -337,10 +349,12 @@ def init_repository(
     Raises :class:`InvalidRepositoryKey` for a bad key,
     :class:`InvalidTicketingProvider` for an unknown provider,
     :class:`InvalidProfile` for an unknown profile,
-    :class:`RepositoryKeyConflict` when a different key is already established
-    in this exact directory, and :class:`MalformedRepositoryConfig` when an
-    existing file cannot be read.
+    :class:`RepositoryKeyConflict` when a different key is already established in
+    this exact directory, and :class:`MalformedRepositoryConfig` when an existing
+    file cannot be read.
     """
+    # Validate every argument (key, then ticketing, then profile) before touching
+    # the filesystem, so a bad request never partially writes.
     if not KEY_RE.match(key):
         raise InvalidRepositoryKey(key)
     if ticketing is not None and ticketing not in TICKETING_PROVIDER_NAMES:
@@ -350,19 +364,26 @@ def init_repository(
         resolved_profile = get_profile(profile)
         if resolved_profile is None:
             raise InvalidProfile(profile)
+
     config_path = Path(directory) / CONFIG_DIR / CONFIG_FILE
     if config_path.is_file():
+        # Already initialized: confirm the key matches (never a silent rewrite),
+        # and leave creation-time extras — ticketing, profile — untouched.
         existing = _read_config(config_path)
         if existing.repository_key != key:
             raise RepositoryKeyConflict(existing.repository_key, key, str(config_path))
         return InitResult(repository_key=key, config_path=str(config_path), created=False)
+
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    # Written as literal bytes, not a YAML round-trip: the exact on-disk form is a
+    # contract (test_fresh_init_writes_config / test_init_writes_ticketing_provider).
     body = f"repository_key: {key}\n"
     if ticketing is not None:
         body += f"ticketing:\n  provider: {ticketing}\n"
     if resolved_profile is not None and resolved_profile.config_stanza:
         body += resolved_profile.config_stanza
     config_path.write_text(body, encoding="utf-8")
+
     files_written: tuple[str, ...] = ()
     if resolved_profile is not None and resolved_profile.mcp_wiring:
         files_written = tuple(write_mcp_configs(directory))

@@ -1,25 +1,24 @@
 """Repository intelligence summary — `rac portfolio` (v0.7.3).
 
-``build_portfolio_summary`` walks a directory once, gathering:
+``build_portfolio_summary`` walks a directory once and gathers:
 
 - Artifact counts (by type + unknown)
-- Validation (valid / invalid)
+- Validation (valid / invalid, severity overrides applied)
 - Completeness (filled recommended slots / total recommended slots)
-- Relationship health (from ``summarize_relationships``)
-- Attention items (broken refs, invalid artifacts, missing recommended sections)
-- Health score (weighted composite)
+- Relationship health (from the relationship summary)
+- Attention items (invalid artifacts, missing recommended sections, broken refs)
+- A weighted composite health score
 
-All analysis is deterministic and belongs to Core (ADR-015). The CLI renders
-the result; it calculates nothing independently.
+All analysis is deterministic and belongs to Core (ADR-015): the CLI renders the
+result and calculates nothing of its own.
 
-Health score formula (each sub-score ∈ [0, 1], 1.0 when denominator is 0):
+Health score (each sub-score in [0, 1], and 1.0 when its denominator is 0):
 
-    score = round(100 × (0.5·validity + 0.25·completeness + 0.25·rel_integrity))
+    score = round(100 * (0.5*validity + 0.25*completeness + 0.25*rel_integrity))
 
-where:
-    validity         = valid_artifacts / total_artifacts
-    completeness     = filled_recommended_slots / total_recommended_slots
-    rel_integrity    = (total_refs − broken_refs) / total_refs
+    validity      = valid_artifacts / total_artifacts
+    completeness  = filled_recommended_slots / total_recommended_slots
+    rel_integrity = (total_refs - broken_refs) / total_refs
 """
 
 from __future__ import annotations
@@ -55,13 +54,16 @@ _REL_ISSUE_PHRASE = {
     ISSUE_SELF_REFERENCE: "references itself via",
 }
 
+# Attention ordering: errors before warnings, then path, then code.
+_SEV_ORDER = {"error": 0, "warning": 1}
+
 
 @dataclass
 class AttentionItem:
     """One actionable finding surfaced by ``rac portfolio``."""
 
     path: str
-    identifier: str  # artifact identifier or filename stem
+    identifier: str  # the artifact identifier, or the filename stem
     severity: str  # "error" | "warning"
     code: str
     message: str
@@ -80,26 +82,26 @@ class AttentionItem:
 class PortfolioSummary:
     """Repository-level intelligence result (v0.7.3).
 
-    ``to_dict`` is the stable JSON contract (ADR-007); all fields are additive
-    and schema_version-gated so consumers can detect breaking changes.
+    ``to_dict`` is the stable JSON contract (ADR-007): all fields are additive and
+    schema_version-gated so consumers can detect breaking changes.
     """
 
     directory: str
     recursive: bool
-    by_type: dict[str, int]  # {type: count} incl. unknown
+    by_type: dict[str, int]  # {type: count}, including unknown
     valid_artifacts: int
     invalid_artifacts: int
     recommended_slots: int
     filled_slots: int
     relationships: RelationshipSummary
     attention: list[AttentionItem] = field(default_factory=list)
-    # Paths of unknown-type files (v0.7.9, additive): they are counted in
-    # ``by_type`` but neither validated nor completeness-scored, so consumers
-    # like ``rac review`` need the paths to surface them without a second walk.
+    # Paths of unknown-type files (v0.7.9, additive): counted in ``by_type`` but
+    # neither validated nor completeness-scored, so consumers like ``rac review``
+    # can surface them without a second walk.
     unknown_paths: list[str] = field(default_factory=list)
     # Full relationship-validation gate result (v0.16.0, additive): whether every
     # referential, edge-legality, range, status-consistency, and acyclicity check
-    # passes. Distinct from ``relationships.broken`` (referential resolution only),
+    # passes. Broader than ``relationships.broken`` (referential resolution only),
     # so the summary can report the same verdict as `rac relationships --validate`.
     relationships_ok: bool = True
 
@@ -117,10 +119,9 @@ class PortfolioSummary:
     def health_score(self) -> int:
         total = self.total_artifacts
         validity = self.valid_artifacts / total if total else 1.0
-        completeness = self.completeness
         checked = self.relationships.total
         rel_integrity = (checked - self.relationships.broken) / checked if checked else 1.0
-        raw = 0.5 * validity + 0.25 * completeness + 0.25 * rel_integrity
+        raw = 0.5 * validity + 0.25 * self.completeness + 0.25 * rel_integrity
         return round(100 * raw)
 
     def to_dict(self) -> dict:
@@ -179,15 +180,15 @@ def portfolio_from_corpus(
 ) -> PortfolioSummary:
     """Summarize an already-walked corpus snapshot (v0.8.0).
 
-    Same result as :func:`build_portfolio_summary`. The snapshot also feeds
-    the relationship summary, so a portfolio costs one walk instead of two.
+    Produces the same result as :func:`build_portfolio_summary`; the snapshot also
+    feeds the relationship analysis, so a portfolio costs one walk, not two.
     """
-
     # Repository-wide severity overrides (ADR-053): review/portfolio/watchkeeper
     # honour the same .rac/config.yaml policy as `rac validate`.
     overrides = load_overrides(directory)
 
-    # --- per-artifact pass ---------------------------------------------------
+    # Seed every known type plus unknown at zero so the count is stable regardless
+    # of which types the corpus actually contains.
     by_type: dict[str, int] = {spec.name: 0 for spec in ARTIFACT_SPECS}
     by_type["unknown"] = 0
 
@@ -197,9 +198,8 @@ def portfolio_from_corpus(
     filled_slots = 0
     attention: list[AttentionItem] = []
     unknown_paths: list[str] = []
-    # path -> canonical identifier, for mapping relationship issues (whose
-    # source_path is always a known artifact) back to an identifier without a
-    # second identifier pass.
+    # Relationship issues carry a source path that is always a known artifact;
+    # this map recovers its identifier without a second identifier pass.
     path_to_identifier: dict[str, str] = {}
 
     for entry in entries:
@@ -209,14 +209,14 @@ def portfolio_from_corpus(
 
         spec = spec_for(artifact_type)
         if spec is None:
-            # Unknown artifacts: not validated, not scored for completeness.
+            # Unknown artifacts are counted but neither validated nor scored.
             unknown_paths.append(str(path))
             continue
 
         identifier = artifact_identifier(product, spec, str(path))
         path_to_identifier[str(path)] = identifier
 
-        # Validation (overrides applied, ADR-053)
+        # Validation, with severity overrides applied (ADR-053).
         issues = apply_overrides(validate(product), artifact_type, overrides)
         if has_errors(issues):
             invalid_count += 1
@@ -233,14 +233,13 @@ def portfolio_from_corpus(
         else:
             valid_count += 1
 
-        # Completeness (recommended sections only — required failures are already
-        # reported as validation errors above, counting them twice would double-
-        # penalise in the health score).
+        # Completeness scores recommended sections only: a missing *required*
+        # section is already an error above, and counting it here too would
+        # double-penalise the health score.
         slots = len(spec.recommended)
         recommended_slots += slots
         _, missing_rec = missing_sections(product, spec)
-        filled = slots - len(missing_rec)
-        filled_slots += filled
+        filled_slots += slots - len(missing_rec)
         if missing_rec:
             names = ", ".join(s.title() for s in missing_rec)
             attention.append(
@@ -253,12 +252,10 @@ def portfolio_from_corpus(
                 )
             )
 
-    # --- relationship summary ------------------------------------------------
-    # Reuses the snapshot (no second walk); per-reference issues become
-    # attention items so broken references are surfaced, not just counted.
+    # Relationship health reuses the snapshot (no second walk). The referential
+    # summary drives the counts and the broken-reference attention items; the
+    # full gate verdict is a separate, broader check (v0.16.0).
     rel_summary = summary_from_corpus(entries)
-    # The full relationship-validation gate (additive, v0.16.0): same verdict as
-    # `rac relationships --validate`, over the same snapshot (no extra walk).
     relationships_ok = validation_from_corpus(directory, entries, recursive=recursive).ok
     for issue in rel_summary.issues:
         source = issue.source_path or ""
@@ -274,8 +271,6 @@ def portfolio_from_corpus(
             )
         )
 
-    # Sort attention: errors before warnings, then path, then code (deterministic).
-    _SEV_ORDER = {"error": 0, "warning": 1}
     attention.sort(key=lambda a: (_SEV_ORDER.get(a.severity, 2), a.path, a.code))
 
     return PortfolioSummary(

@@ -2,15 +2,14 @@
 
 A profile is a named bundle of *configuration only* (ADR-085): the
 ``.rac/config.yaml`` stanzas and the ``.mcp.json`` client wiring a careful admin
-would otherwise hand-write. A profile never writes authored prose (ADR-024,
-ADR-044) — firm ADR/prompt content lives in a referenced standards corpus
-(ADR-089), not in generated files.
+would otherwise hand-write. It never writes authored prose (ADR-024, ADR-044) —
+firm ADR/prompt content belongs in a referenced standards corpus (ADR-089).
 
-Profiles are creation-time configuration: they apply on a fresh `rac init`, layer
-onto the repository key, and never overwrite a file that already exists. Built-in
-and named (``default``, ``enterprise``); a profile adds no code path a solo
-developer cannot reach (the ADR-085 backstop) — it emits exactly the files a
-careful admin would hand-write.
+Profiles are creation-time configuration: they layer onto the repository key on a
+fresh ``rac init`` and never overwrite an existing file. Two are built in —
+``default`` (client wiring only) and ``enterprise`` (wiring plus an auditable
+enforcement policy). By construction a profile adds no capability a solo
+developer could not reach by hand (the ADR-085 backstop).
 """
 
 from __future__ import annotations
@@ -19,7 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # The lore MCP server wiring, identical for Claude Code (root ``.mcp.json``) and
-# Cursor (``.cursor/mcp.json``). Mirrors examples/cursor/mcp.example.json.
+# Cursor (``.cursor/mcp.json``). Kept as a literal, never a serialized import: a
+# service must not reach the MCP SDK (test_mcp_isolation). Mirrors
+# examples/cursor/mcp.example.json.
 MCP_JSON = (
     "{\n"
     '  "mcpServers": {\n'
@@ -31,11 +32,11 @@ MCP_JSON = (
     "}\n"
 )
 
-# Enterprise enforcement (ADR-049): relationship-integrity findings block the
-# gate, committed explicitly so the policy is auditable rather than implicit
-# (these are blocking by default; the profile makes the posture a committed,
-# git-diffable artifact). Requirement-quality severities are left at their
-# defaults — escalate per repo (ADR-053) for stricter authoring discipline.
+# Enterprise enforcement (ADR-049): the relationship-integrity findings plus the
+# duplicate-identifier finding block `rac gate`. Committed explicitly so the
+# posture is an auditable, git-diffable artifact rather than an implicit default.
+# Requirement-quality severities are left at their defaults — escalate per repo
+# (ADR-053) for stricter authoring discipline.
 _ENTERPRISE_CONFIG = """\
 # Enterprise profile (ADR-088): relationship-integrity findings block `rac gate`,
 # committed explicitly so the enforcement policy is auditable (ADR-049).
@@ -73,24 +74,25 @@ PROFILES: dict[str, Profile] = {
     "enterprise": Profile(name="enterprise", config_stanza=_ENTERPRISE_CONFIG, mcp_wiring=True),
 }
 
-# The recognised profile names, for CLI choices and config validation.
+# Recognised profile names in definition order, for CLI choices and validation.
 PROFILE_NAMES: tuple[str, ...] = tuple(PROFILES)
 
 # The ``.mcp.json`` client targets a profile wires, relative to the repo root.
+# Tuple order is the write order `rac init` reports.
 _MCP_TARGETS: tuple[str, ...] = (".mcp.json", ".cursor/mcp.json")
 
 
 def get_profile(name: str) -> Profile | None:
-    """The :class:`Profile` with the given name, or None."""
+    """The :class:`Profile` with the given name, or None when unrecognised."""
     return PROFILES.get(name)
 
 
 def write_mcp_configs(directory: str) -> list[str]:
     """Write the lore MCP wiring for Claude Code and Cursor, never overwriting.
 
-    Returns the paths actually written, in target order; an existing file is left
-    untouched and omitted, so `rac init` can report exactly what landed and a
-    user's own ``.mcp.json`` is never clobbered.
+    Returns the paths actually written, in target order. An existing file is left
+    untouched and omitted from the result, so `rac init` reports exactly what
+    landed and a user's own ``.mcp.json`` is never clobbered.
     """
     written: list[str] = []
     for target in _MCP_TARGETS:

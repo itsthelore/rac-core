@@ -1,19 +1,19 @@
-"""Git-derived artifact recency (v0.13.2, ADR-045).
+"""Git-derived artifact recency and provenance (v0.13.2 / v0.23.0, ADR-045).
 
-When was each artifact last written? RAC artifacts carry no timestamp, and
-adding one would mean a schema change, hand-kept dates that drift, and the
-work-status modelling ADR-017 rejects. Git already records exactly when every
-file last changed, so recency is *derived* from `git log`, never stored.
+RAC artifacts carry no authored-on timestamp: adding one would mean a schema
+change, hand-kept dates that drift, and the work-status modelling ADR-017
+rejects. Git already records when every file last changed and by whom, so both
+*recency* (when knowledge was last written) and *provenance* (who wrote it, and
+the lifecycle it moved through) are derived from ``git log`` here — never stored.
 
-This is the second narrow git touchpoint in the package, alongside
-`revisions.py` (ADR-043): read-only, offline, no `.git` mutation. It answers
-"unknown" (``None``) rather than raising when git is unavailable, the
-directory is not a repository, or a file is untracked or uncommitted —
-recency is advisory, never required.
+This is one of the package's two narrow git touchpoints, alongside
+``revisions.py`` (ADR-043): read-only, offline, and never mutating ``.git``.
+Every read degrades to "unknown" (``None`` / ``[]``) rather than raising when
+git is absent, the directory is not a repository, or a file is untracked —
+recency and provenance are advisory, never required.
 
-Recency is a *capture-cadence* signal — when product knowledge was last
-written — explicitly not a work-status or due-date signal, so consumers (the
-cadence nudge, v0.13.3) stay inside ADR-017.
+Recency is deliberately a *capture-cadence* signal, not a work-status or
+due-date one, so its consumers (the cadence nudge, v0.13.3) stay inside ADR-017.
 """
 
 from __future__ import annotations
@@ -27,10 +27,15 @@ from rac.core.markdown import parse
 from rac.services.agent_rules import artifact_status
 from rac.services.index import build_repository_index
 
-# Field separator for combined ``git log --format`` records. The unit-separator
-# control byte never appears in a commit date, author name, or email, so a
-# single ``--format`` call can carry several fields and be split unambiguously.
+# Joins several ``git log --format`` fields into one line. The unit-separator
+# control byte never appears in a commit date, author name, or email, so the
+# record splits back apart unambiguously.
 _FIELD_SEP = "\x1f"
+
+# ``git log`` boundary selectors: the first commit that touched a file
+# (``--reverse``, oldest first) versus the most recent (``-1``).
+_EARLIEST = ["--reverse"]
+_LATEST = ["-1"]
 
 
 def _run_git(args: list[str], cwd: str) -> subprocess.CompletedProcess[str] | None:
@@ -68,36 +73,25 @@ def _parse_stamp(stamp: str) -> datetime | None:
         return None
 
 
-def _last_committed(repo_root: str, path: str) -> datetime | None:
-    """Commit time of the most recent change to ``path``, or ``None``.
+def _boundary_log(repo_root: str, path: str, fmt: str, *, earliest: bool) -> list[str]:
+    """Non-empty ``git log`` lines for one file's boundary commit.
 
-    Uses ``git log -1 --format=%cI`` (ISO-8601, timezone-aware). An empty
-    result means the file is untracked or uncommitted.
+    ``earliest`` selects the creation commit (``--reverse``, first line);
+    otherwise the most recent change (``-1``). ``fmt`` is a ``--format`` spec so a
+    single call can carry several ``_FIELD_SEP``-joined fields. An empty list
+    means the file is untracked, or git could not answer.
     """
-    result = _run_git(
-        ["log", "-1", "--format=%cI", "--", _pathspec(repo_root, path)], cwd=repo_root
-    )
+    selector = _EARLIEST if earliest else _LATEST
+    result = _run_git(["log", *selector, fmt, "--", _pathspec(repo_root, path)], cwd=repo_root)
     if result is None or result.returncode != 0:
-        return None
-    return _parse_stamp(result.stdout)
+        return []
+    return [line for line in result.stdout.splitlines() if line.strip()]
 
 
-def _first_committed(repo_root: str, path: str) -> datetime | None:
-    """Commit time of the earliest change to ``path``, or ``None``.
-
-    ``git log --reverse --format=%cI`` lists oldest first; the first line is the
-    creation commit. Used only for the OKF export's ``created`` field, never on
-    the cadence path.
-    """
-    result = _run_git(
-        ["log", "--reverse", "--format=%cI", "--", _pathspec(repo_root, path)], cwd=repo_root
-    )
-    if result is None or result.returncode != 0:
-        return None
-    for line in result.stdout.splitlines():
-        if line.strip():
-            return _parse_stamp(line)
-    return None
+def _boundary_committed(repo_root: str, path: str, *, earliest: bool) -> datetime | None:
+    """Commit time of ``path``'s first or last change (``%cI``), or ``None``."""
+    lines = _boundary_log(repo_root, path, "--format=%cI", earliest=earliest)
+    return _parse_stamp(lines[0]) if lines else None
 
 
 @dataclass
@@ -175,12 +169,13 @@ def artifact_recency(
 
     artifacts: list[ArtifactRecency] = []
     for entry in entries:
-        last = _last_committed(repo_root, entry.path) if repo_root is not None else None
-        first = (
-            _first_committed(repo_root, entry.path)
-            if with_creation and repo_root is not None
-            else None
-        )
+        if repo_root is None:
+            last = first = None
+        else:
+            last = _boundary_committed(repo_root, entry.path, earliest=False)
+            first = (
+                _boundary_committed(repo_root, entry.path, earliest=True) if with_creation else None
+            )
         artifacts.append(
             ArtifactRecency(
                 path=entry.path,
@@ -207,21 +202,15 @@ def _commit_record(
 ) -> tuple[datetime | None, str | None]:
     """``(commit time, "Name <email>")`` for one boundary commit touching ``path``.
 
-    ``earliest`` selects the creation commit (``git log --reverse``, first line);
-    otherwise the most recent change (``git log -1``). One ``--format`` call
-    carries both fields. Returns ``(None, None)`` when git does not know.
+    ``earliest`` selects the creation commit; otherwise the most recent change.
+    One ``--format`` call carries both fields. ``(None, None)`` when git does not
+    know.
     """
-    fmt = f"--format=%cI{_FIELD_SEP}%an <%ae>"
-    args = ["log", "--reverse", fmt] if earliest else ["log", "-1", fmt]
-    args += ["--", _pathspec(repo_root, path)]
-    result = _run_git(args, cwd=repo_root)
-    if result is None or result.returncode != 0:
+    lines = _boundary_log(repo_root, path, f"--format=%cI{_FIELD_SEP}%an <%ae>", earliest=earliest)
+    if not lines:
         return None, None
-    for line in result.stdout.splitlines():
-        if line.strip():
-            stamp, _, author = line.partition(_FIELD_SEP)
-            return _parse_stamp(stamp), (author.strip() or None)
-    return None, None
+    stamp, _, author = lines[0].partition(_FIELD_SEP)
+    return _parse_stamp(stamp), (author.strip() or None)
 
 
 def _status_history(repo_root: str, path: str) -> list[StatusChange]:

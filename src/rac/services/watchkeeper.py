@@ -1,14 +1,15 @@
-"""Watchkeeper — RAC's product knowledge review surface (v0.12.0).
+"""Watchkeeper — RAC's product-knowledge review surface.
 
-``build_watchkeeper_report`` resolves the base and head of a comparison —
-each either an existing directory or a git revision materialized through
-:mod:`rac.services.revisions` — loads both states, and assembles the report
-the ``rac watchkeeper`` command renders. Watchkeeper consumes Core
-intelligence; it computes nothing the comparison services do not already
-provide (ADR-015).
+``build_watchkeeper_report`` resolves the base and head of a comparison — each
+either an existing directory or a git revision materialized through
+:mod:`rac.services.revisions` — loads both states, and assembles the report the
+``rac watchkeeper`` command renders. Watchkeeper composes ``compare`` (what
+changed), ``intent`` (deterministic findings), and ``revisions`` (git
+materialization); it computes nothing those services do not already provide
+(ADR-015).
 
-``WatchkeeperReport.to_dict`` is the stable JSON contract (ADR-007): fields
-are additive across the v0.12.x series and schema_version-gated.
+``WatchkeeperReport.to_dict`` is the stable JSON contract (ADR-007): fields are
+additive across the schema-version-gated series.
 """
 
 from __future__ import annotations
@@ -39,14 +40,15 @@ from rac.services.intent import (
 from rac.services.relationships import RelationshipSummary
 from rac.services.revisions import materialized_revision, repository_root
 
-# Recommendation reason codes (part of the JSON contract, ADR-007). The
-# delta-driven codes are watchkeeper's own; the finding-driven codes reuse
-# the intent vocabulary verbatim.
+# Recommendation reason codes (part of the JSON contract, ADR-007). The two
+# delta-driven codes are watchkeeper's own; the finding-driven codes reuse the
+# intent vocabulary verbatim.
 REASON_VALIDATION_REGRESSION = "validation_regression"
 REASON_BROKEN_RELATIONSHIP = "broken_relationship"
 
-# Findings that recommend review on their own. Ambiguity, unlinked scope,
-# and relationship impact inform but never recommend (v0.12.2 contract).
+# Findings that recommend review on their own. Ambiguity, unlinked scope, and
+# relationship impact inform but never recommend by themselves (v0.12.2). The
+# github renderer imports this set to decide error-vs-warning annotations.
 RECOMMENDING_FINDINGS = frozenset(
     {
         SPECIFICITY_REGRESSION,
@@ -58,7 +60,7 @@ RECOMMENDING_FINDINGS = frozenset(
 )
 
 # Core-owned reason sentences, one per code (mirrors review.py's impact
-# phrasing): consumers render these, they do not compose their own.
+# phrasing): consumers render these, they never compose their own.
 _REASONS = {
     REASON_VALIDATION_REGRESSION: "One or more artifacts became invalid.",
     REASON_BROKEN_RELATIONSHIP: "One or more relationship references broke.",
@@ -80,13 +82,13 @@ class ReviewRecommendation:
 
 @dataclass
 class WatchkeeperReport:
-    """One product knowledge review: base state, head state, what changed."""
+    """One product-knowledge review: base state, head state, what changed."""
 
     directory: str
     base: str  # base label: revision name or directory path
     head: str  # head label: revision name or directory path (working tree)
     comparison: RepositoryComparison
-    findings: list[IntentFinding] = field(default_factory=list)  # v0.12.1, additive
+    findings: list[IntentFinding] = field(default_factory=list)  # additive, v0.12.1
     recommendations: list[ReviewRecommendation] = field(default_factory=list)  # v0.12.2
 
     @property
@@ -102,6 +104,8 @@ class WatchkeeperReport:
         return any(f.severity == SEVERITY_WARNING for f in self.findings)
 
     def to_dict(self) -> dict:
+        # Byte-pinned by tests/golden/watchkeeper_json.txt: key order and the
+        # nested shapes below are the contract, not an implementation detail.
         validation = self.comparison.validation
         relationships = self.comparison.relationships
         stats = self.comparison.stats
@@ -152,14 +156,15 @@ def _change_dict(change: ArtifactChange) -> dict:
         "base_status": change.base_status,
         "head_status": change.head_status,
     }
+    # The requirement-level diff is only carried for modified artifacts.
     if change.diff is not None:
         payload["diff"] = _diff_dict(change.diff)
     return payload
 
 
 def _diff_dict(diff: Diff) -> dict:
-    # Mirrors the `rac diff` JSON fields so the requirement-level shape is
-    # the same wherever a diff appears.
+    # Mirrors the ``rac diff`` JSON fields, so the requirement-level shape is the
+    # same wherever a diff appears.
     return {
         "added_requirements": [asdict(r) for r in diff.added_requirements],
         "removed_requirements": [asdict(r) for r in diff.removed_requirements],
@@ -207,8 +212,10 @@ def derive_recommendations(
 ) -> list[ReviewRecommendation]:
     """The deterministic finding/delta → reason mapping (v0.12.2).
 
-    Reasons are deduplicated by code and ordered: validation regressions,
-    broken relationships, then finding-driven reasons in finding order.
+    Order is fixed and deduplicated by code: validation regressions first, then
+    broken relationships, then the finding-driven reasons in finding order (only
+    those in ``RECOMMENDING_FINDINGS``). The order is pinned by the golden
+    fixtures and the recommendation-order test.
     """
     codes: list[str] = []
     if comparison.validation.newly_invalid:
@@ -222,7 +229,11 @@ def derive_recommendations(
 
 
 def _resolve_side(stack: ExitStack, directory: str, ref: str) -> str:
-    """A directory for one comparison side: ``ref`` itself, or a materialization."""
+    """A directory for one comparison side: ``ref`` itself, or a materialization.
+
+    An existing directory is used as-is; otherwise ``ref`` is a git revision and
+    the corpus subtree is materialized under the ``stack`` for the call's life.
+    """
     if Path(ref).is_dir():
         return ref
     root = repository_root(directory)
@@ -235,9 +246,9 @@ def build_watchkeeper_report(
 ) -> WatchkeeperReport:
     """Compare ``directory``'s corpus between ``base`` and ``head``.
 
-    ``base`` and ``head`` each name an existing directory (used as-is) or a
-    git revision of the repository containing ``directory``; ``head`` of
-    ``None`` means the working tree at ``directory``.
+    ``base`` and ``head`` each name an existing directory (used as-is) or a git
+    revision of the repository containing ``directory``; ``head`` of ``None``
+    means the working tree at ``directory``.
     """
     head_label = head if head is not None else directory
     with ExitStack() as stack:

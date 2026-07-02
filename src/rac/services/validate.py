@@ -1,13 +1,19 @@
-"""Directory validation — `rac validate <directory>` (v0.7.9).
+"""Corpus and single-document validation — the engine behind ``rac validate``.
 
-``validate_directory`` walks a directory and validates every *recognized*
-artifact with the same classification-dispatched rules as single-file
-``rac validate``. Unknown-type files are reported as skipped, not failed —
-the same semantics as ``rac portfolio`` (unknown is a valid outcome, and the
-legacy requirement fallback only applies to explicit single-file validation).
+Four public entry points share one classification-dispatched rule set so the
+verdict never drifts between surfaces (ADR-015):
 
-All analysis is deterministic and belongs to Core (ADR-015). The CLI renders
-the result; it calculates nothing independently.
+- :func:`validate_product` — one parsed artifact, with repository severity
+  overrides applied (the single-file ``rac validate`` and SDK path).
+- :func:`validate_directory` — walk a directory and validate every recognized
+  artifact; unknown-type files are *skipped*, not failed (portfolio semantics).
+- :func:`validate_corpus` — the same directory verdict over an already-walked
+  snapshot, so one walk can feed several analyses (repository model, gate).
+- :func:`validate_stdin_against_corpus` — a proposed document validated
+  structurally *and* against a live corpus (the pre-edit hook seam, ADR-067).
+
+All analysis is deterministic and offline (ADR-002); the CLI and output layer
+render these dataclasses and compute nothing of their own.
 """
 
 from __future__ import annotations
@@ -25,7 +31,8 @@ from .init import load_overrides, load_ticketing_provider
 from .okf_conformance import OkfConformanceReport, check_okf_conformance
 from .relationships import RelationshipIssue, validate_document_against_corpus
 
-# Stable per-file statuses (part of the JSON contract, ADR-007).
+# Per-file outcomes carried in the JSON contract (ADR-007). "skipped" is an
+# unknown-type document that portfolio semantics decline to validate.
 STATUS_VALID = "valid"
 STATUS_INVALID = "invalid"
 STATUS_SKIPPED = "skipped"
@@ -51,17 +58,18 @@ class FileValidation:
 
 @dataclass
 class DirectoryValidation:
-    """Repository-level validation result (v0.7.9).
+    """Repository-level validation result.
 
-    ``to_dict`` is the stable JSON contract (ADR-007); fields are additive and
-    schema_version-gated so consumers can detect breaking changes.
+    ``to_dict`` is the stable, schema_version-gated JSON contract (ADR-007);
+    the ``okf`` block is additive and optional so a snapshot built without OKF
+    conformance still renders.
     """
 
     directory: str
     recursive: bool
     files: list[FileValidation]
-    # OKF v0.1 conformance over the same snapshot (ADR-048, Layer 0). Additive
-    # (ADR-007): optional so other constructors stay valid; folded into ``ok``.
+    # OKF v0.1 conformance over the same snapshot (ADR-048, Layer 0). Optional so
+    # alternate constructions stay valid; folded into the pass/fail verdict below.
     okf: OkfConformanceReport | None = None
 
     @property
@@ -82,9 +90,9 @@ class DirectoryValidation:
 
     @property
     def ok(self) -> bool:
-        # A run passes only when every artifact validates *and* the corpus is OKF
-        # v0.1 conformant (ADR-048). Conformance is treated as ok when not
-        # computed, so single-purpose constructions are unaffected.
+        # OKF conformance is part of the verdict (ADR-048): a reserved-filename
+        # collision fails the run even with zero structural errors. Absent OKF
+        # (a non-conformance-computing construction) is treated as conformant.
         return self.invalid == 0 and (self.okf is None or self.okf.ok)
 
     def to_dict(self) -> dict:
@@ -102,7 +110,7 @@ class DirectoryValidation:
             "valid": self.ok,
             "files": [f.to_dict() for f in self.files],
         }
-        # Additive (ADR-007): OKF v0.1 conformance, present when computed.
+        # Additive (ADR-007): the OKF block appears only when it was computed.
         if self.okf is not None:
             payload["okf"] = self.okf.to_dict()
         return payload
@@ -110,22 +118,21 @@ class DirectoryValidation:
 
 @dataclass
 class StdinCorpusValidation:
-    """Combined structural + corpus-relationship validation of a proposed document.
+    """Structural + corpus-relationship validation of a proposed document.
 
-    The result of ``rac validate - --corpus DIR`` (v0.21.17, ADR-067): the
-    single-document structural findings (:class:`Issue`) *and* the proposed
-    document's outbound relationship findings resolved against the live corpus
-    (:class:`RelationshipIssue`) — references to retired (superseded/deprecated)
-    or missing decisions, range/edge violations, etc. Both finding sets are
-    additive and ``schema_version``-gated (ADR-007); the proposed document is
-    identified as ``source_path`` ("-" for stdin).
+    The result of ``rac validate - --corpus DIR`` and the generated pre-edit
+    hook (ADR-067): the proposed document's own structural findings *and* its
+    outbound relationship references resolved against the live corpus — a
+    reference to a retired (superseded/deprecated) or missing decision, a range
+    or edge violation, etc. The document is identified by ``source_path``
+    (``"-"`` for stdin); both finding sets are additive and schema_version-gated
+    (ADR-007).
 
-    ``ok`` is False — and the CLI exits non-zero — when *either* a structural
-    error or *any* relationship finding is present. Relationship findings are all
-    blocking here regardless of intrinsic severity: a reference to a retired
-    decision is a structural contradiction the pre-edit hook exists to stop
-    (ADR-067), so it blocks just like a missing target. Structural *warnings* do
-    not block, mirroring single-file ``rac validate``.
+    Two severity policies coexist here. A structural *error* blocks; a structural
+    *warning* does not (matching single-file ``rac validate``). But *every*
+    relationship finding blocks regardless of intrinsic severity: a reference to
+    a retired decision is warning-severity yet is exactly the contradiction the
+    pre-edit hook exists to stop, so it blocks like a missing target.
     """
 
     source_path: str
@@ -153,25 +160,22 @@ def validate_stdin_against_corpus(
     source_path: str = "-",
     recursive: bool = True,
 ) -> StdinCorpusValidation:
-    """Validate a proposed document structurally *and* against a live corpus.
+    """Validate a proposed document structurally and against a live corpus.
 
-    The engine seam behind ``rac validate - --corpus DIR`` and the generated
-    Claude Code ``PreToolUse`` pre-edit hook (v0.21.17, ADR-067): plain
-    ``rac validate -`` is single-document and cannot resolve cross-artifact
-    references, so a proposed edit introducing a reference to a *retired* or
-    *missing* decision would slip through. This composes the two existing
-    deterministic checks — it computes nothing new (ADR-063):
+    The seam behind ``rac validate - --corpus DIR`` and the Claude Code
+    ``PreToolUse`` pre-edit hook (ADR-067). Plain ``rac validate -`` is
+    single-document and cannot resolve cross-artifact references, so a proposed
+    edit that points at a retired or missing decision would slip through. This
+    composes two existing deterministic checks and computes nothing new
+    (ADR-063):
 
     1. structural validation with the corpus' severity overrides applied
        (:func:`validate_product` anchored at ``corpus_dir``, so policy matches a
        normal ``rac validate`` in that repository, ADR-053); and
-    2. the proposed document's outbound relationship references resolved against
-       the whole corpus (:func:`validate_document_against_corpus`), which already
-       flags retired-target and missing-target references.
-
-    The on-disk counterpart of an edited artifact is excluded from the corpus
-    index by canonical identity, so an edit is validated as if it replaces the
-    committed version (see :func:`validate_document_against_corpus`).
+    2. the proposed document's outbound references resolved against the whole
+       corpus (:func:`validate_document_against_corpus`), which already flags
+       retired-target and missing-target references and excludes the on-disk
+       counterpart of an edited artifact so the edit validates as a replacement.
     """
     structural = validate_product(product, start=corpus_dir)
     relationships = validate_document_against_corpus(
@@ -187,12 +191,12 @@ def validate_stdin_against_corpus(
 def validate_product(product: Product, start: str = ".") -> list[Issue]:
     """Validate one parsed artifact with repository severity overrides applied.
 
-    The single-file analogue of :func:`validate_directory`: run the
-    classification-dispatched rules (:func:`validate`) and apply the repository's
-    severity overrides (ADR-053) loaded from ``start`` (the directory whose
-    ``.rac/config.yaml`` governs policy). The CLI's single-file ``rac validate``
-    and SDK callers share this one composition, so behind-the-gate analysis never
-    drifts from what the interface reports (ADR-015).
+    The single-file analogue of :func:`validate_directory` and the one place
+    single-file analysis lives: run the classification-dispatched rules and apply
+    the repository's severity overrides (ADR-053) loaded from ``start`` — the
+    directory whose ``.rac/config.yaml`` governs policy. Sharing this one
+    composition keeps behind-the-gate analysis from drifting from what the
+    interface reports (ADR-015).
     """
     return apply_overrides(
         validate(product, ticketing_provider=load_ticketing_provider(start)),
@@ -206,11 +210,10 @@ def validate_directory(
 ) -> DirectoryValidation:
     """Validate every recognized artifact under ``directory``.
 
-    Files are processed in sorted path order (``walk_corpus``), so the
-    result — and everything rendered from it — is deterministic. When a
-    per-invocation ``cache`` is supplied, the walk is served through it so an
-    artifact already parsed in an earlier phase of the same run is not reparsed
-    (WS8); the result is byte-identical either way.
+    Files are processed in sorted path order (``walk_corpus``), so the result —
+    and everything rendered from it — is deterministic. A supplied per-run
+    ``cache`` serves the walk from artifacts already parsed earlier in the same
+    run; the result is byte-identical either way (pinned by ``test_idempotent``).
     """
     entries = (
         cache.collect(directory, recursive=recursive)
@@ -227,48 +230,40 @@ def validate_corpus(
     recursive: bool = True,
     overrides: SeverityOverrides | None = None,
 ) -> DirectoryValidation:
-    """Validate an already-walked corpus snapshot (v0.8.0).
+    """Validate an already-walked corpus snapshot.
 
-    Same result as :func:`validate_directory`; the snapshot lets one walk
-    feed several analyses (repository model, future incremental refresh).
-    Severity overrides (ADR-053) are repository-wide: when not supplied they are
-    loaded from the directory's ``.rac/config.yaml``, so the repository model
-    behind review / watchkeeper / portfolio honours the same policy as
-    ``rac validate``. Pass :data:`~rac.core.overrides.EMPTY` to opt out. Overrides
-    are applied before status and exit code are computed, so a downgraded type or
-    rule keeps the run green.
+    Same verdict as :func:`validate_directory`; the snapshot seam lets one walk
+    feed several analyses (repository model, gate). Severity overrides (ADR-053)
+    are repository-wide: when ``None`` they are loaded from ``directory`` so the
+    repository model behind gate / review / portfolio honours the same policy as
+    ``rac validate``; pass :data:`~rac.core.overrides.EMPTY` to opt out. Overrides
+    apply before status and exit code are derived (ADR-053).
     """
     if overrides is None:
         overrides = load_overrides(directory)
-    # The external ticket format-lint (ADR-087) reads the repository's configured
-    # provider once for the whole corpus — organisations standardise on one.
+    # The external ticket format-lint (ADR-087) reads the configured provider
+    # once for the whole corpus — an organisation standardises on one.
     provider = load_ticketing_provider(directory)
-    files: list[FileValidation] = []
-    for entry in entries:
-        path, product = entry.path, entry.product
-        artifact_type = entry.artifact_type
-        if spec_for(artifact_type) is None:
-            # Unknown artifacts: not validated (portfolio semantics) — the
-            # requirement fallback is a single-file compatibility path only.
-            files.append(
-                FileValidation(
-                    path=str(path),
-                    artifact_type=artifact_type,
-                    status=STATUS_SKIPPED,
-                    issues=[],
-                )
-            )
-            continue
-        issues = apply_overrides(
-            validate(product, ticketing_provider=provider), artifact_type, overrides
-        )
-        files.append(
-            FileValidation(
-                path=str(path),
-                artifact_type=artifact_type,
-                status=STATUS_INVALID if has_errors(issues) else STATUS_VALID,
-                issues=issues,
-            )
-        )
+    files = [_validate_entry(entry, provider, overrides) for entry in entries]
     okf = check_okf_conformance(directory, entries, recursive=recursive, overrides=overrides)
     return DirectoryValidation(directory=directory, recursive=recursive, files=files, okf=okf)
+
+
+def _validate_entry(
+    entry: CorpusEntry, provider: str | None, overrides: SeverityOverrides
+) -> FileValidation:
+    """Validate one walked entry, or skip it when its type is unrecognized.
+
+    Unknown-type documents are skipped rather than failed (portfolio semantics);
+    the single-file requirement fallback is a compatibility path that does not
+    apply inside a directory walk.
+    """
+    path = str(entry.path)
+    artifact_type = entry.artifact_type
+    if spec_for(artifact_type) is None:
+        return FileValidation(path, artifact_type, STATUS_SKIPPED, issues=[])
+    issues = apply_overrides(
+        validate(entry.product, ticketing_provider=provider), artifact_type, overrides
+    )
+    status = STATUS_INVALID if has_errors(issues) else STATUS_VALID
+    return FileValidation(path, artifact_type, status, issues)

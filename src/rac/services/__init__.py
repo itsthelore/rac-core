@@ -2,14 +2,15 @@
 
 Repository and artifact capabilities — inspection, improvement, relationship
 operations, portfolio/repository intelligence, ingestion, and diffing. Services
-provide stable APIs consumed by the CLI, Explorer, tests, and future
-integrations (ADR-008, ADR-015). They depend on :mod:`rac.core`, never on the
-CLI or output layers.
+expose stable APIs consumed by the CLI, Explorer, tests, and future integrations
+(ADR-008, ADR-015); they depend on :mod:`rac.core`, never on the CLI or output
+layers.
 
-The names re-exported here are the SDK's service surface (ADR-062): a consumer
-imports them flat — ``from rac.services import build_review`` — instead of
-reaching into individual modules. The top-level :mod:`rac` package re-exports
-the same set, so ``from rac import build_review`` is the canonical form.
+The names re-exported below are the SDK's service surface (ADR-062): a consumer
+imports them flat — ``from rac.services import build_review`` — rather than
+reaching into individual modules. The top-level :mod:`rac` package re-exports the
+same set, so ``from rac import build_review`` is the canonical form. ``__all__``
+is guarded by ``test_sdk_surface`` and must not drift from what is exported.
 """
 
 from rac.services.create import CreatedArtifact, create_artifact

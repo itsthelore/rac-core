@@ -1,14 +1,14 @@
-"""Convert source documents into Markdown.
+"""Turn a source document into Markdown so it can enter the RAC workflow.
 
-`rac ingest <file>` turns an existing document (DOCX today; HTML/PDF later) into
-Markdown so it can enter the RAC workflow. Ingestion's only job is **conversion
-that preserves structure** — it does not judge whether the result is a valid RAC
-artifact. That is the responsibility of future `inspect` / `normalize` commands.
+`rac ingest <file>` converts an existing document — Markdown already, or a rich
+format such as DOCX/PDF/HTML — into Markdown text. Conversion is the whole job
+(ADR-006, ingestion over rewrite): the result is *not* judged against any RAC
+schema here; classification and validation are separate, later commands.
 
-Per ADR-008 (agent-ready architecture), the logic lives here as a reusable
-service behind a :class:`DocumentConverter` abstraction; the CLI is a thin
-wrapper. New sources (Notion, Confluence, PDF, ...) are added by registering
-another converter — the CLI does not change.
+Each format is handled by a :class:`DocumentConverter` (ADR-008), so a new
+source is added by registering another converter and the CLI never changes.
+The rich-format converter (ADR-072) is `markitdown`, imported lazily so the
+core install — and ``rac ingest file.md`` — works without the optional extras.
 """
 
 from __future__ import annotations
@@ -21,28 +21,28 @@ from rac.errors import RACError
 
 
 class ConversionError(RACError):
-    """A document was recognized but could not be converted."""
+    """A recognized document could not be converted to Markdown."""
 
 
 class UnsupportedDocument(ConversionError):
-    """The file type has no registered converter (or a needed extra is missing)."""
+    """No converter handles this file type, or its optional extra is missing."""
 
 
 @dataclass
 class IngestResult:
-    """Typed result of an ingestion (ADR-003: structured outputs)."""
+    """Structured outcome of one ingestion (ADR-003)."""
 
     source_path: str
-    converter: str  # name of the converter that produced the Markdown
+    converter: str  # name of the converter that produced ``markdown``
     markdown: str
 
 
 @runtime_checkable
 class DocumentConverter(Protocol):
-    """Turns a source document into Markdown.
+    """A source document turned into a Markdown string.
 
-    Implementations declare the file extensions they handle and convert a path
-    to a Markdown string. They should raise :class:`ConversionError` on failure.
+    A converter declares the extensions it recognizes and converts a path,
+    raising :class:`ConversionError` (or its subclass) when it cannot.
     """
 
     name: str
@@ -52,7 +52,7 @@ class DocumentConverter(Protocol):
 
 
 class MarkdownConverter:
-    """Pass-through for files already in Markdown — needs no extra dependency."""
+    """Pass through files that are already Markdown — no extra dependency."""
 
     name = "markdown"
     extensions: tuple[str, ...] = (".md", ".markdown")
@@ -62,15 +62,17 @@ class MarkdownConverter:
 
 
 class MarkItDownConverter:
-    """Convert rich documents to Markdown via MarkItDown (optional dependency).
+    """Convert rich documents via `markitdown`, an optional dependency (ADR-072).
 
-    Imported lazily so the core install (and `rac ingest file.md`) works without
-    the `ingest` extra installed.
+    The import is deferred to :meth:`convert` (and to :func:`_is_missing_dependency`)
+    so nothing here is required by a core install. A missing package, or a
+    missing per-format reader extra, is reported as an :class:`UnsupportedDocument`
+    that names the extra to install; any other failure is a :class:`ConversionError`.
     """
 
     name = "markitdown"
-    # HTML needs no extra (built into MarkItDown); the others come from the
-    # corresponding markitdown extras, exposed as our granular ingest extras.
+    # HTML/HTM are built into markitdown; the remaining formats need reader
+    # extras, mapped to our granular ingest extras in ``_EXTRA_FOR_SUFFIX``.
     extensions: tuple[str, ...] = (".docx", ".pdf", ".html", ".htm", ".pptx", ".xls", ".xlsx")
 
     def convert(self, path: Path) -> str:
@@ -81,16 +83,16 @@ class MarkItDownConverter:
 
         try:
             result = MarkItDown().convert(str(path))
-        except Exception as exc:  # MarkItDown raises a variety of errors
+        except Exception as exc:  # markitdown surfaces many unrelated error types
             if _is_missing_dependency(exc):
-                # MarkItDown is installed but this format's reader extra isn't.
+                # The package is present but this format's reader extra is not.
                 raise UnsupportedDocument(_missing_extra_message(path.suffix)) from exc
             raise ConversionError(f"could not convert {path.name}: {exc}") from exc
         return result.text_content
 
 
-# Which optional extra provides the reader for a given file type. HTML/HTM need
-# no extra (built into MarkItDown), so they fall back to the base `ingest`.
+# The optional extra that supplies each format's reader. Suffixes absent here —
+# ``.html``/``.htm`` — need no extra, so they fall back to the base ``ingest``.
 _EXTRA_FOR_SUFFIX = {
     ".docx": "ingest",
     ".pdf": "ingest-pdf",
@@ -106,15 +108,19 @@ def _missing_extra_message(suffix: str) -> str:
 
 
 def _is_missing_dependency(exc: Exception) -> bool:
-    """True if ``exc`` is (or wraps) a MarkItDown missing-dependency error."""
+    """True when ``exc`` is, or wraps, a markitdown missing-dependency error.
+
+    markitdown raises ``MissingDependencyException`` directly for a bare missing
+    reader, but also bundles per-attempt failures inside
+    ``FileConversionException(attempts=...)``, each attempt keeping the original
+    error in ``.exc_info = (type, value, traceback)``. Both shapes count.
+    """
     try:
         from markitdown._exceptions import MissingDependencyException
-    except Exception:  # pragma: no cover - defensive
+    except Exception:  # pragma: no cover - markitdown not installed
         return False
     if isinstance(exc, MissingDependencyException):
         return True
-    # MarkItDown wraps converter failures in FileConversionException(attempts=...),
-    # each attempt carrying the original error in .exc_info = (type, value, tb).
     for attempt in getattr(exc, "attempts", None) or []:
         info = getattr(attempt, "exc_info", None)
         if info and isinstance(info[1], MissingDependencyException):
@@ -122,8 +128,8 @@ def _is_missing_dependency(exc: Exception) -> bool:
     return False
 
 
-# Registry — first converter whose extensions match wins. Order is not currently
-# significant since extension sets are disjoint, but kept explicit for clarity.
+# Registry ordered by lookup preference; extension sets are disjoint today, so
+# the first match is also the only match.
 _CONVERTERS: list[DocumentConverter] = [MarkdownConverter(), MarkItDownConverter()]
 
 
@@ -137,22 +143,22 @@ def converter_for(path: Path) -> DocumentConverter | None:
 
 
 def supported_extensions() -> list[str]:
-    """All file extensions any registered converter can handle."""
-    return sorted({ext for c in _CONVERTERS for ext in c.extensions})
+    """Every extension any registered converter can handle, sorted."""
+    return sorted({ext for converter in _CONVERTERS for ext in converter.extensions})
 
 
 def ingest(path: str) -> IngestResult:
     """Convert ``path`` to Markdown, preserving its structure.
 
-    Raises :class:`UnsupportedDocument` for unhandled file types and
-    :class:`ConversionError` when a recognized document fails to convert.
+    Raises :class:`UnsupportedDocument` when no converter recognizes the file
+    type and :class:`ConversionError` when a recognized document fails to convert.
     """
-    p = Path(path)
-    converter = converter_for(p)
+    source = Path(path)
+    converter = converter_for(source)
     if converter is None:
         raise UnsupportedDocument(
-            f"unsupported file type '{p.suffix or p.name}'. "
+            f"unsupported file type '{source.suffix or source.name}'. "
             f"Supported: {', '.join(supported_extensions())}"
         )
-    markdown = converter.convert(p)
-    return IngestResult(source_path=str(p), converter=converter.name, markdown=markdown)
+    markdown = converter.convert(source)
+    return IngestResult(source_path=str(source), converter=converter.name, markdown=markdown)

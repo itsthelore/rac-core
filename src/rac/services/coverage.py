@@ -1,26 +1,28 @@
 """Traceability coverage report — typed completeness gaps (v0.24, WS-F).
 
-Coverage answers a different question from `rac doctor`'s integrity checks: not
-"is this artifact reachable or well-formed" but "does it have the *specific*
-traceability edge its type expects". Three deterministic, advisory gap classes
-are derived from the corpus relationship graph (rac-traceability-coverage-report):
+Coverage answers a different question from ``rac doctor``'s integrity checks: not
+"is this artifact well-formed or reachable" but "does it carry the *specific*
+traceability edge its type is expected to have". Three deterministic, advisory
+gap classes are derived from the corpus relationship graph
+(rac-traceability-coverage-report):
 
   - **unscheduled** — a requirement that no roadmap references (nothing schedules
     the capability),
-  - **unapplied** — a decision that no requirement or roadmap references (the
-    decision is recorded but nothing applies it),
-  - **unscoped** — a roadmap that references no requirement (the plan scopes no
+  - **unapplied** — a decision that no requirement or roadmap references (recorded
+    but not yet applied),
+  - **unscoped** — a roadmap that references no requirement (a plan that scopes no
     capability).
 
 Gaps are completeness signals for human judgement, never validation errors: a
 roadmap may legitimately precede its requirements, a decision may be recorded
-before anything applies it. The report stays out of the `rac gate` enforcement
+before anything applies it. The report stays out of the ``rac gate`` enforcement
 path (ADR-049) and never fails a build. Deterministic and offline (ADR-002).
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,14 +30,16 @@ from rac.core.corpus import walk_corpus
 from rac.services.index import index_from_corpus
 from rac.services.relationships import relationships_from_corpus
 
-# Gap class -> (artifact type it applies to, the missing-coverage description).
-# Derived from the relationship semantics rather than a per-artifact table, so a
-# new type does not silently inherit a coverage rule (rac-traceability-coverage
-# REQ-006): each rule is one type and one expected traceability direction.
 GAP_UNSCHEDULED = "unscheduled"
 GAP_UNAPPLIED = "unapplied"
 GAP_UNSCOPED = "unscoped"
 
+# Report order for the three classes (REQ-003): unscheduled, unapplied, unscoped.
+_GAP_ORDER = (GAP_UNSCHEDULED, GAP_UNAPPLIED, GAP_UNSCOPED)
+
+# The missing-coverage sentence per class. Each rule is one artifact type and one
+# expected traceability direction, so a new type never silently inherits a rule
+# (rac-traceability-coverage REQ-006).
 _MISSING = {
     GAP_UNSCHEDULED: "no roadmap schedules this requirement",
     GAP_UNAPPLIED: "no requirement or roadmap applies this decision",
@@ -50,7 +54,7 @@ class CoverageGap:
     path: str
     id: str
     type: str
-    gap: str  # GAP_* class
+    gap: str  # one of GAP_*
     missing: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -72,69 +76,85 @@ class CoverageReport:
 
     @property
     def counts(self) -> dict[str, int]:
-        out = {GAP_UNSCHEDULED: 0, GAP_UNAPPLIED: 0, GAP_UNSCOPED: 0}
+        out = {gap_class: 0 for gap_class in _GAP_ORDER}
         for gap in self.gaps:
             out[gap.gap] += 1
         return out
 
     def to_dict(self) -> dict[str, Any]:
-        counts = self.counts
         return {
             "schema_version": "1",
             "directory": self.directory,
             "gaps": [g.to_dict() for g in self.gaps],
-            "summary": {**counts, "total": len(self.gaps)},
+            "summary": {**self.counts, "total": len(self.gaps)},
         }
 
 
 def analyze_coverage(directory: str) -> CoverageReport:
     """Derive the typed coverage gaps for ``directory`` from its relationship graph."""
     entries = list(walk_corpus(directory, recursive=True))
-    index = index_from_corpus(directory, entries, recursive=True).artifacts
-    type_by_path = {a.path: a.type for a in index}
-    identity = {a.path: (a.id, a.type) for a in index}
-    relationships = relationships_from_corpus(entries)
+    artifacts = index_from_corpus(directory, entries, recursive=True).artifacts
+    type_by_path = {a.path: a.type for a in artifacts}
 
-    # Resolved incoming source types and resolved outgoing target types per path.
-    incoming_types: dict[str, set[str]] = {a.path: set() for a in index}
-    outgoing_types: dict[str, set[str]] = {a.path: set() for a in index}
-    for rel in relationships:
-        if rel.resolved_path is None or rel.resolved_path == rel.source_path:
-            continue
-        source_type = type_by_path.get(rel.source_path)
-        target_type = type_by_path.get(rel.resolved_path)
-        if rel.resolved_path in incoming_types and source_type is not None:
-            incoming_types[rel.resolved_path].add(source_type)
-        if rel.source_path in outgoing_types and target_type is not None:
-            outgoing_types[rel.source_path].add(target_type)
+    # For each artifact, the set of resolved neighbour types on each side. A
+    # requirement/decision cares about who points *at* it (incoming source types);
+    # a roadmap cares about what *it* points at (outgoing target types).
+    incoming: dict[str, set[str]] = {a.path: set() for a in artifacts}
+    outgoing: dict[str, set[str]] = {a.path: set() for a in artifacts}
+    for source_path, source_type, target_path, target_type in _resolved_edges(
+        relationships_from_corpus(entries), type_by_path
+    ):
+        if target_path in incoming and source_type is not None:
+            incoming[target_path].add(source_type)
+        if source_path in outgoing and target_type is not None:
+            outgoing[source_path].add(target_type)
 
     gaps: list[CoverageGap] = []
-    for artifact in index:
-        artifact_id, artifact_type = identity[artifact.path]
-        gap: str | None = None
-        if artifact_type == "requirement" and "roadmap" not in incoming_types[artifact.path]:
-            gap = GAP_UNSCHEDULED
-        elif artifact_type == "decision" and not (
-            {"requirement", "roadmap"} & incoming_types[artifact.path]
-        ):
-            gap = GAP_UNAPPLIED
-        elif artifact_type == "roadmap" and "requirement" not in outgoing_types[artifact.path]:
-            gap = GAP_UNSCOPED
-        if gap is not None:
+    for artifact in artifacts:
+        gap_class = _classify(artifact.type, incoming[artifact.path], outgoing[artifact.path])
+        if gap_class is not None:
             gaps.append(
                 CoverageGap(
                     path=artifact.path,
-                    id=artifact_id,
-                    type=artifact_type,
-                    gap=gap,
-                    missing=_MISSING[gap],
+                    id=artifact.id,
+                    type=artifact.type,
+                    gap=gap_class,
+                    missing=_MISSING[gap_class],
                 )
             )
 
     # Deterministic order: gap class, then ascending path (REQ-003).
-    order = {GAP_UNSCHEDULED: 0, GAP_UNAPPLIED: 1, GAP_UNSCOPED: 2}
-    gaps.sort(key=lambda g: (order[g.gap], g.path))
+    rank = {gap_class: i for i, gap_class in enumerate(_GAP_ORDER)}
+    gaps.sort(key=lambda g: (rank[g.gap], g.path))
     return CoverageReport(directory=directory, gaps=gaps)
+
+
+def _resolved_edges(
+    relationships: Any, type_by_path: dict[str, str]
+) -> Iterator[tuple[str, str | None, str, str | None]]:
+    """Yield ``(source_path, source_type, target_path, target_type)`` for each
+    resolved, non-self relationship edge."""
+    for rel in relationships:
+        if rel.resolved_path is None or rel.resolved_path == rel.source_path:
+            continue
+        yield (
+            rel.source_path,
+            type_by_path.get(rel.source_path),
+            rel.resolved_path,
+            type_by_path.get(rel.resolved_path),
+        )
+
+
+def _classify(artifact_type: str, incoming: set[str], outgoing: set[str]) -> str | None:
+    """The gap class an artifact falls into, or ``None`` when its expected edge is
+    present. The branches are mutually exclusive — one type, one direction each."""
+    if artifact_type == "requirement" and "roadmap" not in incoming:
+        return GAP_UNSCHEDULED
+    if artifact_type == "decision" and not ({"requirement", "roadmap"} & incoming):
+        return GAP_UNAPPLIED
+    if artifact_type == "roadmap" and "requirement" not in outgoing:
+        return GAP_UNSCOPED
+    return None
 
 
 def render_coverage_json(report: CoverageReport) -> str:
@@ -142,24 +162,25 @@ def render_coverage_json(report: CoverageReport) -> str:
 
 
 def render_coverage_human(report: CoverageReport) -> str:
-    counts = report.counts
     lines = [f"Traceability coverage — {report.directory}", ""]
     if not report.gaps:
         lines.append("✓ No coverage gaps — every artifact has its expected traceability edge.")
         return "\n".join(lines)
+
     headings = {
         GAP_UNSCHEDULED: "Unscheduled requirements (no roadmap schedules them)",
         GAP_UNAPPLIED: "Unapplied decisions (no requirement or roadmap applies them)",
         GAP_UNSCOPED: "Unscoped roadmaps (reference no requirement)",
     }
-    for gap_class, heading in headings.items():
+    for gap_class in _GAP_ORDER:
         members = [g for g in report.gaps if g.gap == gap_class]
         if not members:
             continue
-        lines.append(f"{heading}: {len(members)}")
-        for gap in members:
-            lines.append(f"  {gap.id}  {gap.path}")
+        lines.append(f"{headings[gap_class]}: {len(members)}")
+        lines.extend(f"  {gap.id}  {gap.path}" for gap in members)
         lines.append("")
+
+    counts = report.counts
     total = len(report.gaps)
     lines.append(
         f"{total} coverage gap{'s' if total != 1 else ''} "

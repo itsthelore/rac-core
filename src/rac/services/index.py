@@ -1,17 +1,16 @@
-"""Repository index — `rac index` (v0.7.5).
+"""Repository index — `rac index`.
 
-``build_repository_index`` walks a directory once and produces a deterministic
-inventory of every Markdown artifact discovered: its stable identity, classified
-type, title, and path. It answers a single question — *what exists in this
-repository?* — and deliberately nothing more: no validation, no relationship
-traversal, no health scoring, no metadata interpretation. Those concerns belong
-to ``rac inspect`` / ``rac relationships`` / ``rac portfolio``.
+``build_repository_index`` walks a directory once and returns a deterministic
+inventory of every Markdown artifact: its stable identity, classified type,
+title, and path. It answers exactly one question — *what exists here?* — and
+deliberately nothing more: no validation, no relationship traversal, no health
+scoring, no metadata interpretation. Those belong to ``rac inspect`` /
+``rac relationships`` / ``rac portfolio``.
 
-Discovery belongs to RAC Core (REQ-001, ADR-015): consumers such as Explorer,
-IDE integrations, AI tools, and CI build navigation from this inventory rather
-than scanning files themselves. The index is read-only (REQ-004) and pure /
-deterministic (ADR-002): one parse per file, no cross-file resolution, entries in
-sorted-path order.
+Discovery is a Core responsibility (REQ-001, ADR-015): Explorer, IDE
+integrations, AI tools, and CI navigate from this inventory instead of scanning
+files themselves. The index is read-only (REQ-004) and deterministic (ADR-002):
+one parse per file, no cross-file resolution, entries in sorted-path order.
 """
 
 from __future__ import annotations
@@ -37,21 +36,22 @@ class IndexEntry:
     type: str
     title: str | None
     path: str
-    # Every identifier the artifact answers to, canonical first (v0.7.12,
-    # additive): legacy aliases keep resolving during identity migration.
+    # Every identifier the artifact answers to, canonical first (additive): legacy
+    # aliases keep resolving during identity migration.
     aliases: list[str] = field(default_factory=list)
-    # Searchable section headings and body lines, original text preserved
-    # (v0.10.3): the body/heading tiers of `rac find` and their snippets read
-    # from here, sourced from the same corpus walk — never a second read. Not
-    # serialized: the index JSON contract is unchanged (id/type/title/path/
-    # aliases only).
+    # Searchable headings and body lines with original text preserved. The
+    # heading/body tiers of ``rac find`` and their snippets read from here,
+    # sourced from this same walk — never a second file read. Carried in memory
+    # only: the index JSON contract (id/type/title/path/aliases) excludes it.
     search_sections: list[SearchSection] = field(default_factory=list)
-    # Count of resolved relationship edges pointing at this artifact (v2026.6,
-    # additive): the deterministic graph signal the relevance ranker fuses
-    # (ADR-078). Not serialized — the index JSON contract is unchanged.
+    # Resolved relationship edges pointing at this artifact — the deterministic
+    # graph signal the ``rac find`` relevance ranker fuses (ADR-078). Also
+    # in-memory only; not part of the JSON contract.
     inbound_count: int = 0
 
     def to_dict(self) -> dict:
+        # search_sections/inbound_count are deliberately excluded — the JSON
+        # contract (ADR-007) is exactly these five keys.
         return {
             "id": self.id,
             "type": self.type,
@@ -63,11 +63,11 @@ class IndexEntry:
 
 @dataclass
 class RepositoryIndex:
-    """Deterministic inventory of every artifact in a repository (v0.7.5).
+    """Deterministic inventory of every artifact in a repository.
 
     ``to_dict`` is the stable JSON contract (ADR-007); ``schema_version`` lets
     consumers detect breaking changes. Entries follow discovery order (sorted by
-    path), so the output is reproducible across runs and machines.
+    path), so output is reproducible across runs and machines.
     """
 
     directory: str
@@ -97,31 +97,31 @@ def build_repository_index(directory: str, recursive: bool = True) -> Repository
 def index_from_corpus(
     directory: str, entries: list[CorpusEntry], recursive: bool = True
 ) -> RepositoryIndex:
-    """Inventory an already-walked corpus snapshot (v0.8.0).
+    """Inventory an already-walked corpus snapshot.
 
-    Same result as :func:`build_repository_index`; the snapshot lets one walk
-    feed several analyses (repository model, future incremental refresh).
-
-    Each entry also carries its inbound resolved-edge count — the graph signal
-    the relevance ranker fuses (ADR-078) — computed once from the same snapshot.
-    The import is deferred to keep the index → relationships dependency one-way.
+    Same result as :func:`build_repository_index`, but taking a snapshot lets one
+    walk feed several analyses. Each entry also gets its inbound resolved-edge
+    count (ADR-078), computed once from the same snapshot. The import is deferred
+    inside the function body to keep the index -> relationships dependency
+    one-way — relationships never imports index.
     """
     from rac.services.relationships import inbound_counts_from_corpus
 
     inbound = inbound_counts_from_corpus(entries)
     artifacts: list[IndexEntry] = []
     for entry in entries:
-        path, product = entry.path, entry.product
-        spec = spec_for(entry.artifact_type)  # None for Unknown
+        path = str(entry.path)
+        product = entry.product
+        spec = spec_for(entry.artifact_type)  # None for unknown
         artifacts.append(
             IndexEntry(
-                id=artifact_identifier(product, spec, str(path)),
+                id=artifact_identifier(product, spec, path),
                 type=entry.artifact_type,
                 title=product.title,
-                path=str(path),
-                aliases=artifact_identifiers(product, spec, str(path)),
+                path=path,
+                aliases=artifact_identifiers(product, spec, path),
                 search_sections=product.search_sections,
-                inbound_count=inbound.get(str(path), 0),
+                inbound_count=inbound.get(path, 0),
             )
         )
     return RepositoryIndex(directory=directory, recursive=recursive, artifacts=artifacts)

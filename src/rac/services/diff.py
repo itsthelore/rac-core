@@ -1,13 +1,18 @@
-"""Compare two :class:`~rac.core.models.Product` ASTs and classify the changes.
+"""AST-level requirement diff between two versions of an artifact.
 
-Diffing operates purely on the AST, never on raw Markdown text.
+``diff`` compares two :class:`~rac.core.models.Product` ASTs and classifies
+what changed. It reads only the parsed structure — requirements, success
+metrics, risks — never the raw Markdown, so cosmetic edits (reflowed prose,
+reordered paragraphs) never register as a change.
 
-- Requirements are matched by ID:
-    * same ID, same text   -> unchanged (omitted)
-    * same ID, different    -> modified
-    * ID only in the new    -> added
-    * ID only in the old    -> removed
-- Metrics and risks are matched by exact string (set difference).
+Matching rules:
+
+- Requirements are keyed by their ``[REQ-NNN]`` id. A shared id with identical
+  text is unchanged (omitted); a shared id with different text is *modified*;
+  an id present only in the new version is *added*; one present only in the old
+  is *removed*.
+- Success metrics and risks are compared as plain strings by exact equality:
+  each direction's delta is the ordered set difference.
 """
 
 from __future__ import annotations
@@ -15,34 +20,34 @@ from __future__ import annotations
 from rac.core.models import Diff, Product, Requirement, RequirementChange
 
 
-def _by_id(requirements: list[Requirement]) -> dict[str, Requirement]:
-    # On a duplicate ID (a validation error) the last occurrence wins; the diff
-    # is still well-defined.
-    return {r.id: r for r in requirements}
+def _index_by_id(requirements: list[Requirement]) -> dict[str, Requirement]:
+    # A duplicate id is a validation error handled elsewhere; here the last
+    # occurrence wins so the mapping — and thus the diff — stays well-defined.
+    return {requirement.id: requirement for requirement in requirements}
 
 
-def _ordered_difference(a: list[str], b: list[str]) -> list[str]:
-    """Items in ``a`` not present in ``b``, preserving ``a``'s order, de-duped."""
-    b_set = set(b)
+def _ordered_difference(source: list[str], other: list[str]) -> list[str]:
+    """Items in ``source`` absent from ``other``, in ``source`` order, de-duped."""
+    excluded = set(other)
     seen: set[str] = set()
-    out: list[str] = []
-    for item in a:
-        if item not in b_set and item not in seen:
+    result: list[str] = []
+    for item in source:
+        if item not in excluded and item not in seen:
             seen.add(item)
-            out.append(item)
-    return out
+            result.append(item)
+    return result
 
 
 def diff(old: Product, new: Product) -> Diff:
     """Return the classified :class:`Diff` between ``old`` and ``new``."""
-    old_reqs = _by_id(old.requirements)
-    new_reqs = _by_id(new.requirements)
+    old_by_id = _index_by_id(old.requirements)
+    new_by_id = _index_by_id(new.requirements)
 
     result = Diff()
 
-    # Added / modified: iterate new (preserves new-file order).
-    for req_id, new_req in new_reqs.items():
-        old_req = old_reqs.get(req_id)
+    # Added and modified are emitted in new-file order (first appearance of each id).
+    for req_id, new_req in new_by_id.items():
+        old_req = old_by_id.get(req_id)
         if old_req is None:
             result.added_requirements.append(new_req)
         elif old_req.text != new_req.text:
@@ -50,9 +55,9 @@ def diff(old: Product, new: Product) -> Diff:
                 RequirementChange(id=req_id, old_text=old_req.text, new_text=new_req.text)
             )
 
-    # Removed: in old but not new (preserves old-file order).
-    for req_id, old_req in old_reqs.items():
-        if req_id not in new_reqs:
+    # Removed are emitted in old-file order.
+    for req_id, old_req in old_by_id.items():
+        if req_id not in new_by_id:
             result.removed_requirements.append(old_req)
 
     result.added_metrics = _ordered_difference(new.success_metrics, old.success_metrics)

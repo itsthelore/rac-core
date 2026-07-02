@@ -1,16 +1,21 @@
 """Deterministic intent analysis of repository comparisons (v0.12.1).
 
-``analyze_intent`` consumes a :class:`~rac.services.compare.RepositoryComparison`
-and reports changes that reduce product clarity: measurable requirements
-becoming vague, mandatory language weakening, ambiguous wording arriving,
-acceptance criteria or success measures disappearing, relationship impact,
-and new scope without supporting context.
+:func:`analyze_intent` consumes a
+:class:`~rac.services.compare.RepositoryComparison` and reports the changes that
+reduce product clarity: measurable requirements turning vague, mandatory language
+weakening, ambiguous wording arriving, acceptance criteria or success measures
+disappearing, relationship impact, and new scope without supporting context.
 
 Every check is a pure, explainable function of the two repository states —
-token-boundary text matching and parsed-section comparison, no semantic
-scoring (ADR-015). Findings flag changes for human attention; they never
-judge correctness. Codes reuse the policy vocabulary of the Product Intent
-CI requirement so downstream policy needs no translation layer.
+token-boundary text matching and parsed-section comparison, never semantic
+scoring (ADR-015). Findings flag changes for human attention; they never judge
+correctness. Codes reuse the Product-Intent-CI policy vocabulary so downstream
+policy needs no translation layer.
+
+The watchkeeper consumes this module directly, hard-importing the finding codes
+plus :class:`IntentFinding`, :data:`SEVERITY_WARNING`, and :func:`analyze_intent`;
+``rac.output.github`` also imports :data:`SEVERITY_WARNING`. Those names are a
+stable cross-module contract.
 """
 
 from __future__ import annotations
@@ -29,7 +34,7 @@ from rac.services.compare import (
     RepoState,
 )
 
-# Stable finding codes (part of the watchkeeper JSON contract, ADR-007).
+# Stable finding codes — part of the watchkeeper JSON contract (ADR-007).
 SPECIFICITY_REGRESSION = "specificity_regression"
 AMBIGUITY_INTRODUCED = "ambiguity_introduced"
 CONSTRAINT_WEAKENED = "constraint_weakened"
@@ -42,8 +47,8 @@ UNLINKED_SCOPE = "unlinked_scope"
 SEVERITY_WARNING = "warning"
 SEVERITY_INFO = "info"
 
-# Pinned by the v0.12.1 implementation contract; changing the vocabulary is
-# a corpus edit (roadmap/decision), not a code tweak.
+# Pinned by the v0.12.1 implementation contract; changing this vocabulary is a
+# corpus edit (roadmap/decision), not a code tweak.
 AMBIGUITY_TERMS = frozenset(
     {
         "easy",
@@ -61,7 +66,7 @@ AMBIGUITY_TERMS = frozenset(
 MANDATORY_TERMS = ("must", "shall")
 HEDGE_TERMS = ("should", "may", "could")
 
-# Normalized section headings (Product.sections keys are casefolded).
+# Product.sections keys are casefolded, so these lookup keys are too.
 _ACCEPTANCE_SECTIONS = ("acceptance criteria",)
 _SUCCESS_SECTIONS = ("success measures", "success metrics")
 
@@ -78,7 +83,11 @@ class IntentFinding:
     evidence: tuple[str, ...]  # the triggering text, diff-style where applicable
 
 
+# --- Text predicates (token-boundary matching, never substring) --------------
+
+
 def _has_token(text: str, token: str) -> bool:
+    # Word boundaries only: "breakfast" must not match the ambiguity term "fast".
     return re.search(rf"\b{re.escape(token)}\b", text, re.IGNORECASE) is not None
 
 
@@ -102,11 +111,22 @@ def _section_filled(product: Product, headings: tuple[str, ...]) -> bool:
     return any(product.sections.get(heading, "").strip() for heading in headings)
 
 
+# --- Per-change-kind findings ------------------------------------------------
+
+
 def _modified_findings(change: ArtifactChange, base: Product, head: Product) -> list[IntentFinding]:
+    """Clarity-reducing edits within a modified artifact.
+
+    The finding ``identifier`` is the *artifact* id (``change.id``); the detail
+    sentence names the *requirement-line* id (``req_change.id``) — different
+    values, and both are load-bearing (a fixture without frontmatter has an
+    artifact id derived from its filename, never ``REQ-001``).
+    """
     findings: list[IntentFinding] = []
 
     for req_change in change.diff.modified_requirements if change.diff else []:
         evidence = (f"- {req_change.old_text}", f"+ {req_change.new_text}")
+
         if _has_digit(req_change.old_text) and not _has_digit(req_change.new_text):
             findings.append(
                 IntentFinding(
@@ -118,6 +138,7 @@ def _modified_findings(change: ArtifactChange, base: Product, head: Product) -> 
                     evidence=evidence,
                 )
             )
+
         new_terms = [
             term
             for term in _ambiguous_terms(req_change.new_text)
@@ -135,6 +156,7 @@ def _modified_findings(change: ArtifactChange, base: Product, head: Product) -> 
                     evidence=evidence,
                 )
             )
+
         if (
             _has_mandatory(req_change.old_text)
             and not _has_mandatory(req_change.new_text)
@@ -164,35 +186,36 @@ def _modified_findings(change: ArtifactChange, base: Product, head: Product) -> 
                 )
             )
 
-    if _section_filled(base, _ACCEPTANCE_SECTIONS) and not _section_filled(
-        head, _ACCEPTANCE_SECTIONS
-    ):
-        findings.append(
-            IntentFinding(
-                code=ACCEPTANCE_CRITERIA_REMOVED,
-                severity=SEVERITY_WARNING,
-                path=change.path,
-                identifier=change.id,
-                detail="Acceptance criteria section removed.",
-                evidence=(),
-            )
-        )
-    if _section_filled(base, _SUCCESS_SECTIONS) and not _section_filled(head, _SUCCESS_SECTIONS):
-        findings.append(
-            IntentFinding(
-                code=SUCCESS_MEASURES_REMOVED,
-                severity=SEVERITY_WARNING,
-                path=change.path,
-                identifier=change.id,
-                detail="Success measures section removed.",
-                evidence=(),
-            )
-        )
+    findings.extend(_section_removed_findings(change, base, head))
+    return findings
 
+
+def _section_removed_findings(
+    change: ArtifactChange, base: Product, head: Product
+) -> list[IntentFinding]:
+    """Acceptance-criteria / success-measures sections that were filled and are
+    now empty. An emptied section counts as a removal."""
+    findings: list[IntentFinding] = []
+    for sections, code, label in (
+        (_ACCEPTANCE_SECTIONS, ACCEPTANCE_CRITERIA_REMOVED, "Acceptance criteria"),
+        (_SUCCESS_SECTIONS, SUCCESS_MEASURES_REMOVED, "Success measures"),
+    ):
+        if _section_filled(base, sections) and not _section_filled(head, sections):
+            findings.append(
+                IntentFinding(
+                    code=code,
+                    severity=SEVERITY_WARNING,
+                    path=change.path,
+                    identifier=change.id,
+                    detail=f"{label} section removed.",
+                    evidence=(),
+                )
+            )
     return findings
 
 
 def _removed_findings(change: ArtifactChange, base: RepoState) -> list[IntentFinding]:
+    """Mandatory requirements lost when a whole artifact is removed."""
     findings: list[IntentFinding] = []
     product = base.products.get(change.path)
     for requirement in product.requirements if product else []:
@@ -211,6 +234,7 @@ def _removed_findings(change: ArtifactChange, base: RepoState) -> list[IntentFin
 
 
 def _added_findings(change: ArtifactChange, head: RepoState) -> list[IntentFinding]:
+    """Ambiguous wording introduced by a newly added artifact."""
     findings: list[IntentFinding] = []
     product = head.products.get(change.path)
     for requirement in product.requirements if product else []:
@@ -230,8 +254,29 @@ def _added_findings(change: ArtifactChange, head: RepoState) -> list[IntentFindi
     return findings
 
 
+def _impact_finding(
+    change: ArtifactChange, incoming: dict[str, list[str]], verb: str
+) -> IntentFinding | None:
+    """Informational note that other artifacts reference the changed one."""
+    sources = sorted(set(incoming.get(change.path, [])))
+    if not sources:
+        return None
+    return IntentFinding(
+        code=RELATIONSHIP_IMPACT,
+        severity=SEVERITY_INFO,
+        path=change.path,
+        identifier=change.id,
+        detail=f"{verb} artifact is referenced by {len(sources)} artifact(s).",
+        evidence=tuple(sources),
+    )
+
+
+# --- Reference graph ---------------------------------------------------------
+
+
 def _reference_maps(state: RepoState) -> tuple[dict[str, list[str]], dict[str, set[str]]]:
-    """Incoming references (target path -> source ids) and declared targets."""
+    """Incoming references (target path -> source ids) and declared outgoing
+    targets, both keyed by corpus-relative path."""
     incoming: dict[str, list[str]] = {}
     outgoing: dict[str, set[str]] = {}
     for relationship in state.repository.relationships:
@@ -250,20 +295,7 @@ def _rel(state: RepoState, path: str) -> str:
     return os.path.relpath(path, state.directory).replace(os.sep, "/")
 
 
-def _impact_finding(
-    change: ArtifactChange, incoming: dict[str, list[str]], verb: str
-) -> IntentFinding | None:
-    sources = sorted(set(incoming.get(change.path, [])))
-    if not sources:
-        return None
-    return IntentFinding(
-        code=RELATIONSHIP_IMPACT,
-        severity=SEVERITY_INFO,
-        path=change.path,
-        identifier=change.id,
-        detail=f"{verb} artifact is referenced by {len(sources)} artifact(s).",
-        evidence=tuple(sources),
-    )
+# --- Entry point -------------------------------------------------------------
 
 
 def analyze_intent(comparison: RepositoryComparison) -> list[IntentFinding]:
@@ -281,13 +313,16 @@ def analyze_intent(comparison: RepositoryComparison) -> list[IntentFinding]:
             impact = _impact_finding(change, head_incoming, "Modified")
             if impact is not None:
                 findings.append(impact)
+
         elif change.change == CHANGE_REMOVED:
             findings.extend(_removed_findings(change, comparison.base))
             impact = _impact_finding(change, base_incoming, "Removed")
             if impact is not None:
                 findings.append(impact)
+
         elif change.change == CHANGE_ADDED:
             findings.extend(_added_findings(change, comparison.head))
+            # New scope no one references and that references nothing is dangling.
             if (
                 change.type != "unknown"
                 and not head_outgoing.get(change.path)
@@ -306,5 +341,6 @@ def analyze_intent(comparison: RepositoryComparison) -> list[IntentFinding]:
                     )
                 )
 
+    # Warnings first, then info; within a severity by code, path, detail (ADR-002).
     findings.sort(key=lambda f: (f.severity != SEVERITY_WARNING, f.code, f.path, f.detail))
     return findings

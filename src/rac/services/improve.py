@@ -1,18 +1,18 @@
-"""Artifact improvement — deterministic, schema-driven guidance (ADR-002).
+"""Advisory, schema-driven completion guidance (`rac improve`).
 
-`rac improve <file>` is RAC's *advisory* capability: it reports which required and
-recommended sections an artifact is missing, explains *how to complete them* with
-schema-defined guidance (v0.5.1), and can emit Markdown templates. It is strictly
-read-only (REQ-004) and generates no content beyond schema-derived placeholders —
-no AI, no rewriting.
+`rac improve <file>` reports which required and recommended sections an artifact
+is missing and, for each, the schema-defined questions that guide filling it in.
+It is strictly read-only (REQ-004) and deterministic (ADR-002): no AI, no
+rewriting, no content generated beyond schema-derived placeholders.
 
-Improvement depends only on the artifact *type* and a *schema comparison*
-(:func:`rac.core.classification.missing_sections`); it never reaches into classification
-confidence internals. A type is *supported* when it has an :class:`ArtifactSpec`
-**and** complete guidance coverage for its expected sections — so requirement and
-decision are supported today, while Unknown (and any future spec lacking guidance)
-is not. Guidance is informational only: it never affects classification, validation,
-or statistics.
+Guidance depends only on the artifact *type* and a *schema comparison*
+(:func:`rac.core.classification.missing_sections`) — never on classification
+internals, and it never feeds back into classification, validation, or
+statistics. A type earns support purely through its :class:`ArtifactSpec`: it
+must define guidance for every expected section (:func:`supports_improve`).
+There is no per-type engine — the same pipeline serves every artifact family,
+which is why a new type becomes improvable the moment its spec gains complete
+guidance.
 """
 
 from __future__ import annotations
@@ -26,31 +26,37 @@ from rac.core.models import Product
 
 
 def supports_improve(spec: ArtifactSpec) -> bool:
-    """True when every expected section of ``spec`` defines guidance.
+    """True when ``spec`` defines guidance for every section it expects.
 
-    Gates ``rac improve`` so a future artifact type cannot become improvable until
-    its schema includes guidance for all required and recommended sections.
+    This gate is what makes support spec-driven rather than hard-coded: a future
+    type cannot become improvable until its schema covers all of its required
+    and recommended sections.
     """
     return all(section in spec.guidance for section in spec.expected)
+
+
+def _snake(section: str) -> str:
+    return section.replace(" ", "_")
 
 
 @dataclass
 class ImprovementResult:
     """Typed improvement analysis for one artifact (ADR-003).
 
-    Section names are stored normalized (e.g. ``"success metrics"``); renderers
-    format them. ``to_dict`` is the stable JSON contract (ADR-007):
-    ``{type, missing_required, missing_recommended, guidance}``.
+    Section names are stored in their normalized form (e.g. ``"success
+    metrics"``); renderers do the casing. ``to_dict`` is the stable JSON
+    contract (ADR-007): ``{type, missing_required, missing_recommended,
+    guidance}`` with snake-cased section names.
     """
 
-    type: str  # classified artifact type, or "unknown"
+    type: str  # classified type, or "unknown"
     missing_required: list[str]
     missing_recommended: list[str]
-    # Schema guidance for the missing sections: {section -> prompting questions}.
+    # Guidance questions for each missing section: {section -> questions}.
     guidance: dict[str, list[str]] = field(default_factory=dict)
-    # Whether `improve` produces suggestions for this type (spec + full coverage).
+    # Whether this type yields suggestions at all (spec present + full coverage).
     supported: bool = False
-    # Reserved for future Unknown handling (e.g. "closest match"); not serialized.
+    # Reserved for future unknown-type handling (e.g. nearest match); not serialized.
     closest_type: str | None = None
 
     def to_dict(self) -> dict:
@@ -58,31 +64,30 @@ class ImprovementResult:
             "type": self.type,
             "missing_required": [_snake(s) for s in self.missing_required],
             "missing_recommended": [_snake(s) for s in self.missing_recommended],
-            "guidance": {_snake(s): list(g) for s, g in self.guidance.items()},
+            "guidance": {_snake(s): list(questions) for s, questions in self.guidance.items()},
         }
 
 
-def _snake(section: str) -> str:
-    return section.replace(" ", "_")
-
-
 def improve_product(product: Product) -> ImprovementResult:
-    """Analyze a parsed ``product`` and return improvement guidance."""
+    """Analyze a parsed ``product`` and return its completion guidance."""
     artifact_type = classify(product).type
     spec = spec_for(artifact_type)
     if spec is None or not supports_improve(spec):
-        # Unknown, or a known type whose schema lacks complete guidance.
+        # Unknown, or a known type whose schema lacks complete guidance: there is
+        # nothing actionable to report.
         return ImprovementResult(
             type=artifact_type,
             missing_required=[],
             missing_recommended=[],
             supported=False,
         )
+
     missing_required, missing_recommended = missing_sections(product, spec)
+    # Keep required sections ahead of recommended so renderers preserve priority.
     guidance = {
-        s: list(spec.guidance[s])
-        for s in missing_required + missing_recommended
-        if spec.guidance.get(s)
+        section: list(spec.guidance[section])
+        for section in missing_required + missing_recommended
+        if spec.guidance.get(section)
     }
     return ImprovementResult(
         type=artifact_type,

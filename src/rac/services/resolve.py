@@ -1,23 +1,22 @@
-"""Artifact lookup and resolution — `rac resolve` / `rac find` (v0.7.12).
+"""Artifact lookup and search — the engine behind `rac resolve` / `rac find`.
 
-Built strictly on the repository index (the dependency direction pinned by the
-roadmap): no independent file discovery, identity extraction, or
-classification happens here. Explorer, Watchkeeper, CI, and IDE integrations
-consume these same functions, so lookup behavior cannot fork per consumer
-(ADR-015, ADR-026).
+Everything here reads from the repository index; nothing walks the filesystem,
+extracts identity, or classifies on its own. The CLI, Explorer, Watchkeeper, the
+MCP server, and IDE integrations all consume these functions, so lookup
+semantics cannot fork per consumer (ADR-015, ADR-026).
 
-Exact resolution has exactly three outcomes — resolved, not found, duplicate —
-and a duplicate is never silently resolved by path order. Resolution stays
-exact-match against an artifact's identifier set.
+Two capabilities live side by side:
 
-Search (v0.10.3, ADR-037/ADR-038) is deterministic, tiered, token-boundary
-matching: identifiers, title, path, section headings, and body text are
-tokenized on non-alphanumeric boundaries and camelCase transitions; a query
-term matches a token by casefolded equality or prefix; a multi-term query
-requires every term to match somewhere in the artifact (AND). Matches rank by
-the best field any term hit — identifier, then title, then path, then heading,
-then body — with sorted path as the tiebreak. Heading and body matches carry
-snippet fields (the matched heading and the matching line, as stored).
+* **Exact resolution** answers "which artifact is this identifier?" with exactly
+  one of three outcomes — resolved, not found, duplicate. A duplicate is never
+  silently collapsed to one file by path order; it is reported with every path.
+
+* **Search** (ADR-037/ADR-038) is deterministic token-boundary matching over a
+  five-tier ladder (id, title, path, heading, body). A query term matches a
+  token by casefolded equality or prefix; a multi-term query is an AND. The
+  matched set is then ordered by a reproducible relevance score (ADR-078) that
+  fuses a field-weighted BM25 lexical signal with a bounded inbound-edge graph
+  signal — no embeddings, no learned model, no network.
 """
 
 from __future__ import annotations
@@ -38,11 +37,12 @@ OUTCOME_DUPLICATE = "duplicate"
 
 
 class SearchableArtifact(Protocol):
-    """Anything resolvable/searchable: index entries, repository artifacts.
+    """The structural shape resolution and search consume.
 
-    Structural (v0.8.1) so consumers holding an already-loaded repository
-    model can reuse the exact `rac resolve` / `rac find` semantics without
-    re-walking the directory (ADR-026).
+    Defined as a Protocol (not a concrete class) so a caller already holding a
+    loaded repository model can feed its artifacts straight in and reuse the
+    exact `rac resolve` / `rac find` semantics without a second directory walk
+    (ADR-026). Index entries and repository artifacts both satisfy it.
     """
 
     @property
@@ -61,27 +61,13 @@ class SearchableArtifact(Protocol):
     def inbound_count(self) -> int: ...
 
 
-# Match-field priority for search ordering (lower ranks first); the ladder
-# pinned by ADR-037/ADR-038: id, then title, then path, then heading, then body.
-_RANK_ID = 0
-_RANK_TITLE = 1
-_RANK_PATH = 2
-_RANK_HEADING = 3
-_RANK_BODY = 4
-
-# Tier number -> field name, the projection ADR-037's ladder exposes as match
-# evidence (WS2 explainable retrieval): the winning rank named, no new compute.
-_RANK_NAMES: dict[int, str] = {
-    _RANK_ID: "id",
-    _RANK_TITLE: "title",
-    _RANK_PATH: "path",
-    _RANK_HEADING: "heading",
-    _RANK_BODY: "body",
-}
-
+# --- Tokenization (ADR-037) --------------------------------------------------
+#
 # A token is a maximal run that is neither a non-alphanumeric boundary nor a
-# camelCase transition. We split on both: ``_TOKEN_SPLIT`` breaks on runs of
-# non-alphanumerics, then ``_CAMEL_SPLIT`` breaks lowercase->uppercase seams.
+# camelCase seam. We split on both so `soft-delete` and `camelCaseWord` become
+# separate searchable tokens and a query term matches on token boundaries rather
+# than as a raw substring.
+
 _NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z]+")
 _CAMEL_RE = re.compile(r"(?<=[a-z])(?=[A-Z])")
 
@@ -89,10 +75,10 @@ _CAMEL_RE = re.compile(r"(?<=[a-z])(?=[A-Z])")
 def tokenize(text: str) -> list[str]:
     """Split ``text`` into casefolded match tokens (ADR-037).
 
-    Tokens break on non-alphanumeric boundaries and on lowercase-to-uppercase
-    (camelCase) transitions: ``soft-delete`` -> ``[soft, delete]``,
-    ``relationships`` -> ``[relationships]``, ``Explorer`` -> ``[explorer]``,
-    ``camelCase`` -> ``[camel, case]``. Empty pieces are dropped.
+    Non-alphanumeric runs and lowercase-to-uppercase transitions both break
+    tokens: ``soft-delete`` -> ``[soft, delete]``, ``camelCaseWord`` ->
+    ``[camel, case, word]``, ``adr-002-legacy.md`` -> ``[adr, 002, legacy,
+    md]``. Empty pieces are dropped, so an all-punctuation string yields ``[]``.
     """
     tokens: list[str] = []
     for piece in _NON_ALNUM_RE.split(text):
@@ -109,15 +95,20 @@ def _term_hits_tokens(term: str, tokens: Sequence[str]) -> bool:
     return any(token == term or token.startswith(term) for token in tokens)
 
 
+# --- Result shapes (stable JSON contract, ADR-007) ---------------------------
+
+
 @dataclass
 class ResolvedArtifact:
-    """The canonical answer to "what artifact is this ID?" (ADR-026).
+    """The identity answer for one resolution or search hit.
 
-    ``section`` and ``snippet`` (v0.10.3, additive) carry the matched section
-    heading and matching line for heading/body search matches; both stay None
-    for resolution and for id/title/path search matches, and are absent (not
-    null) from ``to_dict`` then — the metadata-match shape is byte-identical to
-    pre-v0.10.3 (ADR-007).
+    ``section``/``snippet`` carry the matched heading and line for a heading or
+    body *search* hit; they stay None for resolution and for id/title/path hits,
+    and are then absent (not null) from ``to_dict`` — so the metadata-match shape
+    is byte-identical to the pre-body-tier contract. ``evidence`` is the additive
+    ``{field, terms, tier, score, components}`` object a search hit carries; it
+    too is absent from ``to_dict`` when None or when evidence is suppressed, so
+    the default `rac find` JSON stays byte-stable (ADR-007).
     """
 
     id: str
@@ -126,11 +117,6 @@ class ResolvedArtifact:
     path: str
     section: str | None = None
     snippet: str | None = None
-    # Match evidence (v0.23.0, WS2, additive): the winning field/tier and matched
-    # terms for a *search* hit — ``{field, terms, tier}`` (ADR-037/ADR-038). None
-    # for resolution and absent from ``to_dict`` then, so the exact-lookup shape
-    # is unchanged. Always set for a search match; the gate it answers to is
-    # ``include_evidence`` so the CLI's default ``rac find`` JSON stays byte-stable.
     evidence: dict | None = None
 
     def to_dict(self, *, include_evidence: bool = True) -> dict:
@@ -170,7 +156,7 @@ class ResolvedArtifact:
 
 @dataclass
 class ResolutionResult:
-    """Outcome of one exact-ID lookup (stable JSON contract, ADR-007)."""
+    """Outcome of one exact-ID lookup."""
 
     artifact_id: str  # the query as given
     outcome: str  # OUTCOME_RESOLVED | OUTCOME_NOT_FOUND | OUTCOME_DUPLICATE
@@ -179,9 +165,9 @@ class ResolutionResult:
 
     def to_dict(self) -> dict:
         if self.outcome == OUTCOME_RESOLVED:
-            assert self.artifact is not None  # resolved outcome implies an artifact
+            assert self.artifact is not None  # a resolved outcome always carries the artifact
             return {"schema_version": "1", **self.artifact.to_dict()}
-        payload: dict = {
+        payload: dict[str, Any] = {
             "schema_version": "1",
             "error": self.outcome,
             "id": self.artifact_id,
@@ -193,7 +179,7 @@ class ResolutionResult:
 
 @dataclass
 class SearchResult:
-    """Outcome of one repository search (stable JSON contract, ADR-007)."""
+    """Outcome of one repository search."""
 
     query: str
     artifact_type: str | None
@@ -213,36 +199,38 @@ class SearchResult:
         }
 
 
+# --- Exact resolution --------------------------------------------------------
+
+
 def resolve_artifact(directory: str, artifact_id: str, recursive: bool = True) -> ResolutionResult:
     """Resolve ``artifact_id`` to exactly one artifact under ``directory``.
 
-    Matching is case-insensitive against every identifier an artifact answers
-    to — the canonical ID and its legacy aliases — the same identity set
-    relationship resolution uses. Multiple *distinct files* matching is a
-    duplicate, reported with every path and never resolved by order.
+    Matching is case-insensitive against every identifier an artifact answers to
+    — its canonical ID and any legacy aliases — the same identity set
+    relationship resolution uses. Two distinct files answering to the ID is a
+    duplicate, reported with both paths and never resolved by order.
     """
     entries = build_repository_index(directory, recursive=recursive).artifacts
     return resolve_in_index(entries, artifact_id)
 
 
 def resolve_in_index(entries: Sequence[SearchableArtifact], artifact_id: str) -> ResolutionResult:
-    """Resolve ``artifact_id`` against already-discovered entries (v0.8.1).
+    """Resolve ``artifact_id`` against an already-discovered index.
 
-    Same outcomes and semantics as :func:`resolve_artifact`; the seam lets a
-    loaded repository model answer lookups without another directory walk.
+    The seam behind :func:`resolve_artifact`: identical outcomes, but a caller
+    with a loaded model answers lookups without re-walking the directory.
     """
     wanted = artifact_id.strip().casefold()
-    matches: list[SearchableArtifact] = []
-    for entry in entries:
-        if any(alias.casefold() == wanted for alias in entry.aliases):
-            matches.append(entry)
+    matches = [
+        entry for entry in entries if any(alias.casefold() == wanted for alias in entry.aliases)
+    ]
     if not matches:
         return ResolutionResult(artifact_id=artifact_id, outcome=OUTCOME_NOT_FOUND)
     if len(matches) > 1:
         return ResolutionResult(
             artifact_id=artifact_id,
             outcome=OUTCOME_DUPLICATE,
-            duplicate_paths=sorted(e.path for e in matches),
+            duplicate_paths=sorted(entry.path for entry in matches),
         )
     return ResolutionResult(
         artifact_id=artifact_id,
@@ -251,12 +239,33 @@ def resolve_in_index(entries: Sequence[SearchableArtifact], artifact_id: str) ->
     )
 
 
+# --- Match tiers and evidence (ADR-037/ADR-038) ------------------------------
+#
+# Field priority for a match, best (lowest) first: the ladder ADR-037/ADR-038
+# pins. The winning tier is surfaced verbatim as match evidence — no second
+# heuristic, no relevance score enters here (ADR-034).
+
+_RANK_ID = 0
+_RANK_TITLE = 1
+_RANK_PATH = 2
+_RANK_HEADING = 3
+_RANK_BODY = 4
+
+_RANK_NAMES: dict[int, str] = {
+    _RANK_ID: "id",
+    _RANK_TITLE: "title",
+    _RANK_PATH: "path",
+    _RANK_HEADING: "heading",
+    _RANK_BODY: "body",
+}
+
+
 @dataclass
 class _Match:
-    """A search hit: the winning tier, snippet for heading/body, matched terms.
+    """One artifact's best search hit: winning tier, snippet, matched terms.
 
-    ``terms`` is the matched-terms set the matcher already computes (WS2), kept
-    in query order and surfaced as evidence rather than recomputed (ADR-037).
+    ``terms`` are the matched query terms in query order — the evidence the
+    matcher already has in hand, kept rather than recomputed downstream.
     """
 
     rank: int
@@ -266,12 +275,7 @@ class _Match:
 
 
 def _evidence(match: _Match) -> dict:
-    """The additive match ``evidence`` object for a search hit (WS2, ADR-037).
-
-    ``{field, terms, tier}``: the winning field name, the matched query terms in
-    query order, and the numeric tier — read off the matcher's existing rank and
-    matched-terms set, never a second heuristic or a relevance score (ADR-034).
-    """
+    """The ``{field, terms, tier}`` evidence for a search hit (ADR-037)."""
     return {"field": _RANK_NAMES[match.rank], "terms": list(match.terms), "tier": match.rank}
 
 
@@ -284,12 +288,11 @@ def _score_evidence(
     graph_rank: int,
     inbound: int,
 ) -> dict:
-    """The match evidence plus the additive relevance-score components (ADR-078).
+    """Match evidence extended with the additive relevance components (ADR-078).
 
-    Extends ``{field, terms, tier}`` with the fused score and its per-signal
-    contributions, so ``--explain`` and the JSON show why one hit outranks
-    another. ``schema_version`` is unchanged; the existing keys are untouched
-    (ADR-007).
+    Adds the fused score and its per-signal contributions so ``--explain`` (and
+    the MCP payload) can show why one hit outranks another. The tier keys are
+    untouched; ``schema_version`` is unchanged (ADR-007).
     """
     evidence = _evidence(match)
     evidence["score"] = round(fused, 6)
@@ -303,6 +306,7 @@ def _score_evidence(
 
 
 def _id_tokens(entry: SearchableArtifact) -> list[str]:
+    """Every alias tokenized into one flat id-tier token list."""
     tokens: list[str] = []
     for alias in entry.aliases:
         tokens.extend(tokenize(alias))
@@ -310,21 +314,19 @@ def _id_tokens(entry: SearchableArtifact) -> list[str]:
 
 
 def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | None:
-    """Best tiered match for an AND query, or None when a term matches nothing.
+    """The best tiered match for an AND query, or None if any term misses.
 
-    Every term of ``terms`` must match somewhere in the artifact's matchable
-    fields (id, title, path, headings, body); the artifact then ranks by the
-    best (lowest) tier *any* term hit (ADR-037). For a heading/body win, the
-    snippet is the first matching line in document order — the heading itself
-    for a heading hit, the body line for a body hit (ADR-038, deterministic).
+    Every term must hit *somewhere* across the matchable fields (AND); the
+    artifact then ranks by the best tier *any single* term reached. For a
+    heading or body win, the snippet is the first matching line in document order
+    — the heading text itself for a heading hit, the body line for a body hit —
+    so snippets are deterministic (ADR-038).
     """
     id_tokens = _id_tokens(entry)
     title_tokens = tokenize(entry.title or "")
     path_tokens = tokenize(entry.path)
 
-    # Per term: does any term hit each metadata tier? (AND requires every term
-    # match *somewhere*; ranking uses the best tier any *single* term reached.)
-    matched_terms = set()
+    matched_terms: set[str] = set()
     best_rank: int | None = None
 
     def consider(rank: int, tokens: Sequence[str]) -> None:
@@ -339,38 +341,35 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
     consider(_RANK_TITLE, title_tokens)
     consider(_RANK_PATH, path_tokens)
 
-    # Heading/body tiers, with the snippet captured at the first matching line
-    # in document order. Headings rank above body; within each, document order.
-    heading_hit: tuple[str, str] | None = None  # (section_heading, snippet_line)
+    # Heading and body hits both need the source text (for the snippet), so they
+    # are captured while scanning sections in document order — first hit wins.
+    heading_hit: tuple[str, str] | None = None  # (section heading, snippet line)
     body_hit: tuple[str, str] | None = None
-    for sec in entry.search_sections:
-        heading_tokens = tokenize(sec.heading)
+    for section in entry.search_sections:
+        heading_tokens = tokenize(section.heading)
         for term in terms:
             if _term_hits_tokens(term, heading_tokens):
                 matched_terms.add(term)
                 if heading_hit is None:
-                    heading_hit = (sec.heading, sec.heading)
-        for line in sec.lines:
+                    heading_hit = (section.heading, section.heading)
+        for line in section.lines:
             line_tokens = tokenize(line)
             for term in terms:
                 if _term_hits_tokens(term, line_tokens):
                     matched_terms.add(term)
                     if body_hit is None:
-                        body_hit = (sec.heading, line)
+                        body_hit = (section.heading, line)
 
     if heading_hit is not None and (best_rank is None or _RANK_HEADING < best_rank):
         best_rank = _RANK_HEADING
     if body_hit is not None and (best_rank is None or _RANK_BODY < best_rank):
         best_rank = _RANK_BODY
 
-    # AND semantics: every term must have matched at least one field.
-    if any(term not in matched_terms for term in terms):
-        return None
-    if best_rank is None:
+    # AND semantics: every query term must have matched at least one field.
+    if best_rank is None or any(term not in matched_terms for term in terms):
         return None
 
-    # Matched terms in query order (deduped) — the evidence the matcher already
-    # has (WS2). AND semantics make this every distinct query term.
+    # Distinct query terms in query order — AND makes this every term, deduped.
     ordered_terms = [term for term in dict.fromkeys(terms) if term in matched_terms]
 
     if best_rank == _RANK_HEADING and heading_hit is not None:
@@ -382,6 +381,9 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
     return _Match(rank=best_rank, terms=ordered_terms)
 
 
+# --- Search entry points -----------------------------------------------------
+
+
 def find_artifacts(
     directory: str,
     query: str,
@@ -390,47 +392,34 @@ def find_artifacts(
 ) -> SearchResult:
     """Search artifacts under ``directory`` by id, title, path, heading, or body.
 
-    Deterministic and explainable (no ranking heuristics): token-boundary
-    matching (ADR-037), the five-tier ladder with body text (ADR-038), results
-    ordered by match-field priority then sorted path. An empty result is a
-    valid outcome, not an error.
+    Token-boundary matching (ADR-037), the five-tier ladder with body text
+    (ADR-038), ordered by the deterministic relevance score (ADR-078). An empty
+    result is a valid outcome, not an error.
     """
     entries = build_repository_index(directory, recursive=recursive).artifacts
     return search_index(entries, query, artifact_type=artifact_type)
 
 
-# --- Live decision query (v0.21.16, ADR-067) ---------------------------------
-#
-# The deterministic "what did we decide about X / is X ruled out" retrieval. The
-# engine asserts *which live decisions bind a topic* — structural search filtered
-# to decisions, then to the live ones — and stops there. It never asserts that a
-# change is *wrong*: semantic contradiction stays in the consuming agent, which
-# reads the engine-supplied decisions and judges (ADR-067). No scoring enters the
-# engine; ranking is the same explainable tiered ladder `rac find` already uses.
-
-# Decisions are the artifact type the query answers over. The same constant the
-# agent-rules projection scopes to, named locally so the dependency reads cleanly.
+# The single artifact type the live-decision query answers over. Named locally so
+# the dependency on the agent-rules projection stays legible.
 _DECISION_TYPE = "decision"
 
 
 def find_decisions(directory: str, topic: str, recursive: bool = True) -> SearchResult:
     """Search *live* decisions under ``directory`` for ``topic`` (ADR-067).
 
-    Two deterministic filters compose over the existing tiered search: the type
-    filter restricts to decisions, and a liveness filter — the same Accepted,
-    non-retired predicate the agent-rules projection uses (one source of truth,
-    never duplicated) — drops superseded/deprecated decisions even when their
-    text matches the topic. Ranking is the explainable id/title/path/heading/body
-    ladder (ADR-037/ADR-038); an empty result is a valid answer (a query always
-    succeeds), not an error.
+    Two deterministic filters compose over the existing tiered search: restrict
+    to decisions, then to the *live* ones — the same Accepted, non-retired
+    predicate the agent-rules projection uses, so the definition never forks.
+    Superseded or deprecated decisions are dropped even when their text matches.
 
     This is structural retrieval, not a verdict: it returns the decisions that
-    bind the topic and lets the agent judge contradiction (ADR-067). No semantic
-    score is computed here or anywhere downstream.
+    bind the topic and leaves any contradiction judgement to the consuming agent
+    (ADR-067). No semantic score is computed here or downstream. An empty result
+    is a valid answer.
     """
-    # Reuse the liveness predicate from the agent-rules projection rather than
-    # re-deriving "Accepted and not retired" — the definition must not fork
-    # (the same rule the committed rules block is built from).
+    # Reuse the liveness predicate rather than re-deriving "Accepted and not
+    # retired"; the rule behind the committed rules block must stay single-source.
     from rac.services.agent_rules import is_live_decision
 
     entries = list(walk_corpus(directory, recursive=recursive))
@@ -441,30 +430,29 @@ def find_decisions(directory: str, topic: str, recursive: bool = True) -> Search
     }
     index = index_from_corpus(directory, entries, recursive=recursive).artifacts
     result = search_index(index, topic, artifact_type=_DECISION_TYPE)
-    # Drop matches that are decisions but not live; ranking/order is preserved.
+    # Preserve ranking/order; only drop the non-live decisions.
     result.matches = [m for m in result.matches if m.path in live_paths]
     return result
 
 
-# --- Deterministic relevance ranking (ADR-078): BM25 + RRF + graph boost -----
+# --- Deterministic relevance ranking: BM25F + graph, fused by RRF (ADR-078) --
 #
-# Ordering replaces the old "best tier, then path" sort with a fused relevance
-# score. Two deterministic signals — a field-weighted BM25 lexical score and a
-# bounded graph boost (inbound resolved-edge count) — are combined with
-# Reciprocal Rank Fusion. No embeddings, no semantic scoring (ADR-038, ADR-066);
-# the matched set and the {field, terms, tier} evidence are unchanged, and the
-# score components are additive under `--explain` (ADR-007).
+# The matched set is ordered by a fused relevance score, not by tier then path.
+# Two deterministic signals combine via Reciprocal Rank Fusion: a field-weighted
+# BM25 lexical score and a bounded inbound-edge graph boost. No embeddings, no
+# semantic scoring (ADR-038, ADR-066); the matched set and its {field, terms,
+# tier} evidence are unchanged, and the score components are additive.
+#
+# These tunables are byte-pinned through the golden output — changing any of them
+# (or the arithmetic below) shifts the sixth decimal and breaks the contract.
 
-_RRF_K = 60  # the conventional RRF constant, the one recorded tunable (ADR-078).
-# The graph signal is bounded below lexical relevance (REQ-004: a connected
-# artifact ranks higher only *at equal lexical relevance*), so its fused
-# contribution is weighted down — it breaks near-ties, never overrides a clear
-# lexical winner. This is the design's "capped, not dominant" graph boost.
-_GRAPH_WEIGHT = 0.5
+_RRF_K = 60  # the conventional RRF constant, the one recorded tunable.
+_GRAPH_WEIGHT = 0.5  # graph boost weighted below lexical: it breaks near-ties, never dominates.
 _BM25_K1 = 1.2  # term-frequency saturation.
 _BM25_B = 0.75  # field-length normalisation strength.
-# Field boosts mirror the old tier order (id/title heaviest, body lightest),
-# turning the hard tier cutoff into a graded BM25F contribution.
+# Field boosts mirror the tier order (id/title heaviest, body lightest), turning
+# the old hard tier cutoff into a graded BM25F contribution. Insertion order is
+# load-bearing: it fixes the summation order of the float score.
 _FIELD_BOOSTS: dict[str, float] = {
     "id": 4.0,
     "title": 3.0,
@@ -475,12 +463,12 @@ _FIELD_BOOSTS: dict[str, float] = {
 
 
 def _field_tokens(entry: SearchableArtifact) -> dict[str, list[str]]:
-    """Match tokens per scorable field, using the same tokeniser as matching."""
+    """Match tokens per scorable field, via the same tokeniser matching uses."""
     headings: list[str] = []
     body: list[str] = []
-    for sec in entry.search_sections:
-        headings.extend(tokenize(sec.heading))
-        for line in sec.lines:
+    for section in entry.search_sections:
+        headings.extend(tokenize(section.heading))
+        for line in section.lines:
             body.extend(tokenize(line))
     return {
         "id": _id_tokens(entry),
@@ -501,9 +489,9 @@ def _corpus_stats(
 ) -> tuple[int, dict[str, int], dict[str, float], dict[str, dict[str, list[str]]]]:
     """Document count, per-term document frequency, mean field length, field tokens.
 
-    Computed once over the whole corpus so IDF and length normalisation are
-    global (standard BM25), and the per-entry field tokens are cached for reuse
-    by the scorer.
+    Computed over the *whole* corpus so IDF and length normalisation are global
+    (standard BM25), and the per-entry field tokens are cached here for the
+    scorer to reuse rather than re-tokenize.
     """
     field_tokens_by_path: dict[str, dict[str, list[str]]] = {}
     length_sums: dict[str, int] = dict.fromkeys(_FIELD_BOOSTS, 0)
@@ -551,10 +539,11 @@ def _bm25f(
 
 
 def _competition_ranks(scores: dict[str, float]) -> dict[str, int]:
-    """1-based ranks (higher score → better), ties sharing a rank, by path order.
+    """1-based competition ranks (higher score is better), ties sharing a rank.
 
-    Equal scores get the same rank so a signal never leaks path order onto
-    candidates it does not actually distinguish (e.g. equal inbound counts).
+    Ordered by ``(-score, path)``; equal scores get the same rank so a signal
+    never leaks path order onto candidates it does not actually distinguish
+    (e.g. artifacts with equal inbound counts).
     """
     ordered = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
     ranks: dict[str, int] = {}
@@ -573,14 +562,13 @@ def search_index(
     query: str,
     artifact_type: str | None = None,
 ) -> SearchResult:
-    """Search already-discovered entries with `rac find` semantics (v0.8.1).
+    """Search an already-discovered index with `rac find` semantics.
 
-    Matching is unchanged (ADR-037/038): a multi-term query requires every term
-    to hit somewhere, and the result carries the same `{field, terms, tier}`
-    evidence. Ordering is the deterministic relevance score (ADR-078): a
-    field-weighted BM25 lexical signal and a bounded inbound-reference graph
-    signal, fused by RRF, tie-broken by sorted path. The seam lets a loaded
-    repository model serve searches without another directory walk.
+    Matching is the AND token-boundary ladder (ADR-037/ADR-038) and each hit
+    carries its ``{field, terms, tier}`` evidence. Ordering is the deterministic
+    relevance score (ADR-078): field-weighted BM25 and a bounded inbound-edge
+    graph signal, fused by RRF and tie-broken by sorted path. The seam lets a
+    loaded model serve searches without another directory walk.
     """
     terms = tokenize(query)
     matched: list[tuple[SearchableArtifact, _Match]] = []
@@ -594,7 +582,7 @@ def search_index(
     if not matched:
         return SearchResult(query=query, artifact_type=artifact_type, matches=[])
 
-    # Corpus-wide BM25 statistics (global IDF and mean field length, ADR-078).
+    # Global BM25 statistics (IDF and mean field length over the whole corpus).
     n, df, avglen, field_tokens_by_path = _corpus_stats(entries, terms)
     bm25 = {e.path: _bm25f(field_tokens_by_path[e.path], terms, n, df, avglen) for e, _ in matched}
     inbound = {e.path: float(getattr(e, "inbound_count", 0)) for e, _ in matched}
@@ -605,7 +593,7 @@ def search_index(
         for path in bm25
     }
 
-    # Fused score descending, ties broken by sorted path: total and byte-stable.
+    # Fused score descending, sorted path as the tiebreak: total and byte-stable.
     matched.sort(key=lambda em: (-round(fused[em[0].path], 12), em[0].path))
     return SearchResult(
         query=query,

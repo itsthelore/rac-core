@@ -1,17 +1,18 @@
-"""Metadata migration — `rac migrate metadata` (v0.7.13).
+"""Bring legacy artifacts onto canonical frontmatter identity (`rac migrate metadata`).
 
-The repeatable path onto canonical frontmatter identity (ADR-025 staged
-migration, step 3): every recognized artifact without frontmatter gains the
-canonical envelope — ``schema_version``, one newly generated opaque ID, its
-classified ``type`` — prepended in stable key order, with the Markdown body
-preserved byte-for-byte. Idempotent by construction: artifacts that already
-carry frontmatter are reported untouched, documents that do not classify are
-reported rather than guessed at (ADR-010), and a repaired document is picked
-up by the next run.
+The repeatable step onto canonical identity (ADR-025, staged migration): a
+recognized artifact that carries no frontmatter has the canonical envelope —
+``schema_version``, a freshly minted opaque ID, and its classified ``type`` —
+prepended, while its Markdown body is preserved byte-for-byte.
 
-``dry_run`` produces the identical report without writing a single file, so
-users can preview a bulk rewrite. IDs are deduplicated within the run and
-against the repository index — the same contract as ``rac new``.
+The operation is idempotent and conservative by construction. A file that
+already has any frontmatter (valid, malformed, or unterminated) is reported
+untouched — validation, not migration, owns broken envelopes. A document that
+does not classify is reported rather than guessed at (ADR-010), and once a user
+repairs it the next run picks it up. ``dry_run`` produces the identical report
+without writing a byte, so a bulk rewrite can be previewed first. Minted IDs are
+deduplicated within the run and against the existing repository index — the same
+contract as ``rac new``.
 """
 
 from __future__ import annotations
@@ -30,26 +31,27 @@ from rac.services.create import (
 from rac.services.index import build_repository_index
 from rac.services.init import load_repository_config
 
-# Stable per-file statuses (part of the JSON contract, ADR-007).
+# Per-file outcomes; part of the stable JSON contract (ADR-007).
 STATUS_MIGRATED = "migrated"
 STATUS_ALREADY_CANONICAL = "already-canonical"
 STATUS_SKIPPED_UNKNOWN = "skipped-unknown"
 
-# Bounded regeneration attempts per file (same rationale as rac new).
+# Bounded ID regeneration per file, matching ``rac new``.
 _MAX_ID_ATTEMPTS = 5
 
-# Module-level seam so golden tests can inject a deterministic generator
-# (the v0.7.11 pattern); the default is the real offline generator.
+# Module-level generator seam: golden tests monkeypatch this name for
+# deterministic IDs, so ``_next_id`` must resolve it as a module global at call
+# time rather than binding the default at import.
 _DEFAULT_ID_GENERATOR = generate_id
 
 
 @dataclass
 class FileMigration:
-    """Migration outcome for one Markdown file in a directory walk."""
+    """Migration outcome for one Markdown file in the walk."""
 
     path: str
-    status: str  # STATUS_MIGRATED | STATUS_ALREADY_CANONICAL | STATUS_SKIPPED_UNKNOWN
-    id: str | None = None  # assigned ID; None unless migrated
+    status: str  # one of the STATUS_* constants
+    id: str | None = None  # minted ID; None unless migrated
     type: str | None = None  # classified type; None unless migrated
 
     def to_dict(self) -> dict:
@@ -71,7 +73,7 @@ class MigrationReport:
     files: list[FileMigration] = field(default_factory=list)
 
     def _count(self, status: str) -> int:
-        return sum(1 for f in self.files if f.status == status)
+        return sum(1 for file in self.files if file.status == status)
 
     @property
     def migrated(self) -> int:
@@ -97,7 +99,7 @@ class MigrationReport:
                 "already_canonical": self.already_canonical,
                 "skipped_unknown": self.skipped_unknown,
             },
-            "files": [f.to_dict() for f in self.files],
+            "files": [file.to_dict() for file in self.files],
         }
 
 
@@ -106,11 +108,10 @@ def migrate_metadata(
     dry_run: bool = False,
     recursive: bool = True,
 ) -> MigrationReport:
-    """Bring every recognized legacy artifact under ``directory`` onto
-    canonical frontmatter identity.
+    """Migrate every recognized frontmatter-less artifact under ``directory``.
 
     Raises :class:`~rac.services.create.MissingRepositoryConfig` when no
-    repository key is established and
+    repository key is established, and
     :class:`~rac.services.create.IdGenerationExhausted` on persistent ID
     collisions.
     """
@@ -118,11 +119,15 @@ def migrate_metadata(
     if config is None:
         raise MissingRepositoryConfig(directory)
 
+    # Seed the dedup set from every ID already issued across the repository, so
+    # a freshly minted ID never collides with an existing artifact.
     repository_root = str(Path(config.config_path).parent.parent)
     issued = {entry.id.upper() for entry in build_repository_index(repository_root).artifacts}
 
     def _next_id() -> str:
         for _ in range(_MAX_ID_ATTEMPTS):
+            # ``_DEFAULT_ID_GENERATOR`` is looked up as a module global here so
+            # the golden-test monkeypatch takes effect.
             candidate = _DEFAULT_ID_GENERATOR(config.repository_key)
             if candidate.upper() not in issued:
                 issued.add(candidate.upper())
@@ -132,19 +137,20 @@ def migrate_metadata(
     files: list[FileMigration] = []
     for entry in walk_corpus(directory, recursive=recursive):
         path, product = entry.path, entry.product
+
+        # Any frontmatter presence — valid or broken — is left strictly alone.
         if product.metadata is not None or product.metadata_issues:
-            # Any frontmatter presence — valid, malformed, or unterminated —
-            # means migration keeps its hands off (Initiative 4: never modify
-            # an existing envelope). Validation owns reporting broken ones.
             files.append(FileMigration(path=str(path), status=STATUS_ALREADY_CANONICAL))
             continue
+
         artifact_type = entry.artifact_type
         if spec_for(artifact_type) is None:
             files.append(FileMigration(path=str(path), status=STATUS_SKIPPED_UNKNOWN))
             continue
+
         artifact_id = _next_id()
         if not dry_run:
-            # Prepend the envelope only; the body bytes are untouched.
+            # Prepend the envelope; the original body bytes are untouched.
             original = path.read_bytes()
             envelope = render_frontmatter(artifact_id, artifact_type)
             path.write_bytes(envelope.encode("utf-8") + original)
@@ -156,4 +162,5 @@ def migrate_metadata(
                 type=artifact_type,
             )
         )
+
     return MigrationReport(directory=directory, recursive=recursive, dry_run=dry_run, files=files)

@@ -1,12 +1,14 @@
-"""Artifact inspection — classify Markdown documents and report their structure.
+"""Artifact inspection — classify a Markdown document and report its structure.
 
-`rac inspect <file>` answers, for a single document: *what kind of artifact is
-this, how confident are we, and which expected sections are present / missing?*
-For Decisions it also surfaces lightweight metadata (status, category, supersedes)
-when present. `rac inspect <dir>` aggregates the type across a directory into
-counts. It is strictly observational — it never modifies content and never
-recommends changes (that is a future `improve` command's job). Classification is
-delegated to :mod:`rac.core.classification` (the shared, AI-optional heuristic).
+`rac inspect <file>` answers three questions about a single document: what kind
+of artifact is it, how confident is the classifier, and which expected sections
+are present or missing. Decisions additionally surface lightweight metadata
+(status, category, supersedes) when they declare it. `rac inspect <dir>`
+aggregates the classified type across a directory into counts.
+
+Inspection is strictly observational: it never rewrites content and never
+recommends changes (that is `rac improve`'s job). Classification is delegated to
+the shared, AI-optional heuristic in :mod:`rac.core.classification`.
 """
 
 from __future__ import annotations
@@ -26,24 +28,25 @@ from .relationships import extract_relationships
 class InspectionResult:
     """Typed single-file inspection result (ADR-003).
 
-    Section names are stored normalized (e.g. ``"success metrics"``); renderers
-    format them. ``to_dict`` is the JSON contract and is additive-friendly:
-    decision metadata fields and ``relationships`` appear only when present.
+    Section names are held normalized (e.g. ``"success metrics"``) and the
+    renderers format them. ``to_dict`` is the JSON contract: decision metadata
+    and the relationships block are additive, appearing only when populated so
+    that documents without them serialize exactly as before those fields existed.
     """
 
-    type: str  # artifact name, or "unknown"
-    confidence: float  # 0.0 – 1.0 (rounded to 2dp)
+    type: str  # an artifact name, or "unknown"
+    confidence: float  # 0.0 - 1.0, already rounded to 2dp by the classifier
     present_sections: list[str]
     missing_sections: list[str]
-    # Decision metadata — populated only for decisions that declare it.
+    # Decision metadata — set only for decisions that declare these sections.
     status: str | None = None
     category: str | None = None
-    # ``supersedes`` is a relationship section but, for backwards compatibility
-    # (v0.4.2 / ADR-007), it stays a top-level scalar here rather than going into
-    # ``relationships`` — the documented exception to the v0.7.0 model.
+    # ``supersedes`` is a relationship section but stays a top-level scalar for
+    # backwards compatibility (v0.4.2 / ADR-007) — the documented exception to
+    # the v0.7.0 relationships model.
     supersedes: str | None = None
     # Cross-artifact relationship metadata (v0.7.0): {snake_section -> [refs]}.
-    # Holds only the ``related_*`` sections; never resolved or validated.
+    # The ``related_*`` sections only; never resolved or validated here.
     relationships: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -57,7 +60,6 @@ class InspectionResult:
             value = getattr(self, key)
             if value is not None:
                 payload[key] = value
-        # Additive: only present when the artifact declares relationship sections.
         if self.relationships:
             payload["relationships"] = self.relationships
         return payload
@@ -65,7 +67,7 @@ class InspectionResult:
 
 @dataclass
 class FileInspection:
-    """One file's result inside a directory inspection (flat — path/type/conf)."""
+    """One file's entry inside a directory inspection — path/type/confidence only."""
 
     path: str
     type: str
@@ -86,7 +88,8 @@ class DirectoryInspection:
 
     @property
     def counts(self) -> dict[str, int]:
-        # Known types first (in ARTIFACT_SPECS order), then unknown.
+        # Known types first in ARTIFACT_SPECS order, then unknown, so the tally is
+        # stable regardless of which types the directory happens to hold.
         counts = {spec.name: 0 for spec in ARTIFACT_SPECS}
         counts["unknown"] = 0
         for f in self.files:
@@ -103,7 +106,7 @@ def _snake(section: str) -> str:
 
 
 def _first_line(body: str) -> str:
-    """The first non-empty line of a section body (single-value metadata)."""
+    """First non-empty line of a section body — used for single-value metadata."""
     for line in body.splitlines():
         stripped = line.strip()
         if stripped:
@@ -112,9 +115,12 @@ def _first_line(body: str) -> str:
 
 
 def canonical_value(raw: str, allowed: tuple[str, ...]) -> str:
-    """Match ``raw`` against ``allowed`` case-insensitively, returning the
-    canonical spelling; if it matches nothing, return it stripped (an invalid
-    value that validation will flag)."""
+    """Return the canonical spelling of ``raw`` drawn from ``allowed``.
+
+    The first non-empty line of ``raw`` is matched against ``allowed`` case-
+    insensitively. An unrecognized value is returned stripped rather than dropped,
+    leaving it for validation to flag. Shared with ``export`` and ``stats``.
+    """
     candidate = _first_line(raw)
     for value in allowed:
         if value.casefold() == candidate.casefold():
@@ -123,8 +129,9 @@ def canonical_value(raw: str, allowed: tuple[str, ...]) -> str:
 
 
 def _attach_decision_metadata(result: InspectionResult, product: Product) -> None:
+    """Populate a decision's status/category/supersedes from its sections."""
     spec = spec_for("decision")
-    if spec is None:  # pragma: no cover - decision spec always exists
+    if spec is None:  # pragma: no cover - the decision spec always exists
         return
     for field_name, allowed in spec.metadata.items():
         body = product.sections.get(field_name)
@@ -132,12 +139,12 @@ def _attach_decision_metadata(result: InspectionResult, product: Product) -> Non
             setattr(result, field_name, canonical_value(body, allowed))
     supersedes = product.sections.get("supersedes")
     if supersedes:
-        # Metadata only (REQ-003): no validation, just normalize the value.
+        # Metadata only (REQ-003): normalize the value, do not resolve the target.
         result.supersedes = _first_line(supersedes)
 
 
 def build_inspection(product: Product) -> InspectionResult:
-    """Classify ``product``, attach decision metadata and relationships."""
+    """Classify ``product`` and attach decision metadata and relationships."""
     c = classify(product)
     result = InspectionResult(
         type=c.type,
@@ -147,8 +154,8 @@ def build_inspection(product: Product) -> InspectionResult:
     )
     if c.type == "decision":
         _attach_decision_metadata(result, product)
-    # Relationship metadata is spec-driven, so it applies to any recognized type
-    # (Unknown has no spec and therefore no relationships).
+    # Relationship metadata is spec-driven, so it applies to any recognized type;
+    # unknown has no spec and therefore no relationships.
     spec = spec_for(c.type)
     if spec is not None:
         result.relationships = extract_relationships(product, spec)
@@ -164,9 +171,17 @@ def inspect_file(path: str) -> InspectionResult:
 
 
 def inspect_directory(directory: str, recursive: bool = True) -> DirectoryInspection:
-    """Inspect every Markdown file under ``directory`` and aggregate the types."""
-    files = []
-    for entry in walk_corpus(directory, recursive=recursive):
-        c = entry.classification
-        files.append(FileInspection(path=str(entry.path), type=c.type, confidence=c.confidence))
+    """Inspect every Markdown file under ``directory`` and aggregate the types.
+
+    The corpus walk classifies each file once; the directory view reads that
+    result rather than re-running the classifier.
+    """
+    files = [
+        FileInspection(
+            path=str(entry.path),
+            type=entry.classification.type,
+            confidence=entry.classification.confidence,
+        )
+        for entry in walk_corpus(directory, recursive=recursive)
+    ]
     return DirectoryInspection(directory=directory, recursive=recursive, files=files)

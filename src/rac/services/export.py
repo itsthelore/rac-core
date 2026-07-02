@@ -1,52 +1,38 @@
-"""Corpus export — `rac export` (v0.11.0).
+"""Corpus projections — `rac export` and its `--documents` / `--graph` / `--okf` modes.
 
-``build_corpus_export`` walks a directory once and composes existing Core
-services — corpus traversal, identity/aliases, relationship extraction and
-resolution — into one deterministic :class:`CorpusExport` payload for the
-Portal, the read-only HTML viewer (ADR-014: artifacts stay viewer-agnostic;
-exports are how external viewers consume a corpus; ADR-012: export lives in
-the open-source core). The payload shape is a stable public contract
-(ADR-007), reconciled with ``rac-localview/VIEWER_CONTRACT.md`` v1.
+Three deterministic, read-only projections of a corpus, each composed from the
+same Core services (traversal, identity/aliases, relationship resolution) so a
+single walk yields a stable public payload (ADR-007):
 
-Determinism (ADR-002): no timestamps, no environment-dependent fields,
-artifacts in sorted-path order, relationships sorted by ``(from, to)`` —
-two exports of the same tree are byte-identical.
+- :func:`build_corpus_export` — the viewer/Portal payload (:class:`CorpusExport`):
+  every classified artifact with its rendered HTML body and flattened, untyped
+  ``relates-to`` edges.
+- :func:`build_documents_export` — the ingestion projection (:class:`DocumentsExport`):
+  one Markdown-body document per artifact for memory/RAG backends.
+- :func:`build_graph_export` — the typed graph (:class:`GraphExport`, ADR-074):
+  nodes plus edges carrying their registry edge kind and direction.
 
-Pinned semantics (the viewer treats both fields as open sets):
+Determinism (ADR-002): no timestamps, no environment-dependent fields (bar the
+producing CLI's version, captured into the model at build time), artifacts and
+nodes in sorted-path order, edges sorted by a total key — two exports of the
+same tree are byte-identical.
 
-- ``status`` is the first non-empty line of the artifact's ``## Status``
-  section, canonicalized against the type's declared metadata values exactly
-  as ``rac inspect`` does (so a decision's ``accepted`` exports as
-  ``Accepted``). ``rac inspect`` *omits* a missing status; the export
-  contract requires a string, so an absent or empty section exports as
-  ``"unknown"``.
-- ``title`` is the document title; an untitled artifact falls back to its
-  canonical identifier (``rac index`` emits ``null`` there, but the viewer
-  contract pins ``title`` as a string).
-- ``body_html`` is the Markdown body after the frontmatter envelope,
-  rendered by the vendored ``markdown-it-py`` CommonMark preset with raw
-  HTML *disabled*: HTML in sources is escaped, not executed (the Portal
-  trust model in VIEWER_CONTRACT.md depends on this).
-- Unknown-type files are not exported (classification is the gate, matching
-  the skip semantics of directory validation); invalid but *recognizable*
-  artifacts export as classified — classification stays separate from
-  validation.
-- Relationships are untyped ``relates-to`` edges. ``to`` is the target's
-  canonical identifier when the reference resolves uniquely through the same
-  alias index relationship validation uses; otherwise the literal reference
-  text is preserved verbatim (ADR-016: the line text *is* the reference).
+Shared gate: ``spec_for(type) is None`` (an unknown file) is excluded from the
+projection, but the file still feeds reference resolution — an edge resolves
+here exactly when ``relationships --validate`` reports it resolved.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import PurePath
+from typing import NamedTuple
 
 from markdown_it import MarkdownIt
 
 import rac
 from rac.core.artifacts import ArtifactSpec, spec_for
-from rac.core.corpus import walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.frontmatter import split_frontmatter
 from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.models import Product
@@ -56,17 +42,18 @@ from .init import load_ticketing_provider
 from .inspect import canonical_value
 from .relationships import relationships_from_corpus
 
-# The only edge type Core emits today; richer typing (supersedes/refines/
-# implements) is reserved for a future decision, not an export invention.
+# The single edge type the viewer payload emits; richer typing lives in the
+# graph projection, not here.
 EDGE_TYPE = "relates-to"
 
-# Exported status for artifacts with no (or an empty) ``## Status`` section.
+# Exported status for an artifact whose ``## Status`` section is missing or empty
+# (the viewer contract requires a string where ``rac inspect`` would omit it).
 STATUS_ABSENT = "unknown"
 
 
 @dataclass
 class ExportArtifact:
-    """One artifact in the export payload (viewer contract v1)."""
+    """One artifact in the viewer payload (viewer contract v1)."""
 
     id: str
     aliases: list[str]
@@ -75,9 +62,9 @@ class ExportArtifact:
     title: str
     path: str
     body_html: str
-    # OKF-reserved descriptive labels (ADR-050). Carried for the OKF bundle
-    # projection; deliberately *not* in ``to_dict`` — the JSON contract (ADR-007)
-    # is unchanged until a versioned addition is decided.
+    # OKF-reserved descriptive labels (ADR-050), carried for the OKF bundle
+    # projection only. Deliberately absent from ``to_dict``: the frozen JSON
+    # contract (ADR-007) predates tags and stays unchanged until a versioned add.
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -94,12 +81,12 @@ class ExportArtifact:
 
 @dataclass
 class ExportRelationship:
-    """One ``relates-to`` edge; reads "``from`` ``type`` ``to``".
+    """One flattened ``relates-to`` edge, read "``from`` ``type`` ``to``".
 
-    ``from_`` serializes as ``"from"`` (a Python keyword cannot be a field
-    name). ``to`` is a canonical identifier when resolved, else the literal
-    reference text — the viewer renders unresolved targets as "(not in
-    corpus)" rather than dropping them.
+    ``from_`` serializes as ``"from"`` (the keyword cannot name a field). ``to``
+    is a canonical identifier when the reference resolves, else the literal
+    reference text preserved verbatim — the viewer renders unresolved targets
+    rather than dropping them.
     """
 
     from_: str
@@ -112,12 +99,11 @@ class ExportRelationship:
 
 @dataclass
 class CorpusExport:
-    """Deterministic corpus export (v0.11.0).
+    """Deterministic viewer/Portal payload.
 
-    ``to_dict`` is the stable JSON contract (ADR-007); ``schema_version`` is
-    the string ``"1"``, matching the index contract. ``rac_version`` is the
-    producing CLI's version — the one environment-derived field, captured at
-    build time into the model so the payload itself stays a pure value.
+    ``to_dict`` is the stable JSON contract (ADR-007); ``schema_version`` is the
+    string ``"1"``. ``rac_version`` is captured from the producing CLI at build
+    time so the payload value itself carries no live environment lookup.
     """
 
     corpus_name: str
@@ -144,12 +130,12 @@ class CorpusExport:
 
 @dataclass
 class ExportDocument:
-    """One artifact as an ingestion-ready document (v0.25.0 WS1).
+    """One artifact as an ingestion-ready document.
 
-    Unlike :class:`ExportArtifact`, ``text`` is the artifact's **Markdown body**
-    (frontmatter stripped), not rendered HTML: memory/RAG backends embed text,
-    and HTML markup would be noise. The artifact is the atomic unit (ADR-004,
-    ADR-010) — one document per artifact, never chunked.
+    ``text`` is the artifact's Markdown *body* (frontmatter stripped), not
+    rendered HTML: memory/RAG backends embed text, and markup would be noise.
+    The artifact is the atomic unit (ADR-004, ADR-010) — one document each,
+    never chunked.
     """
 
     id: str
@@ -162,7 +148,7 @@ class ExportDocument:
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self, source: str) -> dict:
-        """One JSONL record. ``source`` namespaces the corpus (e.g. a containerTag)."""
+        """One JSONL record; ``source`` namespaces the corpus (e.g. a container tag)."""
         return {
             "schema_version": "1",
             "id": self.id,
@@ -181,14 +167,12 @@ class ExportDocument:
 
 @dataclass
 class DocumentsExport:
-    """Deterministic, ingestion-shaped projection of the corpus (v0.25.0 WS1).
+    """Deterministic ingestion projection, serialized as JSON Lines.
 
-    One record per classified artifact, in sorted-path order with no timestamps
-    (ADR-002), serialized as JSON Lines — the common ingestion shape for external
-    memory/RAG backends. The contract is additive and separate from the viewer
-    JSON (:class:`CorpusExport`), which is unchanged (ADR-007). Each record
-    carries the canonical ``id`` so an agent can re-fetch the authoritative
-    artifact from Lore, and ``status`` so a retired decision is filterable on read.
+    One record per classified artifact, sorted-path order, no timestamps
+    (ADR-002). Additive and separate from the viewer JSON (ADR-007). Each record
+    carries the canonical ``id`` (re-fetch hook) and ``status`` (so a retired
+    artifact is filterable on read).
     """
 
     corpus_name: str
@@ -204,7 +188,7 @@ class DocumentsExport:
 
 @dataclass
 class GraphNode:
-    """One artifact as a graph node (v0.25.0 WS2)."""
+    """One artifact as a graph node."""
 
     id: str
     type: str
@@ -217,18 +201,17 @@ class GraphNode:
 
 @dataclass
 class GraphEdge:
-    """One typed relationship edge (v0.25.0 WS2, ADR-074).
+    """One typed relationship edge (ADR-074).
 
-    ``type`` is the registry edge kind (``supersedes``, ``related_decisions``,
-    …) and ``directed`` follows the registry (``supersedes`` is directed; the
-    ``related_*`` edges are not). ``resolved`` is False when the reference does
-    not resolve uniquely, in which case ``target`` is the literal reference text
-    (no phantom node is invented). ``external`` is True for an external-reference
-    edge (``related_tickets``, ADR-087) whose target is an external ticket rather
-    than an in-corpus artifact — always unresolved by design, and distinguished
-    from a dangling in-corpus link (unresolved but not external); ``provider``
-    carries the repository's configured ticketing system (ADR-088) for external
-    edges, else None.
+    ``type`` is the registry edge kind and ``directed`` follows the registry
+    (``supersedes`` is directed; the ``related_*`` edges are not). ``resolved``
+    is False when the reference does not resolve, in which case ``target`` is the
+    literal reference text — no phantom node is invented. ``external`` is True for
+    an external-reference edge (``related_tickets``, ADR-087; ``verified_by``,
+    ADR-096) whose target is not an in-corpus artifact, distinguishing it from a
+    dangling in-corpus link. ``provider`` carries the configured ticketing system
+    (ADR-088) only for provider-backed external edges — ``verified_by`` is
+    external and directed but not provider-tagged.
     """
 
     source: str
@@ -253,12 +236,11 @@ class GraphEdge:
 
 @dataclass
 class GraphExport:
-    """Deterministic typed node+edge projection of the corpus (v0.25.0 WS2).
+    """Deterministic typed node+edge projection (ADR-074).
 
-    Surfaces the *typed* relationship graph (ADR-055, ADR-074) for graph
-    backends, unlike the viewer JSON's flattened ``relates-to`` edges, which are
-    unchanged. A single whole-graph JSON object; nodes in sorted-path order and
-    edges sorted by ``(source, type, target)`` — no timestamps (ADR-002).
+    Surfaces the *typed* relationship graph for graph backends, unlike the
+    viewer JSON's flattened ``relates-to`` edges (unchanged). Nodes in
+    sorted-path order, edges sorted by ``(source, type, target)``, no timestamps.
     """
 
     corpus_name: str
@@ -274,60 +256,86 @@ class GraphExport:
         }
 
 
-def _corpus_name(directory: str) -> str:
-    """The directory's basename, deterministic relative to the argument given.
+class _Projection(NamedTuple):
+    """A classified entry ready to project: path, entry, its spec, canonical id."""
 
-    Trailing separators are stripped so ``rac/`` and ``rac`` name the same
-    corpus; the path is *not* resolved against the filesystem, so output never
-    depends on the working directory.
+    path: str
+    entry: CorpusEntry
+    spec: ArtifactSpec
+    canonical: str
+
+
+def _project(entries: list[CorpusEntry]) -> tuple[dict[str, str], list[_Projection]]:
+    """Split a walked corpus into the resolution index and the projectable artifacts.
+
+    The returned ``canonical_by_path`` maps *every* entry's path to its canonical
+    id — unknown files included, because a reference that resolves to an unknown
+    file must still name it in an edge. The list holds only classified entries
+    (``spec is not None``), in the walk's sorted-path order, so all three builders
+    share one gate and one loop instead of three near-duplicates.
+    """
+    canonical_by_path: dict[str, str] = {}
+    projections: list[_Projection] = []
+    for entry in entries:
+        path = str(entry.path)
+        spec = spec_for(entry.artifact_type)  # None for unknown
+        canonical = artifact_identifier(entry.product, spec, path)
+        canonical_by_path[path] = canonical
+        if spec is not None:
+            projections.append(_Projection(path, entry, spec, canonical))
+    return canonical_by_path, projections
+
+
+def _corpus_name(directory: str) -> str:
+    """The directory's basename, stable relative to the argument as given.
+
+    Trailing separators are stripped so ``rac/`` and ``rac`` name one corpus; the
+    path is not resolved against the filesystem, so output is independent of the
+    working directory.
     """
     return PurePath(directory.rstrip("/")).name or directory
 
 
 def _status(product: Product, spec: ArtifactSpec) -> str:
-    """The artifact's lifecycle status, in inspect's canonical spelling."""
+    """The lifecycle status in inspect's canonical spelling, else ``STATUS_ABSENT``.
+
+    Canonicalizes the ``## Status`` value against the type's declared metadata
+    (``accepted`` -> ``Accepted``); the rendered body still keeps the literal
+    source spelling.
+    """
     body = product.sections.get("status")
     if not body:
         return STATUS_ABSENT
     return canonical_value(body, spec.metadata.get("status", ())) or STATUS_ABSENT
 
 
-def _render_body(path: str, md: MarkdownIt) -> str:
-    """Render the Markdown body after the frontmatter envelope to HTML."""
-    with open(path, encoding="utf-8") as fh:
-        text = fh.read()
-    return md.render(split_frontmatter(text).body)
-
-
 def _body_markdown(path: str) -> str:
-    """The artifact's Markdown body after the frontmatter envelope (no render)."""
+    """The Markdown body after the frontmatter envelope (a fresh read).
+
+    The parsed ``Product`` keeps sections, not the raw body, and a ``CorpusEntry``
+    does not carry the source text — so the file is re-read here. This is the one
+    place export reaches back to disk, shared by the HTML and document bodies.
+    """
     with open(path, encoding="utf-8") as fh:
-        text = fh.read()
-    return split_frontmatter(text).body
+        return split_frontmatter(fh.read()).body
+
+
+def _render_body(path: str, md: MarkdownIt) -> str:
+    """Render the artifact's Markdown body to HTML (raw HTML escaped, never run)."""
+    return md.render(_body_markdown(path))
 
 
 def build_corpus_export(directory: str, recursive: bool = True) -> CorpusExport:
-    """Export every classified artifact under ``directory`` (one corpus walk).
-
-    Unknown-type files are skipped from ``artifacts`` but still feed the
-    resolution index, exactly as relationship validation builds it — so a
-    reference resolves here precisely when ``--validate`` reports no issue
-    for it.
-    """
+    """Export every classified artifact under ``directory`` as the viewer payload."""
     entries = list(walk_corpus(directory, recursive=recursive))
-    # The commonmark preset *enables* raw HTML (the spec includes it); the
-    # Portal trust model requires it off, so sources arrive escaped.
+    # The commonmark preset enables raw HTML (the spec includes it); the Portal
+    # trust model requires it off, so source HTML arrives escaped, not executed
+    # (ADR-059: one parser instance per build).
     md = MarkdownIt("commonmark", {"html": False})
+    canonical_by_path, projections = _project(entries)
 
-    canonical_by_path: dict[str, str] = {}
     artifacts: list[ExportArtifact] = []
-    for entry in entries:
-        path = str(entry.path)
-        spec = spec_for(entry.artifact_type)  # None for Unknown
-        canonical = artifact_identifier(entry.product, spec, path)
-        canonical_by_path[path] = canonical
-        if spec is None:
-            continue  # unknown files are not exported
+    for path, entry, spec, canonical in projections:
         meta = entry.product.metadata
         artifacts.append(
             ExportArtifact(
@@ -360,71 +368,57 @@ def build_corpus_export(directory: str, recursive: bool = True) -> CorpusExport:
 
 
 def build_documents_export(directory: str, recursive: bool = True) -> DocumentsExport:
-    """Project every classified artifact under ``directory`` as a document (one walk).
+    """Project every classified artifact under ``directory`` as an ingestion document.
 
-    Mirrors :func:`build_corpus_export`'s gate — unknown-type files are skipped,
-    invalid-but-recognizable artifacts project as classified — but emits the
-    Markdown body and the verify-in-Lore metadata rather than the viewer's HTML.
-    Artifacts arrive in sorted-path order, so the projection is deterministic.
+    Same gate as :func:`build_corpus_export`, but emits the Markdown body and the
+    verify-in-Lore metadata rather than the viewer's HTML.
     """
-    documents: list[ExportDocument] = []
-    for entry in walk_corpus(directory, recursive=recursive):
-        path = str(entry.path)
-        spec = spec_for(entry.artifact_type)  # None for Unknown
-        if spec is None:
-            continue  # unknown files are not exported
-        canonical = artifact_identifier(entry.product, spec, path)
-        meta = entry.product.metadata
-        documents.append(
-            ExportDocument(
-                id=canonical,
-                type=entry.artifact_type,
-                status=_status(entry.product, spec),
-                title=entry.product.title or canonical,
-                text=_body_markdown(path),
-                aliases=artifact_identifiers(entry.product, spec, path),
-                path=path,
-                tags=meta.tags if meta else [],
-            )
+    entries = list(walk_corpus(directory, recursive=recursive))
+    _, projections = _project(entries)
+
+    documents = [
+        ExportDocument(
+            id=canonical,
+            type=entry.artifact_type,
+            status=_status(entry.product, spec),
+            title=entry.product.title or canonical,
+            text=_body_markdown(path),
+            aliases=artifact_identifiers(entry.product, spec, path),
+            path=path,
+            tags=(entry.product.metadata.tags if entry.product.metadata else []),
         )
+        for path, entry, spec, canonical in projections
+    ]
     return DocumentsExport(corpus_name=_corpus_name(directory), documents=documents)
 
 
 def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
-    """Project the corpus as typed nodes and edges (v0.25.0 WS2, ADR-074).
+    """Project the corpus as typed nodes and edges (ADR-074).
 
-    Nodes are the classified artifacts (sorted-path order); edges are the typed
-    relationships ``relationships_from_corpus`` resolves, carrying the registry
-    edge kind and its direction. Resolved targets become canonical-id edges;
-    unresolved references are kept with their literal target and ``resolved:
-    False`` rather than dropped (REQ-004). Deterministic — no timestamps.
+    Nodes are the classified artifacts; edges carry the registry edge kind and
+    its direction. Resolved targets become canonical-id edges; unresolved
+    references keep their literal target with ``resolved: False`` rather than
+    being dropped.
     """
     entries = list(walk_corpus(directory, recursive=recursive))
-    # The configured ticketing provider tags external edges (ADR-088); read once.
+    # The configured ticketing provider tags provider-backed external edges
+    # (ADR-088); read once for the whole build.
     provider = load_ticketing_provider(directory)
+    canonical_by_path, projections = _project(entries)
 
-    canonical_by_path: dict[str, str] = {}
-    nodes: list[GraphNode] = []
-    for entry in entries:
-        path = str(entry.path)
-        spec = spec_for(entry.artifact_type)  # None for Unknown
-        canonical = artifact_identifier(entry.product, spec, path)
-        canonical_by_path[path] = canonical
-        if spec is None:
-            continue  # unknown files feed resolution but are not nodes
-        nodes.append(
-            GraphNode(
-                id=canonical,
-                type=entry.artifact_type,
-                status=_status(entry.product, spec),
-                title=entry.product.title or canonical,
-            )
+    nodes = [
+        GraphNode(
+            id=canonical,
+            type=entry.artifact_type,
+            status=_status(entry.product, spec),
+            title=entry.product.title or canonical,
         )
+        for _path, entry, spec, canonical in projections
+    ]
 
     edges: list[GraphEdge] = []
     for rel in relationships_from_corpus(entries):
         kind = edge_spec(rel.relationship)
-        external = kind.external if kind else False
         target = (
             canonical_by_path[rel.resolved_path] if rel.resolved_path is not None else rel.target
         )
@@ -435,7 +429,7 @@ def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
                 type=rel.relationship,
                 directed=kind.directional if kind else False,
                 resolved=rel.resolved_path is not None,
-                external=external,
+                external=kind.external if kind else False,
                 provider=provider if (kind and kind.external_provider) else None,
             )
         )

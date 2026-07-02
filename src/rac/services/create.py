@@ -1,18 +1,16 @@
 """Artifact creation — `rac new` (v0.7.10, identity added in v0.7.11).
 
-``create_artifact`` is the reusable creation capability (REQ: service-layer
-creation API): it owns type lookup, template loading, identity assignment,
-the no-overwrite check, and the result model, so Explorer and IDE
-integrations can create artifacts without reimplementing template logic. The
-CLI stays a thin adapter.
+``create_artifact`` is the reusable creation capability (service-layer creation
+API): it owns type lookup, template loading, identity assignment, the
+no-overwrite check, and the result model, so Explorer and IDE integrations create
+artifacts without reimplementing template logic. The CLI stays a thin adapter.
 
 Since v0.7.11 every generated artifact carries canonical YAML frontmatter
-(ADR-025) with a system-assigned opaque ID (ADR-026): the repository key is
-read from the nearest ``.rac/config.yaml`` (``rac init``), one ID is
-generated offline, checked against the repository index, and written with
-stable key order (``schema_version``, ``id``, ``type``). Creation without an
-initialized repository fails with an actionable error — no fallback, no
-implicit init (v0.7.11 contract).
+(ADR-025) with a system-assigned opaque ID (ADR-026): the repository key is read
+from the nearest ``.rac/config.yaml`` (``rac init``), one ID is generated
+offline, checked against the repository index, and written with stable key order
+(``schema_version``, ``id``, ``type``). Creation without an initialized
+repository fails with an actionable error — no fallback, no implicit init.
 
 Failure contract:
 
@@ -86,7 +84,9 @@ class CreatedArtifact:
     bytes_written: int
     id: str
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
+        # ``bytes_written`` is an internal measurement, not part of the JSON
+        # contract (test_created_artifact_json_contract pins this key set).
         return {
             "schema_version": "1",
             "created": True,
@@ -109,16 +109,22 @@ def render_artifact(artifact_type: str, frontmatter: str | None = None) -> str:
     return frontmatter + body
 
 
+def _existing_upper_ids(repository_root: str) -> frozenset[str]:
+    """The upper-cased IDs already present in the corpus at ``repository_root``."""
+    return frozenset(
+        entry.id.upper() for entry in build_repository_index(repository_root).artifacts
+    )
+
+
 def _assign_id(
     repository_key: str,
-    repository_root: str,
+    existing_ids: frozenset[str],
     id_generator: Callable[[str], str],
 ) -> str:
-    """One repository-unique ID: generate, check the index, retry bounded."""
-    existing = {entry.id.upper() for entry in build_repository_index(repository_root).artifacts}
+    """One repository-unique ID: generate, check against ``existing_ids``, retry bounded."""
     for _ in range(_MAX_ID_ATTEMPTS):
         candidate = id_generator(repository_key)
-        if candidate.upper() not in existing:
+        if candidate.upper() not in existing_ids:
             return candidate
     raise IdGenerationExhausted(_MAX_ID_ATTEMPTS)
 
@@ -128,12 +134,19 @@ def create_artifact(
     output_path: str,
     *,
     id_generator: Callable[[str], str] = generate_id,
+    _existing_ids: frozenset[str] | None = None,
 ) -> CreatedArtifact:
     """Write a new ``artifact_type`` artifact with assigned identity.
 
     The path is taken literally — no slug derivation, no extension magic, no
-    directory creation. ``id_generator`` is injectable for deterministic
-    tests; the default is the real offline generator.
+    directory creation. ``id_generator`` is injectable for deterministic tests;
+    the default is the real offline generator.
+
+    ``_existing_ids`` is an internal fast path: when a caller has already walked
+    the corpus (e.g. :func:`~rac.services.quickstart.quickstart` scanning for an
+    empty corpus), it threads the pre-collected upper-cased ID set through so
+    cold start walks the tree once rather than twice. It is not part of the
+    public contract; omit it and the index is built here as usual.
     """
     body = load_template(artifact_type)  # validates the type first (cheap)
     out = Path(output_path)
@@ -146,10 +159,12 @@ def create_artifact(
     if config is None:
         raise MissingRepositoryConfig(str(out.parent))
     repository_root = str(Path(config.config_path).parent.parent)
-    artifact_id = _assign_id(config.repository_key, repository_root, id_generator)
+    existing_ids = (
+        _existing_ids if _existing_ids is not None else _existing_upper_ids(repository_root)
+    )
+    artifact_id = _assign_id(config.repository_key, existing_ids, id_generator)
 
-    content = render_frontmatter(artifact_id, artifact_type) + body
-    data = content.encode("utf-8")
+    data = (render_frontmatter(artifact_id, artifact_type) + body).encode("utf-8")
     out.write_bytes(data)
     return CreatedArtifact(
         artifact_type=artifact_type,

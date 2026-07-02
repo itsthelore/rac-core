@@ -1,18 +1,19 @@
 """Portfolio-level statistics across a directory of knowledge artifacts.
 
 `rac stats <directory>` walks the tree for Markdown files, parses and classifies
-each one, and aggregates the results. Like the rest of RAC, it works on the
-Product AST: every `.md` is parsed into a :class:`~rac.core.models.Product`.
+each one, and aggregates the results. Like the rest of RAC it works on the
+Product AST: every ``.md`` is parsed into a :class:`~rac.core.models.Product`.
 
-Requirement, Decision, Roadmap, Prompt, and Design artifacts are aggregated separately so
-that one never distorts another: requirement totals/averages span only requirement
-files, decisions get their own status/category breakdown, and roadmaps and prompts
-and designs each get a lightweight count of how many exist and how many are valid.
+Each artifact family is aggregated on its own so one never distorts another:
+requirement totals and averages span only requirement files; decisions get a
+status/category breakdown; roadmaps, prompts, and designs each get a lightweight
+count of how many exist and how many are valid. Documents matching no known
+schema are recorded separately (ADR-010), never validated as broken requirements.
 
 Counting basis: requirement totals, averages, and the per-feature breakdown span
-*all* parsed requirement files (including ones that fail validation). A file
-counts as a *valid feature* when it has no error-severity issues; invalid files
-are still counted and are reported separately (never silently skipped).
+*all* parsed requirement files, including ones that fail validation. A file is a
+*valid feature* when it has no error-severity issues; invalid files are still
+counted and reported separately, never silently skipped.
 """
 
 from __future__ import annotations
@@ -60,8 +61,8 @@ class RoadmapStat:
     """Per-file result for a Roadmap artifact (kept separate from features).
 
     Deliberately lightweight (v0.6.0): identity plus validity. Section-completeness
-    or quality breakdowns are intentionally absent — those belong to `rac improve`,
-    not portfolio statistics.
+    and quality breakdowns are intentionally absent — those belong to `rac improve`,
+    not to portfolio statistics.
     """
 
     path: str
@@ -75,7 +76,7 @@ class PromptStat:
     """Per-file result for a Prompt artifact (kept separate from features).
 
     Lightweight by design (v0.6.2): identity plus validity and error codes only.
-    No prompt quality/completeness metrics — those are out of scope (REQ-010).
+    No prompt quality or completeness metrics — those are out of scope (REQ-010).
     """
 
     path: str
@@ -103,8 +104,8 @@ class UnrecognizedStat:
     """Per-file result for a document that matched no known artifact schema.
 
     ADR-010 (documents are not artifacts): a file that classifies as ``unknown``
-    is recorded here rather than being validated as a Requirement *feature*. It is
-    surfaced (never silently dropped) but is not an error — there is no schema to
+    is recorded here rather than validated as a Requirement *feature*. It is
+    surfaced, never silently dropped, but is not an error — there is no schema to
     validate it against. ``confidence`` is the best-fit classification score
     (0.0 when the document has no recognizable sections at all).
     """
@@ -116,7 +117,12 @@ class UnrecognizedStat:
 
 @dataclass
 class PortfolioStats:
-    """Aggregate view over all discovered requirement files."""
+    """Aggregate view over every artifact discovered under a directory.
+
+    The output layers (``rac.output.json``/``human``) read the properties below
+    directly — there is deliberately no ``to_dict`` here, so the property surface
+    *is* the contract and every name must be preserved.
+    """
 
     directory: str
     features: list[FeatureStat] = field(default_factory=list)
@@ -124,19 +130,19 @@ class PortfolioStats:
     roadmaps: list[RoadmapStat] = field(default_factory=list)
     prompts: list[PromptStat] = field(default_factory=list)
     designs: list[DesignStat] = field(default_factory=list)
-    # Documents that matched no known artifact schema (ADR-010). Surfaced
-    # separately so they never inflate the feature/invalid counts.
+    # Documents that matched no known schema (ADR-010). Held apart so they never
+    # inflate the feature or invalid counts.
     unrecognized: list[UnrecognizedStat] = field(default_factory=list)
-    # Declared relationship-presence counts (v0.7.0, REQ-011): {normalized
-    # section -> number of artifacts that declare it with >=1 reference}. Ordered
-    # by RELATIONSHIP_SECTIONS. Not resolution, not edge totals — just presence.
+    # Declared relationship-presence counts (v0.7.0, REQ-011): {normalized section
+    # -> number of artifacts that declare it with >=1 reference}, ordered by
+    # RELATIONSHIP_SECTIONS. Presence only — not resolution, not edge totals.
     relationship_counts: dict[str, int] = field(default_factory=dict)
 
     # --- counts (requirement features) ---
     @property
     def files_found(self) -> int:
-        # Legacy name: counts Requirement-style *features* only. Decisions,
-        # roadmaps, and prompts are tracked in their own lists, not here.
+        # Legacy name kept for the output contract: it counts Requirement-style
+        # *features* only. The other families live in their own lists.
         return len(self.features)
 
     @property
@@ -188,7 +194,10 @@ class PortfolioStats:
     def largest_feature(self) -> FeatureStat | None:
         if not self.features:
             return None
-        # Most requirements wins; ties broken by name for stable output.
+        # Most requirements wins; ties broken toward the earlier name for stable
+        # output. This is deliberately a distinct key from requirements_by_feature:
+        # _neg_name orders prefix names the opposite way to a plain string sort, so
+        # the two must not be collapsed.
         return max(self.features, key=lambda f: (f.requirements, _neg_name(f.name)))
 
     @property
@@ -283,8 +292,8 @@ class PortfolioStats:
         Distinct from :attr:`is_empty`: a corpus of only invalid files is neither
         empty nor meaningful. ``rac stats`` exits OK when this is true *or* the
         corpus is empty — a day-one corpus is a valid state, not a failure
-        (v0.13.1). The "files exist but none are valid known artifacts" failure is
-        preserved for a non-empty corpus.
+        (v0.13.1). Note decisions count even when invalid, whereas the other
+        families and features only count when valid.
         """
         return (
             self.valid_features > 0
@@ -296,7 +305,7 @@ class PortfolioStats:
 
 
 def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict[str, int]:
-    """Count ``decisions`` by ``attr`` in the artifact spec's declared order."""
+    """Count ``decisions`` by ``attr`` in the decision spec's declared order."""
     spec = spec_for("decision")
     order = spec.metadata.get(metadata_key, ()) if spec else ()
     counts: dict[str, int] = {}
@@ -304,7 +313,7 @@ def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict
         value = getattr(d, attr)
         if value:
             counts[value] = counts.get(value, 0) + 1
-    # Schema order first; then any out-of-vocabulary values seen, alphabetically.
+    # Schema order first, then any out-of-vocabulary values seen, alphabetically.
     ordered = {v: counts[v] for v in order if v in counts}
     for v in sorted(counts):
         if v not in ordered:
@@ -313,12 +322,12 @@ def _bucket(decisions: list[DecisionStat], attr: str, metadata_key: str) -> dict
 
 
 def _neg_name(name: str) -> tuple[int, ...]:
-    """Sort key that makes earlier names 'larger' (for max() tie-breaks)."""
+    """Sort key that makes earlier names compare 'larger' (for max() tie-breaks)."""
     return tuple(-ord(c) for c in name)
 
 
-# The lightweight, validity-only stats share an identical constructor shape;
-# they are kept as separate types by design but built the same way.
+# The lightweight, validity-only stats share one constructor shape; they stay
+# separate types by design but are built the same way.
 _ValidityStat = TypeVar("_ValidityStat", RoadmapStat, PromptStat, DesignStat)
 
 
@@ -341,55 +350,59 @@ def _validity_stat(
 def collect_stats(directory: str) -> PortfolioStats:
     """Parse and classify every Markdown file under ``directory``.
 
-    Decisions, roadmaps, prompts, and designs are each routed to their own
-    aggregate, and documents that match no known schema are recorded as
-    unrecognized (ADR-010); only Requirement-classified files become features
-    (preserving prior behavior for requirement repositories).
+    Each family is routed to its own aggregate and unknown documents are recorded
+    separately (ADR-010); only Requirement-classified files become features. The
+    routing reads the classification the corpus walk already produced, so the full
+    inspection is rebuilt only for decisions (which need status/category/
+    supersedes) rather than reclassifying every file.
     """
     stats = PortfolioStats(directory=directory)
     rel_counts: dict[str, int] = {}
     for entry in walk_corpus(directory):
         path, product = entry.path, entry.product
+        artifact_type = entry.artifact_type
         name = product.title or path.stem
-        result = build_inspection(product)
-        # Declared relationship-presence counts span every artifact type, so they
-        # are tallied before the per-type routing below (each branch continues).
-        spec = spec_for(result.type)
+
+        # Declared relationship-presence spans every recognized type, so it is
+        # tallied before the per-type routing below.
+        spec = spec_for(artifact_type)
         if spec is not None:
             for section in present_relationship_sections(product, spec):
                 rel_counts[section] = rel_counts.get(section, 0) + 1
-        if result.type == "decision":
+
+        if artifact_type == "decision":
+            inspection = build_inspection(product)
             stats.decisions.append(
                 DecisionStat(
                     path=str(path),
                     name=name,
-                    status=result.status,
-                    category=result.category,
-                    supersedes=result.supersedes,
+                    status=inspection.status,
+                    category=inspection.category,
+                    supersedes=inspection.supersedes,
                 )
             )
             continue
-        if result.type == "roadmap":
+        if artifact_type == "roadmap":
             stats.roadmaps.append(_validity_stat(RoadmapStat, path, name, product))
             continue
-        if result.type == "prompt":
+        if artifact_type == "prompt":
             stats.prompts.append(_validity_stat(PromptStat, path, name, product))
             continue
-        if result.type == "design":
+        if artifact_type == "design":
             stats.designs.append(_validity_stat(DesignStat, path, name, product))
             continue
-        if result.type == "unknown":
-            # ADR-010: a document that matches no known artifact schema is not a
-            # broken Requirement. Record it separately instead of validating it as
-            # a feature (its former fate via the fallthrough below).
+        if artifact_type == "unknown":
+            # ADR-010: a document matching no known schema is not a broken
+            # Requirement — record it, do not validate it as a feature.
             stats.unrecognized.append(
                 UnrecognizedStat(
                     path=str(path),
                     name=name,
-                    confidence=result.confidence,
+                    confidence=entry.classification.confidence,
                 )
             )
             continue
+
         error_codes = _error_codes(product)
         stats.features.append(
             FeatureStat(
@@ -402,6 +415,7 @@ def collect_stats(directory: str) -> PortfolioStats:
                 risks=len(product.risks),
             )
         )
+
     # Order the relationship counts by the canonical vocabulary for stable output.
     stats.relationship_counts = {
         section: rel_counts[section] for section in RELATIONSHIP_SECTIONS if section in rel_counts

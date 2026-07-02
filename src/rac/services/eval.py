@@ -1,38 +1,41 @@
 """Grounding retrieval benchmark — ``rac eval`` (v0.23.0, WS1).
 
-A deterministic, offline benchmark that scores Lore's retrieval surface against
-a versioned fixture corpus and query set, then gates CI against a committed
+A deterministic, offline benchmark that scores Lore's retrieval surface against a
+versioned fixture corpus and query set, then gates CI against a committed
 baseline. It is the proof that the core claim — "the agent retrieves the right
 recorded decision" — holds and keeps holding (ADR-066, ADR-002).
 
 Determinism is load-bearing. The *scored path* is a pure function of
 ``(corpus bytes, query set, retrieval code)``: no network, no API keys, no
-randomness, and no clock (REQ-002). The two clock/identity values a run records
-— ``generated_at`` and ``lore_version`` — live in ``metadata``, which the gate
-excludes from comparison, so a wall clock never fails a build (REQ-005).
+randomness, no clock (REQ-002). The two clock/identity values a run records —
+``generated_at`` and ``lore_version`` — live in ``metadata``, which the gate
+excludes, so a wall clock never fails a build (REQ-005).
 
 The benchmark guards the *real* surface, never a parallel scorer (REQ-002): a
-``search_artifacts`` case scores the exact :func:`rac.services.resolve.search_index`
-order the MCP ``search_artifacts`` tool returns, and a ``get_related`` case
-scores the exact ``incoming`` neighborhood
+``search_artifacts`` case scores the exact
+:func:`rac.services.resolve.search_index` order the MCP ``search_artifacts`` tool
+returns, and a ``get_related`` case scores the exact ``incoming`` neighbourhood
 :func:`rac.services.relationships.incoming_references` computes — the single
-source of truth the MCP ``get_related`` tool also serializes, so the scored
-surface cannot drift from the served one. Production retrieval order is consumed
-verbatim — no re-sort, no re-rank (REQ-004). Because only returned-id
-*membership* is compared, additive WS2 ``evidence`` fields cannot shift any
-metric (REQ-010).
+source of truth the MCP ``get_related`` tool also serializes. Production order is
+consumed verbatim, no re-sort (REQ-004). Because only returned-id *membership* is
+compared, additive WS2 ``evidence`` fields cannot shift any metric (REQ-010).
 
-Metrics are Precision@k and Recall@k at ``k ∈ {1, 3, 5}``, macro-averaged
-(equal weight per case), reported ``overall`` / ``by_category`` / ``by_tool``,
-plus a summed hard-negative ``negative_violations`` count (REQ-003). Floats are
-rounded to a fixed precision so the serialized ``metrics`` block is byte-stable
-across runs on an unchanged corpus.
+Metrics are Precision@k and Recall@k at ``k ∈ {1, 3, 5}``, macro-averaged (equal
+weight per case), reported ``overall`` / ``by_category`` / ``by_tool``, plus a
+summed hard-negative ``negative_violations`` count (REQ-003). Floats are rounded
+to a fixed precision so the serialized ``metrics`` block is byte-stable across
+runs on an unchanged corpus.
+
+``search_index`` is imported into this module's namespace and always called by
+that name so a test can rebind ``rac.services.eval.search_index`` to prove the
+membership-only scoring contract.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,17 +50,16 @@ from rac.services.resolve import OUTCOME_RESOLVED, resolve_in_index, search_inde
 
 # The ranks the benchmark reports Precision@k / Recall@k at (REQ-003).
 K_VALUES: tuple[int, ...] = (1, 3, 5)
-# The window a hard-negative violation is judged in: the widest k, i.e. the
-# top-5 an agent actually reads (REQ-003, design "Hard-negative violation").
+# A hard-negative violation is judged in the widest window — the top-5 an agent
+# actually reads (REQ-003).
 NEGATIVE_K: int = max(K_VALUES)
-# Metric floats are rounded to this many decimals so the serialized ``metrics``
-# object is byte-identical across runs (the gate compares with tolerance, far
-# coarser than this precision, so rounding never hides a real regression).
+# Metric floats round to this many decimals so the serialized ``metrics`` object
+# is byte-identical across runs. The gate compares with a far coarser tolerance,
+# so this rounding never masks a real regression.
 _PRECISION: int = 6
 
-# Default fixture locations, resolved against the current working directory (the
-# repo root in CI). The in-repo benchmark is a dev/CI surface; ``rac eval`` with
-# no arguments runs it (REQ-001).
+# Default fixture locations, resolved against the working directory (the repo root
+# in CI). ``rac eval`` with no arguments runs the in-repo benchmark (REQ-001).
 DEFAULT_CORPUS = "tests/eval/corpus"
 DEFAULT_QUERIES = "tests/eval/queries.json"
 DEFAULT_BASELINE = "tests/eval/baseline.json"
@@ -72,7 +74,9 @@ class EvalUsageError(Exception):
     """A usage/IO error — missing baseline, unreadable corpus, malformed input.
 
     The CLI maps this to exit code 2 (REQ-006), distinct from a gate failure
-    (exit 1) and a clean run (exit 0).
+    (exit 1) and a clean run (exit 0). Its message text is externally observed:
+    the words "baseline" and "corpus" and the phrase "malformed query set" reach
+    stderr and are asserted by the battery.
     """
 
 
@@ -80,10 +84,10 @@ class EvalUsageError(Exception):
 class QueryCase:
     """One scored retrieval case (REQ-008).
 
-    ``query`` is the search string for a ``search_artifacts`` case, or the
-    artifact id to look up for a ``get_related`` case. ``relevant`` has at least
-    one id by construction; ``must_not_return`` is the optional hard-negative
-    set (e.g. a superseded decision that must not surface).
+    ``query`` is the search string for a ``search_artifacts`` case, or the artifact
+    id to look up for a ``get_related`` case. ``relevant`` has at least one id by
+    construction; ``must_not_return`` is the optional hard-negative set (e.g. a
+    superseded decision that must not surface).
     """
 
     id: str
@@ -97,7 +101,12 @@ class QueryCase:
 
 @dataclass
 class CaseResult:
-    """The scored outcome of one :class:`QueryCase` — a ``per_query`` row."""
+    """The scored outcome of one :class:`QueryCase` — a ``per_query`` row.
+
+    :meth:`to_dict` is the per-query row shape. ``violations`` is present on every
+    row (the human renderer filters offenders on it) and ``must_not_return`` only
+    when the case declared one.
+    """
 
     case: QueryCase
     returned: list[str]
@@ -164,7 +173,11 @@ def _load_json(path: str, what: str) -> Any:
 
 
 def load_query_set(path: str) -> list[QueryCase]:
-    """Parse the committed query set, validating each case's shape (REQ-008)."""
+    """Parse the committed query set, validating each case's shape (REQ-008).
+
+    Every rejection begins ``malformed query set:`` — the phrase the CLI surfaces
+    on stderr for exit 2.
+    """
     data = _load_json(path, "query set")
     cases_raw = data.get("cases") if isinstance(data, dict) else data
     if not isinstance(cases_raw, list) or not cases_raw:
@@ -244,12 +257,13 @@ def load_config(path: str) -> dict[str, Any]:
 # --- Retrieval seam: the real surface, never a parallel scorer (REQ-002) -----
 
 
-def _search_returned(root: str, entries: list, case: QueryCase) -> list[str]:
+def _search_returned(entries: list, case: QueryCase) -> list[str]:
     """Returned ids for a ``search_artifacts`` case, production order verbatim.
 
-    Calls :func:`rac.services.resolve.search_index` — the exact function the MCP
-    ``search_artifacts`` tool calls — and consumes its ``(match_rank, path)``
-    order unchanged (REQ-004).
+    Calls the module-level :func:`search_index` — the exact function the MCP
+    ``search_artifacts`` tool calls — and reads only ``match.id``, in the
+    ``(match_rank, path)`` order it produced (REQ-004). Reading ids alone is what
+    makes additive evidence fields inert (REQ-010).
     """
     result = search_index(entries, case.query, artifact_type=case.type)
     return [match.id for match in result.matches]
@@ -258,14 +272,13 @@ def _search_returned(root: str, entries: list, case: QueryCase) -> list[str]:
 def _related_returned(root: str, case: QueryCase) -> list[str]:
     """Returned ids for a ``get_related`` case — the tool's ``incoming`` order.
 
-    Builds the 1-hop neighborhood from the same services the MCP ``get_related``
-    tool uses (a fresh corpus walk, the repository index, reference resolution,
-    and :func:`rac.services.relationships.incoming_references`), then reads the
-    ``incoming`` artifacts in the order the tool returns them: the
-    reverse-reference / impact-analysis direction ("what references this
-    artifact"), the highest-value grounding signal. A query that does not
-    resolve to an artifact is a malformed case against this corpus — a usage
-    error, not a silent empty result.
+    Rebuilds the 1-hop neighbourhood from the same services the MCP
+    ``get_related`` tool uses (a fresh corpus walk, the repository index,
+    reference resolution, and :func:`incoming_references`), then reads the
+    ``incoming`` artifacts in tool order: the reverse-reference / impact-analysis
+    direction ("what references this artifact"), the highest-value grounding
+    signal. A query that does not resolve to an artifact is a malformed case
+    against this corpus — a usage error, not a silent empty result.
     """
     entries = list(walk_corpus(root, recursive=True))
     index = index_from_corpus(root, entries, recursive=True).artifacts
@@ -282,9 +295,13 @@ def _related_returned(root: str, case: QueryCase) -> list[str]:
 
 
 def returned_ids(root: str, entries: list, case: QueryCase) -> list[str]:
-    """The deterministic ranked id list the case's tool returns (REQ-002)."""
+    """The deterministic ranked id list the case's tool returns (REQ-002).
+
+    ``search`` cases score the supplied ``entries``; ``get_related`` cases rebuild
+    their own neighbourhood and ignore ``entries``.
+    """
     if case.tool == TOOL_SEARCH:
-        return _search_returned(root, entries, case)
+        return _search_returned(entries, case)
     return _related_returned(root, case)
 
 
@@ -296,15 +313,13 @@ def score_case(returned: list[str], case: QueryCase) -> CaseResult:
 
     ``P@k = |Rel ∩ top_k| / k`` (empty slots count against precision);
     ``R@k = |Rel ∩ top_k| / |Rel|`` (``|Rel| ≥ 1`` by construction). A violation
-    is a ``must_not_return`` id appearing in the top-``NEGATIVE_K`` window
-    (REQ-003).
+    is a ``must_not_return`` id inside the top-``NEGATIVE_K`` window (REQ-003).
     """
     relevant = set(case.relevant)
     precision: dict[int, float] = {}
     recall: dict[int, float] = {}
     for k in K_VALUES:
-        top_k = returned[:k]
-        hits = sum(1 for rid in top_k if rid in relevant)
+        hits = sum(1 for rid in returned[:k] if rid in relevant)
         precision[k] = hits / k
         recall[k] = hits / len(relevant)
     negatives = set(case.must_not_return)
@@ -331,11 +346,12 @@ def _overall(results: list[CaseResult]) -> dict[str, Any]:
     return overall
 
 
-def _grouped(results: list[CaseResult], key: Any) -> dict[str, Any]:
+def _grouped(results: list[CaseResult], key: Callable[[CaseResult], str]) -> dict[str, Any]:
     """``{group -> {p_at_1, r_at_5}}`` macro-averaged within each group.
 
-    The gated breakdown surface (per-category is gated, per-tool diagnostic):
-    p_at_1 and r_at_5 mirror the overall floors the gate enforces (REQ-006).
+    p_at_1 and r_at_5 mirror the overall floors the gate enforces (REQ-006);
+    per-category is gated, per-tool is diagnostic. Groups iterate in sorted order
+    so the block is byte-stable.
     """
     groups: dict[str, list[CaseResult]] = {}
     for result in results:
@@ -357,7 +373,7 @@ def corpus_hash(root: str) -> str:
     """A stable ``sha256:…`` over the fixture corpus files (REQ-005).
 
     Covers exactly the Markdown files the benchmark scores, each prefixed by its
-    repo-relative path, in the corpus walk's sorted order.
+    corpus-relative path, in the walk's sorted order.
     """
     root_path = Path(root)
     digest = hashlib.sha256()
@@ -442,6 +458,7 @@ class GateFailure:
                 f"FAIL [negative_violations] {self.metric}: "
                 f"limit {self.threshold:.0f}, current {self.current:.0f}"
             )
+        # A regression compares against the baseline; a floor against the config.
         label = "floor" if self.rule == RULE_FLOOR else "baseline"
         return (
             f"FAIL [{self.rule}] {self.metric}: "
@@ -450,10 +467,10 @@ class GateFailure:
 
 
 def _gated_pairs(config: dict[str, Any]) -> list[tuple[str, str, str]]:
-    """The (scope, name, metric) triples the gate enforces beyond negatives.
+    """The ``(scope, name, metric)`` triples the gate enforces beyond negatives.
 
     ``overall`` floors plus each per-category floor declared in config (REQ-006).
-    Per-tool figures are diagnostic this release and are not enumerated here.
+    Per-tool figures are diagnostic this release and are not enumerated.
     """
     pairs: list[tuple[str, str, str]] = []
     floors = config["floors"]
@@ -476,20 +493,30 @@ def _metric_value(metrics: dict[str, Any], scope: str, name: str, metric: str) -
     return float(value) if value is not None else None
 
 
+def _floor(floors: dict[str, Any], scope: str, name: str, metric: str) -> float | None:
+    if scope == "overall":
+        value = floors.get("overall", {}).get(metric)
+    else:
+        value = floors.get(scope, {}).get(name, {}).get(metric)
+    return float(value) if value is not None else None
+
+
 def evaluate_gate(
     current: dict[str, Any], baseline: dict[str, Any], config: dict[str, Any]
 ) -> list[GateFailure]:
     """Compare current ``metrics`` against floors and baseline (REQ-006).
 
-    Fires when any of: (a) ``negative_violations > 0``; (b) a gated metric is
-    below its floor; (c) a gated metric is below ``baseline − tolerance``.
-    Returns one :class:`GateFailure` per fired rule, in a deterministic order.
+    Fires when any of: (a) ``negative_violations`` exceeds its configured max;
+    (b) a gated metric is below its floor (a metric the run does not report is
+    itself a floor failure at current 0.0); (c) a gated metric is below
+    ``baseline − tolerance``. One :class:`GateFailure` per fired rule, in a
+    deterministic order.
     """
     failures: list[GateFailure] = []
     tolerance = float(config["tolerance"])
     floors = config["floors"]
 
-    # (a) Hard-negative violations — always gated, floor is the configured max.
+    # (a) Hard-negative violations — always gated; the floor is the configured max.
     negatives = int(current.get("overall", {}).get("negative_violations", 0))
     negatives_max = int(floors.get("negative_violations", 0))
     if negatives > negatives_max:
@@ -500,31 +527,20 @@ def evaluate_gate(
     for scope, name, metric in _gated_pairs(config):
         dotted = f"{scope}.{name}.{metric}" if name else f"{scope}.{metric}"
         value = _metric_value(current, scope, name, metric)
+        floor = _floor(floors, scope, name, metric)
         if value is None:
-            # A gated metric the current run does not report (e.g. a category
-            # that vanished from the corpus) is itself a regression.
-            missing_floor = _floor(floors, scope, name, metric)
+            # A gated metric the current run omits (e.g. a category that vanished
+            # from the corpus) is itself a regression to zero.
             failures.append(
-                GateFailure(
-                    RULE_FLOOR, dotted, missing_floor if missing_floor is not None else 0.0, 0.0
-                )
+                GateFailure(RULE_FLOOR, dotted, floor if floor is not None else 0.0, 0.0)
             )
             continue
-        floor = _floor(floors, scope, name, metric)
         if floor is not None and value < floor:
             failures.append(GateFailure(RULE_FLOOR, dotted, floor, value))
         base = _metric_value(baseline, scope, name, metric)
         if base is not None and value < base - tolerance:
             failures.append(GateFailure(RULE_REGRESSION, dotted, base, value))
     return failures
-
-
-def _floor(floors: dict[str, Any], scope: str, name: str, metric: str) -> float | None:
-    if scope == "overall":
-        value = floors.get("overall", {}).get(metric)
-    else:
-        value = floors.get(scope, {}).get(name, {}).get(metric)
-    return float(value) if value is not None else None
 
 
 # --- Rendering ---------------------------------------------------------------
@@ -541,18 +557,12 @@ def render_metrics_json(metrics: dict[str, Any]) -> str:
 
 
 def render_scorecard_human(scorecard: Scorecard) -> str:
-    """A terminal-legible summary: overall, by-category, by-tool, Violations."""
+    """A terminal-legible summary: Overall, By category, By tool, Violations."""
     metrics = scorecard.metrics
-    lines: list[str] = []
-
     overall = metrics["overall"]
-    lines.append("Overall")
-    header = "  " + "".join(f"{f'P@{k}':>8}{f'R@{k}':>8}" for k in K_VALUES)
-    lines.append(header)
-    overall_row = "  " + "".join(
-        f"{overall[f'p_at_{k}']:>8.3f}{overall[f'r_at_{k}']:>8.3f}" for k in K_VALUES
-    )
-    lines.append(overall_row)
+    header = "".join(f"{f'P@{k}':>8}{f'R@{k}':>8}" for k in K_VALUES)
+    values = "".join(f"{overall[f'p_at_{k}']:>8.3f}{overall[f'r_at_{k}']:>8.3f}" for k in K_VALUES)
+    lines: list[str] = ["Overall", "  " + header, "  " + values]
     lines.append(f"  negative_violations: {overall['negative_violations']}")
     lines.append("")
 
@@ -565,14 +575,14 @@ def render_scorecard_human(scorecard: Scorecard) -> str:
     lines.append("")
 
     lines.append("Violations")
-    offenders = [entry for entry in scorecard.per_query if entry["violations"]]
+    offenders = [row for row in scorecard.per_query if row["violations"]]
     if not offenders:
         lines.append("  none")
     else:
-        for offender in offenders:
+        for row in offenders:
             lines.append(
-                f"  {offender['id']} ({offender['tool']}): returned {offender['violations']} "
-                f"in top-{NEGATIVE_K} [returned={offender['returned']}]"
+                f"  {row['id']} ({row['tool']}): returned {row['violations']} "
+                f"in top-{NEGATIVE_K} [returned={row['returned']}]"
             )
     return "\n".join(lines)
 

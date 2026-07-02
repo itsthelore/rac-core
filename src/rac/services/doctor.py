@@ -1,34 +1,35 @@
-"""Repository health diagnostic — `rac doctor` (v0.23.0, WS3).
+"""Repository health diagnostic — ``rac doctor`` (v0.23.0, WS3).
 
-One front door for corpus health. RAC already *detects* most defects, but across
-three commands a new adopter must know to chain. `doctor` runs them in one pass
-and returns a single verdict with a paste-ready fix per finding, reusing the
-existing services rather than re-deriving any defect class they already own
-(ADR-049, ADR-055, ADR-060):
+One front door for corpus health. RAC already *detects* most defects, but the
+signals are spread across three commands a new adopter has to know to chain.
+``doctor`` runs them in a single pass and returns one verdict, each finding
+carrying a paste-ready fix. It reuses the services that already own each defect
+class rather than re-deriving them (ADR-049, ADR-055, ADR-060):
 
-- structural validity, from :func:`rac.services.validate.validate_directory`;
+- structural validity — :func:`rac.services.validate.validate_directory`;
 - relationship integrity (broken / ambiguous / self / type-mismatch / retired /
-  duplicate-id / cyclic), from
-  :func:`rac.services.relationships.validate_relationships`.
+  duplicate-id / cyclic) — :func:`rac.services.relationships.validate_relationships`.
 
-It adds only the two diagnostics no command provides (REQ-002): **high-fan-out
-hubs** (a node whose inbound-plus-outbound resolved-edge degree exceeds a
-configurable threshold) and a heuristic **injection-style content** flag for
-human review (REQ-005). Orphans are derived from the same one-hop degree pass
-and match the portfolio's "never a resolved target" count exactly (a test pins
-this), so the signal cannot drift from the service that owns it.
+On top of the reused signals ``doctor`` adds only what no command already
+provides (REQ-002): **high-fan-out hubs** (a node whose inbound-plus-outbound
+resolved-edge degree exceeds a configurable threshold) and a heuristic
+**injection-style content** flag for human review (REQ-005). Orphans fall out of
+the same one-hop degree pass and are counted from the shared inbound signal
+(ADR-078), so ``doctor``'s orphan count equals the portfolio's exactly — a test
+pins the no-drift.
 
 Everything is deterministic and offline (ADR-002, ADR-034, ADR-066): no AI, no
-network, byte-identical output across runs on an unchanged corpus. `doctor`
+network, byte-identical output across runs on an unchanged corpus. ``doctor``
 never edits content — the injection flag is a reviewable WARNING, never a
-hard-fail or an auto-edit, and makes no safety claim; the trust boundary stays
-human PR review (ADR-065). It exits non-zero only on a validation or
-relationship-integrity *error*; warnings (orphans, hubs, injection) exit zero
-(REQ-007).
+hard-fail or an auto-edit, and asserts nothing about safety; the trust boundary
+stays human PR review (ADR-065). The run exits non-zero only on a validation or
+relationship-integrity *error*; every warning (orphan, hub, injection, unlinked
+reference) still exits zero (REQ-007).
 """
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,17 +49,20 @@ from rac.services.relationships import (
 )
 from rac.services.validate import STATUS_INVALID, validate_directory
 
-# Fixed default hub threshold, configurable per run (decision: ~20). A node with
-# more than this many resolved relationship edges is a high-fan-out hub WS4 must
-# bound at runtime; authors fix the data, doctor names it (REQ-004).
+# A node with more than this many resolved relationship edges is a high-fan-out
+# hub. The default is deliberately generous; a run can tighten it per invocation
+# so authors fix the data while doctor only names it (REQ-004).
 DEFAULT_HUB_THRESHOLD = 20
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
+
+# Errors sort before warnings; the rest of the key (path, code, problem) breaks
+# ties deterministically (ADR-002).
 _SEVERITY_RANK = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1}
 
-# Stable doctor finding codes (part of the JSON contract, ADR-007). Validation
-# and relationship findings reuse the upstream codes; these three are doctor's.
+# Stable finding codes — part of the JSON contract (ADR-007). Validation and
+# relationship findings keep their upstream codes; these five originate here.
 CODE_INVALID_ARTIFACT = "invalid-artifact"
 CODE_ORPHANED_ARTIFACT = "orphaned-artifact"
 CODE_HIGH_FAN_OUT_HUB = "high-fan-out-hub"
@@ -67,9 +71,10 @@ CODE_UNLINKED_REFERENCE = "unlinked-reference"
 
 # Heuristic injection-style idioms (REQ-005): instruction overrides, role/system
 # impersonation, concealment from the user, and steering away from recorded
-# decisions. Deterministic and narrow — each `.` stays within a line (no DOTALL),
-# so a match is a contained idiom, not an accident of two distant paragraphs.
-# This is a review aid, never a safety verdict (ADR-065).
+# decisions. Each `.` is intentionally line-bounded (no DOTALL) so a match is a
+# contained idiom, not two distant paragraphs colliding. A review aid only, never
+# a safety verdict (ADR-065). The pattern text is behaviour, not structure — it
+# is preserved verbatim so what does and does not flag never shifts.
 _INJECTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "instruction-override",
@@ -135,7 +140,7 @@ class DoctorFinding:
 
 @dataclass
 class DoctorReport:
-    """Aggregated repository health (stable JSON contract, ADR-007)."""
+    """Aggregated repository health — the stable JSON contract (ADR-007)."""
 
     directory: str
     hub_threshold: int
@@ -168,48 +173,52 @@ class DoctorReport:
 def diagnose(
     directory: str, recursive: bool = True, hub_threshold: int = DEFAULT_HUB_THRESHOLD
 ) -> DoctorReport:
-    """Run validation, relationship integrity, and the two new checks in one pass.
+    """Run every health phase over one shared corpus snapshot and sort the result.
 
-    All four phases share one per-invocation :class:`CorpusCache` (WS8), so each
-    artifact is parsed once for the whole run rather than re-parsed by the
-    validation, relationship, and degree/injection phases independently. The
-    short-circuit is a performance path only — the report is byte-identical to a
-    full reprocess (REQ-003).
+    A single per-invocation :class:`CorpusCache` (WS8) is threaded through the
+    validation, relationship, degree, injection, and unlinked-reference phases so
+    each artifact is parsed once for the whole run. The cache is a performance
+    path only — the report is byte-identical to reprocessing each phase from a
+    fresh walk (REQ-003), which ``test_idempotent`` pins.
     """
     cache = CorpusCache()
     entries = cache.collect(directory, recursive=recursive)
+
     findings: list[DoctorFinding] = []
     findings.extend(_validation_findings(directory, recursive, cache))
     findings.extend(_relationship_findings(directory, recursive, cache))
     findings.extend(_degree_findings(entries, hub_threshold))
     findings.extend(_injection_findings(entries))
     findings.extend(_unlinked_reference_findings(directory, entries, recursive))
-    # Deterministic order: errors before warnings, then path, code, problem.
+
+    # Errors first, then a stable (path, code, problem) tiebreak so the ordering
+    # is independent of the phase that produced each finding (ADR-002).
     findings.sort(key=lambda f: (_SEVERITY_RANK[f.severity], f.path, f.code, f.problem))
     return DoctorReport(directory=directory, hub_threshold=hub_threshold, findings=findings)
 
 
 def _validation_findings(
-    directory: str, recursive: bool, cache: CorpusCache | None = None
+    directory: str, recursive: bool, cache: CorpusCache
 ) -> list[DoctorFinding]:
-    """One finding per structurally invalid artifact, reusing the validator.
+    """One error finding per structurally invalid artifact, reusing the validator.
 
-    The validator owns the defect detail; doctor surfaces the verdict and points
-    at `rac validate <path>` for the full report (REQ-001, REQ-003).
+    The validator owns the defect detail; doctor surfaces only the verdict and
+    points at ``rac validate <path>`` for the full report (REQ-001, REQ-003).
     """
     result = validate_directory(directory, recursive=recursive, cache=cache)
     findings: list[DoctorFinding] = []
     for file in result.files:
         if file.status != STATUS_INVALID:
             continue
-        codes = sorted({issue.code for issue in file.issues if issue.severity == SEVERITY_ERROR})
-        problem = "structural validation failed: " + ", ".join(codes)
+        error_codes = sorted(
+            {issue.code for issue in file.issues if issue.severity == SEVERITY_ERROR}
+        )
         findings.append(
             DoctorFinding(
                 path=file.path,
                 code=CODE_INVALID_ARTIFACT,
                 severity=SEVERITY_ERROR,
-                problem=problem,
+                problem="structural validation failed: " + ", ".join(error_codes),
                 fix=f"Run: rac validate {file.path}",
             )
         )
@@ -217,30 +226,30 @@ def _validation_findings(
 
 
 def _relationship_findings(
-    directory: str, recursive: bool, cache: CorpusCache | None = None
+    directory: str, recursive: bool, cache: CorpusCache
 ) -> list[DoctorFinding]:
     """One finding per relationship-integrity issue, reusing the engine.
 
-    Cycles, duplicate ids, broken / ambiguous / type-mismatch / retired / self
-    references all come from `relationships --validate` (REQ-002, REQ-004);
-    intrinsic severity is the recorded source of truth (`RELATIONSHIP_SEVERITY`).
+    Broken / ambiguous / type-mismatch / retired / self references, cycles, and
+    duplicate ids all come from ``relationships --validate`` (REQ-002, REQ-004).
+    Intrinsic severity is the recorded source of truth (``RELATIONSHIP_SEVERITY``);
+    an unmapped code defaults to error so a new integrity defect fails loud.
     """
     result = validate_relationships(directory, recursive=recursive, cache=cache)
-    findings: list[DoctorFinding] = []
-    for issue in result.issues:
-        findings.append(
-            DoctorFinding(
-                path=_issue_path(issue),
-                code=issue.code,
-                severity=RELATIONSHIP_SEVERITY.get(issue.code, SEVERITY_ERROR),
-                problem=_issue_problem(issue),
-                fix=f"Run: rac relationships {directory} --validate",
-            )
+    return [
+        DoctorFinding(
+            path=_issue_path(issue),
+            code=issue.code,
+            severity=RELATIONSHIP_SEVERITY.get(issue.code, SEVERITY_ERROR),
+            problem=_issue_problem(issue),
+            fix=f"Run: rac relationships {directory} --validate",
         )
-    return findings
+        for issue in result.issues
+    ]
 
 
 def _issue_path(issue: RelationshipIssue) -> str:
+    """The best anchor path for a relationship issue: source, else first involved."""
     if issue.source_path:
         return issue.source_path
     if issue.paths:
@@ -249,38 +258,33 @@ def _issue_path(issue: RelationshipIssue) -> str:
 
 
 def _issue_problem(issue: RelationshipIssue) -> str:
+    """A human-readable one-liner per issue kind (duplicate / cycle / reference)."""
     if issue.code == ISSUE_DUPLICATE_IDENTIFIER:
-        return (
-            f"duplicate artifact identifier {issue.identifier!r} in: {', '.join(issue.paths or [])}"
-        )
+        joined = ", ".join(issue.paths or [])
+        return f"duplicate artifact identifier {issue.identifier!r} in: {joined}"
     if issue.code == ISSUE_RELATIONSHIP_CYCLE:
-        return f"relationship cycle in {issue.relationship!r}: {' -> '.join(issue.paths or [])}"
+        chain = " -> ".join(issue.paths or [])
+        return f"relationship cycle in {issue.relationship!r}: {chain}"
     return f"{issue.code} via {issue.relationship!r} -> {issue.target!r}"
 
 
 def _degree_findings(entries: list[CorpusEntry], hub_threshold: int) -> list[DoctorFinding]:
-    """Orphans (inbound degree 0) and high-fan-out hubs, from one degree pass.
+    """Orphans (inbound degree 0) and high-fan-out hubs from one degree pass.
 
-    Doctor's own one-hop degree computation (REQ-002): resolved edges only,
-    counted per node. The orphan definition matches the portfolio's exactly —
-    a known artifact that is never a resolved target — so it cannot drift.
+    Only typed artifacts (``spec_for`` resolves) participate. Inbound comes from
+    the shared canonical signal (also the search graph boost, ADR-078) so the
+    orphan count cannot drift from the portfolio's; outbound is counted here over
+    resolved edges. Degree is their sum.
     """
-    known_paths = {str(e.path) for e in entries if spec_for(e.artifact_type) is not None}
-    # Inbound is the shared canonical signal (also the search graph boost, ADR-078)
-    # so the orphan count cannot drift from it; outbound is doctor's own one pass.
-    counts = inbound_counts_from_corpus(entries)
-    inbound: dict[str, int] = {p: counts.get(p, 0) for p in known_paths}
-    outbound: dict[str, int] = {p: 0 for p in known_paths}
-    for rel in relationships_from_corpus(entries):
-        if rel.resolved_path is None:  # only resolved (unique, non-self) edges
-            continue
-        if rel.source_path in outbound:
-            outbound[rel.source_path] += 1
+    known_paths = [str(e.path) for e in entries if spec_for(e.artifact_type) is not None]
+    inbound = inbound_counts_from_corpus(entries)
+    outbound = _outbound_resolved_degrees(entries, set(known_paths))
 
     findings: list[DoctorFinding] = []
     for path in known_paths:
-        degree = inbound[path] + outbound[path]
-        if inbound[path] == 0:
+        inbound_degree = inbound.get(path, 0)
+        degree = inbound_degree + outbound[path]
+        if inbound_degree == 0:
             findings.append(
                 DoctorFinding(
                     path=path,
@@ -312,71 +316,81 @@ def _degree_findings(entries: list[CorpusEntry], hub_threshold: int) -> list[Doc
     return findings
 
 
+def _outbound_resolved_degrees(entries: list[CorpusEntry], known_paths: set[str]) -> dict[str, int]:
+    """Resolved outbound edge count per known artifact (unresolved edges ignored)."""
+    degrees = dict.fromkeys(known_paths, 0)
+    for rel in relationships_from_corpus(entries):
+        if rel.resolved_path is None:
+            continue  # only unique, non-self, resolved edges count toward degree
+        if rel.source_path in degrees:
+            degrees[rel.source_path] += 1
+    return degrees
+
+
 def _unlinked_reference_findings(
     directory: str, entries: list[CorpusEntry], recursive: bool
 ) -> list[DoctorFinding]:
     """Body references to other artifacts with no declared edge (ADR-082).
 
-    Advisory WARNINGs that suggest a `## Related` link the prose already implies;
-    the detector writes nothing (suggest, never apply). Reuses the shared corpus
-    snapshot so no second walk happens.
+    Advisory WARNINGs suggesting a ``## Related`` link the prose already implies.
+    The detector reuses the shared snapshot (no second walk) and writes nothing —
+    it suggests, it never applies (ADR-082).
     """
-    findings: list[DoctorFinding] = []
-    for ref in detect_unlinked_references(directory, entries=entries, recursive=recursive):
-        findings.append(
-            DoctorFinding(
-                path=ref.source_path,
-                code=CODE_UNLINKED_REFERENCE,
-                severity=SEVERITY_WARNING,
-                problem=(
-                    f"body references {ref.matched_token} but declares no "
-                    f"{ref.related_section} link to it"
-                ),
-                fix=(
-                    f"Add `{ref.suggested_line}` under `## {ref.related_section}` "
-                    "if the link is intended — a suggestion to review; RAC writes "
-                    "no edge (ADR-082)."
-                ),
-            )
+    return [
+        DoctorFinding(
+            path=ref.source_path,
+            code=CODE_UNLINKED_REFERENCE,
+            severity=SEVERITY_WARNING,
+            problem=(
+                f"body references {ref.matched_token} but declares no "
+                f"{ref.related_section} link to it"
+            ),
+            fix=(
+                f"Add `{ref.suggested_line}` under `## {ref.related_section}` "
+                "if the link is intended — a suggestion to review; RAC writes "
+                "no edge (ADR-082)."
+            ),
         )
-    return findings
+        for ref in detect_unlinked_references(directory, entries=entries, recursive=recursive)
+    ]
 
 
 def _injection_findings(entries: list[CorpusEntry]) -> list[DoctorFinding]:
     """Heuristic injection-style content flag for human review (REQ-005).
 
     A reviewable WARNING only — never an auto-edit, a hard-fail, or a safety
-    claim (ADR-065). Each artifact's stored text is scanned for the narrow
-    idioms in :data:`_INJECTION_PATTERNS`; the first match names the finding.
+    claim (ADR-065). Each artifact's stored text is scanned for the narrow idioms
+    in :data:`_INJECTION_PATTERNS`; every matching label is named, sorted, in the
+    finding so the message is stable.
     """
     findings: list[DoctorFinding] = []
     for entry in entries:
         text = _scan_text(str(entry.path))
         if text is None:
             continue
-        matched = [label for label, pattern in _INJECTION_PATTERNS if pattern.search(text)]
-        if matched:
-            findings.append(
-                DoctorFinding(
-                    path=str(entry.path),
-                    code=CODE_INJECTION_CONTENT,
-                    severity=SEVERITY_WARNING,
-                    problem=(
-                        "instruction-like / injection-style content for review "
-                        f"({', '.join(sorted(matched))})"
-                    ),
-                    fix=(
-                        "Review this content; artifact content is untrusted and the "
-                        "trust boundary is human PR review (ADR-065). Remove or quote "
-                        "the flagged phrasing if it was not intended as literal guidance."
-                    ),
-                )
+        matched = sorted(label for label, pattern in _INJECTION_PATTERNS if pattern.search(text))
+        if not matched:
+            continue
+        findings.append(
+            DoctorFinding(
+                path=str(entry.path),
+                code=CODE_INJECTION_CONTENT,
+                severity=SEVERITY_WARNING,
+                problem=(
+                    f"instruction-like / injection-style content for review ({', '.join(matched)})"
+                ),
+                fix=(
+                    "Review this content; artifact content is untrusted and the "
+                    "trust boundary is human PR review (ADR-065). Remove or quote "
+                    "the flagged phrasing if it was not intended as literal guidance."
+                ),
             )
+        )
     return findings
 
 
 def _scan_text(path: str) -> str | None:
-    """The artifact's stored text, or None if it cannot be read as UTF-8."""
+    """The artifact's stored text, or None when it cannot be read as UTF-8."""
     try:
         return Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):  # pragma: no cover — walked files are readable
@@ -384,11 +398,12 @@ def _scan_text(path: str) -> str | None:
 
 
 # --- Rendering ---------------------------------------------------------------
+# doctor owns its own human/JSON rendering (the established per-service pattern);
+# both are byte-pinned by the golden fixtures. JSON uses ``ensure_ascii=False`` so
+# the em-dash and backticks in fix text survive verbatim.
 
 
 def render_doctor_json(report: DoctorReport) -> str:
-    import json
-
     return json.dumps(report.to_dict(), indent=2, ensure_ascii=False)
 
 
@@ -397,6 +412,7 @@ def render_doctor_human(report: DoctorReport) -> str:
     if not report.findings:
         lines.append("✓ No issues found.")
         return "\n".join(lines)
+
     lines.append(f"{report.error_count} error(s), {report.warning_count} warning(s)")
     lines.append("")
     for finding in report.findings:
@@ -405,6 +421,5 @@ def render_doctor_human(report: DoctorReport) -> str:
         lines.append(f"  [{finding.code}] {finding.problem}")
         lines.append(f"  fix: {finding.fix}")
         lines.append("")
-    verdict = "✓ No errors (warnings are advisory)." if report.ok else "✗ Errors present."
-    lines.append(verdict)
+    lines.append("✓ No errors (warnings are advisory)." if report.ok else "✗ Errors present.")
     return "\n".join(lines)
