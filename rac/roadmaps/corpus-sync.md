@@ -185,8 +185,9 @@ rather than duplicating them.
   remain the wire baseline these features extend additively.
 - rac-connectors consumes the feed and anchors without contract changes
   beyond this programme.
-- The team-scale triggers stay untripped; `lore-at-team-scale` remains
-  deferred and this programme does not pull its serving work forward.
+- The team-scale trigger has since been met and `lore-at-team-scale` has
+  graduated to its own scoped roadmap; this programme still does not pull
+  its serving work forward — the two proceed independently.
 
 ## Risks
 
