@@ -14,8 +14,8 @@ Extends Tranche B of the deterministic-substrate programme: where
 this programme makes those projections a versioned consumption plane —
 schema-checked, addressable at any revision, syncable by delta, chunkable at
 recorded boundaries, and collision-free across corpora. Execution is tracked
-in a GitHub issue per ADR-093 when an initiative is picked up; a
-`## Related Tickets` entry is added then.
+in GitHub per ADR-093: the epic in `## Related Tickets` carries ordering
+and task state, with a sub-issue per initiative.
 
 ## Context
 
@@ -254,3 +254,7 @@ rather than duplicating them.
 - rac-corpus-documents-export
 - rac-corpus-graph-export
 - rac-grounding-eval-benchmark
+
+## Related Tickets
+
+- itsthelore/rac-core#255
