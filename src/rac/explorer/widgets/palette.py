@@ -1,11 +1,11 @@
 """The command palette — summoned by `/`, dismissed by Esc (v0.8.8).
 
 A titled floating panel over the context region: an input line on top and a
-live, navigable suggestion menu directly below it (DESIGN-command-surface).
-Empty input teaches the registry; a command prefix filters it; any other
-text quick-opens matching artifacts. The idle frame carries no input chrome.
-Routing of submitted text stays on the main screen — the palette only
-decides between completing, running, and opening.
+live, navigable suggestion menu directly below (DESIGN-command-surface). Empty
+input teaches the registry; a command prefix filters it; any other text
+quick-opens matching artifacts. The idle frame carries no input chrome. Routing
+of submitted text stays on the main screen — the palette only decides between
+completing, running, and opening.
 """
 
 from __future__ import annotations
@@ -23,12 +23,13 @@ from rac.explorer.adapter import ExplorerAdapter
 from rac.explorer.state import ArtifactRow
 from rac.explorer.widgets.sidebar import type_tag
 
-# Quick-open shows at most this many artifact matches; full result sets
-# belong to the results view in the context region.
+# Quick-open shows at most this many artifact matches; full result sets belong
+# to the results view in the context region.
 _MATCH_LIMIT = 8
 
 
 def _takes_args(spec: commands.CommandSpec) -> bool:
+    """Whether the command's usage declares an argument slot."""
     return "<" in spec.usage or "[" in spec.usage
 
 
@@ -51,6 +52,10 @@ def _artifact_option(row: ArtifactRow, *, dark: bool = True) -> Option:
 class CommandPalette(Vertical):
     """Input on top, menu below; `↑ ↓` drive the menu while typing continues."""
 
+    # escape/up/down are pinned so the menu is arrow-drivable without moving
+    # focus off the input, and Esc restores the prior focus (see the palette
+    # focus tests). None is a priority binding, so typed text still reaches the
+    # input.
     BINDINGS = [
         Binding("escape", "dismiss_palette", "Close", show=False),
         Binding("up", "menu_up", "Choose", show=False),
@@ -61,7 +66,7 @@ class CommandPalette(Vertical):
         """Esc — the screen should restore the previous focus."""
 
     class Routed(Message):
-        """Submitted text for the screen's command routing."""
+        """Submitted text handed to the screen's command routing."""
 
         def __init__(self, text: str) -> None:
             super().__init__()
@@ -84,7 +89,7 @@ class CommandPalette(Vertical):
         yield Input(placeholder="Type a command or search…", id="command-input")
         yield OptionList(id="palette-menu")
 
-    # --- lifecycle -------------------------------------------------------------
+    # --- lifecycle ----------------------------------------------------------
 
     def show(self) -> None:
         self.display = True
@@ -101,7 +106,7 @@ class CommandPalette(Vertical):
     def action_dismiss_palette(self) -> None:
         self.hide(restore_focus=True)
 
-    # --- the live menu ----------------------------------------------------------
+    # --- the live menu ------------------------------------------------------
 
     def _menu(self) -> OptionList:
         return self.query_one(OptionList)
@@ -113,38 +118,46 @@ class CommandPalette(Vertical):
         except Exception:  # noqa: BLE001 - no app/theme yet: assume the dark default
             return True
 
-    def _refresh_menu(self, text: str) -> None:
-        menu = self._menu()
-        menu.clear_options()
-        stripped = text.strip().lstrip("/").strip()
-        # Theme-aware tag hues (v0.26.1); the menu rebuilds on every keystroke,
-        # so reading the active theme here keeps the palette tags current.
-        dark = self._tag_dark()
-        options: list[Option] = []
+    def _menu_options(self, stripped: str, *, dark: bool) -> list[Option]:
+        """The menu contents for the current input: recents+registry, a filtered
+        command list, or quick-open matches with a search-all escape hatch."""
         if not stripped:
             # The artifacts the user actually works in come first (v0.8.9);
             # Enter reopens one. The registry follows, labelled, in full.
+            options: list[Option] = []
             recents = self.adapter.recent_rows()
             if recents:
                 options.append(Option(Text("Recent", style="dim"), disabled=True))
                 options.extend(_artifact_option(row, dark=dark) for row in recents)
                 options.append(Option(Text("Commands", style="dim"), disabled=True))
             options.extend(_command_option(spec) for spec in commands.REGISTRY)
-        else:
-            matched = commands.suggestions(stripped)
-            if matched:
-                options = [_command_option(spec) for spec in matched]
-            else:
-                lookup = self.adapter.search_rows(stripped)
-                options.extend(
-                    _artifact_option(row, dark=dark) for row in lookup.rows[:_MATCH_LIMIT]
-                )
-                options.append(Option(f"Search all results for '{stripped}'", id="route:search"))
-        menu.add_options(options)
+            return options
+
+        matched = commands.suggestions(stripped)
+        if matched:
+            return [_command_option(spec) for spec in matched]
+
+        lookup = self.adapter.search_rows(stripped)
+        options = [_artifact_option(row, dark=dark) for row in lookup.rows[:_MATCH_LIMIT]]
+        options.append(Option(f"Search all results for '{stripped}'", id="route:search"))
+        return options
+
+    def _refresh_menu(self, text: str) -> None:
+        menu = self._menu()
+        menu.clear_options()
+        stripped = text.strip().lstrip("/").strip()
+        # The menu rebuilds on every keystroke, so reading the active theme here
+        # keeps the tag hues current after a live theme switch (v0.26.1).
+        menu.add_options(self._menu_options(stripped, dark=self._tag_dark()))
+        self._highlight_first_selectable(menu)
+
+    @staticmethod
+    def _highlight_first_selectable(menu: OptionList) -> None:
+        """Highlight the first non-header row so Enter has an obvious target."""
         for index in range(menu.option_count):
             if not menu.get_option_at_index(index).disabled:
                 menu.highlighted = index
-                break
+                return
 
     def on_input_changed(self, event: Input.Changed) -> None:
         event.stop()
@@ -156,7 +169,7 @@ class CommandPalette(Vertical):
     def action_menu_down(self) -> None:
         self._menu().action_cursor_down()
 
-    # --- selection ---------------------------------------------------------------
+    # --- selection ----------------------------------------------------------
 
     def _highlighted_id(self) -> str | None:
         menu = self._menu()
@@ -177,6 +190,7 @@ class CommandPalette(Vertical):
             self.hide(restore_focus=False)
             self.post_message(self.Routed(raw_text))
             return
+
         spec = next(s for s in commands.REGISTRY if s.name == value)
         head = raw_text.strip().lstrip("/").strip().partition(" ")[0].casefold()
         if head == spec.name:

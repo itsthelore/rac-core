@@ -1,11 +1,12 @@
-"""The main screen — one persistent workspace frame (v0.8.7).
+"""The main screen — one persistent workspace frame.
 
-App bar, navigation sidebar, context panel, command bar, status line: the
-frame composes once and never rebuilds; views swap inside the context region
-via ``ContentSwitcher`` with an internal history backing Esc
+The frame (app bar, navigation sidebar, context region, status line) composes
+once and never rebuilds; views swap inside the context region through a
+``ContentSwitcher`` backed by an internal history that answers Esc
 (DESIGN-visual-system). The screen stack survives only for the confirm-write
-modal (ADR-024). Loading runs in a thread worker (Core is synchronous);
-command routing answers everything through the adapter (ADR-015).
+modal (ADR-024). Loading runs in a thread worker because Core is synchronous,
+and every command answer is routed through the adapter (ADR-015): the screen
+owns navigation, never repository intelligence.
 """
 
 from __future__ import annotations
@@ -55,14 +56,21 @@ from rac.explorer.widgets.views import (
 # The sidebar hides below this width so the context panel keeps room to read.
 _SIDEBAR_MIN_WIDTH = 80
 
-# Split layout (v0.26.3) needs room for two panes; below this the master pane
-# hides and the reading pane takes the full width (navigate with the palette).
+# The split layout needs room for two panes; below this the master pane hides
+# and the reading pane takes the full width (navigate with the palette).
 _SPLIT_MIN_WIDTH = 100
 
-# How often the live watcher compares the corpus files on disk (v0.8.9).
+# How often the live watcher compares the corpus files on disk.
 _WATCH_INTERVAL = 2.0
 
-# View id → the status-line hint set and the panel title when no artifact is open.
+# Worker-group names. Textual routes ``Worker.StateChanged`` by group string, so
+# these values are dispatch contract — a typo would silently drop a result. They
+# are centralised so the decorator and the handler cannot drift apart.
+_LOAD_GROUP = "repository-load"
+_WATCH_GROUP = "watch-scan"
+_LAYOUT_GROUP = "layout-switch"
+
+# View id → (status-line hint region, panel title when no artifact is open).
 _VIEW_REGIONS = {
     "view-home": ("home", "Home"),
     "view-context": ("context", "Artifact"),
@@ -103,46 +111,66 @@ class MainScreen(Screen[None]):
         self.adapter = adapter
         self._history: list[tuple[str, str | None]] = []
         self._last_focus: Widget | None = None
-        # Live reload (v0.8.9): the corpus snapshot the last load saw. None
-        # means "do not watch" — before the first successful load, after a
-        # load error, or while the application is suspended for an editor.
+        # The corpus snapshot the last successful load saw. ``None`` means "do
+        # not watch": before the first load, after a load error, or while the
+        # application is suspended for an external editor.
         self._watch_baseline: tuple[tuple[str, int], ...] | None = None
         self._watch_paused = False
-        # A `/new` write reloads the repository and then opens the artifact
-        # it created (v0.8.10) — the path waits here for the load to finish.
+        # A confirmed ``/new`` reloads the repository, then opens the artifact it
+        # created: the path waits here until the reload finishes.
         self._open_after_load: str | None = None
 
-    # --- frame ----------------------------------------------------------------
+    # --- frame construction -----------------------------------------------------
 
     def _split(self) -> bool:
-        """Whether the master-detail split layout is active (v0.26.3)."""
+        """Whether the master-detail split layout is active."""
         return self.adapter.preferences.layout == LAYOUT_SPLIT
 
+    def _context_region(self, split: bool) -> Vertical:
+        """The swapping context region shared by both layouts.
+
+        The view instance set and their ids are the pinned surface the tests
+        traverse; only the swappable ``PortfolioView`` differs between layouts —
+        in split the portfolio is the master pane instead of a ``/list`` view.
+        """
+        views: list[Widget] = [
+            HomeView(self.adapter),
+            ContextView(self.adapter),
+            HealthView(),
+            RecommendationsView(self.adapter),
+            ImportView(self.adapter),
+            ResultsView(),
+            SettingsView(self.adapter),
+            StatsView(self.adapter),
+        ]
+        if not split:
+            views.append(PortfolioView(self.adapter))
+        return Vertical(
+            ContentSwitcher(*views, initial="view-home", id="views"), id="context-region"
+        )
+
+    def _workspace(self, split: bool) -> Horizontal:
+        """Build the ``#workspace`` row for the given layout.
+
+        The single source for both the initial ``compose`` and the live layout
+        switch, so the two paths can never drift. The sidebar is always present
+        (it hosts the loaded browser state plus the reveal/status calls); it
+        simply hides in split, where the master list is the navigator.
+        """
+        children: list[Widget] = [NavigationSidebar()]
+        if split:
+            children.append(PortfolioView(self.adapter))  # the master pane
+        children.append(self._context_region(split))
+        return Horizontal(*children, id="workspace")
+
     def compose(self) -> ComposeResult:
-        # Two layouts (v0.26.3, ADR-028): `frame` is the tree sidebar plus a
-        # swapping context region; `split` is master-detail — the portfolio list
-        # drives a persistent reading pane. The sidebar is always composed (it
-        # hosts the loaded browser state and the reveal/status calls); it simply
-        # hides in split, where the list is the navigator instead.
-        split = self._split()
+        # Two layouts (ADR-028): `frame` is the tree sidebar plus a swapping
+        # context region; `split` is master-detail, the portfolio list driving a
+        # persistent reading pane. The palette floats over the region on its own
+        # layer and stays hidden while idle.
         yield AppBar(self.adapter.directory)
-        with Horizontal(id="workspace"):
-            yield NavigationSidebar()
-            if split:
-                yield PortfolioView(self.adapter)  # the master pane
-            with Vertical(id="context-region"), ContentSwitcher(initial="view-home", id="views"):
-                yield HomeView(self.adapter)
-                yield ContextView(self.adapter)
-                yield HealthView()
-                yield RecommendationsView(self.adapter)
-                yield ImportView(self.adapter)
-                yield ResultsView()
-                yield SettingsView(self.adapter)
-                yield StatsView(self.adapter)
-                if not split:
-                    yield PortfolioView(self.adapter)  # a swappable /list view
+        yield self._workspace(self._split())
         yield StatusLine()
-        # Floats over the context region on its own layer; hidden when idle.
         yield CommandPalette(self.adapter)
 
     def on_mount(self) -> None:
@@ -154,8 +182,8 @@ class MainScreen(Screen[None]):
         else:
             self.query_one(HomeView).focus()
         self.set_interval(_WATCH_INTERVAL, self._watch_tick)
-        # Type tags are pre-rendered Rich text, not theme tokens, so a live
-        # theme change must re-render them (v0.26.1); the rest recolours itself.
+        # Type tags are pre-rendered Rich text, not theme tokens, so a live theme
+        # change must re-render them; the rest of the frame recolours itself.
         self.watch(self.app, "theme", self._retheme_tags, init=False)
         self.action_reload()
 
@@ -163,9 +191,9 @@ class MainScreen(Screen[None]):
         self._apply_layout_visibility()
 
     def _apply_layout_visibility(self) -> None:
-        # Frame: the sidebar hides under 80 cols. Split (v0.26.3): the sidebar
-        # is always hidden (the list is the navigator) and the master pane hides
-        # under 100 cols, leaving the reading pane full width.
+        # Frame: the sidebar hides under 80 cols. Split: the sidebar is always
+        # hidden (the list navigates) and the master pane hides under 100 cols,
+        # leaving the reading pane full width.
         width = self.app.size.width
         if self._split():
             self.query_one(NavigationSidebar).display = False
@@ -175,13 +203,15 @@ class MainScreen(Screen[None]):
 
     def _retheme_tags(self) -> None:
         # Re-render the active navigator so its theme-aware type-tag hues track
-        # the new theme (v0.26.1); the palette reads the active theme each time.
+        # the new theme; the palette reads the active theme on each build.
         if self._split():
             self.query_one(PortfolioView).refresh_tags()
             return
         state = self.adapter.browser_state()
         if state is not None:
             self.query_one(NavigationSidebar).show_repository(state)
+
+    # --- view switching ---------------------------------------------------------
 
     @property
     def current_view(self) -> str:
@@ -199,8 +229,8 @@ class MainScreen(Screen[None]):
         """Swap the context region to ``view_id``, recording history for Esc.
 
         ``record`` defaults to "when the view changes"; artifact-to-artifact
-        traversal stays on the context view but still records, so Esc can
-        unwind across the graph.
+        traversal stays on the context view but still records, so Esc can unwind
+        across the graph.
         """
         switcher = self.query_one(ContentSwitcher)
         if record is None:
@@ -211,7 +241,7 @@ class MainScreen(Screen[None]):
         self._set_region_title(view_id)
         self.query_one(StatusLine).show_hints(_VIEW_REGIONS[view_id][0])
         if view_id in ("view-health", "view-recommendations", "view-context"):
-            # Workspace continuity (v0.8.8): resume restores the view too.
+            # Workspace continuity: resume restores the view too.
             self.adapter.record_view(view_id)
         if focus:
             self._focus_view(view_id)
@@ -271,15 +301,17 @@ class MainScreen(Screen[None]):
     def action_help(self) -> None:
         self.route_command("help")
 
-    # --- loading (moved from the v0.8.0 repository screen) ----------------------
+    # --- repository loading ------------------------------------------------------
 
     def action_reload(self) -> None:
+        # The scan label is pinned: it drives the SEARCHING mascot while the
+        # thread worker walks the corpus, and its counter fills in as files land.
         self.query_one(HomeView).show_progress(
             LoadProgressState(phase="scan", completed=0, total=None, label="Scanning artifacts")
         )
         self._load_repository()
 
-    @work(thread=True, exclusive=True, group="repository-load")
+    @work(thread=True, exclusive=True, group=_LOAD_GROUP)
     def _load_repository(self) -> RepositorySummaryState | LoadErrorState | None:
         worker = get_current_worker()
         token = _WorkerCancelToken(worker)
@@ -288,19 +320,22 @@ class MainScreen(Screen[None]):
             if not worker.is_cancelled:
                 self.app.call_from_thread(self.query_one(HomeView).show_progress, progress)
 
-        # Snapshot before loading: a save that lands mid-load differs from
-        # this baseline, so the next watch tick reloads again and converges.
+        # Snapshot before loading: a save that lands mid-load differs from this
+        # baseline, so the next watch tick reloads again and converges.
         baseline = self.adapter.fingerprint()
         result = self.adapter.load(on_progress=relay, cancel=token)
         self._watch_baseline = baseline if isinstance(result, RepositorySummaryState) else None
         return result
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        if event.worker.group == "watch-scan":
+        # Widgets start their own workers (import, stats, recency); Textual routes
+        # each StateChanged to the starting widget and it bubbles here, so guard
+        # on the groups this screen owns.
+        if event.worker.group == _WATCH_GROUP:
             if event.state == WorkerState.SUCCESS:
                 self._on_scan_result(event.worker.result)
             return
-        if event.worker.group != "repository-load":
+        if event.worker.group != _LOAD_GROUP:
             return
         home = self.query_one(HomeView)
         if event.state == WorkerState.SUCCESS:
@@ -309,19 +344,19 @@ class MainScreen(Screen[None]):
                 home.show_result(result)
                 self.query_one(NavigationSidebar).show_repository(self.adapter.browser_state())
                 self.query_one(StatusLine).show_summary(result)
-                self._populate_master()  # split layout master pane (v0.26.3)
+                self._populate_master()
                 self._refresh_current_view()
                 pending, self._open_after_load = self._open_after_load, None
                 if pending is not None and self.adapter.context_state(pending) is not None:
-                    # The artifact a confirmed `/new` just created (v0.8.10).
+                    # The artifact a confirmed `/new` just created.
                     self.open_artifact(pending)
             elif isinstance(result, LoadErrorState):
                 self._open_after_load = None
                 home.show_error(result)
             # None — the load was cancelled; a fresh worker is taking over.
         elif event.state == WorkerState.ERROR:
-            # The adapter is the recoverable boundary, so this is unexpected —
-            # but the interface must still never crash (Initiative 6).
+            # The adapter is the recoverable boundary, so a worker-level error is
+            # unexpected — but the interface must still never crash.
             self._watch_baseline = None
             home.show_error(
                 LoadErrorState(
@@ -331,7 +366,7 @@ class MainScreen(Screen[None]):
                 )
             )
 
-    # --- live reload (v0.8.9) ----------------------------------------------------
+    # --- live reload ------------------------------------------------------------
 
     def pause_watching(self) -> None:
         """Hold the watcher while the application is suspended for an editor."""
@@ -345,11 +380,11 @@ class MainScreen(Screen[None]):
     def _watch_tick(self) -> None:
         if self._watch_paused or self._watch_baseline is None:
             return
-        if any(w.group == "repository-load" and w.is_running for w in self.workers):
+        if any(w.group == _LOAD_GROUP and w.is_running for w in self.workers):
             return
         self._scan_corpus()
 
-    @work(thread=True, exclusive=True, group="watch-scan")
+    @work(thread=True, exclusive=True, group=_WATCH_GROUP)
     def _scan_corpus(self) -> tuple[tuple[str, int], ...] | None:
         return self.adapter.fingerprint()
 
@@ -365,8 +400,8 @@ class MainScreen(Screen[None]):
         """Re-render whatever the user is looking at from the fresh load.
 
         Reload (manual or watched) refreshes the open artifact, health, or
-        recommendations in place; an artifact that disappeared from the
-        repository falls back home rather than showing stale content.
+        recommendations in place; an artifact that vanished from the repository
+        falls back home rather than showing stale content.
         """
         current = self.current_view
         if current == "view-context":
@@ -397,7 +432,7 @@ class MainScreen(Screen[None]):
             if recommendations is not None:
                 self.query_one(RecommendationsView).show_recommendations(recommendations)
 
-    # --- navigation ---------------------------------------------------------------
+    # --- navigation -------------------------------------------------------------
 
     def open_artifact(
         self,
@@ -415,7 +450,7 @@ class MainScreen(Screen[None]):
         same = (
             self.current_view == "view-context" and previous is not None and previous.path == path
         )
-        # Workspace continuity (v0.8.6): this is now the last artifact opened.
+        # Workspace continuity: this is now the last artifact opened.
         self.adapter.record_artifact(path)
         markdown = self.adapter.artifact_markdown(path) or ""
         relationships = self.adapter.relationships_view(path)
@@ -426,8 +461,8 @@ class MainScreen(Screen[None]):
             for row in rows
             if row.path == path
         )
-        # Improvement suggestions (v0.8.9) join the review findings — fetched
-        # on open, never during the repository load.
+        # Improvement suggestions join the review findings — fetched on open,
+        # never during the repository load (they read one file each).
         findings += self.adapter.improvement_rows(path)
         # Snapshot before the context view is overwritten, so Esc can unwind
         # artifact-to-artifact traversal across the graph.
@@ -448,12 +483,12 @@ class MainScreen(Screen[None]):
 
     def on_portfolio_view_followed(self, message: PortfolioView.Followed) -> None:
         message.stop()
-        # Split layout (v0.26.3): the master cursor moved, so refresh the detail
-        # pane in place and keep focus on the list so arrows keep driving it.
+        # Split layout: the master cursor moved, so refresh the detail pane in
+        # place and keep focus on the list so arrows keep driving it.
         self.open_artifact(message.path, record=False, focus=False)
 
     def _populate_master(self) -> None:
-        """Fill the split layout's master list and open its first row (v0.26.3)."""
+        """Fill the split layout's master list and open its first row."""
         if not self._split():
             return
         state = self.adapter.portfolio_state()
@@ -483,40 +518,16 @@ class MainScreen(Screen[None]):
             # The sidebar mirrors the grouping preference immediately.
             self.query_one(NavigationSidebar).show_repository(self.adapter.browser_state())
         elif message.key == "layout":
-            # Live-switch the workspace between frame and split (v0.26.3).
+            # Live-switch the workspace between frame and split.
             self._switch_layout()
 
-    def _make_workspace(self) -> Horizontal:
-        """Build the workspace for the current layout preference (v0.26.3)."""
-        split = self._split()
-        views: list[Widget] = [
-            HomeView(self.adapter),
-            ContextView(self.adapter),
-            HealthView(),
-            RecommendationsView(self.adapter),
-            ImportView(self.adapter),
-            ResultsView(),
-            SettingsView(self.adapter),
-            StatsView(self.adapter),
-        ]
-        if not split:
-            views.append(PortfolioView(self.adapter))
-        context = Vertical(
-            ContentSwitcher(*views, initial="view-home", id="views"), id="context-region"
-        )
-        left: list[Widget] = [NavigationSidebar()]
-        if split:
-            left.append(PortfolioView(self.adapter))
-        left.append(context)
-        return Horizontal(*left, id="workspace")
-
-    @work(exclusive=True, group="layout-switch")
+    @work(exclusive=True, group=_LAYOUT_GROUP)
     async def _switch_layout(self) -> None:
-        # Re-mount the workspace for the new layout, then reload from the
-        # already-open repository (v0.26.3). The frame never jumps during
-        # navigation; this is an explicit preference change, like the theme.
+        # Re-mount the workspace for the new layout, then reload from the already
+        # open repository. The frame never jumps during navigation; this is an
+        # explicit preference change, like the theme.
         await self.query_one("#workspace").remove()
-        await self.mount(self._make_workspace(), after=self.query_one(AppBar))
+        await self.mount(self._workspace(self._split()), after=self.query_one(AppBar))
         self._apply_layout_visibility()
         self._set_region_title("view-home")
         self.query_one(StatusLine).show_hints("home")
@@ -548,8 +559,8 @@ class MainScreen(Screen[None]):
         return True
 
     def action_resume(self) -> None:
-        # Workspace continuity (v0.8.6, view restore v0.8.8): reopen the last
-        # view — health and recommendations included — on request.
+        # Workspace continuity: reopen the last view — health and
+        # recommendations included — on request.
         if self.query_one(HomeView).onboarding_active:
             return
         view = self.adapter.resume_view()
@@ -570,7 +581,7 @@ class MainScreen(Screen[None]):
         outcome = launch_editor(self, self.adapter, message.path)
         self.app.notify(outcome.message)
 
-    # --- command routing (the summoned `/` palette) --------------------------------
+    # --- command routing (the summoned `/` palette) -----------------------------
 
     def _show_results(
         self,
@@ -595,23 +606,20 @@ class MainScreen(Screen[None]):
 
     def _show_lookup(self, lookup: LookupState) -> None:
         if lookup.rows:
-            # Artifact rows render through the filterable path (v0.8.9).
+            # Artifact rows render through the filterable results path.
             self.query_one(ResultsView).show_lookup(lookup.rows, lookup.message)
             self.show_view("view-results", focus=True)
             self.query_one("#context-region").border_title = f"Results · {len(lookup.rows)}"
             return
         options: list[Option | None] = []
-        # The mascot's empty state keeps zero-result moments calm
-        # (text label included, so `mascot = false` loses nothing).
+        # The mascot's empty state keeps zero-result moments calm; the text label
+        # is included, so `mascot = false` loses nothing.
         if self.adapter.preferences.mascot:
             figure = mascot.figure(mascot.EMPTY, animations=self.adapter.preferences.animations)
             options.append(Option(figure, disabled=True))
         if lookup.message:
             options.append(Option(lookup.message, disabled=True))
         self._show_results(options, count=0)
-
-    def summon_palette(self) -> None:
-        self.query_one(CommandPalette).show()
 
     def on_command_palette_dismissed(self, message: CommandPalette.Dismissed) -> None:
         message.stop()
@@ -714,7 +722,7 @@ class MainScreen(Screen[None]):
                 self._show_message("Repository not loaded yet")
                 return
             # `/list <type>` scopes by artifact type; `/list <text>` is a fuzzy
-            # name search; bare `/list` shows everything (v0.26.2).
+            # name search; bare `/list` shows everything.
             arg = invocation.args.strip()
             view = self.query_one(PortfolioView)
             follow = self._split()  # the master keeps driving the detail pane
@@ -724,8 +732,8 @@ class MainScreen(Screen[None]):
             else:
                 view.show_portfolio(state, query=arg or None)
             if follow:
-                # In split the list is the master pane; just focus it (and keep
-                # the detail in sync), never swap it into the context region.
+                # In split the list is the master pane: focus it (and keep the
+                # detail in sync); never swap it into the context region.
                 view.take_focus()
                 view.reveal_first()
             else:
@@ -735,8 +743,7 @@ class MainScreen(Screen[None]):
             if artifact_type is None:
                 self.query_one(NavigationSidebar).focus()
             else:
-                # By type lists in the results view — identical in every
-                # grouping mode (v0.8.10).
+                # By type lists in the results view — identical in every grouping.
                 self._show_lookup(self.adapter.type_rows(artifact_type))
         elif invocation.command == "open":
             lookup = self.adapter.open_ref(invocation.args)

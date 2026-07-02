@@ -1,16 +1,19 @@
-"""The curated RAC themes — dark, light, and high-contrast (v0.26.0, v0.26.1).
+"""The curated RAC themes — dark, light, and high-contrast (DESIGN-visual-system).
 
-All derive from the mascot asset (``rac/assets/images/rac_explorer_mascot.png``):
-a hooded explorer carrying a lantern, the single accent colour the lantern amber
-(DESIGN-visual-system). ``rac-lantern`` is the dark default — amber on near-black,
-as behind the mascot; ``rac-parchment`` is the light companion — the same lantern
-on warm paper, the amber deepened so it stays legible on light; and
-``rac-high-contrast`` maximises separation — pure-white ink on true black with a
-brighter amber, for low-vision and bright-environment use.
+All three derive from the mascot asset (a hooded explorer carrying a lantern),
+with the lantern amber as the single accent colour:
 
-The ``theme`` preference can select any of these, or any other registered Textual
-theme; meaning never depends on the palette (icons + labels + chips, ADR-028),
-so the whole interface recolours from these tokens with no loss of information.
+- ``rac-lantern`` — the dark default: amber on near-black, as behind the mascot.
+- ``rac-parchment`` — the light companion: the same lantern on warm paper, the
+  amber deepened so it stays legible on a pale ground.
+- ``rac-high-contrast`` — maximum separation: pure-white ink on true black with
+  a brighter amber, for low-vision and bright-environment use.
+
+The ``theme`` preference may select any of these, or any other registered
+Textual theme. Meaning never rides on the palette (icons, labels, and chips
+carry it, ADR-028), so the whole interface recolours from these tokens without
+losing information. Because this module constructs ``textual.theme.Theme``
+values it is *not* on the Textual-free list.
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ RAC_PARCHMENT = Theme(
     success="#3E7D2E",
     foreground="#2A2520",  # dark ink
     background="#F4EEE1",  # warm paper
-    surface="#FBF7EC",  # Surface 1 — panels, a touch lighter than the canvas
+    surface="#FBF7EC",  # Surface 1 — a touch lighter than the canvas
     panel="#EBE3D2",
     dark=False,
 )
@@ -66,7 +69,7 @@ RAC_HIGH_CONTRAST = Theme(
     dark=True,
 )
 
-# The curated themes, registered together so all appear in the `/settings`
-# theme cycle and sort adjacently under the `rac-` prefix: the dark default,
-# the light companion, and a high-contrast option (v0.26.1).
+# Registered together (dark default, light companion, high-contrast option) so
+# all three appear in the ``/settings`` theme cycle and sort adjacently under
+# the ``rac-`` prefix.
 RAC_THEMES = (RAC_LANTERN, RAC_PARCHMENT, RAC_HIGH_CONTRAST)

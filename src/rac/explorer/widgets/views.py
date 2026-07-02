@@ -1,10 +1,16 @@
-"""Context-region views — the widgets the main screen swaps (v0.8.7).
+"""Context-region views: the swappable content panels of the Explorer.
 
-One stable frame, many views: home, artifact context (tabbed), health,
-recommendations, import, and command results all render inside the context
-panel via ``ContentSwitcher`` — the layout never jumps
-(DESIGN-visual-system). Views render UI state and own no intelligence
-(ADR-015); navigation requests bubble to the screen as messages.
+The main screen keeps one stable frame and slots a single view into its
+``ContentSwitcher`` — home, artifact context (tabbed), health,
+recommendations, import, stats, portfolio, settings, and command results.
+The frame never rebuilds, so the layout never jumps between views
+(DESIGN-visual-system).
+
+Views render already-computed UI state and own no repository intelligence
+(ADR-015): every fact arrives through the adapter, and navigation requests
+leave as messages the screen interprets. Meaning always rides on text, never
+colour alone (ADR-028), and nothing is written except through the adapter's
+preview-then-confirm writers (ADR-024).
 """
 
 from __future__ import annotations
@@ -58,9 +64,24 @@ from rac.explorer.widgets.sidebar import type_tag
 
 _PREVIEW_LINES = 20
 
+# Portfolio sort modes and status filters, in the order ``s`` / ``f`` cycle them.
+_PORTFOLIO_SORTS = ("type", "recency", "links", "status", "id")
+_PORTFOLIO_FILTERS = ("all", "invalid", "valid")
+
+# Textual routes a worker's completion to the widget that started it; the group
+# name then selects the handler inside that widget's ``on_worker_state_changed``.
+# Naming each group once keeps a typo from silently dropping a result — the
+# string values themselves are the dispatch contract.
+_WORKER_IMPORT = "import-convert"
+_WORKER_STATS = "stats-collect"
+_WORKER_RECENCY = "portfolio-recency"
+
+
+# --- messages the screen listens for -----------------------------------------
+
 
 class OpenArtifact(Message):
-    """A view asks the screen to open an artifact's context view."""
+    """Ask the screen to open an artifact's context view, optionally on a tab."""
 
     def __init__(self, path: str, tab: str | None = None) -> None:
         super().__init__()
@@ -69,11 +90,11 @@ class OpenArtifact(Message):
 
 
 class BrowseRequested(Message):
-    """The home view asks the screen to move focus into the sidebar."""
+    """Ask the screen to hand keyboard focus to the navigation sidebar."""
 
 
 class ShowRecommendations(Message):
-    """The health view asks the screen to show repository recommendations."""
+    """Ask the screen to switch to the repository recommendations view."""
 
 
 class SettingsChanged(Message):
@@ -84,17 +105,28 @@ class SettingsChanged(Message):
         self.key = key
 
 
+class ArtifactCreated(Message):
+    """A ``/new`` write succeeded — the screen reloads and opens the artifact."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+
+
+# --- shared helpers -----------------------------------------------------------
+
+
 def launch_editor(widget: Widget, adapter: ExplorerAdapter, path: str) -> editor_mod.EditorOutcome:
     """Open ``path`` in the configured editor from any widget (ADR-024).
 
-    Terminal editors run with the application suspended and resumed;
-    sessions that cannot suspend get guidance instead of a blind launch.
+    A terminal editor needs the terminal, so the app suspends while it runs and
+    resumes when it returns; a session that cannot suspend gets guidance instead
+    of a blind launch. The live watcher is paused across the hand-off (and
+    rescans on return) so a save made in the editor shows at once.
     """
     editor = adapter.resolved_editor()
     if editor is not None and editor_mod.is_terminal_editor(editor):
-        # The live watcher (v0.8.9) holds while the editor owns the terminal
-        # and rescans the moment it returns, so the saved edit shows at once.
-        # Duck-typed: importing MainScreen here would be circular.
+        # Duck-typed: importing MainScreen for its type would be circular.
         screen = widget.screen
         pause = getattr(screen, "pause_watching", lambda: None)
         resume = getattr(screen, "resume_watching", lambda: None)
@@ -118,8 +150,8 @@ def launch_editor(widget: Widget, adapter: ExplorerAdapter, path: str) -> editor
 def _highlight_first(listing: OptionList) -> None:
     """Highlight the first selectable option after a dynamic rebuild.
 
-    Rebuilt OptionLists start with no highlight, so Enter would be a no-op
-    until the user moves the cursor.
+    A freshly rebuilt OptionList carries no highlight, so Enter would be a no-op
+    until the user first moves the cursor.
     """
     for index in range(listing.option_count):
         if not listing.get_option_at_index(index).disabled:
@@ -127,11 +159,31 @@ def _highlight_first(listing: OptionList) -> None:
             return
 
 
-# --- rendering helpers (carried over from the v0.8.1–v0.8.5 screens) --------
+def _fuzzy(query: str, text: str) -> bool:
+    """Case-insensitive fuzzy match: substring first, else subsequence.
+
+    Cheap and predictable for an in-table name search — a substring hit, or the
+    query's characters appearing in order anywhere in the text.
+    """
+    q, t = query.casefold(), text.casefold()
+    if q in t:
+        return True
+    cursor = iter(t)
+    return all(char in cursor for char in q)
+
+
+def _negated_age(committed: datetime | None) -> float:
+    # Sort key for descending-by-recency: newer (larger timestamp) sorts first;
+    # an undatable artifact keys to 0.0 and is pushed below the dated ones by the
+    # companion "path not in recency" flag.
+    return -committed.timestamp() if committed is not None else 0.0
+
+
+# --- render helpers (pure text over UI state) --------------------------------
 
 
 def render_context(context: ContextState) -> str:
-    """The inspection tab as terminal-readable text (icons + labels, ADR-028)."""
+    """The inspection tab as terminal-readable text — icons plus labels (ADR-028)."""
     lines = [
         context.title or context.id,
         "",
@@ -169,15 +221,14 @@ def render_context(context: ContextState) -> str:
 def render_sections(view: RelationshipsView) -> str:
     """Relationships / Impact / Lineage in the knowledge-graph grammar.
 
-    DESIGN-knowledge-graph: a vertical dependency chain (``A ↓ B ↓ C``), an
-    Impact Analysis block ("Changing: X / May affect: …"), and a lineage
-    chain. Terminal readability over graphical complexity; the relationships
-    come from Core (ADR-015), this only renders them.
+    DESIGN-knowledge-graph: a vertical dependency chain rooted at the artifact
+    (the ``↓`` carries each edge's kind), an Impact Analysis block framing a
+    change, and a lineage chain of supersession steps. The relationships come
+    from Core (ADR-015); this only renders them, favouring terminal readability
+    over graphical complexity.
     """
     root = view.id
 
-    # Relationships — a chain rooted at the artifact; the ↓ carries the kind,
-    # fanning out vertically when several edges are declared.
     lines = [view.title or view.id, "", "Relationships", "", f"  {root}"]
     if view.outgoing:
         for link in view.outgoing:
@@ -186,14 +237,12 @@ def render_sections(view: RelationshipsView) -> str:
     else:
         lines.append("  none declared")
 
-    # Impact Analysis — framing a change to this artifact.
     lines.extend(["", "Impact Analysis", "", "Changing:", f"  {root}", "", "May affect:"])
     if view.impact:
         lines.extend(f"  {link.label} ({link.kind})" for link in view.impact)
     else:
         lines.append("  nothing depends on this artifact")
 
-    # Lineage — supersession steps joined into a vertical chain.
     lines.extend(["", "Lineage", ""])
     if view.lineage:
         for index, line in enumerate(view.lineage):
@@ -206,7 +255,7 @@ def render_sections(view: RelationshipsView) -> str:
 
 
 def render_health(health: HealthState) -> str:
-    """The score and the four areas as terminal-readable text."""
+    """The score and the four health areas as terminal-readable text."""
     lines = [
         f"Repository Health  {health.directory}",
         "",
@@ -220,7 +269,7 @@ def render_health(health: HealthState) -> str:
 
 
 def render_recommendation(row: RecommendationRow) -> str:
-    """One recommendation as a multi-line block: finding → impact → action."""
+    """One recommendation as a block: finding → impact → action."""
     return (
         f"{row.severity_label}  ·  {row.category}\n"
         f"  {row.identifier}  {row.finding}\n"
@@ -232,8 +281,8 @@ def render_recommendation(row: RecommendationRow) -> str:
 def render_preview(preview: ImportPreview) -> str:
     """A converted document and its target, awaiting confirmation.
 
-    Carries no key hints of its own: the status line covers the import view
-    and the confirm modal renders its own chips (DESIGN-visual-system).
+    Carries no key hints of its own: the status line covers the import view, and
+    the confirm modal renders its own chips (DESIGN-visual-system).
     """
     body = preview.markdown.splitlines()
     shown = body[:_PREVIEW_LINES]
@@ -261,9 +310,9 @@ class MascotArt(Static):
 
     Renders the current frame and, when interaction is enabled, takes focus so
     Enter or a click appends the next response beneath the figure — inline,
-    never a popup. It owns no functionality and reveals no hidden features; the
+    never a popup. It owns no functionality and reveals nothing hidden: the
     response only names existing commands. Selection works with animations off
-    (reduced motion) and the response is plain text (screen readers, ADR-028).
+    (reduced motion), and the response is plain text (screen readers, ADR-028).
     """
 
     def __init__(self, *, id: str | None = None) -> None:
@@ -286,14 +335,14 @@ class MascotArt(Static):
         self._redraw()
 
     def advance(self) -> None:
-        """Cycle to the next animation frame, preserving any response."""
+        """Cycle to the next animation frame, keeping any response on screen."""
         if self._state is None or not self._animations:
             return
         self._frame += 1
         self._redraw()
 
     def activate(self) -> None:
-        """Select the mascot: surface the next response (no-op when inert)."""
+        """Select the mascot: surface the next response (a no-op when inert)."""
         if self._state is None or not self._interactive:
             return
         self._selections += 1
@@ -318,12 +367,12 @@ class MascotArt(Static):
 
 
 class HomeView(Vertical):
-    """The repository summary: loading → summary/onboarding → error.
+    """The repository summary: loading → summary / onboarding → error.
 
-    Owns the mascot (v0.8.8): a frame sequence cycled on a slow timer, only
-    while visible and while animations are enabled (DESIGN-mascot-animations).
-    The searching state plays during a load; welcome and empty states keep
-    theirs; everything else hides the mascot.
+    Owns the mascot: a frame sequence cycled on a slow timer, only while the
+    view is visible and animations are enabled (DESIGN-mascot-animations). The
+    searching state plays during a load; the welcome and empty states keep
+    theirs; every other state hides the mascot.
     """
 
     can_focus = True
@@ -332,10 +381,10 @@ class HomeView(Vertical):
     def __init__(self, adapter: ExplorerAdapter) -> None:
         super().__init__(id="view-home")
         self.adapter = adapter
-        # The summary held back while first-run onboarding is on screen;
-        # Enter dismisses onboarding and reveals it (no forced setup).
+        # The summary held back while first-run onboarding is on screen; Enter
+        # dismisses onboarding and reveals it (RAC never forces setup).
         self._onboarding_summary: RepositorySummaryState | None = None
-        # The optional editor step between welcome and summary (v0.8.11).
+        # The optional editor step slotted between welcome and summary.
         self._prompting_editor = False
         self._mascot_state: str | None = None
 
@@ -362,7 +411,7 @@ class HomeView(Vertical):
     def panel(self) -> RepositoryPanel:
         return self.query_one(RepositoryPanel)
 
-    # --- the mascot -----------------------------------------------------------
+    # --- the mascot ----------------------------------------------------------
 
     def show_mascot(self, state: str) -> None:
         prefs = self.adapter.preferences
@@ -382,7 +431,7 @@ class HomeView(Vertical):
             return
         self.query_one("#mascot", MascotArt).advance()
 
-    # --- load states ------------------------------------------------------------
+    # --- load states ---------------------------------------------------------
 
     def show_progress(self, progress: LoadProgressState) -> None:
         # Loading and welcome compose centred ("welcome"); the summary reads
@@ -426,11 +475,13 @@ class HomeView(Vertical):
             lines.append("Recent repositories: " + ", ".join(recent[:3]))
         return "\n".join(lines)
 
+    # --- onboarding advance --------------------------------------------------
+
     def action_continue(self) -> None:
         if self._onboarding_summary is not None:
             if not self._prompting_editor:
-                # The optional editor step (v0.8.11): one prefilled,
-                # skippable line between the welcome and the summary.
+                # The optional editor step: one prefilled, skippable line between
+                # the welcome and the summary.
                 self._prompting_editor = True
                 self.panel.show_editor_prompt(editor_mod.resolve_editor(""))
                 field = self.query_one("#firstrun-editor", Input)
@@ -441,14 +492,14 @@ class HomeView(Vertical):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
-        # Enter accepts: an empty value stores "" — the $VISUAL/$EDITOR
-        # fallback — matching /settings semantics (ADR-024: explorer.json only).
+        # Enter accepts: an empty value stores "" — the $VISUAL/$EDITOR fallback,
+        # matching /settings semantics (ADR-024: explorer.json is the only store).
         self.adapter.save_preferences(replace(self.adapter.preferences, editor=event.value.strip()))
         self._finish_onboarding()
 
     def on_key(self, event: events.Key) -> None:
-        # Esc skips the editor step without writing anything; today's
-        # behavior exactly. Only intercepted while the prompt is up.
+        # Esc skips the editor step without writing anything; intercepted only
+        # while the prompt is up.
         if event.key == "escape" and self._prompting_editor:
             event.stop()
             self._finish_onboarding()
@@ -470,8 +521,8 @@ class ContextView(Vertical):
 
     Content (the default tab) renders the document's Markdown read-only
     (ADR-024) and takes the keyboard on open: the pane scrolls with
-    `j`/`k`/PgUp/PgDn, `←`/`→` switch tabs from anywhere in the view, and
-    artifact references inside the document navigate in place (v0.8.8).
+    ``j``/``k``/PgUp/PgDn, ``←``/``→`` switch tabs from anywhere in the view,
+    and artifact references inside the document navigate in place.
     """
 
     BINDINGS = [
@@ -555,8 +606,8 @@ class ContextView(Vertical):
         self.query_one("#content-scroll", VerticalScroll).scroll_home(animate=False)
 
     def take_focus(self) -> None:
-        # The document is the point: the content pane takes the keyboard on
-        # open; other tabs hand focus to the tab strip.
+        # The document is the point: the content pane takes the keyboard on open;
+        # other tabs hand focus to the tab strip.
         if self.query_one(TabbedContent).active == "tab-content":
             self.query_one("#content-scroll", VerticalScroll).focus()
         else:
@@ -573,8 +624,8 @@ class ContextView(Vertical):
     def restore_scroll(self, y: float) -> None:
         """Put the document back where it was after an in-place refresh."""
         pane = self.query_one("#content-scroll", VerticalScroll)
-        # After the Markdown re-renders: the target offset only exists once
-        # the new content has a height.
+        # After the Markdown re-renders, the target offset only exists once the
+        # new content has a height.
         self.call_after_refresh(lambda: pane.scroll_to(y=y, animate=False))
 
     def action_scroll_content(self, direction: int) -> None:
@@ -590,8 +641,8 @@ class ContextView(Vertical):
             tabs.action_previous_tab()
 
     def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
-        # References inside the document are walkable hypertext: resolve
-        # through the adapter and navigate with the same history as any open.
+        # References inside the document are walkable hypertext: resolve through
+        # the adapter and navigate with the same history as any other open.
         event.stop()
         if self.context is None:
             return
@@ -619,7 +670,7 @@ class ContextView(Vertical):
 
 
 class HealthView(Vertical):
-    """Score + areas + a selectable attention list (v0.8.2 renderers)."""
+    """Score, the four areas, and a selectable attention list."""
 
     BINDINGS = [Binding("r", "recommendations", "Recommendations")]
 
@@ -634,7 +685,7 @@ class HealthView(Vertical):
     def show_health(self, health: HealthState) -> None:
         self.health = health
         # A plain section line, not another border: the region border already
-        # frames this view (v0.8.8 de-dup).
+        # frames this view.
         self.query_one("#health-overview", Static).update(render_health(health) + "\n\nAttention")
         # Options are keyed by list index, not artifact path: several findings
         # may concern the same artifact, and OptionList ids must be unique.
@@ -655,8 +706,8 @@ class HealthView(Vertical):
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_id is None or self.health is None:
             return
-        # Drill-down (v0.8.9): an attention item lands on the tab that
-        # explains it — the Inspection diagnostics — not on the document.
+        # Drill-down: an attention item lands on the tab that explains it — the
+        # Inspection diagnostics — not on the document.
         path = self.health.attention[int(event.option_id)].path
         self.post_message(OpenArtifact(path, tab="tab-inspection"))
 
@@ -665,7 +716,7 @@ class HealthView(Vertical):
 
 
 class RecommendationsView(Vertical):
-    """Category-grouped recommendations; Enter opens the artifact (v0.8.3)."""
+    """Category-grouped recommendations; Enter opens the artifact."""
 
     BINDINGS = [Binding("x", "export", "Export")]
 
@@ -707,34 +758,26 @@ class RecommendationsView(Vertical):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_id is not None:
-            # Drill-down (v0.8.9): a recommendation opens the artifact on its
-            # own Findings tab, where this finding is shown in context.
+            # Drill-down: a recommendation opens the artifact on its own Findings
+            # tab, where this finding is shown in context.
             self.post_message(OpenArtifact(self._paths[int(event.option_id)], tab="tab-findings"))
 
     def action_export(self) -> None:
         result = self.adapter.export_recommendations()
         if isinstance(result, str):
             return  # nothing to export
+        # Lazy import: pulling the screen at module load would be circular.
         from rac.explorer.screens.confirm import ConfirmWriteScreen
 
         self.app.push_screen(ConfirmWriteScreen(self.adapter, result))
 
 
-class ArtifactCreated(Message):
-    """A `/new` write succeeded — the screen reloads and opens the artifact."""
-
-    def __init__(self, path: str) -> None:
-        super().__init__()
-        self.path = path
-
-
 class ImportView(Vertical):
-    """The guided write workflow: preview (y confirms) → result (v0.8.4).
+    """The guided write workflow: preview (``y`` confirms) → result.
 
-    One confirm path for both writers: document import (conversion runs off
-    the UI thread) and `/new` template creation (v0.8.10, rendered
-    instantly). Nothing is written until the user confirms, and writes never
-    overwrite (Initiative 4, ADR-024).
+    One confirm path serves both writers: document import (conversion runs off
+    the UI thread) and ``/new`` template creation (rendered instantly). Nothing
+    is written until the user confirms, and writes never overwrite (ADR-024).
     """
 
     can_focus = True
@@ -746,8 +789,8 @@ class ImportView(Vertical):
         self.source = ""
         self.target: str | None = None
         self.preview: ImportPreview | None = None
-        # The pending write for the confirmed preview; set with the preview
-        # so `y` runs the right Core writer (import vs create).
+        # The pending write for the confirmed preview; set alongside the preview
+        # so ``y`` runs the right Core writer (import vs create).
         self._writer: Callable[[], str] | None = None
         self._done = False
 
@@ -764,8 +807,8 @@ class ImportView(Vertical):
         self._convert()
 
     def start_creation(self, artifact_type: str, target: str) -> None:
-        """Preview a `/new` template; the confirmed write goes through Core's
-        create service, which mints the ID (v0.8.10)."""
+        """Preview a ``/new`` template; the confirmed write goes through Core's
+        create service, which mints the ID."""
         self.preview = None
         self._writer = None
         self._done = False
@@ -779,7 +822,7 @@ class ImportView(Vertical):
             self._done = True
             panel.update(f"✗ Cannot create\n\n{result}\n\nPress Esc to go back.")
 
-    @work(thread=True, exclusive=True, group="import-convert")
+    @work(thread=True, exclusive=True, group=_WORKER_IMPORT)
     def _convert(self) -> ImportPreview | str:
         worker = get_current_worker()
         if worker.is_cancelled:  # pragma: no cover - defensive
@@ -787,7 +830,7 @@ class ImportView(Vertical):
         return self.adapter.import_preview(self.source, self.target)
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        if event.worker.group != "import-convert" or event.state != WorkerState.SUCCESS:
+        if event.worker.group != _WORKER_IMPORT or event.state != WorkerState.SUCCESS:
             return
         result = event.worker.result
         panel = self.query_one("#import-panel", Static)
@@ -813,11 +856,11 @@ class ImportView(Vertical):
 
 
 class StatsView(Vertical):
-    """The portfolio statistics dashboard (v0.8.10).
+    """The portfolio statistics dashboard.
 
-    Collection re-walks the corpus, so it runs in a worker on request —
-    never during the repository load. The dashboard scrolls under the
-    keyboard like the content tab.
+    Collection re-walks the corpus, so it runs in a worker on request — never on
+    the repository load path. The dashboard scrolls under the keyboard like the
+    content tab.
     """
 
     BINDINGS = [
@@ -837,12 +880,12 @@ class StatsView(Vertical):
         self.query_one("#stats-panel", Static).update("Collecting portfolio statistics…")
         self._collect()
 
-    @work(thread=True, exclusive=True, group="stats-collect")
+    @work(thread=True, exclusive=True, group=_WORKER_STATS)
     def _collect(self) -> StatsState:
         return self.adapter.stats_state()
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        if event.worker.group != "stats-collect" or event.state != WorkerState.SUCCESS:
+        if event.worker.group != _WORKER_STATS or event.state != WorkerState.SUCCESS:
             return
         stats = event.worker.result
         if isinstance(stats, StatsState):
@@ -862,19 +905,14 @@ class StatsView(Vertical):
         )
 
 
-# Portfolio sort modes and status filters, in the order `s` / `f` cycle them.
-_PORTFOLIO_SORTS = ("type", "recency", "links", "status", "id")
-_PORTFOLIO_FILTERS = ("all", "invalid", "valid")
-
-
 class PortfolioView(Vertical):
-    """The portfolio list (v0.26.2): every artifact as a sortable DataTable.
+    """The portfolio list: every artifact as a sortable DataTable.
 
     Type, id, title, status, and link count render from already-loaded state
     (ADR-015); the recency column arrives from a git worker after the table is
-    on screen, since git is too slow for the load path (ADR-045). Enter opens
-    the highlighted artifact; ``s`` cycles the sort, ``f`` the status filter.
-    A name search runs from the command (``/list <text>``) or live in the box
+    on screen, because git is too slow for the load path (ADR-045). Enter opens
+    the highlighted artifact; ``s`` cycles the sort, ``f`` the status filter. A
+    name search runs from the command (``/list <text>``) or live in the box
     (``ctrl+f``), and ``/list <type>`` scopes by artifact type.
     """
 
@@ -886,8 +924,8 @@ class PortfolioView(Vertical):
 
     class Followed(Message):
         """The master row changed in the split layout — open it in the detail
-        pane (v0.26.3). Distinct from the Enter-to-open path so it only fires
-        when the view is acting as a master."""
+        pane. Distinct from the Enter-to-open path so it only fires while the
+        view is acting as a master."""
 
         def __init__(self, path: str) -> None:
             super().__init__()
@@ -910,10 +948,9 @@ class PortfolioView(Vertical):
         yield DataTable(id="portfolio-table", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self) -> None:
-        # Fixed widths for the scannable columns keep them tidy and aligned;
-        # ID and Title are auto-sized so they fit the longest value in the
-        # column (the table scrolls horizontally if needed). Tune the fixed
-        # widths here (v0.26.2).
+        # Fixed widths keep the scannable columns tidy and aligned; ID and Title
+        # are auto-sized to fit the longest value (the table scrolls horizontally
+        # if needed).
         table = self.query_one(DataTable)
         table.add_column("Type", width=4)
         table.add_column("ID")  # auto-width: as wide as the longest id
@@ -931,8 +968,8 @@ class PortfolioView(Vertical):
         self._rows = state.rows
         self._type = artifact_type
         self._query = query or ""
-        # Reflect a command-seeded query in the search box; setting the value
-        # re-renders through on_input_changed, so the rebuild below is enough.
+        # Reflect a command-seeded query in the search box; the rebuild below is
+        # enough (setting .value would re-render through on_input_changed anyway).
         self.query_one("#portfolio-search", Input).value = self._query
         self._rebuild()
         self._load_recency()
@@ -971,7 +1008,7 @@ class PortfolioView(Vertical):
                     _negated_age(self._recency.get(r.path)),
                 ),
             )
-        return sorted(rows, key=lambda r: (r.type, r.id))  # type (default)
+        return sorted(rows, key=lambda r: (r.type, r.id))  # type (the default)
 
     def _rebuild(self) -> None:
         table = self.query_one(DataTable)
@@ -1001,12 +1038,12 @@ class PortfolioView(Vertical):
 
     # --- recency worker (git, off the load path) -----------------------------
 
-    @work(thread=True, exclusive=True, group="portfolio-recency")
+    @work(thread=True, exclusive=True, group=_WORKER_RECENCY)
     def _load_recency(self) -> dict[str, datetime]:
         return self.adapter.recency_index()
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        if event.worker.group != "portfolio-recency" or event.state != WorkerState.SUCCESS:
+        if event.worker.group != _WORKER_RECENCY or event.state != WorkerState.SUCCESS:
             return
         result = event.worker.result
         if isinstance(result, dict):
@@ -1032,18 +1069,18 @@ class PortfolioView(Vertical):
             self.post_message(OpenArtifact(path))
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        # Split layout (v0.26.3): the highlighted row drives the detail pane as
-        # the cursor moves. Off in the frame layout, where Enter opens instead.
+        # Split layout: the highlighted row drives the detail pane as the cursor
+        # moves. Off in the frame layout, where Enter opens instead.
         if self._follow and event.row_key is not None and event.row_key.value is not None:
             self.post_message(self.Followed(event.row_key.value))
 
-    # --- split layout (master pane, v0.26.3) ---------------------------------
+    # --- split layout (master pane) ------------------------------------------
 
     def set_follow(self, follow: bool) -> None:
         self._follow = follow
 
     def reveal_first(self) -> None:
-        """Open the first visible row in the detail pane; no-op when empty."""
+        """Open the first visible row in the detail pane; a no-op when empty."""
         table = self.query_one(DataTable)
         if self._follow and table.row_count:
             first = next(iter(table.rows))
@@ -1075,34 +1112,19 @@ class PortfolioView(Vertical):
             self.query_one(DataTable).focus()
 
     def on_key(self, event: events.Key) -> None:
-        # Esc from the search box returns to the table (not all the way back),
-        # so the global Esc=back still works when the table has focus.
+        # Esc from the search box returns to the table (not all the way back), so
+        # the global Esc=back still works once the table holds focus.
         if event.key == "escape" and self.query_one("#portfolio-search", Input).has_focus:
             event.stop()
             self.query_one(DataTable).focus()
-
-
-def _fuzzy(query: str, text: str) -> bool:
-    """Case-insensitive fuzzy match: substring, else subsequence (chars in
-    order). Cheap and predictable for an in-table name search (v0.26.2)."""
-    q, t = query.casefold(), text.casefold()
-    if q in t:
-        return True
-    cursor = iter(t)
-    return all(char in cursor for char in q)
-
-
-def _negated_age(committed: datetime | None) -> float:
-    # A descending-by-recency sort key: newer (larger timestamp) sorts first.
-    return -committed.timestamp() if committed is not None else 0.0
 
 
 class SettingsView(Vertical):
     """Interactive settings — Explorer edits its own config only (ADR-024).
 
     Enter changes the highlighted setting: enumerations cycle (the theme
-    live-previews), booleans toggle, and the editor row takes typed input.
-    Every change persists immediately through the adapter (v0.8.8).
+    live-previews), booleans toggle, and the editor row takes typed input. Every
+    change persists immediately through the adapter.
     """
 
     def __init__(self, adapter: ExplorerAdapter) -> None:
@@ -1159,11 +1181,11 @@ class SettingsView(Vertical):
         elif key == "mascot_interaction":
             updated = replace(prefs, mascot_interaction=not prefs.mascot_interaction)
         elif key == "artifact_grouping":
-            # folders → type → flat → folders (the canonical order, v0.8.10).
+            # folders → type → flat → folders (the canonical order).
             current = GROUPINGS.index(prefs.artifact_grouping)
             updated = replace(prefs, artifact_grouping=GROUPINGS[(current + 1) % len(GROUPINGS)])
         elif key == "layout":
-            # frame → split → frame (v0.26.3).
+            # frame → split → frame.
             current = LAYOUTS.index(prefs.layout) if prefs.layout in LAYOUTS else 0
             updated = replace(prefs, layout=LAYOUTS[(current + 1) % len(LAYOUTS)])
         else:  # editor — reveal the inline input instead of cycling
@@ -1198,13 +1220,12 @@ class SettingsView(Vertical):
 
 
 class ResultsView(Vertical):
-    """Search results, lookups, and help — in the context region.
+    """Search results, lookups, and help — inside the context region.
 
     Results render here rather than in a modal, so the layout never jumps
-    (DESIGN-command-surface). Artifact results can be narrowed by type from
-    the keyboard: `f` cycles all → each type present → all (v0.8.9). The
-    filter is presentation state only — it re-filters rows the search
-    already returned.
+    (DESIGN-command-surface). Artifact results can be narrowed by type from the
+    keyboard: ``f`` cycles all → each type present → all. The filter is
+    presentation state only — it re-filters rows the search already returned.
     """
 
     BINDINGS = [Binding("f", "cycle_filter", "Filter")]
@@ -1235,7 +1256,7 @@ class ResultsView(Vertical):
             _highlight_first(listing)
 
     def show_lookup(self, rows: tuple[ArtifactRow, ...], message: str | None = None) -> None:
-        """Artifact results; `f` narrows them by type."""
+        """Artifact results; ``f`` narrows them by type."""
         self._rows = rows
         self._message = message
         self._filter = None

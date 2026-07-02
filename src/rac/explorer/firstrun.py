@@ -1,10 +1,9 @@
-"""First-run marker — the only state Explorer persists in v0.8.1.
+"""First-run marker — a single onboarding flag under the XDG state directory.
 
-Returning users skip onboarding (DESIGN-first-run-experience); everything
-else — last repository, views, preferences — is deliberately not stored
-until v0.8.6 workspace persistence. The marker lives under the XDG state
-directory and persistence failures are silently tolerated: onboarding
-showing twice is better than a crash on a read-only home.
+Returning users skip onboarding (DESIGN-first-run-experience). Persistence
+failures are deliberately swallowed: showing onboarding twice on a read-only
+home is a far better outcome than crashing the Explorer. This module never
+imports Textual.
 """
 
 from __future__ import annotations

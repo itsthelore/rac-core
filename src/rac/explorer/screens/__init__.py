@@ -1,1 +1,1 @@
-"""Explorer screens — the main workspace frame and the confirm-write modal."""
+"""Explorer screens: the persistent workspace frame and the confirm-write modal."""

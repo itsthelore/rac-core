@@ -1,10 +1,11 @@
-"""Explorer adapter — the boundary between RAC services and the TUI (v0.8.0).
+"""Explorer adapter — the one bridge between RAC services and the TUI (v0.8.0).
 
-The adapter invokes RAC services, translates Core models into UI state, and
-owns no repository intelligence (ADR-015). It is the single place the
-Explorer touches ``rac.services`` / ``rac.core``; widgets depend on
-:mod:`rac.explorer.state` only. This module never imports Textual, so it is
-testable without a terminal.
+The adapter calls RAC services, folds their Core models into the frozen
+:mod:`rac.explorer.state` shapes the widgets render, and holds no repository
+intelligence of its own (ADR-015). Because it is the *only* Explorer module
+that touches ``rac.core`` / ``rac.services``, the isolation gate lets it import
+them while every widget must go through it. It never imports Textual, so the
+whole boundary is exercisable without a terminal.
 """
 
 from __future__ import annotations
@@ -80,7 +81,9 @@ from .state import (
 )
 from .workspace import Workspace, load_workspace, save_workspace
 
-# Presentation labels for the analysis phases that follow the scan.
+# Presentation labels for the analysis phases that follow the scan. The scan
+# phase is labelled separately (it carries a running counter), so it is
+# deliberately absent here.
 _PHASE_LABELS = {
     "index": "Indexing artifacts",
     "validate": "Validating artifacts",
@@ -88,12 +91,32 @@ _PHASE_LABELS = {
     "portfolio": "Calculating portfolio",
 }
 
-# Validation status → text-bearing label (never colour or symbol alone).
-# One chip casing everywhere (DESIGN-visual-system, v0.8.8).
+# Validation status → text-bearing chip (never colour or symbol alone,
+# ADR-028). One casing everywhere (DESIGN-visual-system, v0.8.8).
 _STATUS_LABELS = {
     "valid": "✓ Valid",
     "invalid": "✗ Invalid",
     "skipped": "– Unknown",
+}
+
+# The four recommendation categories (DESIGN-recommendations), fixed order —
+# present categories always render in this sequence.
+_CATEGORY_ORDER = ("Validation", "Relationships", "Repository Health", "Quality")
+
+# Core review-finding code → presentation category. Anything unmapped is a
+# quality suggestion.
+_CODE_CATEGORY = {
+    ATTENTION_INVALID: "Validation",
+    REVIEW_UNKNOWN_ARTIFACT: "Validation",
+    ATTENTION_BROKEN_RELATIONSHIP: "Relationships",
+    ATTENTION_MISSING_RECOMMENDED: "Quality",
+}
+
+# Core severity → the three presentation tiers; the definitions stay in Core.
+_SEVERITY_LABEL = {
+    "error": "✗ Critical",
+    "warning": "! Warning",
+    "info": "· Suggestion",
 }
 
 ProgressHandler = Callable[[LoadProgressState], None]
@@ -108,39 +131,21 @@ def _status_label(status: str) -> str:
 
 
 def _area_label(has_findings: bool, *, error: bool = False) -> str:
-    """A health area's status from a Core fact (no Explorer thresholds)."""
+    """A health area's status derived from a Core fact, not an Explorer band."""
     if not has_findings:
         return "✓ Healthy"
     return "✗ Error" if error else "! Needs Attention"
 
 
-# The four recommendation categories (DESIGN-recommendations), fixed order.
-_CATEGORY_ORDER = ("Validation", "Relationships", "Repository Health", "Quality")
-
-# Core review finding code → presentation category.
-_CODE_CATEGORY = {
-    ATTENTION_INVALID: "Validation",
-    REVIEW_UNKNOWN_ARTIFACT: "Validation",
-    ATTENTION_BROKEN_RELATIONSHIP: "Relationships",
-    ATTENTION_MISSING_RECOMMENDED: "Quality",
-}
-
-# Core severity → the three presentation tiers (definitions stay in Core).
-_SEVERITY_LABEL = {
-    "error": "✗ Critical",
-    "warning": "! Warning",
-    "info": "· Suggestion",
-}
-
-
 def _recommendation(issue: ReviewIssue) -> RecommendationRow:
+    # Core owns the finding, its impact sentence, and its action (v0.8.11); the
+    # adapter only re-labels the code and severity for display.
     return RecommendationRow(
         path=issue.path,
         identifier=issue.identifier,
         category=_CODE_CATEGORY.get(issue.code, "Quality"),
         severity_label=_SEVERITY_LABEL.get(issue.severity, issue.severity),
         finding=issue.message,
-        # Core owns the impact sentence (v0.8.11) — the adapter renders it.
         impact=issue.impact,
         action=issue.action,
     )
@@ -161,7 +166,7 @@ def _display_id(artifact: Artifact) -> str:
 
     The canonical ``id`` is the opaque ``RAC-…`` key; the readable reference
     (``adr-028``, the filename stem) lives in the aliases. Prefer the shortest
-    non-opaque alias, upper-casing the ``letters-digits`` form (``ADR-028``).
+    non-opaque alias and upper-case the ``letters-digits`` form (``ADR-028``).
     """
     candidates = [alias for alias in artifact.aliases if not alias.startswith("RAC-")]
     if not candidates:
@@ -171,13 +176,13 @@ def _display_id(artifact: Artifact) -> str:
 
 
 def _directory_tree(rows: tuple[ArtifactRow, ...], directory: str) -> DirectoryNode:
-    """The repository directory tree from artifact paths (folders grouping).
+    """Fold artifact paths into the repository directory tree (folders grouping).
 
-    Paths are taken relative to the repository root and pinned to posix so
-    the sidebar's expansion keys stay stable across platforms. Empty
-    directories cannot occur — the tree is derived from the artifacts. A
-    path outside the root (cannot happen from the scanner; normalized
-    defensively) lands at the top level.
+    Paths are taken relative to the repository root and pinned to posix so the
+    sidebar's expansion keys stay stable across platforms. Empty directories
+    cannot occur — the tree is derived from the artifacts themselves. A path
+    that somehow escapes the root (the scanner never produces one; guarded
+    defensively) is dropped to the top level.
     """
     root: dict = {"dirs": {}, "rows": []}
     for row in rows:
@@ -202,6 +207,8 @@ def _directory_tree(rows: tuple[ArtifactRow, ...], directory: str) -> DirectoryN
 
 def _progress_state(progress: Progress) -> LoadProgressState:
     if progress.phase == "scan":
+        # Only the scan phase reports a running total; show the counter once
+        # there is one to show.
         counter = f" ({progress.completed}/{progress.total})" if progress.total else ""
         label = f"Scanning artifacts{counter}"
     else:
@@ -217,25 +224,30 @@ def _progress_state(progress: Progress) -> LoadProgressState:
 class ExplorerAdapter:
     """Loads a repository through Core services and yields UI state.
 
-    Failures surface as :class:`LoadErrorState` (Initiative 6 — recoverable,
-    never a crash); a cancelled load returns ``None`` so workers can discard
-    it without handling Core exception types. The last successful
-    :class:`Repository` is kept for navigation milestones (v0.8.1+).
+    Unexpected failures surface as :class:`LoadErrorState` (recoverable, never
+    a crash); a cancelled load returns ``None`` so a worker can discard it
+    without knowing Core's exception types. The last successful
+    :class:`Repository` is kept for navigation.
     """
 
     def __init__(self, directory: str, recursive: bool = True) -> None:
         self.directory = directory
         self.recursive = recursive
         self.repository: Repository | None = None
-        # Local config and continuity (v0.8.6) — read-only at construction;
-        # writes happen on explicit launch/navigation events.
+        # Local config and continuity (v0.8.6): read at construction; writes
+        # happen only on explicit launch/navigation events.
         self.preferences: Preferences = load_preferences()
         self.workspace: Workspace = load_workspace()
+        # Whole-portfolio review is the hottest navigation cost — every
+        # artifact open would otherwise re-run it over the entire portfolio.
+        # Memoize it against the repository it was built from; a load is the
+        # only thing that invalidates it.
+        self._recommendations: tuple[Repository, RecommendationsState] | None = None
 
     # --- workspace continuity (v0.8.6) -------------------------------------
 
     def record_open(self) -> None:
-        """Remember this repository as recently opened (Initiative 1)."""
+        """Remember this repository as recently opened."""
         self.workspace.record_open(self.directory)
         save_workspace(self.workspace)
 
@@ -273,6 +285,8 @@ class ExplorerAdapter:
             return None
         return path if any(a.path == path for a in self.repository.artifacts) else None
 
+    # --- loading -----------------------------------------------------------
+
     def load(
         self,
         *,
@@ -300,15 +314,16 @@ class ExplorerAdapter:
             )
 
         self.repository = repository
+        self._recommendations = None  # a fresh load invalidates the memoized review
         return self._summary(repository)
 
     def fingerprint(self) -> tuple[tuple[str, int], ...] | None:
-        """A snapshot of the corpus files for change detection (v0.8.9).
+        """A cheap snapshot of the corpus files for change detection (v0.8.9).
 
         Paths and mtimes from the same discovery the loader uses
-        (``find_markdown_files``) — no parsing, so a scan stays cheap enough
-        to repeat on a timer. ``None`` means the directory could not be
-        listed; callers treat that as no signal, never as a change.
+        (``find_markdown_files``) — no parsing, so a scan is cheap enough to
+        repeat on a timer. ``None`` means the directory could not be listed;
+        callers read that as no signal, never as a change.
         """
         try:
             paths = find_markdown_files(self.directory, recursive=self.recursive)
@@ -319,7 +334,7 @@ class ExplorerAdapter:
             try:
                 entries.append((str(path), path.stat().st_mtime_ns))
             except OSError:
-                continue  # deleted between listing and stat; the next scan settles it
+                continue  # vanished between listing and stat; the next scan settles it
         return tuple(entries)
 
     @staticmethod
@@ -327,16 +342,14 @@ class ExplorerAdapter:
         portfolio = repository.portfolio
         severities = [d.severity for d in repository.diagnostics]
         incomplete = sum(1 for a in repository.artifacts if a.missing_recommended)
-        attention = tuple(
-            line
-            for count, noun in (
-                (portfolio.invalid_artifacts, "invalid artifact"),
-                (portfolio.relationships.broken, "broken relationship"),
-                (incomplete, "incomplete artifact"),
-            )
-            if count
-            for line in (_plural(count, noun),)
+        # Attention lines aggregate the counts that matter, in priority order;
+        # a zero count contributes no line.
+        attention_counts = (
+            (portfolio.invalid_artifacts, "invalid artifact"),
+            (portfolio.relationships.broken, "broken relationship"),
+            (incomplete, "incomplete artifact"),
         )
+        attention = tuple(_plural(count, noun) for count, noun in attention_counts if count)
         return RepositorySummaryState(
             directory=repository.directory,
             artifact_total=portfolio.total_artifacts,
@@ -349,20 +362,21 @@ class ExplorerAdapter:
             attention=attention,
         )
 
-    # --- navigation state (v0.8.1) — requires a loaded repository -----------
+    # --- navigation state (v0.8.1) — requires a loaded repository ----------
 
     def browser_state(self, artifact_type: str | None = None) -> BrowserState | None:
-        """Artifacts grouped by type for the browser, or None before a load.
+        """Artifacts grouped for the browser, or None before a load.
 
-        ``artifact_type`` narrows the browser to one group.
+        ``artifact_type`` narrows the browser to a single type group.
         """
-        if self.repository is None:
-            return None
         repository = self.repository
-        if artifact_type is None and self.preferences.artifact_grouping == GROUPING_FOLDERS:
-            # Folders grouping (the default, v0.8.10): the tree mirrors the
-            # repository's directory structure; groups stay populated so
-            # status lookups need no second path.
+        if repository is None:
+            return None
+        grouping = self.preferences.artifact_grouping
+        if artifact_type is None and grouping == GROUPING_FOLDERS:
+            # Folders grouping (default, v0.8.10): a single "all" group plus a
+            # tree mirroring the on-disk structure. Groups stay populated so
+            # status lookups need no second pass.
             rows = tuple(_row(a) for a in repository.artifacts)
             return BrowserState(
                 directory=repository.directory,
@@ -370,14 +384,16 @@ class ExplorerAdapter:
                 total=len(rows),
                 tree=_directory_tree(rows, repository.directory),
             )
-        if artifact_type is None and self.preferences.artifact_grouping == GROUPING_FLAT:
-            # Flat grouping (preference): one list, no type headers.
+        if artifact_type is None and grouping == GROUPING_FLAT:
+            # Flat grouping: one list, no headers, no tree.
             rows = tuple(_row(a) for a in repository.artifacts)
             return BrowserState(
                 directory=repository.directory,
                 groups=(("all", rows),),
                 total=len(rows),
             )
+        # Type grouping (or a single-type filter): follow the portfolio's
+        # walk order so the group sequence is deterministic.
         groups = tuple(
             (group_type, tuple(_row(a) for a in repository.artifacts_of_type(group_type)))
             for group_type, count in repository.portfolio.by_type.items()
@@ -395,7 +411,7 @@ class ExplorerAdapter:
         ``link_count`` is the artifact's degree in the loaded relationship
         graph — outgoing plus incoming edges — so the table renders from
         already-loaded state with no git or extra Core call (ADR-015). Recency
-        is filled later by :meth:`recency_labels`, off the UI thread.
+        is filled later off the UI thread.
         """
         repository = self.repository
         if repository is None:
@@ -420,16 +436,19 @@ class ExplorerAdapter:
         return PortfolioState(rows=rows)
 
     def recency_index(self) -> dict[str, datetime]:
-        """Per-path last-committed times from git (ADR-045), or empty when git
-        is unavailable. Expensive — a git call per artifact — so the portfolio
-        view runs it in a worker, never the load path (v0.26.2). Datetimes (not
-        labels) so the view can both format and sort by age.
+        """Per-path last-committed times from git (ADR-045), empty without git.
+
+        Expensive — a git call per artifact — so the portfolio view runs it in
+        a worker, never on the load path (v0.26.2). Returns datetimes rather
+        than labels so the view can both format and sort by age.
         """
+        # Imported lazily: recency lives off the load path and pulls in git
+        # plumbing only when the portfolio view actually asks for it.
         from rac.services.recency import artifact_recency
 
         try:
             report = artifact_recency(self.directory, recursive=self.recursive)
-        except Exception:  # noqa: BLE001 - no git, or a git failure: no recency
+        except Exception:  # noqa: BLE001 — no git, or a git failure: simply no recency
             return {}
         return {
             entry.path: entry.last_committed
@@ -437,11 +456,13 @@ class ExplorerAdapter:
             if entry.last_committed is not None
         }
 
+    # --- lookups (v0.8.1) --------------------------------------------------
+
     def open_ref(self, ref: str) -> LookupState:
         """Exact lookup for `/open`, with `rac resolve` semantics (ADR-026).
 
-        One row resolves unambiguously; duplicates list every file so the
-        user chooses; not-found explains and suggests search.
+        One row resolves unambiguously; duplicates list every file so the user
+        chooses; not-found explains and suggests a search.
         """
         repository = self.repository
         if repository is None:
@@ -479,8 +500,8 @@ class ExplorerAdapter:
     def type_rows(self, artifact_type: str) -> LookupState:
         """Every artifact of one type, for `/browse <type>` (v0.8.10).
 
-        Rendered in the results view in every grouping mode — browsing by
-        type no longer depends on the sidebar having type groups.
+        Rendered in the results view under every grouping mode — browsing by
+        type no longer depends on the sidebar carrying type groups.
         """
         repository = self.repository
         if repository is None:
@@ -490,12 +511,14 @@ class ExplorerAdapter:
             return LookupState(rows=(), message=f"Nothing to browse: {artifact_type}")
         return LookupState(rows=rows)
 
+    # --- health & recommendations (v0.8.2 / v0.8.3) ------------------------
+
     def health_state(self) -> HealthState | None:
         """The repository health screen, or None before a load (v0.8.2).
 
-        Every value is read from the loaded portfolio summary; Explorer adds
-        no scoring (ADR-015). Area status derives from Core facts, not from
-        Explorer-invented thresholds.
+        Every value comes from the loaded portfolio summary; Explorer adds no
+        scoring (ADR-015), and each area's status derives from a Core fact
+        rather than an Explorer-invented threshold.
         """
         repository = self.repository
         if repository is None:
@@ -550,12 +573,17 @@ class ExplorerAdapter:
     def recommendations_state(self) -> RecommendationsState | None:
         """Recommendations grouped by category, or None before a load (v0.8.3).
 
-        Built from Core's review findings over the loaded portfolio — Explorer
-        adds explanation and grouping, never new findings (ADR-015).
+        Built from Core's review over the loaded portfolio — Explorer adds
+        explanation and grouping, never new findings (ADR-015). Memoized
+        against the loaded repository because navigation re-asks for it
+        repeatedly and the underlying review is a whole-portfolio pass.
         """
         repository = self.repository
         if repository is None:
             return None
+        cached = self._recommendations
+        if cached is not None and cached[0] is repository:
+            return cached[1]
         report = review_from_portfolio(
             repository.directory, repository.portfolio, recursive=repository.recursive
         )
@@ -565,22 +593,26 @@ class ExplorerAdapter:
             for category in _CATEGORY_ORDER
             if any(r.category == category for r in rows)
         )
-        return RecommendationsState(
+        state = RecommendationsState(
             directory=repository.directory,
             groups=groups,
             total=len(rows),
         )
+        self._recommendations = (repository, state)
+        return state
+
+    # --- schema reference (v0.8.9) — needs no load -------------------------
 
     def schema_overview(self) -> tuple[tuple[str, str], ...]:
         """(type, one-line structure summary) for every registered schema (v0.8.9).
 
-        Reference data straight from the core schema registry — the same
-        facts `rac schema` reports (ADR-015). Needs no loaded repository.
+        Reference data straight from the Core schema registry — the same facts
+        `rac schema` reports (ADR-015).
         """
         rows: list[tuple[str, str]] = []
         for name in available_schemas():
             ref = schema_reference(name)
-            if ref is None:  # pragma: no cover - registry names always resolve
+            if ref is None:  # pragma: no cover — registry names always resolve
                 continue
             rows.append(
                 (
@@ -620,10 +652,10 @@ class ExplorerAdapter:
     def improvement_rows(self, path: str) -> tuple[RecommendationRow, ...]:
         """Improvement suggestions for the artifact at ``path`` (v0.8.9).
 
-        Core's improve analysis (`rac improve`) rendered as findings rows
-        under the Improvement group — Explorer shows suggestions, it never
-        applies them (ADR-024). Empty for paths outside the load, types the
-        improve service does not support, and analysis trouble.
+        Core's improve analysis (`rac improve`) rendered as findings rows under
+        the Improvement group — Explorer surfaces suggestions, it never applies
+        them (ADR-024). Empty for paths outside the load, types improve does
+        not support, and unreadable files.
         """
         repository = self.repository
         if repository is None:
@@ -634,12 +666,14 @@ class ExplorerAdapter:
         try:
             result = improve_file(path)
         except (OSError, ValueError):
-            return ()  # unreadable mid-edit — the findings simply stay review-only
+            return ()  # unreadable mid-edit — findings stay review-only
         if not result.supported:
             return ()
         rows: list[RecommendationRow] = []
-        groups = ((True, result.missing_required), (False, result.missing_recommended))
-        for required, sections in groups:
+        for required, sections in (
+            (True, result.missing_required),
+            (False, result.missing_recommended),
+        ):
             for section in sections:
                 guidance = result.guidance.get(section, [])
                 rows.append(
@@ -660,12 +694,14 @@ class ExplorerAdapter:
                 )
         return tuple(rows)
 
-    def open_in_editor(self, path: str, *, blocking: bool = False) -> EditorOutcome:
-        """Open ``path`` in the user's configured editor (v0.8.4, ADR-024).
+    # --- editor & preferences (v0.8.4 / v0.8.8) ----------------------------
 
-        The `editor` preference (v0.8.8) beats `$VISUAL`/`$EDITOR`;
-        ``blocking`` runs terminal editors in the foreground (the caller
-        suspends the application around it).
+    def open_in_editor(self, path: str, *, blocking: bool = False) -> EditorOutcome:
+        """Open ``path`` in the configured editor (v0.8.4, ADR-024).
+
+        The `editor` preference (v0.8.8) beats ``$VISUAL``/``$EDITOR``;
+        ``blocking`` runs terminal editors in the foreground while the caller
+        suspends the application around them.
         """
         return editor_mod.open_in_editor(path, self.preferences.editor, blocking=blocking)
 
@@ -676,18 +712,20 @@ class ExplorerAdapter:
     def save_preferences(self, preferences: Preferences) -> None:
         """Persist updated preferences and adopt them for this session.
 
-        Explorer writes its own configuration only — never artifacts
-        (ADR-024); failures stay silent like every preference write.
+        Explorer writes only its own configuration, never artifacts (ADR-024);
+        a failed write stays silent like every preference write.
         """
         save_preferences(preferences)
         self.preferences = preferences
 
-    def new_preview(self, artifact_type: str, target: str) -> ImportPreview | str:
-        """The canonical template for ``artifact_type``, awaiting confirmation (v0.8.10).
+    # --- artifact creation (/new, v0.8.10) ---------------------------------
 
-        Pure render through Core's create service — no writes, no ID minting;
-        the ID note tells the user where the identity comes from (ADR-026).
-        Unknown types return a message rather than raising into the UI.
+    def new_preview(self, artifact_type: str, target: str) -> ImportPreview | str:
+        """The canonical template for ``artifact_type``, awaiting confirmation.
+
+        A pure render through Core's create service — no write, no ID minting;
+        the note tells the user where the identity comes from (ADR-026). An
+        unknown type returns a message rather than raising into the UI.
         """
         try:
             body = render_artifact(artifact_type)
@@ -706,8 +744,8 @@ class ExplorerAdapter:
 
         Core's create service is the only writer: it mints the ID against the
         repository index and refuses existing paths, missing directories, and
-        uninitialized repositories — each refusal becomes a recoverable
-        message, and nothing is written on any failure.
+        uninitialized repositories. Each refusal becomes a recoverable message
+        and nothing is written on any failure.
         """
         try:
             created = create_artifact(artifact_type, target)
@@ -723,12 +761,13 @@ class ExplorerAdapter:
             return str(exc)
         return f"Created {created.path} (ID {created.id})"
 
+    # --- portfolio statistics (/stats, v0.8.10) — needs no load ------------
+
     def stats_state(self) -> StatsState:
         """The portfolio statistics dashboard (v0.8.10).
 
         Built from Core's stats service — the same facts `rac stats` reports
-        (ADR-015). A fresh corpus walk, so callers run it off the UI thread;
-        it needs no loaded repository.
+        (ADR-015). A fresh corpus walk, so callers run it off the UI thread.
         """
         stats = collect_stats(self.directory)
         overview = [
@@ -748,7 +787,7 @@ class ExplorerAdapter:
             f"Missing risks   {stats.features_missing_risks} feature(s)",
         ]
         decisions = [
-            *(f"{status:<15} {count}" for status, count in stats.decision_status_counts.items()),
+            f"{status:<15} {count}" for status, count in stats.decision_status_counts.items()
         ]
         categories = [
             f"{category:<15} {count}" for category, count in stats.decision_category_counts.items()
@@ -768,13 +807,15 @@ class ExplorerAdapter:
             sections.append(("Relationships", tuple(relationships)))
         return StatsState(directory=self.directory, sections=tuple(sections))
 
+    # --- import & export (/import, /recommendations export, v0.8.4) --------
+
     def import_preview(self, source: str, target: str | None = None) -> ImportPreview | str:
         """Convert ``source`` via Core ingest for review (v0.8.4).
 
-        Returns an :class:`ImportPreview` to confirm, or an error message
-        string — conversion never raises into the UI (Initiative 5/6). The
-        default target is the source stem as ``.md`` in the current directory;
-        nothing is written here (Initiative 4).
+        Returns an :class:`ImportPreview` to confirm, or an error message —
+        conversion never raises into the UI (Initiative 5/6). The default
+        target is the source stem as ``.md`` in the current directory; nothing
+        is written here (Initiative 4).
         """
         try:
             result = ingest(source)
@@ -796,7 +837,7 @@ class ExplorerAdapter:
         """Render current recommendations as Markdown for export (v0.8.4).
 
         Returns an :class:`ImportPreview` to confirm and write, or a message
-        when there is nothing to export. Writing goes through
+        when there is nothing to export. The write goes through
         :meth:`write_import`, so it previews and never overwrites.
         """
         recommendations = self.recommendations_state()
@@ -821,9 +862,9 @@ class ExplorerAdapter:
     def write_import(self, preview: ImportPreview) -> str:
         """Write a confirmed import; never overwrites (Initiative 4)."""
         path = Path(preview.target)
-        # is_symlink() catches a dangling symlink, which exists() reports as
-        # absent — writing there would follow the link and create a file at
-        # its target, outside the path the user confirmed.
+        # is_symlink() catches a dangling symlink that exists() reports as
+        # absent: writing there would follow the link and create a file at its
+        # target, outside the path the user confirmed.
         if path.is_symlink() or path.exists():
             return f"Refusing to overwrite existing file: {preview.target}"
         try:
@@ -833,6 +874,8 @@ class ExplorerAdapter:
         except OSError as exc:
             return f"Could not write {preview.target}: {exc}"
         return f"Imported {preview.source} → {preview.target}"
+
+    # --- relationships & context (v0.8.5 / v0.8.7) -------------------------
 
     def relationships_view(self, path: str) -> RelationshipsView | None:
         """The knowledge-graph view for the artifact at ``path`` (v0.8.5).
@@ -906,12 +949,11 @@ class ExplorerAdapter:
     def artifact_markdown(self, path: str) -> str | None:
         """The artifact's Markdown body for the Content tab (v0.8.7).
 
-        Read-only presentation of the document itself (ADR-024); only paths
-        in the loaded repository resolve. The leading YAML frontmatter is
-        stripped (Core's split, ADR-025): identity metadata already lives in
-        the panel title, the sidebar type tag, and the Inspection tab. A read
-        failure returns a message rather than raising into the UI
-        (Initiative 6).
+        A read-only view of the document itself (ADR-024); only paths in the
+        loaded repository resolve. The leading YAML frontmatter is stripped
+        (Core's split, ADR-025) — identity already lives in the panel title,
+        the sidebar tag, and the Inspection tab. A read failure returns a
+        message rather than raising (Initiative 6).
         """
         repository = self.repository
         if repository is None:
@@ -929,8 +971,8 @@ class ExplorerAdapter:
 
         Tries reference resolution (IDs and aliases, `rac resolve` semantics),
         then a path relative to the linking document, then the linked file's
-        stem as a reference. External URLs and unresolvable links return
-        None — the Explorer reports rather than guesses.
+        stem as a reference. External URLs and unresolvable links return None —
+        Explorer reports rather than guesses.
         """
         repository = self.repository
         if repository is None:

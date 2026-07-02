@@ -1,18 +1,20 @@
-"""RAC Explorer — interactive terminal UI over RAC services (v0.8.0, ADR-028).
+"""RAC Explorer — an interactive terminal UI layered over RAC services (ADR-028).
 
-Explorer is a *presentation* layer: it consumes RAC service-layer APIs
-(rac.services) through a dedicated adapter and implements no repository
-intelligence of its own (ADR-015). Anything visible in Explorer is also
-obtainable through ``rac <command>`` or an equivalent service call.
+Explorer only *presents*: every answer it shows is produced by the RAC
+service layer (:mod:`rac.services`) and reached through a single adapter, so
+the UI carries no repository intelligence of its own (ADR-015). Whatever
+Explorer surfaces is equally reachable through ``rac <command>``.
 
-Layout:
+The package splits along one axis — who may import Textual:
 
-- ``launch``  — ``run_explorer`` entry point; lazily imports the Textual app
-  so the base install works without the ``explorer`` extra.
-- ``adapter`` — invokes services, translates Core models into UI state.
-- ``state``   — frozen UI-state dataclasses widgets render.
-- ``app`` / ``screens`` / ``widgets`` — the Textual application (the only
-  modules that import Textual).
+- :mod:`~rac.explorer.launch` is the ``run_explorer`` entry point. It imports
+  the Textual application lazily so the base install runs without the
+  ``explorer`` extra.
+- :mod:`~rac.explorer.adapter` calls services and translates Core models into
+  the frozen UI-state dataclasses in :mod:`~rac.explorer.state`.
+- :mod:`~rac.explorer.app`, ``screens``, and ``widgets`` are the Textual
+  application and the only modules permitted to import Textual.
 
-This package import stays Textual-free.
+Importing this package must not pull in Textual, so it stays usable from the
+base install and from headless tests.
 """

@@ -1,27 +1,26 @@
-"""The Explorer mascot — a lantern-carrying guide (v0.8.6, animated v0.8.8,
-interactive v0.8.12).
+"""The Explorer mascot — a lantern-carrying guide (DESIGN-mascot).
 
 A small explorer with a lantern: navigation that illuminates hidden product
-knowledge (DESIGN-mascot). The mascot is identity, never a feature — it gates
-nothing and modifies nothing.
+knowledge. The mascot is identity, never a feature — it gates nothing and
+changes nothing.
 
 Each state is a *frame sequence* (DESIGN-mascot-animations): equal-width,
 equal-height blocks of terminal art cycled on a slow timer by the widget that
 shows them. Artwork is data — replacing the strings in :data:`FRAMES` changes
-the animation and nothing else. Every state carries equivalent text, so
-disabling animations (first frame only) or the mascot entirely (text only)
-loses no information (ADR-028).
+the animation and nothing else. Every state also carries text, so disabling
+animations (first frame only) or the mascot entirely (text only) loses no
+information (ADR-028).
 
 Selecting the mascot returns a small response (DESIGN-mascot-interaction):
 :func:`interaction_message` maps the Nth selection to an acknowledgement,
-rotating discovery messages, occasional workflow guidance, and one rare line.
-Responses are data and the mapping is pure, so they surface existing
-functionality without containing any. This module never imports Textual.
+rotating discovery lines, occasional guidance, and one rare line. The mapping
+is pure and total, so it surfaces existing functionality without containing
+any. This module never imports Textual.
 """
 
 from __future__ import annotations
 
-# Mascot states tied to system events (DESIGN-mascot-animations).
+# Mascot states, tied to system events (DESIGN-mascot-animations).
 IDLE = "idle"
 SEARCHING = "searching"
 DISCOVERY = "discovery"
@@ -53,7 +52,7 @@ def _figure_frame(lantern: str, eyes: str = "• •") -> str:
 
 
 def _pad(*frames: str) -> tuple[str, ...]:
-    """Space-pad ``frames`` to one width and height so cycling never jitters."""
+    """Pad ``frames`` to one shared width and height so cycling never jitters."""
     split = [frame.split("\n") for frame in frames]
     height = max(len(lines) for lines in split)
     width = max(len(line) for lines in split for line in lines)
@@ -63,9 +62,9 @@ def _pad(*frames: str) -> tuple[str, ...]:
     )
 
 
-# State → frame sequence. Placeholder art (v0.8.8): the lantern flickers and
-# the eyes blink; final frames arrive as drop-in replacements for these
-# strings. Calm states (success, error) hold a single frame by design.
+# State → frame sequence. Placeholder art: the lantern flickers and the eyes
+# blink; final frames drop in as replacements for these strings. Calm states
+# (success, error) hold a single frame by design.
 FRAMES: dict[str, tuple[str, ...]] = {
     IDLE: _pad(_figure_frame("◇"), _figure_frame("◆"), _figure_frame("◇", eyes="– –")),
     SEARCHING: _pad(_figure_frame("◈"), _figure_frame("◇"), _figure_frame("◆")),
@@ -77,20 +76,21 @@ FRAMES: dict[str, tuple[str, ...]] = {
 
 
 def label(state: str) -> str:
-    """The text-only feedback for ``state`` (always available)."""
+    """The text-only feedback for ``state`` (an unknown state falls back to IDLE)."""
     return _LABEL.get(state, _LABEL[IDLE])
 
 
 def frames(state: str) -> tuple[str, ...]:
-    """The frame sequence for ``state`` (at least one frame)."""
+    """The frame sequence for ``state`` (at least one frame; IDLE for unknowns)."""
     return FRAMES.get(state, FRAMES[IDLE])
 
 
 def figure(state: str, frame: int = 0, *, animations: bool = True) -> str:
     """The mascot art for ``state`` at ``frame``, with its label attached.
 
-    With ``animations`` off the steady first frame is used. The label is
-    always part of the figure, so no information depends on the art.
+    With ``animations`` off the steady first frame is used; otherwise the frame
+    index wraps over the sequence. The label is always part of the figure, so
+    no meaning depends on the art.
     """
     sequence = frames(state)
     art = sequence[frame % len(sequence)] if animations else sequence[0]
@@ -99,10 +99,9 @@ def figure(state: str, frame: int = 0, *, animations: bool = True) -> str:
 
 # --- interaction (DESIGN-mascot-interaction) ---------------------------------
 #
-# Selecting the mascot rewards curiosity without interrupting work: a small
-# acknowledgement, occasional discovery messages, gentle guidance toward
-# existing commands, and one rare line. None of these unlock features or touch
-# the repository — the mascot surfaces functionality, it does not contain it.
+# Selecting the mascot rewards curiosity without interrupting work. None of the
+# responses unlock features or touch the repository; the mascot surfaces
+# functionality, it does not contain it.
 
 #: The default acknowledgement for a single selection.
 ACK = "Still exploring."
@@ -114,9 +113,9 @@ DISCOVERY_MESSAGES = (
     "Remember why it changed.",
 )
 
-#: Guidance that points at existing Explorer commands (it names them; it is
-#: not a way to run them).
-GUIDANCE = "Try:  /inspect  /relationships  /health"
+#: Guidance that names existing Explorer commands (it points at them; it is not
+#: a way to run them). Every command named here is in ``commands.REGISTRY``.
+GUIDANCE = "Try:  /find  /relationships  /health"
 
 #: The rare response, reached only on repeated selection.
 RARE = "You found the lantern."
@@ -131,10 +130,10 @@ _GUIDANCE_EVERY = 4
 def interaction_message(count: int) -> str:
     """The response for the ``count``-th mascot selection (1-based).
 
-    Deterministic, so the whole interaction is testable without a terminal:
-    the acknowledgement comes first, the rare line lands at exactly
-    :data:`RARE_AT`, guidance recurs on a fixed cadence, and the discovery
-    messages rotate otherwise. No randomness, no Textual.
+    Pure and total, so the whole interaction is testable without a terminal:
+    the acknowledgement comes first (and covers ``count <= 1``, so indexing is
+    never negative), the rare line lands at exactly :data:`RARE_AT`, guidance
+    recurs on a fixed cadence, and the discovery lines rotate otherwise.
     """
     if count <= 1:
         return ACK

@@ -1,10 +1,11 @@
-"""Workspace continuity — recent repositories and the last artifact (v0.8.6).
+"""Workspace continuity — recent repositories and the last artifact.
 
-Persists, under ``$XDG_STATE_HOME/rac/explorer-workspace.json``, the recently
-opened repositories and, per repository, the last opened artifact, so returning
-users can resume (Initiative 1). This is local state only — no login, cloud, or
-sync — and every write tolerates filesystem trouble silently (resuming is a
-convenience, never a requirement). This module never imports Textual.
+Under ``$XDG_STATE_HOME/rac/explorer-workspace.json`` this records recently
+opened repositories and, per repository, the last opened artifact and view, so
+returning users can resume where they left off (Initiative 1). It is local
+state only — no login, cloud, or sync — and every write tolerates filesystem
+trouble silently, because resuming is a convenience, never a requirement. This
+module never imports Textual.
 """
 
 from __future__ import annotations
@@ -18,6 +19,11 @@ _RECENT_LIMIT = 10
 _RECENT_ARTIFACT_LIMIT = 8
 
 
+def _move_to_front(items: list[str], value: str, limit: int) -> list[str]:
+    """Return ``items`` with ``value`` promoted to the front, deduped and capped."""
+    return [value, *(item for item in items if item != value)][:limit]
+
+
 @dataclass
 class Workspace:
     """Recently opened repositories, plus the last artifact and view in each."""
@@ -25,20 +31,19 @@ class Workspace:
     recent: list[str] = field(default_factory=list)
     last_artifact: dict[str, str] = field(default_factory=dict)
     last_view: dict[str, str] = field(default_factory=dict)
-    # Per repository, the artifacts opened most recently, newest first
-    # (v0.8.9) — the palette offers them before a character is typed.
+    # Per repository, the most recently opened artifacts (newest first) — the
+    # palette offers these before a character is typed.
     recent_artifacts: dict[str, list[str]] = field(default_factory=dict)
 
     def record_open(self, directory: str) -> None:
-        """Move ``directory`` to the front of the recent list (deduped)."""
-        self.recent = [directory, *(d for d in self.recent if d != directory)][:_RECENT_LIMIT]
+        """Promote ``directory`` to the front of the recent list (deduped)."""
+        self.recent = _move_to_front(self.recent, directory, _RECENT_LIMIT)
 
     def record_artifact(self, directory: str, path: str) -> None:
+        """Remember ``path`` as the last artifact and prepend it to the recents."""
         self.last_artifact[directory] = path
         previous = self.recent_artifacts.get(directory, [])
-        self.recent_artifacts[directory] = [path, *(p for p in previous if p != path)][
-            :_RECENT_ARTIFACT_LIMIT
-        ]
+        self.recent_artifacts[directory] = _move_to_front(previous, path, _RECENT_ARTIFACT_LIMIT)
 
     def recent_artifacts_for(self, directory: str) -> list[str]:
         return list(self.recent_artifacts.get(directory, []))
@@ -47,7 +52,7 @@ class Workspace:
         return self.last_artifact.get(directory)
 
     def record_view(self, directory: str, view: str) -> None:
-        """Remember the active view so resume can restore it (v0.8.8)."""
+        """Remember the active view so resume can restore it."""
         self.last_view[directory] = view
 
     def resume_view(self, directory: str) -> str | None:
@@ -77,7 +82,8 @@ def load_workspace() -> Workspace:
         }
 
     recent = [str(d) for d in data.get("recent", []) if isinstance(d, str)]
-    # Additive (v0.8.9): state files written before recent_artifacts load as-is.
+    # Forward-compatible: state files written before recent_artifacts existed
+    # simply load without it (the key defaults to an empty map).
     recent_artifacts = {
         str(k): [str(p) for p in v if isinstance(p, str)][:_RECENT_ARTIFACT_LIMIT]
         for k, v in (data.get("recent_artifacts", {}) or {}).items()

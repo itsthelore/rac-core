@@ -1,26 +1,26 @@
-"""Explorer command registry and routing (v0.8.1, DESIGN-command-surface).
+"""The ``/`` command registry and its routing (DESIGN-command-surface).
 
-The `/` surface is backed by this single registry: an action not registered
-here is not discoverable. Routing is the only logic that lives in Explorer —
-every answer comes from Core services through the adapter (ADR-015).
+The command surface is exactly this registry: a verb not listed here is not
+discoverable. Routing is the only decision Explorer makes locally — the
+answers all come from Core services via the adapter (ADR-015).
 
-Search and commands share the one entry point: input whose first word is not
-a registered command name is a search, so users never have to decide which
-they are doing. This module imports neither Textual nor Core, keeping the
-routing unit-testable without a terminal.
+Search and commands share a single entry field: any input whose first word is
+not a registered command name is treated as a search, so a user never has to
+choose between "searching" and "running a command". Importing neither Textual
+nor Core keeps this routing unit-testable without a terminal.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# The implicit route for input that names no registered command.
+# The fallback route for input that names no registered command.
 SEARCH = "search"
 
 
 @dataclass(frozen=True)
 class CommandSpec:
-    """One discoverable command on the `/` surface."""
+    """One discoverable command on the ``/`` surface."""
 
     name: str
     usage: str
@@ -29,12 +29,14 @@ class CommandSpec:
 
 @dataclass(frozen=True)
 class Invocation:
-    """A routed input: a registry command (or SEARCH) plus its arguments."""
+    """A routed input: a registry command (or ``SEARCH``) plus its arguments."""
 
     command: str
     args: str
 
 
+# Order is contract (test_registry_is_the_v0810_contract): the help listing and
+# the empty-palette suggestions both render the registry in this exact order.
 REGISTRY: tuple[CommandSpec, ...] = (
     CommandSpec("open", "open <ref>", "Open an artifact by ID or alias"),
     CommandSpec("find", "find <query> [type]", "Search artifacts by ID, title, or path"),
@@ -60,11 +62,11 @@ REGISTRY: tuple[CommandSpec, ...] = (
 
 _NAMES = {spec.name: spec for spec in REGISTRY}
 
-# Accepted spellings that route to a registered command (muscle memory from
-# earlier releases stays valid without growing the discoverable registry).
+# Alternative spellings that route to a registered command, so muscle memory
+# from earlier releases keeps working without enlarging the visible registry.
 _ALIASES = {"preferences": "settings"}
 
-# Shown when the surface is empty: teach by example (DESIGN-command-surface).
+# Rendered when the surface is empty: teach the grammar by example.
 EXAMPLES: tuple[str, ...] = (
     "open req-001",
     "find payments",
@@ -75,9 +77,9 @@ EXAMPLES: tuple[str, ...] = (
 def parse(text: str) -> Invocation:
     """Route raw surface input to a command or a search.
 
-    A leading ``/`` is tolerated (users may type it out of habit); matching
-    on the command name is casefolded. Anything else — including input that
-    merely *contains* a command name — is a search.
+    A leading ``/`` is tolerated (users type it out of habit) and command-name
+    matching is casefolded. Only the *first* word can name a command; input
+    that merely contains a command word (``the open question``) is a search.
     """
     stripped = text.strip().lstrip("/").strip()
     head, _, rest = stripped.partition(" ")
@@ -88,6 +90,9 @@ def parse(text: str) -> Invocation:
 
 
 def suggestions(text: str) -> tuple[CommandSpec, ...]:
-    """Registry commands whose name starts with the (partial) first word."""
+    """Registry commands whose name starts with the (partial) first word.
+
+    Preserves registry order, so empty input yields the whole registry.
+    """
     head = text.strip().lstrip("/").strip().partition(" ")[0].casefold()
     return tuple(spec for spec in REGISTRY if spec.name.startswith(head))

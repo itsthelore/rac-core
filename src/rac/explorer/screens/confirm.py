@@ -1,10 +1,10 @@
-"""Confirm-write modal — preview a file write, apply only on confirmation (v0.8.4).
+"""Confirm-write modal — preview a file write, apply only on confirmation.
 
 Any workflow that can change repository contents previews first and writes only
-on explicit confirmation (Initiative 4, ADR-024). Used to export findings;
-import has its own conversion step but the same confirm discipline. The sole
-surface on the screen stack (v0.8.7): a titled rounded panel over the dimmed
-frame, speaking the same key-chip language as the status line.
+on explicit confirmation (ADR-024). Export findings uses this modal; import has
+its own conversion step but the same discipline. It is the only surface that
+lives on the screen stack over the persistent frame: a titled rounded panel
+speaking the status line's key-chip language.
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ class ConfirmWriteScreen(ModalScreen[None]):
         super().__init__()
         self.adapter = adapter
         self.preview = preview
+        # Write-once: `y` may repeat, but the file is written a single time.
         self._done = False
 
     def compose(self) -> ComposeResult:
@@ -47,6 +48,7 @@ class ConfirmWriteScreen(ModalScreen[None]):
             return
         message = self.adapter.write_import(self.preview)
         self._done = True
+        # The panel now reports the outcome; the only key left is Esc to leave.
         self.query_one("#confirm-panel", Static).update(message)
         self.query_one("#confirm-chips", Static).update(key_chips((("Esc", "Back"),)))
 

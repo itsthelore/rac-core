@@ -1,10 +1,10 @@
-"""The Explorer Textual application (v0.8.0, restyled v0.8.7, ADR-028).
+"""The Explorer Textual application shell (ADR-028).
 
 Keyboard-first and terminal-native: one persistent workspace frame
-(:mod:`rac.explorer.screens.main`) with the rac-lantern theme as the curated
-default. This is the first module on the import path that requires Textual;
-:mod:`rac.explorer.launch` imports it lazily so the base install works
-without the ``explorer`` extra.
+(:class:`rac.explorer.screens.main.MainScreen`) over a single repository, with
+the rac-lantern theme as the curated default. This is the first module on the
+import path to require Textual; :mod:`rac.explorer.launch` imports it lazily so
+the base install runs without the ``explorer`` extra.
 """
 
 from __future__ import annotations
@@ -19,14 +19,14 @@ from rac.explorer.widgets.palette import CommandPalette
 
 
 class ExplorerApp(App[None]):
-    """Application shell over one repository: one frame, swappable views, `/`."""
+    """The application shell: one frame, swappable views, and the ``/`` surface."""
 
     TITLE = "RAC Explorer"
     CSS_PATH = "explorer.tcss"
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        # Not a priority binding: a typed `/` must keep working inside the
-        # palette's input rather than re-triggering this action.
+        # Deliberately not a priority binding: a typed `/` must keep reaching
+        # the palette's input as text rather than re-triggering this action.
         Binding("slash", "command_surface", "Commands"),
     ]
 
@@ -36,21 +36,22 @@ class ExplorerApp(App[None]):
         self.sub_title = directory
 
     def on_mount(self) -> None:
-        # The curated pair (v0.26.0): rac-lantern (dark, the default) and
-        # rac-parchment (light). The `theme` preference selects either, or any
-        # other Textual theme, and an unknown name never breaks startup.
+        # Register the curated themes so all appear in the `/settings` cycle,
+        # then adopt the `theme` preference. An unknown or unregistered theme
+        # name must never break startup, so any failure falls back to the
+        # default rather than propagating.
         for theme in RAC_THEMES:
             self.register_theme(theme)
         try:
             self.theme = self.adapter.preferences.theme
-        except Exception:  # noqa: BLE001 - unknown theme: keep the default
+        except Exception:  # noqa: BLE001 — unknown theme: keep the default
             self.theme = THEME_NAME
         self.adapter.record_open()  # workspace continuity (Initiative 1)
         self.push_screen(MainScreen(self.adapter))
 
     def action_command_surface(self) -> None:
-        # `/` summons the palette from anywhere on the main screen; there is
-        # no palette on the confirm-write modal.
+        # `/` summons the palette from anywhere on the main screen; the
+        # confirm-write modal has no palette, so query rather than assume one.
         palettes = self.screen.query(CommandPalette)
         if palettes:
             palettes.first().show()
