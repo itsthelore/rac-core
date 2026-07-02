@@ -1,26 +1,24 @@
-"""The anonymous daily ping — RAC's entire network surface (v0.10.6).
+"""The anonymous daily ping — RAC's entire network surface (ADR-041).
 
-ADR-041 allows one transmission and pins it in full: with consent recorded
-(:mod:`rac.consent`) and a PostHog key configured, the Guide server sends at
-most one ping per 24 hours carrying a random install id, the RAC version, and
-an active-repo count. Never repository contents, paths, artifact text,
-queries, or tool arguments. Adding a field is a new recorded decision.
+ADR-041 permits one transmission and pins it in full: with consent recorded
+(:mod:`rac.consent`) and a PostHog key configured, the Guide server sends at most
+one ping per 24 hours carrying a random install id, the RAC version, and an
+active-repo count — never repository contents, paths, artifact text, queries, or
+tool arguments. Adding a field is a new recorded decision.
 
-This is the only module in RAC permitted to import ``urllib.request`` — the
-isolation battery enforces it — so "what does RAC phone home" is answerable
-by reading one file.
+This is the only module in RAC permitted to import ``urllib.request`` (the isolation
+battery enforces it), so "what does RAC phone home?" is answerable by reading one
+file.
 
-Fire-and-forget posture: a daemon thread started by ``run_server``, a
-three-second socket timeout, every exception swallowed, no retries, no
-queueing. The 24-hour marker is written after each attempt regardless of
-outcome, so a failing endpoint costs one attempt per day, never a storm. The
-ping runs outside the request/response contract (ADR-032): nothing it reads
-or writes ever feeds a tool response.
+Fire-and-forget posture: a daemon thread started by ``run_server``, a three-second
+socket timeout, every exception swallowed, no retries, no queueing. The 24-hour
+marker is written after each attempt regardless of outcome, so a failing endpoint
+costs one attempt per day, never a storm. The ping runs outside the request/response
+contract (ADR-032): nothing it reads or writes ever feeds a tool response.
 
-Active repos are counted locally: each served repository root is recorded as
-a salted digest (the per-install salt from the consent record, never
-transmitted) with a last-seen date, pruned to a thirty-day window. Only the
-count crosses the wire.
+Active repos are counted locally: each served repository root is recorded as a
+salted digest (the per-install salt from the consent record, never transmitted) with
+a last-seen date, pruned to a thirty-day window. Only the count crosses the wire.
 """
 
 from __future__ import annotations
@@ -50,8 +48,14 @@ ACTIVE_REPOS_FILENAME = "active-repos.json"
 
 
 def _state_dir() -> Path:
+    """The XDG state directory for RAC; ``XDG_STATE_HOME`` is read on every call."""
     base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
     return Path(base) / "rac"
+
+
+def _iso(now: datetime) -> str:
+    """``now`` as ``...Z`` with seconds precision (the ping/marker timestamp format)."""
+    return now.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def repo_digest(root: str, salt: str) -> str:
@@ -60,7 +64,12 @@ def repo_digest(root: str, salt: str) -> str:
 
 
 def record_active_repo(root: str, salt: str) -> None:
-    """Mark ``root`` active today in the local digest file; never raises."""
+    """Mark ``root`` active today in the local digest file; never raises.
+
+    Idempotent per (root, salt): re-recording the same repo overwrites its date. The
+    write prunes any digest last seen past the thirty-day window, so the file holds
+    only salted digests and recent dates — never a path or the salt itself.
+    """
     path = _state_dir() / ACTIVE_REPOS_FILENAME
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -93,6 +102,7 @@ def active_repo_count() -> int:
 
 
 def _within_window(seen: object, cutoff: date) -> bool:
+    """True when ``seen`` is a parseable ``YYYY-MM-DD`` on or after ``cutoff``."""
     if not isinstance(seen, str):
         return False
     parsed = _parse_date(seen)
@@ -107,7 +117,7 @@ def _parse_date(text: str) -> date | None:
 
 
 def last_ping_at() -> datetime | None:
-    """When the last attempt happened; missing or corrupt means never."""
+    """When the last attempt happened; a missing or corrupt marker means never."""
     path = _state_dir() / LAST_PING_FILENAME
     try:
         text = path.read_text(encoding="utf-8").strip()
@@ -127,21 +137,18 @@ def mark_pinged(now: datetime) -> None:
 
 
 def should_ping(now: datetime) -> bool:
+    """True when no attempt has been recorded, or the last was 24h or more ago."""
     last = last_ping_at()
     return last is None or (now - last).total_seconds() >= PING_INTERVAL_SECONDS
-
-
-def _iso(now: datetime) -> str:
-    return now.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def build_payload(install_id: str, active_repos: int, now: datetime) -> dict:
     """The entire transmission, pinned by ADR-041; additions are a new ADR.
 
-    The shape follows PostHog's documented capture contract: ``distinct_id``
-    rides inside ``properties``, and ``$process_person_profile: false`` marks
-    the event anonymous so PostHog creates no person profile — cheaper, and
-    one more enforcement of the anonymity posture.
+    The shape follows PostHog's documented capture contract: ``distinct_id`` rides
+    inside ``properties``, and ``$process_person_profile: false`` marks the event
+    anonymous so PostHog creates no person profile — cheaper, and one more
+    enforcement of the anonymity posture.
     """
     return {
         "api_key": consent_record.POSTHOG_API_KEY,
@@ -189,10 +196,9 @@ def start_ping_thread(consent: Consent) -> threading.Thread | None:
     """Start the daily-ping daemon thread, or return None when nothing may send.
 
     Requires recorded consent, a minted install id, and a configured key (the
-    empty-key kill switch, ADR-041), and that the enterprise hard-lock is not
-    set (ADR-086) — the lock forces the ping off at runtime regardless of
-    consent or key. The thread dies with the process; there is no shutdown
-    choreography.
+    empty-key kill switch, ADR-041), and that the enterprise hard-lock is not set
+    (ADR-086) — the lock forces the ping off at runtime regardless of consent or
+    key. The thread dies with the process; there is no shutdown choreography.
     """
     if consent.enterprise_locked:
         return None

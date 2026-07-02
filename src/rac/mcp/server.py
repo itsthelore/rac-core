@@ -1,44 +1,33 @@
-"""RAC Guide MCP server — the read-tool surface (v0.10.0; v0.21.16).
+"""RAC Guide MCP server — the read-tool surface (ADR-030, ADR-031).
 
-This module is the FastMCP application: it builds a server bound to a
-repository root and registers the read-only tools the agent queries. The
-original four the ``guide-tool-surface`` design pins (``get_artifact``,
-``search_artifacts``, ``get_related``, ``get_summary``) ship their descriptions
-verbatim from that design; changing them is a contract change (ADR-030).
-v0.21.16 adds ``find_decisions`` — the live decision query (ADR-067):
-deterministic retrieval of the Accepted, non-retired decisions binding a topic,
-so an agent consults what the team already settled instead of re-litigating it.
+This module is the FastMCP application: it binds a server to a repository root
+and registers the five read-only tools an agent queries. Four are the original
+``guide-tool-surface`` tools (``get_artifact``, ``search_artifacts``,
+``get_related``, ``get_summary``); the fifth, ``find_decisions``, is the live
+decision query (ADR-067) — deterministic retrieval of the Accepted, non-retired
+decisions binding a topic, so an agent consults what the team settled rather
+than re-litigating it. Every tool description ships verbatim from the design;
+editing that text is a contract change (ADR-030).
 
-The server is a *consumer* of RAC Core (ADR-015, ADR-031): every tool calls
-read-only service functions — resolution, search, relationships, portfolio —
-and shapes their results for the wire. It re-implements no parsing, resolution,
-relationship extraction, or scoring, and imports no write-capable service. The
-isolation battery (``tests/test_mcp_isolation.py``) enforces both.
+Guide is a *consumer* of RAC Core (ADR-015, ADR-031): each tool calls read-only
+services — resolution, search, relationships, portfolio — and shapes their
+results for the wire. It re-implements no parsing, resolution, relationship
+extraction, or scoring, and imports no write-capable service. The isolation
+battery (``tests/test_mcp_isolation.py``) enforces both by construction.
 
-Every tool call re-reads the repository from disk (ADR-032): there is no cache,
-no file watcher, and no session state. Identical repository bytes and identical
-input produce identical output, within the per-response character budget
-(ADR-033, see :mod:`rac.mcp.budget`).
+Every call re-reads the repository from disk (ADR-032): no cache, no file
+watcher, no session state. Identical repository bytes and identical input yield
+identical output, within the per-response character budget (ADR-033, see
+:mod:`rac.mcp.budget`). A failed lookup returns structured error data, never a
+protocol exception (ADR-034, :mod:`rac.mcp.errors`).
 
-Failed lookups return structured error data, never protocol exceptions
-(ADR-034, :mod:`rac.mcp.errors`): an agent recovers from a JSON body.
-
-Opt-in telemetry (v0.10.4, ADR-040): when serving with a recorder, each tool
-call routes through :func:`rac.mcp.telemetry.observe`, which times the call,
-classifies the structured payload, and returns it unchanged — tool responses
-are byte-identical with telemetry on and off, and the log is never an input
-to a response. Default is off; nothing is recorded without ``--telemetry``.
-
-Anonymous usage sharing (v0.10.6, ADR-041): with consent recorded via
-``rac telemetry on`` (or the ``rac init`` prompt), ``run_server`` starts the
-daily-ping daemon thread (:mod:`rac.mcp.ping`) — at most one pinned,
-content-free ping per 24 hours, independent of ``--telemetry``, announced on
-stderr. Without consent or without a configured key, nothing sends.
-
-Startup diagnostics (v0.10.1): ``run_server`` writes a one-line notice to
-stderr when the repository root contains no recognized artifacts, so the first
-run against a misconfigured or empty root fails helpfully rather than silently.
-stdout belongs to the MCP protocol; only stderr carries diagnostics.
+Two out-of-band recorders may wrap each call, both default-off and both
+payload-transparent: opt-in usage telemetry (ADR-040, content-free) and the
+config-driven read-access audit log (ADR-084, content-bearing). With neither
+present, a tool call is exactly its bare body and the response is byte-identical.
+Anonymous daily usage sharing (ADR-041) is a third, independent opt-in that
+``run_server`` may start. stdout belongs to the MCP protocol; every diagnostic
+goes to stderr.
 """
 
 from __future__ import annotations
@@ -85,9 +74,10 @@ SERVER_NAME = "lore"
 
 # --- Verbatim tool descriptions (pinned by guide-tool-surface; ADR-030) ------
 #
-# These strings are a designed product surface: the only interface an agent
-# sees when deciding whether to call. They ship character-for-character as the
-# design artifact pins them. Editing this text is a contract change.
+# These strings are the designed product surface: the only interface an agent
+# reads when deciding whether to call a tool. They ship character-for-character
+# as the design artifact pins them, "Call this ..." trigger phrasing included.
+# Editing this text is a contract change, guarded by test_mcp_server.
 
 DESC_GET_ARTIFACT = (
     "Retrieve one artifact from this repository's recorded product knowledge — "
@@ -140,6 +130,14 @@ DESC_GET_SUMMARY = (
 )
 
 
+# --- Tool bodies -------------------------------------------------------------
+#
+# Each returns the serialized JSON string a tool hands back. They take an
+# explicit ``budget`` so the same body serves any startup cap. ``_read_content``
+# and the module-level ``walk_corpus`` binding are deliberate monkeypatch seams
+# (see the unreadable-artifact and one-walk tests) — keep them module-level.
+
+
 def _read_content(path: str) -> str:
     """Read an artifact file's text exactly as stored, frontmatter included.
 
@@ -152,8 +150,8 @@ def _read_content(path: str) -> str:
 def _resolve(root: str, artifact_id: str) -> ResolutionResult:
     """Resolve ``artifact_id`` against a fresh read of ``root`` (ADR-032).
 
-    Uses the repository index and the resolver's in-index semantics so a single
-    walk serves both resolution and any follow-on shaping the tool needs.
+    Resolution runs over the repository index so a single walk answers both the
+    ID and any shaping the tool does next.
     """
     entries = build_repository_index(root, recursive=True).artifacts
     return resolve_in_index(entries, artifact_id)
@@ -166,21 +164,20 @@ def _get_artifact(root: str, artifact_id: str, budget: int) -> str:
     try:
         content = _read_content(result.artifact.path)
     except (OSError, UnicodeDecodeError):
-        # The artifact resolved, but its file could not be read (deleted
-        # between walk and read, permissions, non-UTF-8). Return the failure
-        # as data, never a protocol exception (ADR-034).
+        # Resolved, but its file could not be read (deleted between walk and
+        # read, permissions, non-UTF-8). Return the failure as data, never a
+        # protocol exception (ADR-034).
         return serialize(errors.unreadable(result.artifact.id, result.artifact.path), budget)
     payload = {
         "schema_version": "1",
         **result.artifact.to_dict(),
         "content": content,
-        # Provenance (WS11 + WS5, ADR-065/ADR-045): the one additive object
-        # get_artifact's review/accountability fields share. ``status`` is the
-        # reviewed ``## Status`` from parsed bytes (WS11 trust signal,
-        # present-but-empty when none); the rest is git-derived authorship and
-        # the reconstructed status history (WS5), each ``null``/``[]`` when git
-        # cannot answer. All reported facts sourced from the repository, never a
-        # trust verdict or score (ADR-034).
+        # Provenance (WS11 + WS5, ADR-065/ADR-045): the single additive object
+        # get_artifact's review and accountability fields share. ``status`` is
+        # the reviewed ``## Status`` parsed from the same bytes (present-but-empty
+        # when none); the rest is git-derived authorship and the reconstructed
+        # status history, each null/[] when git cannot answer. Reported facts
+        # only — never a trust verdict or score (ADR-034).
         "provenance": {
             "status": artifact_status(parse(content)),
             **artifact_provenance(root, result.artifact.path).to_dict(),
@@ -192,38 +189,36 @@ def _get_artifact(root: str, artifact_id: str, budget: int) -> str:
 def _search_artifacts(root: str, query: str, artifact_type: str | None, budget: int) -> str:
     entries = build_repository_index(root, recursive=True).artifacts
     result = search_index(entries, query, artifact_type=artifact_type)
+    # The service already supplies the pinned envelope (schema_version, query,
+    # type, match_count, matches); the server adds nothing (one source of truth).
     return serialize(result.to_dict(), budget)
 
 
 def _find_decisions(root: str, topic: str, budget: int) -> str:
     """Ranked live decisions binding ``topic`` (ADR-067, deterministic retrieval).
 
-    Calls the same ``find_decisions`` service the CLI ``--decisions`` face uses
-    (one source of truth): structural search restricted to live decisions, no
-    semantic verdict. The payload is the search contract plus the live-filter
-    intent in ``type``/``filter`` so a reader knows the result is the *settled*
-    decisions, not every match.
+    Delegates to the same ``find_decisions`` service the CLI uses — structural
+    search restricted to live decisions, no semantic verdict — and adds only the
+    additive ``filter`` marker (ADR-007) so a reader sees the result is the
+    *settled* decisions, not every match.
     """
-    result = find_decisions(root, topic, recursive=True)
-    payload = result.to_dict()
-    # Make the live-decision intent explicit on the wire (additive, ADR-007): the
-    # type is always "decision" and the result is filtered to live decisions.
+    payload = find_decisions(root, topic, recursive=True).to_dict()
     payload["filter"] = "live-decisions"
     return serialize(payload, budget)
 
 
 def _get_related(root: str, artifact_id: str, budget: int, depth: int = 1) -> str:
-    # One corpus walk feeds resolution, outgoing, and incoming, so the whole
-    # response reflects a single atomic snapshot of the repository (ADR-032):
-    # there is no window in which the relationship view drifts mid-call.
-    # Caching across calls remains forbidden — the snapshot lives and dies
-    # inside this call.
+    # One corpus walk feeds resolution, outgoing, incoming, and the neighborhood,
+    # so the whole response reflects a single atomic snapshot (ADR-032): the view
+    # cannot drift mid-call, and the snapshot dies with the call (no caching).
+    # The walk seam is spied by test_get_related_performs_exactly_one_corpus_walk.
     entries = list(walk_corpus(root, recursive=True))
     index = index_from_corpus(root, entries, recursive=True).artifacts
     result = resolve_in_index(index, artifact_id)
     if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
         return serialize(errors.from_resolution(result), budget)
     artifact = result.artifact
+
     relationships = relationships_from_corpus(entries)
     identity_by_path = {entry.path: (entry.id, entry.type, entry.title) for entry in index}
     outgoing = outgoing_references(relationships, artifact.path)
@@ -235,10 +230,9 @@ def _get_related(root: str, artifact_id: str, budget: int, depth: int = 1) -> st
             "title": ref.title,
             "path": ref.path,
             "section": ref.section,
-            # Edge evidence (WS2, additive): the relationship edge that surfaced
-            # this artifact, named rather than recomputed (REQ-002). A relationship
-            # is not a text match, so it carries direction/relationship/target,
-            # not field/terms/tier.
+            # Edge evidence (WS2, additive): the relationship that surfaced this
+            # artifact, named rather than recomputed (REQ-002). A relationship is
+            # not a text match, so it carries direction/relationship/target.
             "evidence": {
                 "direction": "incoming",
                 "relationship": ref.section,
@@ -253,9 +247,10 @@ def _get_related(root: str, artifact_id: str, budget: int, depth: int = 1) -> st
         "outgoing": outgoing.by_section,
         "incoming": incoming,
     }
-    # Bounded multi-hop (v0.24, WS-D): depth>1 adds an additive `neighborhood`
-    # field listing artifacts two-or-more hops out, each tagged with its hop
-    # distance (ADR-007). depth=1 leaves the payload byte-identical to before.
+
+    # Bounded multi-hop (WS-D): depth>1 adds an additive `neighborhood` of
+    # artifacts two-or-more hops out, each tagged with its hop distance (ADR-007).
+    # depth=1 leaves the payload byte-identical to the pre-multihop shape.
     neighborhood_truncated = False
     if depth > 1:
         hood = neighborhood(relationships, identity_by_path, artifact.path, depth=depth)
@@ -266,11 +261,11 @@ def _get_related(root: str, artifact_id: str, budget: int, depth: int = 1) -> st
         ]
         payload["depth"] = min(depth, MAX_TRAVERSAL_DEPTH)
         neighborhood_truncated = hood.truncated
-    # Per-call edge cap overflow (WS4, REQ-007): when collection hit the cap, mark
-    # the response truncated up front. The ADR-033 response budget then enforces
-    # the character cap on top; if it must drop further incoming entries it
-    # recomputes the marker (budget.serialize), so the response is always bounded
-    # and carries the additive truncated/omitted/hint signal (REQ-006).
+
+    # Per-call edge-cap overflow (WS4, REQ-007): when edge collection hit the cap,
+    # mark the response up front with the overflow count. The ADR-033 budget then
+    # caps characters on top; if it must drop further incoming entries it
+    # recomputes the marker inside serialize, so the response is always bounded.
     edge_overflow = (incoming_result.total - len(incoming_result.items)) + (
         outgoing.total - outgoing.kept
     )
@@ -284,9 +279,8 @@ def _get_related(root: str, artifact_id: str, budget: int, depth: int = 1) -> st
 def _get_summary(root: str, budget: int) -> str:
     summary = build_portfolio_summary(root, recursive=True)
     payload = summary.to_dict()
-    # Additive empty-state pointer (v0.13.1, ADR-007): a cold agent session
-    # against a fresh repository is told how the user begins authoring, rather
-    # than just seeing zeros.
+    # Additive empty-state pointer (ADR-007): a cold session against a fresh
+    # repository is told how the user starts authoring, not just shown zeros.
     if summary.total_artifacts == 0:
         payload["guidance"] = (
             "This repository has no RAC artifacts yet. The user can create the "
@@ -303,26 +297,32 @@ def build_server(
     recorder: TelemetryRecorder | None = None,
     audit_recorder: audit.AuditRecorder | None = None,
 ) -> FastMCP:
-    """Build the Guide MCP server bound to repository ``root``.
+    """Build a fresh Guide MCP server bound to repository ``root``.
 
-    ``budget`` is the per-response character cap (ADR-033), configurable here at
-    startup; there is no per-call override. ``recorder`` enables opt-in usage
-    telemetry (ADR-040) and ``audit_recorder`` enables the read-access audit log
-    (ADR-084): with both ``None`` — the default — nothing is recorded and every
-    call is exactly the bare tool body. The returned :class:`FastMCP` instance
-    has the five pinned tools registered and is ready to run over any transport —
-    the CLI runs it over stdio.
+    ``budget`` is the per-response character cap (ADR-033), fixed here at
+    startup with no per-call override. ``recorder`` enables opt-in usage
+    telemetry (ADR-040) and ``audit_recorder`` the read-access audit log
+    (ADR-084); with both ``None`` — the default — nothing is recorded and every
+    call is exactly its bare tool body. Each invocation returns a new
+    :class:`FastMCP` with the five pinned tools registered, holding no corpus
+    snapshot (statelessness starts at construction, ADR-032). The CLI runs it
+    over stdio.
     """
     server: FastMCP = FastMCP(SERVER_NAME)
 
     def observed(tool: str, args: dict, call: Callable[[], str]) -> str:
-        # Audit (content-bearing, ADR-084) runs innermost so its duration is the
+        # Audit (content-bearing, ADR-084) runs innermost, so its duration is the
         # pure call time; telemetry (content-free, ADR-040) wraps it and still
         # sees the unchanged payload. Each is a no-op when its recorder is None,
-        # so the default response stays byte-identical.
+        # keeping the default response byte-identical.
         return telemetry.observe(
             recorder, tool, lambda: audit.observe(audit_recorder, tool, args, call)
         )
+
+    # FastMCP derives each tool's wire schema by introspecting the handler
+    # signature, so the handlers keep their exact names, parameters, and
+    # annotations. Each handler is a thin adapter: capture args for the audit
+    # log, then delegate to the matching tool body.
 
     @server.tool(name="get_artifact", description=DESC_GET_ARTIFACT)
     def get_artifact(id: str) -> str:
@@ -355,15 +355,17 @@ def build_server(
     return server
 
 
-def _check_corpus(root: str) -> None:
-    """Emit a helpful stderr notice when the repository root has no artifacts.
+# --- Process lifecycle -------------------------------------------------------
 
-    Called once at startup — after the validity check for the root directory
-    (which lives in the CLI layer) but before the server begins serving.
-    stdout belongs to the MCP protocol; this function only writes to stderr.
-    Absence of a corpus is not an error (the server runs and ``get_summary``
-    reports zero artifacts), but silence on the first misconfigured run would
-    obscure the problem.
+
+def _check_corpus(root: str) -> None:
+    """Warn on stderr when the repository root holds no recognized artifacts.
+
+    Called once at startup, after the CLI has validated the root directory but
+    before serving. An empty corpus is not an error — the server runs and
+    ``get_summary`` reports zero artifacts — but a silent first run against a
+    misconfigured root would hide the problem. stdout belongs to the MCP
+    protocol, so this notice goes only to stderr.
     """
     try:
         index = build_repository_index(root, recursive=True)
@@ -376,16 +378,16 @@ def _check_corpus(root: str) -> None:
                 "The server is running; get_summary will report the empty state.",
                 file=sys.stderr,
             )
-    except Exception:  # pragma: no cover — defensive; corpus walk is stable
+    except Exception:  # pragma: no cover — defensive; the corpus walk is stable
         pass
 
 
 def _maybe_start_sharing(root: str) -> None:
-    """Start the consented daily ping; absence of consent costs nothing (ADR-041).
+    """Start the consented daily ping; without consent it costs nothing (ADR-041).
 
-    Independent of ``--telemetry`` — each is its own opt-in. stdout belongs to
-    the MCP protocol; the enablement notice goes to stderr, so sharing is
-    announced, never silent.
+    Independent of ``--telemetry`` — each is its own opt-in. The enablement
+    notice goes to stderr (stdout is the protocol channel), so sharing is
+    announced, never silent. An enterprise lock (ADR-086) forces it off.
     """
     consent = consent_record.load_consent()
     if consent.enterprise_locked or not consent.share_usage:
@@ -408,17 +410,16 @@ def _maybe_start_sharing(root: str) -> None:
 
 
 def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool = False) -> int:
-    """Run the Guide server over stdio until the client disconnects.
+    """Run the Guide server over stdio until the client disconnects; return 0.
 
-    Returns ``0`` on clean shutdown. stdout belongs to the MCP protocol; any
-    diagnostics a caller emits go to stderr (the CLI owns that channel).
-
-    Emits a one-line notice to stderr when the repository root contains no
-    recognized artifacts (v0.10.1 startup hardening), and another when
-    telemetry is enabled — opt-in recording is announced, never silent
-    (ADR-040).
+    Startup order is fixed: warn on an empty corpus, build the opt-in telemetry
+    recorder (with a stderr notice) if requested, build the config-driven audit
+    recorder (with a stderr notice) if a stanza enables it, start consented
+    usage sharing, then serve. Recording is always announced on stderr, never
+    silent (ADR-040, ADR-084). stdout belongs to the MCP protocol.
     """
     _check_corpus(root)
+
     recorder: TelemetryRecorder | None = None
     if telemetry_enabled:
         recorder = telemetry.create_recorder()
@@ -427,9 +428,10 @@ def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool 
             f"(no arguments, no content) to {recorder.path}",
             file=sys.stderr,
         )
-    # The read-access audit log is config-driven (ADR-084), not a flag: enabled
-    # by an ``audit:`` stanza in .rac/config.yaml. Default-absent — no stanza,
-    # no recorder, no file, and the response stays byte-identical.
+
+    # The read-access audit log is config-driven (ADR-084), not a flag: an
+    # ``audit:`` stanza in .rac/config.yaml turns it on. Default-absent — no
+    # stanza, no recorder, no file, and the response stays byte-identical.
     audit_recorder = audit.create_recorder(audit.load_audit_config(root), root)
     if audit_recorder is not None:
         print(
@@ -438,6 +440,7 @@ def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool 
             f"{audit_recorder.path}",
             file=sys.stderr,
         )
+
     _maybe_start_sharing(root)
     build_server(root, budget=budget, recorder=recorder, audit_recorder=audit_recorder).run(
         transport="stdio"

@@ -1,13 +1,13 @@
 """Read-access audit recorder for the Guide MCP server (ADR-084).
 
-The deliberate inversion of telemetry (ADR-040): where telemetry is content-free
-and silently self-disabling, the audit recorder is content-BEARING by design and
-fail-LOUD. It answers the question telemetry cannot — who consulted which
+This is the deliberate inversion of telemetry (ADR-040). Where telemetry is
+content-free and silently self-disabling, the audit recorder is content-BEARING by
+design and fail-LOUD. It answers the question telemetry cannot — who consulted which
 decision, when, and which artifact IDs came back — by appending one JSON line per
 MCP read-tool call.
 
-It is default-ABSENT: with no ``audit:`` stanza in ``.rac/config.yaml`` no
-recorder is built, no file is created, and the engine's content-free guarantee is
+It is default-ABSENT: with no ``audit:`` stanza in ``.rac/config.yaml`` no recorder
+is built, no file is created, and the engine's content-free guarantee is
 byte-for-byte intact (ADR-084's strict-superset property). When enabled it is
 local-only — this module imports no network code (the isolation battery enforces
 it); shipping events to a sink is the ``lore-audit`` satellite's job, never the
@@ -19,10 +19,10 @@ byte-identical with and without the recorder — except, by design, under
 ``on_write_error: block`` when a write fails, where the call is refused with a
 structured ``audit-unavailable`` error rather than serving un-audited content.
 
-The principal is attributable, not authenticated (ADR-065, ADR-077): it records
-who *claimed* to query (git identity by default, ``RAC_AUDIT_PRINCIPAL`` to
-override), never a verified identity — the enforced boundary stays repository ACL
-plus human pull-request review.
+The principal is attributable, not authenticated (ADR-065, ADR-077): it records who
+*claimed* to query (git identity by default, ``RAC_AUDIT_PRINCIPAL`` to override),
+never a verified identity — the enforced boundary stays repository ACL plus human
+pull-request review.
 """
 
 from __future__ import annotations
@@ -45,9 +45,9 @@ from rac.errors import RACError
 # Pinned audit event schema version (ADR-084). Bumping it is a recorded decision.
 SCHEMA_VERSION = "1"
 
-# Repository config discovery (read-only half of the `.rac/config.yaml` contract).
-# Mirrored here rather than imported from ``rac.services.init`` because the MCP
-# layer must not import a write-capable service (ADR-031, the isolation battery).
+# Repository config discovery (the read-only half of the ``.rac/config.yaml``
+# contract). Mirrored here rather than imported from ``rac.services.init`` because
+# the MCP layer must not import a write-capable service (ADR-031, isolation battery).
 CONFIG_DIR = ".rac"
 CONFIG_FILE = "config.yaml"
 
@@ -92,12 +92,17 @@ def _find_config_file(start_dir: str) -> Path | None:
 
 
 def _state_dir() -> Path:
+    """The XDG state directory for RAC; ``XDG_STATE_HOME`` is read on every call."""
     base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
     return Path(base) / "rac"
 
 
 def audit_path(config: AuditConfig | None = None) -> Path:
-    """Resolve the audit log path: ``RAC_AUDIT_PATH`` > config ``path`` > XDG default."""
+    """Resolve the audit log path: ``RAC_AUDIT_PATH`` > config ``path`` > XDG default.
+
+    The precedence order is pinned: an operator's environment override wins over a
+    checked-in config path, which in turn wins over the per-user default.
+    """
     env_override = os.environ.get(PATH_ENV)
     if env_override:
         return Path(env_override)
@@ -109,9 +114,10 @@ def audit_path(config: AuditConfig | None = None) -> Path:
 def load_audit_config(start_dir: str) -> AuditConfig:
     """Read the ``audit`` stanza from the nearest ``.rac/config.yaml`` (ADR-084).
 
-    Returns a disabled config when there is no config file or no ``audit``
-    section. A malformed shape raises :class:`MalformedAuditConfig` — the audit
-    posture is never silently misconfigured.
+    Returns a disabled config when there is no config file or no ``audit`` section.
+    A malformed shape raises :class:`MalformedAuditConfig` — the audit posture is
+    never silently misconfigured. Fields are validated in declaration order
+    (``enabled`` before ``path`` before ``on_write_error``).
     """
     disabled = AuditConfig(enabled=False, path="", on_write_error="warn")
     config_path = _find_config_file(start_dir)
@@ -121,11 +127,13 @@ def load_audit_config(start_dir: str) -> AuditConfig:
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise MalformedAuditConfig(str(config_path), f"invalid YAML: {exc}") from exc
+
     section = data.get("audit") if isinstance(data, dict) else None
     if section is None:
         return disabled
     if not isinstance(section, dict):
         raise MalformedAuditConfig(str(config_path), "'audit' must be a mapping")
+
     enabled = section.get("enabled", False)
     if not isinstance(enabled, bool):
         raise MalformedAuditConfig(str(config_path), "'audit.enabled' must be true or false")
@@ -147,7 +155,11 @@ def load_audit_config(start_dir: str) -> AuditConfig:
 
 
 def _git_identity(root: str) -> str | None:
-    """``"Name <email>"`` from git config in ``root``, or None when unavailable."""
+    """``"Name <email>"`` from git config in ``root``, or None when unavailable.
+
+    Falls back to whichever of name/email is present, and to None when neither is —
+    or when there is no git binary to ask.
+    """
 
     def _config(key: str) -> str | None:
         try:
@@ -185,10 +197,10 @@ def resolve_principal(root: str) -> str:
 class AuditRecorder:
     """Append-only, content-bearing, fail-loud audit writer (ADR-084).
 
-    Unlike :class:`~rac.mcp.telemetry.TelemetryRecorder`, a write failure is
-    never silently swallowed: it is reported once on stderr (fail-loud), and the
-    recorder keeps trying, so ``on_write_error: block`` can refuse every
-    un-recordable call rather than disabling itself after the first.
+    Unlike :class:`~rac.mcp.telemetry.TelemetryRecorder`, a write failure is never
+    silently swallowed: it is reported once on stderr (fail-loud) and the recorder
+    keeps trying, so ``on_write_error: block`` can refuse every un-recordable call
+    rather than disabling itself after the first.
     """
 
     def __init__(self, path: Path, principal: str, on_write_error: str = "warn") -> None:
@@ -232,11 +244,10 @@ def observe(recorder: AuditRecorder | None, tool: str, args: dict, call: Callabl
     """Run ``call``, record one audit event, and return the payload unchanged.
 
     With no recorder this is exactly ``call()`` — audit off creates nothing and
-    leaves the response byte-identical (ADR-084's strict superset). A raised call
-    is recorded as ``outcome: "exception"`` and re-raised, never swallowed
-    (ADR-034). Under ``on_write_error: block`` a failed write refuses the call
-    with a structured ``audit-unavailable`` error rather than serving un-audited
-    content.
+    leaves the response byte-identical (ADR-084's strict superset). A raised call is
+    recorded as ``outcome: "exception"`` and re-raised, never swallowed (ADR-034).
+    Under ``on_write_error: block`` a failed write refuses the call with a structured
+    ``audit-unavailable`` error rather than serving un-audited content.
     """
     if recorder is None:
         return call()
@@ -263,6 +274,12 @@ def _event(
     outcome: str,
     started: float,
 ) -> dict:
+    """One audit event dict, built in the pinned field order (ADR-084).
+
+    Dict insertion order is the wire contract. ``query`` is the tool arguments
+    verbatim (``dict(args)``); ``returned`` is the resolved artifact IDs the call
+    surfaced, never a body.
+    """
     return {
         "schema_version": SCHEMA_VERSION,
         "ts": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
@@ -276,13 +293,19 @@ def _event(
     }
 
 
-def _outcome(payload: str) -> str:
-    """``"error"`` when the payload is a structured error, else ``"ok"`` (ADR-034)."""
+def _decode(payload: str) -> dict | None:
+    """The payload parsed to a dict, or None when it is not a JSON object."""
     try:
         data = json.loads(payload)
     except ValueError:
-        return "ok"
-    if isinstance(data, dict) and isinstance(data.get("error"), str):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _outcome(payload: str) -> str:
+    """``"error"`` when the payload is a structured error, else ``"ok"`` (ADR-034)."""
+    data = _decode(payload)
+    if data is not None and isinstance(data.get("error"), str):
         return "error"
     return "ok"
 
@@ -294,13 +317,11 @@ def _returned(payload: str) -> list[str]:
     get_related), search/find matches, and get_related incoming + neighborhood
     neighbours. The queried artifact's own outgoing references are raw declared
     target text (``dict[str, list[str]]``), not resolved IDs, so they are not
-    recorded as returned access; get_summary surfaces no IDs.
+    recorded as returned access; get_summary surfaces no IDs. Duplicates are
+    dropped preserving first-seen order.
     """
-    try:
-        data = json.loads(payload)
-    except ValueError:
-        return []
-    if not isinstance(data, dict) or isinstance(data.get("error"), str):
+    data = _decode(payload)
+    if data is None or isinstance(data.get("error"), str):
         return []
     ids: list[str] = []
     primary = data.get("id")

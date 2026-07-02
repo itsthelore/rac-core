@@ -1,35 +1,22 @@
-"""Opt-in local usage telemetry for Guide (v0.10.4).
+"""Opt-in, local-only, content-free usage telemetry for the Guide server (ADR-040).
 
-Telemetry answers one product question — is Guide actually used, and which
-tools matter — without spending the trust the Guide asks for (ADR-040). The
-shape is pinned: opt-in and default-off, local-only, and content-free. Events
-carry counts and metadata; tool arguments, artifact IDs, query strings, paths,
-and repository content are never recorded.
+Telemetry answers a single product question — is the Guide used, and which tools
+matter — without spending the trust the Guide asks for. Three properties make that
+safe, and each is pinned by the battery rather than promised in prose:
+
+* **Opt-in / default-off** — no recorder means nothing is written.
+* **Local-only** — an append-only JSONL log under the XDG state directory; sharing
+  is a separate, deliberate act (:func:`share_url` builds a prefilled issue URL the
+  user submits from their own browser). This module imports only the standard
+  library, so the isolation battery's consumer-boundary rule holds by construction.
+* **Content-free** — events carry counts and metadata only. Tool arguments,
+  artifact IDs, query strings, paths, and repository content are never recorded.
 
 Recording is write-only observability outside the request/response contract
-(ADR-032): :func:`observe` returns the tool payload unchanged, the log is
-never an input to a response, and a recorder that cannot write disables itself
-silently — telemetry failure never breaks a tool call.
-
-The log is append-only JSONL under the XDG state directory (the same pattern
-Explorer uses for its workspace), one event per line:
-
-    {"schema_version": "1", "ts": "2026-06-12T14:03:22.512Z",
-     "session": "a3f29c1b", "tool": "search_artifacts", "outcome": "ok",
-     "duration_ms": 12, "truncated": false}
-
-``outcome`` classifies the structured payload the tools already return
-(ADR-034): ``ok``, ``error`` (with the stable error token in ``error``), or
-``exception`` for a raised call (recorded, then re-raised). ``truncated``
-reads the ADR-033 marker. Adding a field is a recorded decision, not a patch.
-
-Sharing is a deliberate act: :func:`share_url` formats the JSON summary into a
-prefilled GitHub issue URL the user reviews and submits in their own browser.
-RAC contains no network code — building a URL is string formatting;
-transmission belongs to the user (ADR-035).
-
-This module imports only the standard library, so the isolation battery's
-consumer-boundary rules hold by construction.
+(ADR-032): :func:`observe` returns the tool payload unchanged, the log is never an
+input to a response, and a recorder that cannot write disables itself silently —
+telemetry trouble never breaks a tool call. Adding a field is a recorded decision,
+not a patch; the event field order below is the contract (ADR-007).
 """
 
 from __future__ import annotations
@@ -49,33 +36,41 @@ SCHEMA_VERSION = "1"
 
 TELEMETRY_FILENAME = "guide-telemetry.jsonl"
 
-# Rotation threshold: events are ~120 bytes, so 1 MB holds roughly 8,000
-# calls. One previous generation is kept (``.1``), bounding disk use at about
-# 2 MB with no in-flight rotation and no retention configuration (ADR-040).
+# Rotation threshold. Events run ~120 bytes, so 1 MB is roughly 8,000 calls; one
+# previous generation is kept (``.1``), bounding disk use near 2 MB with no
+# in-flight rotation and no retention configuration (ADR-040).
 MAX_LOG_BYTES = 1_000_000
 
 # Share flow (ADR-040): a prefilled new-issue URL against the repository's
-# usage-report issue form. Issue forms accept ``?field_id=value`` prefill;
-# the user's browser transmits, RAC never does.
+# usage-report issue form. Issue forms prefill from ``?field_id=value``; the
+# user's browser transmits, RAC never does.
 SHARE_ISSUE_URL = "https://github.com/itsthelore/rac-core/issues/new"
 SHARE_TEMPLATE = "guide-usage-report.yml"
 SHARE_FIELD = "report"
 
 
 def telemetry_path() -> Path:
-    """The local telemetry log path under the XDG state directory."""
+    """The local telemetry log path under the XDG state directory.
+
+    ``XDG_STATE_HOME`` is read on every call, never cached at import: the test
+    batteries set it per-test after this module is imported.
+    """
     base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
     return Path(base) / "rac" / TELEMETRY_FILENAME
+
+
+def _iso_ms() -> str:
+    """The current instant as ``...Z`` with millisecond precision (the ``ts`` format)."""
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 class TelemetryRecorder:
     """Append-only event writer with a never-raise posture.
 
-    Holds the log path and a random per-process session id, so the summary
-    can count sessions without recording anything identifying. The first
-    write failure disables the recorder for the rest of the process: a
-    recorder that cannot write records nothing, and a tool call never pays
-    for telemetry trouble.
+    Holds the log path and a random per-process session id, so the summary can
+    count sessions without recording anything identifying. The first write failure
+    disables the recorder for the rest of the process: a recorder that cannot write
+    records nothing, and a tool call never pays for telemetry trouble.
     """
 
     def __init__(self, path: Path) -> None:
@@ -111,11 +106,12 @@ def create_recorder() -> TelemetryRecorder:
 
 
 def observe(recorder: TelemetryRecorder | None, tool: str, call: Callable[[], str]) -> str:
-    """Run ``call`` and record one event; the payload returns unchanged.
+    """Run ``call``, record one event, and return the payload unchanged.
 
-    With no recorder this is exactly ``call()`` — telemetry off costs
-    nothing. A raised call is recorded as ``outcome: "exception"`` and
-    re-raised, never swallowed (the reasoning boundary stays ADR-034's).
+    With no recorder this is exactly ``call()`` — telemetry off costs nothing and
+    leaves the response byte-identical. A raised call is recorded as
+    ``outcome: "exception"`` and re-raised, never swallowed: the reasoning boundary
+    stays ADR-034's.
     """
     if recorder is None:
         return call()
@@ -131,11 +127,11 @@ def observe(recorder: TelemetryRecorder | None, tool: str, call: Callable[[], st
 
 
 def _classify(payload: str) -> tuple[str, str | None, bool]:
-    """Outcome, error token, and truncation read from a serialized payload.
+    """Outcome, error token, and truncation flag read from a serialized payload.
 
-    The tools return structured JSON by contract; anything unparseable is
-    classified as ``ok`` rather than letting telemetry raise over a payload
-    the agent will read anyway.
+    The tools return structured JSON by contract; anything unparseable is treated
+    as ``ok`` rather than letting telemetry raise over a payload the agent reads
+    anyway. ``error`` is populated only when the payload is a structured error.
     """
     try:
         data = json.loads(payload)
@@ -143,8 +139,8 @@ def _classify(payload: str) -> tuple[str, str | None, bool]:
         return "ok", None, False
     if not isinstance(data, dict):
         return "ok", None, False
-    error = data.get("error")
     truncated = data.get("truncated") is True
+    error = data.get("error")
     if isinstance(error, str):
         return "error", error, truncated
     return "ok", None, truncated
@@ -153,9 +149,14 @@ def _classify(payload: str) -> tuple[str, str | None, bool]:
 def _event(
     session: str, tool: str, outcome: str, error: str | None, started: float, truncated: bool
 ) -> dict:
+    """One event dict in the pinned field order.
+
+    ``error`` is inserted between ``outcome`` and ``duration_ms`` on error outcomes
+    only; insertion order is the wire contract (ADR-007).
+    """
     event: dict = {
         "schema_version": SCHEMA_VERSION,
-        "ts": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "ts": _iso_ms(),
         "session": session,
         "tool": tool,
         "outcome": outcome,
@@ -168,11 +169,11 @@ def _event(
 
 
 def read_events(path: Path) -> tuple[list[dict], int]:
-    """Events from ``path`` plus the count of skipped unreadable lines.
+    """Events at ``path`` plus the count of skipped unreadable lines.
 
-    Corruption-tolerant by the same posture as Explorer's state files: a
-    missing file is an empty log, and a garbled line is skipped and counted,
-    never raised over.
+    Corruption-tolerant: a missing file is an empty log, and a blank line is
+    ignored while a garbled or non-object line is skipped and counted — never
+    raised over.
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -197,7 +198,7 @@ def read_events(path: Path) -> tuple[list[dict], int]:
 
 @dataclass(frozen=True)
 class ToolUsage:
-    """Aggregated usage for one tool, ordered by tool name in the summary."""
+    """Aggregated usage for one tool; the summary orders these by tool name."""
 
     tool: str
     calls: int
@@ -217,7 +218,7 @@ class ToolUsage:
 
 @dataclass(frozen=True)
 class TelemetrySummary:
-    """What the local log says about Guide usage (the `mcp-stats` payload)."""
+    """What the local log says about Guide usage (the ``mcp-stats`` payload)."""
 
     path: str
     event_count: int
@@ -273,6 +274,7 @@ def summarize(path: Path | None = None) -> TelemetrySummary:
 
 
 def _average_duration(rows: list[dict]) -> int:
+    """The rounded mean duration over rows that carry an integer ``duration_ms``."""
     durations = [ev["duration_ms"] for ev in rows if isinstance(ev.get("duration_ms"), int)]
     if not durations:
         return 0
@@ -282,10 +284,16 @@ def _average_duration(rows: list[dict]) -> int:
 def share_url(summary: TelemetrySummary) -> str:
     """The prefilled usage-report issue URL for ``summary``.
 
-    String formatting only — the user opens the URL, reviews the prefilled
-    report, and submits it with their own GitHub account (ADR-040). The
-    local log path stays out of the shared report: a home-directory path
-    can embed a username, and the report is counts and timestamps only.
+    String formatting only — the user opens the URL, reviews the prefilled report,
+    and submits it under their own GitHub account (ADR-040). The local log path
+    stays out of the shared report: a home-directory path can embed a username, and
+    the report is counts and timestamps only.
+
+    The report is serialized as indented JSON (``ensure_ascii=False, indent=2``)
+    *before* being urlencoded — that exact serialization is a byte-exact pin (the
+    ``mcp-stats --share`` golden and the share-URL round-trip test). Passing the raw
+    dict would let ``urlencode`` stringify it via ``repr`` (single quotes), which is
+    not JSON and would not round-trip.
     """
     report_data = summary.to_dict()
     del report_data["path"]
