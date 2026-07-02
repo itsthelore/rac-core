@@ -97,3 +97,49 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+
+  image-publish:
+    # Official container image, published in lockstep with the PyPI release
+    # (rac/roadmaps/future/oci-image.md): same trigger, same wheel, same
+    # CalVer tag. Runs after pypi-publish so the image never exists for a
+    # version PyPI does not have.
+    runs-on: ubuntu-latest
+    needs:
+      - pypi-publish
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/itsthelore/rac
+      TAG: ${{ github.event.release.tag_name }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: release-dists
+          path: dist/
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg RAC_VERSION="$TAG" \
+            -t "$IMAGE:$TAG" \
+            -t "$IMAGE:latest" \
+            .
+
+      - name: Smoke-test image
+        run: docker run --rm "$IMAGE:$TAG" --version
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push image
+        run: |
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+
+      - name: Report pushed digest
+        run: docker inspect --format '{{ index .RepoDigests 0 }}' "$IMAGE:$TAG" >> "$GITHUB_STEP_SUMMARY"
