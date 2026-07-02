@@ -65,7 +65,7 @@ from rac.services.rename import (
     RenamePlan,
     RenameResult,
 )
-from rac.services.resolve import ResolutionResult, SearchResult
+from rac.services.resolve import PathDecisionsResult, ResolutionResult, SearchResult
 from rac.services.review import (
     PRIORITY_BROKEN_RELATIONSHIP,
     PRIORITY_INVALID_ARTIFACT,
@@ -1052,6 +1052,23 @@ def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
                 )
     lines.append("")
     lines.append(f"{result.match_count} match(es) for {result.query!r}.")
+    return "\n".join(lines)
+
+
+def render_decisions_human(result: PathDecisionsResult) -> str:
+    """Human `rac decisions` output: the live decisions governing a path (ADR-098).
+
+    One aligned row per decision with its status, then the declared scope(s)
+    that matched, indented as evidence — bindings, never a verdict (ADR-067).
+    """
+    if not result.matches:
+        return f"No live decisions declare a scope governing {result.query_path!r}."
+    id_w = max(len(m.artifact_id) for m in result.matches)
+    status_w = max(len(m.status or "—") for m in result.matches)
+    lines = [f"{result.match_count} live decision(s) govern {result.query_path!r}:", ""]
+    for m in result.matches:
+        lines.append(f"{m.artifact_id:<{id_w}}  {m.status or '—':<{status_w}}  {m.title or '—'}")
+        lines.append(f"{' ' * id_w}  {' ' * status_w}  ↳ {m.path}  via {', '.join(m.scopes)}")
     return "\n".join(lines)
 
 
