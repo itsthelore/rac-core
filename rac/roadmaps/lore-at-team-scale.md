@@ -16,8 +16,9 @@ the deterministic-substrate programme's deferred list, it graduates out of
 `future/` as a live scoped roadmap. The substrate programme's two entry
 conditions are carried here explicitly: **mandatory audit-on for shared
 deployments** and **cache coherency guaranteed as byte-parity with the
-uncached path**. Execution is tracked in a GitHub issue per initiative when
-work is picked up (ADR-093); a `## Related Tickets` entry is added then.
+uncached path**. Execution is tracked in GitHub (ADR-093): the epic in
+`## Related Tickets` carries ordering and task state, with a sub-issue per
+initiative.
 
 ## Context
 
@@ -207,3 +208,7 @@ engine.
 - rac-mcp-http-transport
 - rac-derived-index-cache
 - rac-shared-server-audit-identity
+
+## Related Tickets
+
+- itsthelore/rac-core#262
