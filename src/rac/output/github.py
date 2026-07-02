@@ -1,16 +1,17 @@
-"""GitHub-oriented rendering for `rac watchkeeper --format github` (v0.12.2).
+"""GitHub-oriented rendering for ``rac watchkeeper --format github`` (v0.12.2).
 
 Two surfaces, one invocation, no GitHub API:
 
-- :func:`render_watchkeeper_github` returns a GitHub-flavored Markdown
-  report intended for ``$GITHUB_STEP_SUMMARY``.
-- :func:`watchkeeper_annotations` returns workflow-command lines
-  (``::warning`` / ``::error`` / ``::notice``) intended for the step log,
-  where the runner turns them into inline annotations.
+- :func:`render_watchkeeper_github` returns a GitHub-flavored Markdown report
+  for ``$GITHUB_STEP_SUMMARY``.
+- :func:`watchkeeper_annotations` returns workflow-command lines (``::warning`` /
+  ``::error`` / ``::notice``) for the step log, where the runner turns them into
+  inline annotations.
 
-Annotation file paths are repository-relative (the corpus directory joined
-to each finding's corpus-relative path) so GitHub can map them onto pull
-request files.
+Annotation paths are repository-relative (the corpus directory joined to each
+finding's corpus-relative path) so GitHub can map them onto pull-request files.
+Both surfaces are deterministic (ADR-002): the order is fixed, not derived from
+dict or set iteration.
 """
 
 from __future__ import annotations
@@ -30,11 +31,12 @@ _CHANGE_LABELS = {CHANGE_ADDED: "Added", CHANGE_MODIFIED: "Modified", CHANGE_REM
 
 
 def _repo_path(report: WatchkeeperReport, corpus_relative: str) -> str:
+    """Join the corpus directory to a corpus-relative path, POSIX-style for GitHub."""
     return str(PurePosixPath(report.directory) / corpus_relative)
 
 
 def render_watchkeeper_github(report: WatchkeeperReport) -> str:
-    """The Markdown step-summary report."""
+    """The Markdown step-summary report (byte-pinned by the github golden)."""
     comparison = report.comparison
     validation = comparison.validation
     relationships = comparison.relationships
@@ -98,9 +100,9 @@ def render_watchkeeper_github(report: WatchkeeperReport) -> str:
 def watchkeeper_annotations(report: WatchkeeperReport) -> list[str]:
     """Workflow-command lines for the step log, one annotation per line.
 
-    Recommendation triggers annotate as errors; other warnings as warnings;
-    informational findings as notices. Deterministic order: delta-driven
-    errors first, then findings in report order.
+    Deterministic order: newly-invalid regressions first, then new relationship
+    issues, then findings in report order. A recommendation trigger annotates as
+    an error; other warnings as warnings; informational findings as notices.
     """
     lines: list[str] = []
     for path in report.comparison.validation.newly_invalid:
@@ -109,7 +111,8 @@ def watchkeeper_annotations(report: WatchkeeperReport) -> list[str]:
             f"{REASON_VALIDATION_REGRESSION}: Artifact became invalid."
         )
     for issue in report.comparison.relationships.new_issues:
-        # Duplicate-identifier findings can span files; annotate the first.
+        # A duplicate-identifier finding can span files; anchor the annotation on
+        # the first path.
         file_path = issue.path.split(", ")[0]
         lines.append(
             f"::error file={_repo_path(report, file_path)}::"

@@ -2,25 +2,24 @@
 
 The Portal shell is a self-contained HTML viewer built from
 ``rac-localview/src/viewer/`` and committed as package data at
-``rac.templates.portal`` together with its provenance manifest
-(roadmap v0.11.0, Initiative 2). It carries one empty data seam,
+``rac.templates.portal`` alongside its provenance manifest (roadmap v0.11.0,
+Initiative 2). It carries one empty data seam,
 
     <script type="application/json" id="lore-export"></script>
 
-and ``render_export_html`` substitutes the export JSON into that element —
-nothing else in the file changes, so the result opens from ``file://`` with
-zero network requests (ADR-002 offline; data injection per
+and :func:`render_export_html` substitutes the export JSON into that element —
+nothing else in the file changes, so the result opens from ``file://`` with zero
+network requests (ADR-002 offline; data injection per
 ``rac-localview/VIEWER_CONTRACT.md``).
 
 The serialized JSON is made ``<script>``-safe with two valid JSON escapes:
 ``</`` becomes ``<\\/`` (no premature ``</script>``) and ``<!--`` becomes
-``<\\u0021--`` (no HTML comment open), so the embedded payload parses
-unchanged.
+``<\\u0021--`` (no HTML comment open), so the embedded payload parses unchanged.
 
-Two failure modes are deliberately distinct exceptions, both operational
-(the shell ships with the distribution; neither is a caller error): a
-*missing packaged shell* is a broken installation, while a shell *without
-exactly one empty seam* is corrupt vendoring.
+Two failure modes are deliberately distinct exceptions, both operational (the
+shell ships with the distribution; neither is a caller error): a *missing
+packaged shell* is a broken installation, while a shell *without exactly one
+empty seam* is corrupt vendoring.
 """
 
 from __future__ import annotations
@@ -58,6 +57,12 @@ class PortalSeamMissing(RACError):
 
 
 def _load_shell() -> str:
+    """Read the vendored Portal shell from package data.
+
+    A patchable seam: tests monkeypatch this to simulate a missing shell or a
+    shell without its data seam. The ``rac.templates`` anchor and the
+    ``portal/lore-portal-shell.html`` sub-path are exact and load-bearing.
+    """
     resource = resources.files("rac.templates").joinpath("portal/lore-portal-shell.html")
     try:
         return resource.read_text(encoding="utf-8")

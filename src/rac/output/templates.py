@@ -1,8 +1,15 @@
 """Markdown template rendering for RAC command results.
 
-Starter templates for missing sections (``rac improve --template``) and full
+Starter blocks for missing sections (``rac improve --template``) and full
 artifact scaffolds (``rac schema --template``). Templates are deterministic,
 schema-derived Markdown — never AI-generated content (ADR-002).
+
+:func:`render_schema_template` is byte-pinned twice: against the
+``schema_requirement_template`` golden *and* against every packaged
+``src/rac/templates/{name}.md`` (``load_template(name) ==
+render_schema_template(schema_reference(name))``), so the creation template and
+the ``rac schema --template`` render stay one source of truth. Any whitespace,
+heading, or comment change breaks the drift guard for all five artifact types.
 """
 
 from __future__ import annotations
@@ -14,7 +21,7 @@ from ._shared import _UNKNOWN_MESSAGE, _unsupported_message
 
 
 def render_improve_template(result: ImprovementResult) -> str:
-    """Emit Markdown templates for missing sections (required first)."""
+    """Emit Markdown starter blocks for the missing sections (required first)."""
     if result.type == "unknown":
         return _UNKNOWN_MESSAGE
     if not result.supported:
@@ -35,6 +42,12 @@ def render_improve_template(result: ImprovementResult) -> str:
 
 
 def render_schema_template(ref: SchemaReference) -> str:
+    """Emit a full artifact scaffold from a schema reference.
+
+    ``# Title`` then, per template section, ``## {Name}`` with the section body
+    and any guidance as ``<!-- ... -->`` comments — a metadata section's
+    ``Choose one: a | b`` hint leads its comments.
+    """
     blocks = ["# Title"]
     for section in template_sections(ref):
         block = f"## {section.name.title()}\n\n{section.body}"

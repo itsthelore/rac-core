@@ -1,4 +1,4 @@
-"""OKF bundle export — `rac export --okf` (v0.13.6).
+"""OKF bundle export — ``rac export --okf`` (v0.13.6).
 
 A derived view of the corpus as a conformant Open Knowledge Format (OKF v0.1
 Draft) bundle (ADR-048: OKF is an informative carrier profile and a derived
@@ -10,13 +10,13 @@ Bundle paths are relative to the exported corpus root, so the bundle mirrors the
 corpus layout without leaking the caller's directory. The RAC ``type`` stays
 authoritative; each artifact file projects it to the OKF ``type`` per the
 ADR-048 mapping. Every relationship that resolves (``rac relationships
---validate``) is rendered as a body link in a derived ``# Citations`` section, so
-links survive for permissive OKF consumers while the typed front matter and
+--validate``) becomes a body link in a derived ``# Citations`` section, so links
+survive for permissive OKF consumers while the typed front matter and
 ``## Related <Type>`` sections remain the source of truth.
 
-Determinism (ADR-002, matching ``render_export_json``): artifacts in
-sorted-path order, citations and index entries ordered explicitly, ``log.md``
-grouped by commit date (newest first) then path — the same corpus state yields a
+Determinism (ADR-002, matching ``render_export_json``): artifacts in sorted-path
+order, citations and index entries ordered explicitly, ``log.md`` grouped by
+commit date (newest first) then path — the same corpus state yields a
 byte-identical bundle. Recency is derived from git (ADR-045); when git cannot
 answer, ``log.md`` degrades to a placeholder rather than failing.
 """
@@ -30,12 +30,14 @@ from rac.core.okf import OKF_TYPE
 from rac.services.export import CorpusExport, ExportArtifact
 from rac.services.recency import RecencyReport
 
-# RAC ``type`` → OKF ``type`` is defined once in ``rac.core.okf`` (ADR-048) and
-# re-exported here for the bundle renderer and its existing importers. Unknown-
-# type files are excluded from the export, so every ``art.type`` resolves.
+# The RAC ``type`` → OKF ``type`` map is defined once in ``rac.core.okf``
+# (ADR-048) and re-exported here for the bundle renderer and its importers; it is
+# intentionally not forked. ``OKF_TYPE`` sits in ``__all__`` so importers reach it
+# at ``rac.output.okf`` even though the package facade does not re-export it.
+# Unknown-type files never export, so every ``art.type`` seen here resolves.
 __all__ = ["OKF_TYPE", "render_okf_bundle"]
 
-# Human plural headings for the index, in a fixed disclosure order.
+# Index headings (human plural) in a fixed progressive-disclosure order.
 _INDEX_SECTIONS: tuple[tuple[str, str], ...] = (
     ("requirement", "Requirements"),
     ("decision", "Decisions"),
@@ -49,7 +51,11 @@ _LOG_PATH = "log.md"
 
 
 def _body(path: str) -> str:
-    """The Markdown body after the frontmatter envelope, trailing space trimmed."""
+    """The Markdown body after the frontmatter envelope, trailing space trimmed.
+
+    The only filesystem read in the renderer: source bodies are lifted verbatim
+    into the bundle rather than re-parsed (ADR-059 keeps Markdown parsing in core).
+    """
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     return split_frontmatter(text).body.strip()
@@ -63,9 +69,9 @@ def _artifact_file(
 ) -> str:
     """One OKF artifact file: projected front matter, body, derived citations.
 
-    OKF-reserved descriptive fields (ADR-050), projected present-only so the
+    OKF-reserved descriptive fields (ADR-050) are projected present-only, so the
     bundle stays minimal and deterministic: ``tags`` from the source frontmatter,
-    ``created``/``updated`` derived from git (never stored in source, ADR-045).
+    and ``created``/``updated`` derived from git (never stored in source, ADR-045).
     """
     front = ["---", f"type: {OKF_TYPE[art.type]}", f"id: {art.id}"]
     if created is not None:
@@ -104,7 +110,7 @@ def _citations(
 
 
 def _index(export: CorpusExport, rel: dict[str, str]) -> str:
-    """``index.md`` — progressive disclosure: overview, then artifacts by type."""
+    """``index.md`` — an overview line, then artifacts grouped by type."""
     count = export.artifact_count
     noun = "artifact" if count == 1 else "artifacts"
     lines = [
@@ -126,7 +132,7 @@ def _index(export: CorpusExport, rel: dict[str, str]) -> str:
 
 
 def _log(export: CorpusExport, recency: RecencyReport, rel: dict[str, str]) -> str:
-    """``log.md`` — corpus history grouped by commit date, newest first."""
+    """``log.md`` — corpus history grouped by commit date, newest day first."""
     last_by_path = {a.path: a.last_committed for a in recency.artifacts}
     title_by_path = {art.path: art.title for art in export.artifacts}
 
@@ -152,7 +158,9 @@ def render_okf_bundle(export: CorpusExport, recency: RecencyReport, root: str) -
 
     One file per typed artifact at its path relative to ``root`` (the exported
     corpus directory), plus ``index.md`` and ``log.md`` at the bundle root. Pure
-    and deterministic given the same ``export`` and ``recency``.
+    and deterministic given the same ``export`` and ``recency``. Raises
+    ``ValueError`` if a real artifact's bundle key would collide with a generated
+    file.
     """
     rel = {art.path: os.path.relpath(art.path, root) for art in export.artifacts}
     by_id = {art.id: art for art in export.artifacts}

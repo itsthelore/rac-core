@@ -1,8 +1,16 @@
-"""Human-readable rendering for RAC command results.
+"""Human-readable rendering for every ``rac`` command.
 
-Keeping rendering out of :mod:`rac.cli` lets the CLI stay thin and makes the
-output formats easy to test directly. JSON lives in :mod:`rac.output.json` and
-Markdown templates in :mod:`rac.output.templates`.
+This is the plain-text presentation layer (ADR-003): each ``render_*`` function
+takes an already-computed core/service result and returns the exact ``str`` the
+CLI prints. It never touches the filesystem, decides exit codes, or re-parses
+Markdown — those belong to :mod:`rac.cli` and the service layer. The JSON
+contract lives in :mod:`rac.output.json` and the Markdown scaffolds in
+:mod:`rac.output.templates`.
+
+Every byte here is a public contract pinned by ``tests/golden/`` and
+``tests/test_skill.py``: headers, underline widths, indentation, pluralization,
+column alignment, and the ANSI colour mechanics are all load-bearing. When in
+doubt, the golden files are the oracle.
 """
 
 from __future__ import annotations
@@ -84,12 +92,23 @@ from ._shared import _UNKNOWN_MESSAGE, _unsupported_message
 if TYPE_CHECKING:
     from rac.mcp.telemetry import TelemetrySummary as MCPTelemetrySummary
 
-# --- Minimal color (auto-disabled when not writing to a TTY) ----------------
+
+# =============================================================================
+# Colour layer
+# =============================================================================
+#
+# Colour is on only when stdout is an interactive terminal, so piped or
+# captured output stays plain. ``_USE_COLOR`` is a module-level global evaluated
+# once at import; the golden and skill batteries force it False via
+# ``monkeypatch.setattr("rac.output.human._USE_COLOR", False)``. The wrappers
+# below read the global at *call* time — never capture it as a default argument
+# or a local — so the monkeypatch takes effect for the duration of a test.
 
 _USE_COLOR = sys.stdout.isatty()
 
 
 def _c(text: str, code: str) -> str:
+    """Wrap ``text`` in an ANSI SGR ``code`` when colour is enabled."""
     if not _USE_COLOR:
         return text
     return f"\033[{code}m{text}\033[0m"
@@ -112,6 +131,7 @@ def _bold(t: str) -> str:
 
 
 def _loc(file: str, line: int | None) -> str:
+    """``file:line`` when a line is known, otherwise just ``file``."""
     return f"{file}:{line}" if line is not None else file
 
 
@@ -120,10 +140,51 @@ def _loc(file: str, line: int | None) -> str:
 EMPTY_CORPUS_HINT = "No artifacts yet — create your first with: rac quickstart"
 
 
-# --- validate ---------------------------------------------------------------
+# =============================================================================
+# Shared formatting helpers
+# =============================================================================
+
+
+def _heading(title: str, char: str = "=") -> list[str]:
+    """A bold title over a rule of the same visible width.
+
+    The underline tracks ``len(title)`` — the plain title, since colour codes
+    must never count toward the width — so callers pass the raw title. A few
+    decorative section headers instead use a hand-fixed underline width that
+    does *not* equal the title length (portfolio "Attention", review "Issues",
+    watchkeeper "Findings"); those build their own literal at the call site.
+    """
+    return [_bold(title), char * len(title)]
+
+
+def _relationship_label(snake_section: str) -> str:
+    """``related_decisions`` -> ``Related Decisions``; ``supersedes`` -> ``Supersedes``."""
+    return snake_section.replace("_", " ").title()
+
+
+# Suffix shown after a flagged reference, keyed by the relationship issue code.
+# Used by both single-document stdin validation and directory relationship
+# validation, so it lives here rather than in either renderer.
+_REF_ISSUE_SUFFIX = {
+    ISSUE_TARGET_NOT_FOUND: "not found",
+    ISSUE_TARGET_AMBIGUOUS: "ambiguous",
+    ISSUE_SELF_REFERENCE: "self-reference",
+    ISSUE_TARGET_SUPERSEDED: "superseded",
+    ISSUE_TARGET_TYPE_MISMATCH: "wrong target type",
+}
+
+
+# =============================================================================
+# validate
+# =============================================================================
 
 
 def render_validation_human(product: Product, issues: list[Issue]) -> str:
+    """Single-file ``rac validate`` output: a PASS/FAIL header then each issue.
+
+    The ``error``/``warning`` columns align by literal padding — ``"error   "``
+    and ``"warning "`` are each eight columns — not by computed width.
+    """
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]
     file = product.source_path or "<input>"
@@ -147,13 +208,12 @@ def render_validation_human(product: Product, issues: list[Issue]) -> str:
 
 
 def render_stdin_corpus_human(result: StdinCorpusValidation) -> str:
-    """Human-readable `rac validate - --corpus` output (v0.21.17, ADR-067).
+    """Human ``rac validate - --corpus`` output (v0.21.17, ADR-067).
 
     Renders the proposed document's structural findings exactly as single-file
-    ``rac validate`` does, then appends the corpus-resolved relationship findings
+    ``rac validate`` does, then appends corpus-resolved relationship findings
     (references to retired or missing decisions) under their own heading. Both
-    contribute to the verdict; either alone fails the run. The reason text is the
-    finding the generated Claude Code pre-edit hook surfaces when it blocks.
+    contribute to the verdict; either alone fails the run.
     """
     file = result.source_path or "<input>"
     errors = [i for i in result.structural_issues if i.severity == "error"]
@@ -189,11 +249,13 @@ def render_stdin_corpus_human(result: StdinCorpusValidation) -> str:
 
 
 def render_validate_dir_human(result: DirectoryValidation) -> str:
-    """Human-readable directory `rac validate` output (v0.7.9).
+    """Human directory ``rac validate`` output (v0.7.9).
 
     Lists each invalid artifact with its errors; valid and skipped files are
-    only counted, keeping the output a usable CI gate. Warnings stay in the
-    JSON contract and in single-file validation.
+    only counted, keeping the output a usable CI gate. Warnings stay in the JSON
+    contract and in single-file validation. OKF v0.1 conformance findings
+    (ADR-048) are listed like invalid artifacts so a conformance-only failure is
+    just as actionable.
     """
     lines: list[str] = []
     for f in result.files:
@@ -209,8 +271,6 @@ def render_validate_dir_human(result: DirectoryValidation) -> str:
             lines.append(f"          {issue.message}")
         lines.append("")
 
-    # OKF v0.1 conformance findings (ADR-048): listed like invalid artifacts so a
-    # conformance-only failure is just as actionable as a per-file one.
     okf = result.okf
     if okf is not None and okf.findings:
         for finding in okf.findings:
@@ -238,10 +298,13 @@ def render_validate_dir_human(result: DirectoryValidation) -> str:
     return "\n".join(lines)
 
 
-# --- diff -------------------------------------------------------------------
+# =============================================================================
+# diff
+# =============================================================================
 
 
 def render_diff_human(d: Diff, old_path: str, new_path: str) -> str:
+    """Human ``rac diff`` output: added/removed/modified blocks, blank-separated."""
     if d.is_empty():
         return "No changes."
 
@@ -286,25 +349,33 @@ def render_diff_human(d: Diff, old_path: str, new_path: str) -> str:
     list_block("Added Risks", d.added_risks, "+")
     list_block("Removed Risks", d.removed_risks, "-")
 
-    # Blank line between blocks.
+    # One blank line between blocks.
     return "\n\n".join(blocks)
 
 
-# --- stats -------------------------------------------------------------------
+# =============================================================================
+# stats
+# =============================================================================
 
 
 def render_stats_human(s: PortfolioStats) -> str:
+    """Human ``rac stats`` output: the requirement portfolio, then present-only
+    sections for the other artifact families.
+
+    The decisions/roadmaps/prompts/designs/unrecognized/relationships sections
+    are emitted only when non-empty and in a fixed order (Trap-10), so a
+    requirement-only portfolio renders exactly as it did before those families
+    existed.
+    """
     lines = [
-        _bold("Portfolio Overview"),
-        "==================",
+        *_heading("Portfolio Overview"),
         "",
         f"Features: {s.files_found}",
         f"Requirements: {s.total_requirements}",
         f"Metrics: {s.total_metrics}",
         f"Risks: {s.total_risks}",
         "",
-        _bold("Quality"),
-        "=======",
+        *_heading("Quality"),
         "",
     ]
 
@@ -323,7 +394,7 @@ def render_stats_human(s: PortfolioStats) -> str:
     else:
         lines.append("Largest Feature: (none)")
 
-    lines += ["", _bold("Requirements by Feature"), "=======================", ""]
+    lines += ["", *_heading("Requirements by Feature"), ""]
     by_feature = s.requirements_by_feature
     if by_feature:
         width = max(len(f.name) for f in by_feature) + 4
@@ -338,10 +409,10 @@ def render_stats_human(s: PortfolioStats) -> str:
             reasons = ", ".join(f.error_codes) or "unknown"
             lines.append(f"  {_red(f.path)} — {reasons}")
 
-    # Decisions are reported separately; omit the section entirely when there are
-    # none so requirement-only portfolios render exactly as before.
+    # Decisions are reported separately; the whole section is omitted when there
+    # are none so requirement-only portfolios render exactly as before.
     if s.decisions:
-        lines += ["", _bold("Decisions"), "=========", "", f"Total: {s.decision_count}"]
+        lines += ["", *_heading("Decisions"), "", f"Total: {s.decision_count}"]
 
         def breakdown(label: str, counts: dict[str, int]) -> None:
             lines.extend(["", _bold(label)])
@@ -354,13 +425,11 @@ def render_stats_human(s: PortfolioStats) -> str:
         breakdown("Status", s.decision_status_counts)
         breakdown("Category", s.decision_category_counts)
 
-    # Roadmaps are reported separately and lightly (count + invalid only); the
-    # section is omitted entirely when there are none.
+    # Roadmaps: count + invalid only, omitted entirely when there are none.
     if s.roadmaps:
         lines += [
             "",
-            _bold("Roadmaps"),
-            "========",
+            *_heading("Roadmaps"),
             "",
             f"Total: {s.roadmap_count}",
             f"Valid: {s.valid_roadmaps}",
@@ -372,13 +441,11 @@ def render_stats_human(s: PortfolioStats) -> str:
                 reasons = ", ".join(r.error_codes) or "unknown"
                 lines.append(f"  {_red(r.path)} — {reasons}")
 
-    # Prompts are reported separately and lightly (count + invalid only); the
-    # section is omitted entirely when there are none.
+    # Prompts: count + invalid only, omitted entirely when there are none.
     if s.prompts:
         lines += [
             "",
-            _bold("Prompts"),
-            "=======",
+            *_heading("Prompts"),
             "",
             f"Total: {s.prompt_count}",
             f"Valid: {s.valid_prompts}",
@@ -390,13 +457,11 @@ def render_stats_human(s: PortfolioStats) -> str:
                 reasons = ", ".join(p.error_codes) or "unknown"
                 lines.append(f"  {_red(p.path)} — {reasons}")
 
-    # Designs are reported separately and lightly (count + invalid only); the
-    # section is omitted entirely when there are none.
+    # Designs: count + invalid only, omitted entirely when there are none.
     if s.designs:
         lines += [
             "",
-            _bold("Designs"),
-            "=======",
+            *_heading("Designs"),
             "",
             f"Total: {s.design_count}",
             f"Valid: {s.valid_designs}",
@@ -408,28 +473,25 @@ def render_stats_human(s: PortfolioStats) -> str:
                 reasons = ", ".join(d.error_codes) or "unknown"
                 lines.append(f"  {_red(d.path)} — {reasons}")
 
-    # Unrecognized documents (ADR-010): files that matched no known artifact
-    # schema. Surfaced but rendered neutrally — they are not validation errors.
-    # Omitted entirely when there are none, so portfolios of only known artifacts
-    # render exactly as before.
+    # Unrecognized documents (ADR-010): matched no known schema. Surfaced
+    # neutrally — they are not validation errors — and omitted when there are
+    # none.
     if s.unrecognized:
         count = s.unrecognized_count
         noun = "document" if count == 1 else "documents"
         lines += [
             "",
-            _bold("Unrecognized"),
-            "============",
+            *_heading("Unrecognized"),
             "",
             f"{count} {noun} matched no known artifact schema (not errors — see ADR-010):",
         ]
         for u in s.unrecognized:
             lines.append(f"  {u.path}")
 
-    # Declared relationship-presence counts (v0.7.0). Omitted entirely when no
-    # artifact declares a relationship section, so existing portfolios are
-    # unchanged. These are presence counts, not resolved/edge counts.
+    # Declared relationship-presence counts (v0.7.0): presence, not resolved or
+    # edge counts. Omitted when no artifact declares a relationship section.
     if s.relationship_counts:
-        lines += ["", _bold("Relationships"), "=============", ""]
+        lines += ["", *_heading("Relationships"), ""]
         for section, count in s.relationship_counts.items():
             lines.append(f"Artifacts with {section.title()}: {count}")
 
@@ -439,10 +501,13 @@ def render_stats_human(s: PortfolioStats) -> str:
     return "\n".join(lines)
 
 
-# --- inspect -----------------------------------------------------------------
+# =============================================================================
+# inspect
+# =============================================================================
 
 
 def render_inspect_human(result: InspectionResult) -> str:
+    """Human single-file ``rac inspect`` output: type, confidence, sections."""
     lines = [
         _bold(f"Artifact Type: {result.type.title()}"),
         f"Confidence: {result.confidence:.0%}",
@@ -462,7 +527,7 @@ def render_inspect_human(result: InspectionResult) -> str:
 
 
 def _append_relationships(lines: list[str], result: InspectionResult) -> None:
-    """Add a Relationships block when the artifact declares related artifacts."""
+    """Append a Relationships block when the artifact declares related artifacts."""
     if not result.relationships:
         return
     lines += ["", _bold("Relationships:")]
@@ -472,7 +537,7 @@ def _append_relationships(lines: list[str], result: InspectionResult) -> None:
 
 
 def _append_decision_metadata(lines: list[str], result: InspectionResult) -> None:
-    """Add Status / Category / Supersedes lines when a decision declares them."""
+    """Append Status / Category / Supersedes lines when a decision declares them."""
     pairs = [
         ("Status", result.status),
         ("Category", result.category),
@@ -487,7 +552,7 @@ def _append_decision_metadata(lines: list[str], result: InspectionResult) -> Non
 def render_inspect_verbose(result: InspectionResult, scores: list[TypeScore]) -> str:
     """Explainable single-file output: matches, misses, and the score math."""
     chosen = next((s for s in scores if s.name == result.type), None)
-    if chosen is None:  # Unknown — explain via the closest candidate
+    if chosen is None:  # Unknown — explain via the closest candidate.
         chosen = scores[0] if scores else None
 
     lines = [
@@ -527,6 +592,7 @@ def render_inspect_verbose(result: InspectionResult, scores: list[TypeScore]) ->
 
 
 def render_dir_inspect_human(d: DirectoryInspection) -> str:
+    """Human directory ``rac inspect`` output: a per-type file census."""
     counts = d.counts
     lines = [_bold(f"Files Inspected: {d.total_files}"), ""]
     for spec in ARTIFACT_SPECS:
@@ -535,10 +601,13 @@ def render_dir_inspect_human(d: DirectoryInspection) -> str:
     return "\n".join(lines)
 
 
-# --- improve -----------------------------------------------------------------
+# =============================================================================
+# improve
+# =============================================================================
 
 
 def render_improve_human(result: ImprovementResult) -> str:
+    """Human ``rac improve`` output: missing sections with guidance prompts."""
     if result.type == "unknown":
         return _UNKNOWN_MESSAGE
     if not result.supported:
@@ -564,22 +633,27 @@ def render_improve_human(result: ImprovementResult) -> str:
     return "\n".join(lines).rstrip()
 
 
-# --- schema ------------------------------------------------------------------
+# =============================================================================
+# schema
+# =============================================================================
 
 
 def render_schema_list_human(names: list[str]) -> str:
+    """Human ``rac schema`` (no argument) output: the available schema names."""
     lines = [_bold("Available Schemas:")]
     lines.extend(f"- {name}" for name in names)
     return "\n".join(lines)
 
 
 def render_unknown_schema(name: str, available: list[str]) -> str:
+    """Error output for an unrecognized ``rac schema <name>`` argument."""
     lines = [f"Unknown schema: {name}", "", "Available schemas:"]
     lines.extend(f"- {schema}" for schema in available)
     return "\n".join(lines)
 
 
 def render_schema_human(ref: SchemaReference) -> str:
+    """Human ``rac schema <name>`` output: sections, descriptions, guidance."""
     lines = [_bold(f"Artifact Type: {ref.display}"), ""]
 
     def section_block(title: str, names: list[str]) -> None:
@@ -610,15 +684,18 @@ def render_schema_human(ref: SchemaReference) -> str:
     return "\n".join(lines).rstrip()
 
 
-# --- relationships -----------------------------------------------------------
-
-
-def _relationship_label(snake_section: str) -> str:
-    """``related_decisions`` -> ``Related Decisions``; ``supersedes`` -> ``Supersedes``."""
-    return snake_section.replace("_", " ").title()
+# =============================================================================
+# relationships
+# =============================================================================
 
 
 def render_relationships_human(report: RelationshipReport) -> str:
+    """Human ``rac relationships`` output: the presence census and per-artifact
+    detail (REQ-005).
+
+    References that resolve uniquely show their human-friendly label (v0.7.12);
+    the stored reference stays first, as the source of truth.
+    """
     lines = [
         _bold("Relationships"),
         "",
@@ -634,9 +711,6 @@ def render_relationships_human(report: RelationshipReport) -> str:
             f"- {_relationship_label(section)}: {count}" for section, count in counts.items()
         )
 
-    # Per-artifact detail (REQ-005), only for artifacts that declare relationships.
-    # References that resolve uniquely show their human-friendly label
-    # (v0.7.12): the stored reference stays first — it is the source of truth.
     for artifact in report.artifacts:
         lines += ["", artifact.path]
         for section, refs in artifact.relationships.items():
@@ -648,19 +722,12 @@ def render_relationships_human(report: RelationshipReport) -> str:
     return "\n".join(lines)
 
 
-# --- relationship validation -------------------------------------------------
-
-# Suffix shown after a flagged reference, per issue code.
-_REF_ISSUE_SUFFIX = {
-    ISSUE_TARGET_NOT_FOUND: "not found",
-    ISSUE_TARGET_AMBIGUOUS: "ambiguous",
-    ISSUE_SELF_REFERENCE: "self-reference",
-    ISSUE_TARGET_SUPERSEDED: "superseded",
-    ISSUE_TARGET_TYPE_MISMATCH: "wrong target type",
-}
-
-
 def render_relationship_validation_human(report: RelationshipValidation) -> str:
+    """Human ``rac relationships --validate`` output.
+
+    Findings are grouped by kind — duplicate identifiers, unsupported edges,
+    cycles, then broken references — each under its own heading.
+    """
     lines = [
         _bold("Relationship Validation"),
         "",
@@ -720,20 +787,21 @@ def render_relationship_validation_human(report: RelationshipValidation) -> str:
     return "\n".join(lines)
 
 
-# --- portfolio ---------------------------------------------------------------
+# =============================================================================
+# portfolio
+# =============================================================================
 
 
 def render_portfolio_human(s: PortfolioSummary) -> str:
-    """Human-readable `rac portfolio` output."""
+    """Human ``rac portfolio`` output: inventory, validation, relationships,
+    completeness, attention items, and a health score."""
     lines = [
-        _bold("Repository Summary"),
-        "==================",
+        *_heading("Repository Summary"),
         "",
         f"Directory:  {s.directory}",
         f"Artifacts:  {s.total_artifacts}",
         "",
-        _bold("By Type"),
-        "-------",
+        *_heading("By Type", "-"),
         "",
     ]
     for type_name, count in s.by_type.items():
@@ -742,20 +810,17 @@ def render_portfolio_human(s: PortfolioSummary) -> str:
 
     lines += [
         "",
-        _bold("Validation"),
-        "----------",
+        *_heading("Validation", "-"),
         "",
         f"  Valid:    {s.valid_artifacts}",
         f"  Invalid:  {s.invalid_artifacts}",
         "",
-        _bold("Completeness"),
-        "------------",
+        *_heading("Completeness", "-"),
         "",
         f"  {s.completeness:.0%} "
         f"({s.filled_slots} / {s.recommended_slots} recommended slots filled)",
         "",
-        _bold("Relationships"),
-        "-------------",
+        *_heading("Relationships", "-"),
         "",
         f"  Total:    {s.relationships.total}",
         f"  Valid:    {s.relationships.valid}",
@@ -765,6 +830,8 @@ def render_portfolio_human(s: PortfolioSummary) -> str:
     ]
 
     if s.attention:
+        # Decorative fixed-width underline (10 dashes), independent of the
+        # "Attention (N items)" title length.
         lines += ["", _bold(f"Attention ({len(s.attention)} items)"), "----------", ""]
         for item in s.attention:
             icon = _red("✗") if item.severity == "error" else _yellow("!")
@@ -777,8 +844,7 @@ def render_portfolio_human(s: PortfolioSummary) -> str:
     score_color = _green if score >= 80 else _yellow if score >= 60 else _red
     lines += [
         "",
-        _bold("Health Score"),
-        "------------",
+        *_heading("Health Score", "-"),
         "",
         f"  {score_color(str(score))} / 100",
     ]
@@ -789,8 +855,11 @@ def render_portfolio_human(s: PortfolioSummary) -> str:
     return "\n".join(lines)
 
 
-# --- review ------------------------------------------------------------------
+# =============================================================================
+# review
+# =============================================================================
 
+# Priority-group headings in emission order, keyed by the review priority code.
 _PRIORITY_LABELS = {
     PRIORITY_INVALID_ARTIFACT: "Invalid artifacts",
     PRIORITY_BROKEN_RELATIONSHIP: "Broken relationships",
@@ -801,7 +870,7 @@ _PRIORITY_LABELS = {
 
 
 def render_review_human(r: ReviewReport) -> str:
-    """Human-readable `rac review` output (v0.7.9).
+    """Human ``rac review`` output (v0.7.9).
 
     One report answering "what needs attention?": inventory, validation and
     relationship summaries, issues grouped by priority, deduplicated suggested
@@ -809,8 +878,7 @@ def render_review_human(r: ReviewReport) -> str:
     """
     p = r.portfolio
     lines = [
-        _bold("Repository Review"),
-        "=================",
+        *_heading("Repository Review"),
         "",
         f"Directory:  {r.directory}",
         f"Artifacts:  {p.total_artifacts}",
@@ -822,14 +890,12 @@ def render_review_human(r: ReviewReport) -> str:
 
     lines += [
         "",
-        _bold("Validation"),
-        "----------",
+        *_heading("Validation", "-"),
         "",
         f"  Valid:    {p.valid_artifacts}",
         f"  Invalid:  {p.invalid_artifacts}",
         "",
-        _bold("Relationships"),
-        "-------------",
+        *_heading("Relationships", "-"),
         "",
         f"  Total:    {p.relationships.total}",
         f"  Valid:    {p.relationships.valid}",
@@ -837,6 +903,8 @@ def render_review_human(r: ReviewReport) -> str:
     ]
 
     if r.issues:
+        # Decorative fixed-width underline (6 dashes), independent of the
+        # "Issues (N)" title length.
         lines += ["", _bold(f"Issues ({len(r.issues)})"), "------"]
         for priority, label in _PRIORITY_LABELS.items():
             group = [i for i in r.issues if i.priority == priority]
@@ -853,7 +921,7 @@ def render_review_human(r: ReviewReport) -> str:
                 )
                 lines.append(f"    {icon} {issue.identifier}")
                 lines.append(f"        {issue.message}")
-        lines += ["", _bold("Suggested Actions"), "-----------------", ""]
+        lines += ["", *_heading("Suggested Actions", "-"), ""]
         for n, action in enumerate(r.actions, start=1):
             lines.append(f"  {n}. {action}")
     else:
@@ -863,8 +931,7 @@ def render_review_human(r: ReviewReport) -> str:
     score_color = _green if score >= 80 else _yellow if score >= 60 else _red
     lines += [
         "",
-        _bold("Health Score"),
-        "------------",
+        *_heading("Health Score", "-"),
         "",
         f"  {score_color(str(score))} / 100",
     ]
@@ -873,22 +940,23 @@ def render_review_human(r: ReviewReport) -> str:
     return "\n".join(lines)
 
 
-# --- gate --------------------------------------------------------------------
+# =============================================================================
+# gate
+# =============================================================================
 
 
 def render_gate_human(report: GateReport) -> str:
-    """Human-readable `rac gate` output (v0.21.14).
+    """Human ``rac gate`` output (v0.21.14).
 
     The unified enforcement verdict: blocking versus advisory counts, then the
     findings grouped by enforcement class, each with its source, code, and
-    location. Blocking findings fail the gate; advisory findings annotate but do
-    not. The style mirrors `rac review` — coloured icons, a green clear line.
+    location. The style mirrors ``rac review`` — coloured icons, a green clear
+    line.
     """
     blocking = report.blocking
     advisory = report.advisory
     lines = [
-        _bold("Corpus Gate"),
-        "===========",
+        *_heading("Corpus Gate"),
         "",
         f"Directory:  {report.directory}",
         f"Blocking:   {len(blocking)}",
@@ -898,7 +966,7 @@ def render_gate_human(report: GateReport) -> str:
     def _emit(group: list, title: str, icon: str) -> None:
         if not group:
             return
-        lines.extend(["", _bold(f"{title} ({len(group)})"), "-" * len(f"{title} ({len(group)})")])
+        lines.extend(["", *_heading(f"{title} ({len(group)})", "-")])
         for f in group:
             lines.append(f"  {icon} {_loc(f.path, f.line)}")
             lines.append(f"      [{f.source}] {f.code}: {f.message}")
@@ -914,14 +982,15 @@ def render_gate_human(report: GateReport) -> str:
     return "\n".join(lines)
 
 
-# --- index -------------------------------------------------------------------
+# =============================================================================
+# index
+# =============================================================================
 
 
 def render_index_human(index: RepositoryIndex) -> str:
-    """Human-readable `rac index` output: a repository manifest."""
+    """Human ``rac index`` output: a column-aligned repository manifest."""
     lines = [
-        _bold("Repository Index"),
-        "================",
+        *_heading("Repository Index"),
         "",
         f"Directory:  {index.directory}",
         f"Artifacts:  {index.artifact_count}",
@@ -941,18 +1010,20 @@ def render_index_human(index: RepositoryIndex) -> str:
     return "\n".join(lines)
 
 
-# --- create (rac new / rac templates, v0.7.10) -------------------------------
+# =============================================================================
+# create (rac new / rac templates, v0.7.10)
+# =============================================================================
 
 
 def render_templates_human(names: list[str]) -> str:
-    """Human `rac templates` output: the canonical template set."""
+    """Human ``rac templates`` output: the canonical template set."""
     lines = [_bold("Available artifact templates:"), ""]
     lines.extend(f"- {name}" for name in names)
     return "\n".join(lines)
 
 
 def render_new_human(created: CreatedArtifact) -> str:
-    """Human `rac new` output: what was created, its identity, and where."""
+    """Human ``rac new`` output: what was created, its identity, and where."""
     return (
         f"Created {created.artifact_type} artifact: {created.path}\n"
         f"ID: {created.id}\n"
@@ -962,7 +1033,7 @@ def render_new_human(created: CreatedArtifact) -> str:
 
 
 def render_init_human(result: InitResult) -> str:
-    """Human `rac init` output: the established identity namespace."""
+    """Human ``rac init`` output: the established identity namespace."""
     verb = "Initialized" if result.created else "Already initialized:"
     lines = [f"{verb} repository key {result.repository_key}", f"Config: {result.config_path}"]
     if result.profile is not None:
@@ -972,7 +1043,7 @@ def render_init_human(result: InitResult) -> str:
 
 
 def render_quickstart_human(result: QuickstartResult) -> str:
-    """Human `rac quickstart` output: identity, first artifact, next step."""
+    """Human ``rac quickstart`` output: identity, first artifact, next step."""
     verb = "Initialized" if result.created else "Using"
     artifact = result.artifact
     return (
@@ -984,13 +1055,15 @@ def render_quickstart_human(result: QuickstartResult) -> str:
     )
 
 
-# --- resolve / find (v0.7.12) -------------------------------------------------
+# =============================================================================
+# resolve / find (v0.7.12)
+# =============================================================================
 
 
 def render_resolve_human(result: ResolutionResult) -> str:
-    """Human `rac resolve` output for a resolved artifact."""
+    """Human ``rac resolve`` output for a resolved artifact."""
     artifact = result.artifact
-    assert artifact is not None  # resolved outcome implies an artifact
+    assert artifact is not None  # A resolved outcome implies an artifact.
     return (
         f"{_bold(artifact.id)}\n"
         f"\n"
@@ -1001,7 +1074,7 @@ def render_resolve_human(result: ResolutionResult) -> str:
 
 
 def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
-    """Human `rac find` output: aligned match rows, or a valid empty result.
+    """Human ``rac find`` output: aligned match rows, or a valid empty result.
 
     ``explain`` (WS2) appends one indented attribution line per match —
     ``field=<tier> terms=<t1,t2> [section: snippet]`` — under the existing row,
@@ -1016,9 +1089,9 @@ def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
     lines: list[str] = []
     for m in result.matches:
         lines.append(f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}")
-        # Heading/body matches carry a snippet; show the matched section and line
-        # indented under the row so an agent or reader can triage without opening
-        # the file (ADR-038). Metadata matches have no snippet and stay one line.
+        # Heading/body matches carry a snippet: show the matched section and line
+        # indented under the row so a reader can triage without opening the file
+        # (ADR-038). Metadata matches have no snippet and stay one line.
         if m.snippet is not None:
             section = f"{m.section}: " if m.section else ""
             lines.append(f"{indent}↳ {section}{m.snippet}")
@@ -1044,11 +1117,13 @@ def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
     return "\n".join(lines)
 
 
-# --- migrate (v0.7.13) ----------------------------------------------------------
+# =============================================================================
+# migrate (v0.7.13)
+# =============================================================================
 
 
 def render_migrate_human(report: MigrationReport) -> str:
-    """Human `rac migrate metadata` output: assigned IDs and what remains."""
+    """Human ``rac migrate metadata`` output: assigned IDs and what remains."""
     lines: list[str] = []
     if report.dry_run:
         lines += [_bold("Dry run — no files were written."), ""]
@@ -1078,11 +1153,19 @@ def render_migrate_human(report: MigrationReport) -> str:
     return "\n".join(lines)
 
 
-# --- skill (rac skill install / list, v0.10.5) -------------------------------
+# =============================================================================
+# skill (rac skill install / list, v0.10.5)
+# =============================================================================
 
 
 def render_skill_install_human(installation: SkillInstallation) -> str:
-    """Human `rac skill install` output: what was installed and where."""
+    """Human ``rac skill install`` output: what was installed and where.
+
+    One line per installed skill, then the fixed discovery-path trailer. The
+    single-skill install is the same loop with one entry. Byte-pinned by
+    ``tests/golden/skill_install_human.txt`` and its ``named`` variant — the
+    trailer line is contract.
+    """
     lines = [f"Installed {s.skill} skill: {s.path}" for s in installation.skills]
     lines += [
         "",
@@ -1092,15 +1175,25 @@ def render_skill_install_human(installation: SkillInstallation) -> str:
 
 
 def render_skill_list_human(specs: list[SkillSpec]) -> str:
-    """Human `rac skill list` output: the bundled skill set."""
+    """Human ``rac skill list`` output: the bundled skill set.
+
+    The name column is left-padded to the widest skill name (two spaces before
+    the description); byte-pinned by ``tests/golden/skill_list_human.txt``, so
+    the alignment is load-bearing.
+    """
     lines = [_bold("Bundled agent skills:"), ""]
     name_w = max(len(spec.name) for spec in specs)
     lines.extend(f"- {spec.name:<{name_w}}  {spec.description}" for spec in specs)
     return "\n".join(lines)
 
 
+# =============================================================================
+# hook (rac hook install / list)
+# =============================================================================
+
+
 def render_hook_install_human(installation: InstalledHook) -> str:
-    """Human `rac hook install` output: what was installed and where."""
+    """Human ``rac hook install`` output: what was installed and where."""
     h = installation
     return (
         f"Installed {h.style} git hook: {h.path}\n"
@@ -1110,25 +1203,26 @@ def render_hook_install_human(installation: InstalledHook) -> str:
 
 
 def render_hook_list_human(specs: list[HookSpec]) -> str:
-    """Human `rac hook list` output: the bundled hook set."""
+    """Human ``rac hook list`` output: the bundled hook set."""
     lines = [_bold("Bundled git hooks:"), ""]
     style_w = max(len(spec.style) for spec in specs)
     lines.extend(f"- {spec.style:<{style_w}}  {spec.description}" for spec in specs)
     return "\n".join(lines)
 
 
-# --- mcp-stats (v0.10.4) ----------------------------------------------------
+# =============================================================================
+# mcp-stats (v0.10.4)
+# =============================================================================
 
 
 def render_mcp_stats_human(summary: MCPTelemetrySummary) -> str:
-    """Human `rac mcp-stats` output — what the local telemetry log says.
+    """Human ``rac mcp-stats`` output — what the local telemetry log says.
 
     An empty or missing log is a valid answer (telemetry is off by default),
     rendered as guidance rather than an error.
     """
     lines = [
-        _bold("Guide Telemetry"),
-        "===============",
+        *_heading("Guide Telemetry"),
         "",
         f"Log: {summary.path}",
     ]
@@ -1147,8 +1241,7 @@ def render_mcp_stats_human(summary: MCPTelemetrySummary) -> str:
         f"First Event: {summary.first_ts}",
         f"Last Event: {summary.last_ts}",
         "",
-        _bold("Tool Usage"),
-        "==========",
+        *_heading("Tool Usage"),
         "",
     ]
     for usage in summary.tools:
@@ -1161,14 +1254,18 @@ def render_mcp_stats_human(summary: MCPTelemetrySummary) -> str:
     return "\n".join(lines)
 
 
-# --- watchkeeper --------------------------------------------------------------
+# =============================================================================
+# watchkeeper (v0.12.0)
+# =============================================================================
 
 
 def _delta(base: int, head: int) -> str:
+    """A ``before → after`` count transition."""
     return f"{base} → {head}"
 
 
 def _issue_phrase(issue: RelationshipIssueRef) -> str:
+    """One-line description of a relationship issue for the watchkeeper delta."""
     if issue.relationship is None:
         subject = issue.identifier or issue.path
         return f"{subject}: {issue.code}"
@@ -1177,22 +1274,20 @@ def _issue_phrase(issue: RelationshipIssueRef) -> str:
 
 
 def render_watchkeeper_human(report: WatchkeeperReport) -> str:
-    """Human-readable `rac watchkeeper` output (v0.12.0).
+    """Human ``rac watchkeeper`` output (v0.12.0).
 
     One report answering "what changed between these repository states?":
-    changed artifacts, validation delta, relationship delta, and repository
-    statistics delta.
+    changed artifacts, validation delta, relationship delta, repository
+    statistics delta, findings, and a review verdict.
     """
     comparison = report.comparison
     lines = [
-        _bold("RAC Watchkeeper"),
-        "===============",
+        *_heading("RAC Watchkeeper"),
         "",
         f"Directory:  {report.directory}",
         f"Comparing:  {report.base} → {report.head}",
         "",
-        _bold("Changed Artifacts"),
-        "-----------------",
+        *_heading("Changed Artifacts", "-"),
         "",
     ]
     if comparison.changes:
@@ -1205,8 +1300,7 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
     validation = comparison.validation
     lines += [
         "",
-        _bold("Validation"),
-        "----------",
+        *_heading("Validation", "-"),
         "",
         f"  Valid:    {_delta(validation.base_valid, validation.head_valid)}",
         f"  Invalid:  {_delta(validation.base_invalid, validation.head_invalid)}",
@@ -1221,8 +1315,7 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
     relationships = comparison.relationships
     lines += [
         "",
-        _bold("Relationships"),
-        "-------------",
+        *_heading("Relationships", "-"),
         "",
         f"  Total:    {_delta(relationships.base.total, relationships.head.total)}",
         f"  Valid:    {_delta(relationships.base.valid, relationships.head.valid)}",
@@ -1242,8 +1335,7 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
     stats = comparison.stats
     lines += [
         "",
-        _bold("Repository Changes"),
-        "------------------",
+        *_heading("Repository Changes", "-"),
         "",
     ]
     for type_name, (base_count, head_count) in stats.by_type.items():
@@ -1252,6 +1344,8 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
     lines.append(f"  {'Total':<14} {_delta(stats.total[0], stats.total[1])}")
 
     if report.findings:
+        # Decorative fixed-width underline (8 dashes), independent of the
+        # "Findings (N)" title length.
         lines += ["", _bold(f"Findings ({len(report.findings)})"), "--------"]
         for finding in report.findings:
             icon = _yellow("!") if finding.severity == "warning" else "·"
@@ -1263,7 +1357,7 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
             lines += [f"      {line}" for line in finding.evidence]
 
     # Review verdict (v0.12.2).
-    lines += ["", _bold("Review"), "------", ""]
+    lines += ["", *_heading("Review", "-"), ""]
     if report.review_recommended:
         lines.append(f"  {_yellow('Review recommended.')}")
         lines += ["", "  Reasons:", ""]
@@ -1274,9 +1368,14 @@ def render_watchkeeper_human(report: WatchkeeperReport) -> str:
     return "\n".join(lines)
 
 
-# Per-file state icons for `rac export --agent-rules` (v0.21.15). A drift state
-# (stale/missing under --check) is the red failure; a write/update is a neutral
-# bullet; in-sync is the green clear.
+# =============================================================================
+# agent-rules (rac export --agent-rules, v0.21.15)
+# =============================================================================
+
+# Per-file state icons. A drift state (stale/missing under --check) is the red
+# failure; a write/update is a neutral bullet; in-sync is the green clear. The
+# values are thunks because the coloured icons must be built at call time, after
+# any _USE_COLOR monkeypatch has taken effect.
 _AGENT_RULES_ICONS = {
     STATE_WRITTEN: lambda: "+",
     STATE_UPDATED: lambda: "~",
@@ -1287,18 +1386,17 @@ _AGENT_RULES_ICONS = {
 
 
 def render_agent_rules_human(result: AgentRulesResult) -> str:
-    """Human-readable `rac export --agent-rules [--check]` output (v0.21.15).
+    """Human ``rac export --agent-rules [--check]`` output (v0.21.15).
 
     Lists each target file with its outcome — written/updated/in-sync for a
     generate run, in-sync/stale/missing for a check run — then a verdict line.
-    Under --check, drift (any stale or missing block) is the red failure the CLI
-    turns into a non-zero exit (the vendored-shell drift gate, ADR-067).
+    Under ``--check``, drift (any stale or missing block) is the red failure the
+    CLI turns into a non-zero exit (the vendored-shell drift gate, ADR-067).
     """
     checking = result.mode == "check"
     title = "Agent Rules — drift check" if checking else "Agent Rules"
     lines = [
-        _bold(title),
-        "=" * len(title),
+        *_heading(title),
         "",
         f"Corpus digest: {result.digest}",
         f"Output root:   {result.root}",
@@ -1325,7 +1423,9 @@ def render_agent_rules_human(result: AgentRulesResult) -> str:
     return "\n".join(lines)
 
 
-# --- rename ------------------------------------------------------------------
+# =============================================================================
+# rename
+# =============================================================================
 
 # Human-readable reasons for a refused/empty rename plan, keyed by the stable
 # REASON_* codes the engine emits. The CLI exit code is decided separately.
@@ -1342,7 +1442,12 @@ _RENAME_REASONS = {
 
 
 def render_rename_human(plan: RenamePlan) -> str:
-    """Render a rename plan as a reviewable preview (dry run) or refusal."""
+    """Render a rename plan as a reviewable preview (dry run) or refusal.
+
+    The header line is deliberately unbolded (it doubles as the refusal
+    subject), so this builds its own header/underline rather than using
+    ``_heading``.
+    """
     header = f"Rename {plan.old_ref} -> {plan.new_ref}"
     if not plan.ok:
         reason = _RENAME_REASONS.get(plan.reason or "", plan.reason or "unknown")
@@ -1360,7 +1465,7 @@ def render_rename_human(plan: RenamePlan) -> str:
         if edit.path != current:
             current = edit.path
             lines.append(f"  {edit.path}")
-        # Show each edit as a diff hunk anchored to the 1-based line. The raw line
+        # Each edit is a diff hunk anchored to the 1-based line. The raw line
         # text is shown verbatim (not re-marked), so an existing Markdown "- "
         # list marker reads naturally next to the diff's own ✗/✓ column.
         lines.append(f"    L{edit.line} {_red('✗ ' + edit.old_line)}")

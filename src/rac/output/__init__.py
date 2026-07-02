@@ -1,9 +1,12 @@
-"""RAC output layer.
+"""RAC output layer — the package facade.
 
-Presentation only: human-readable text, JSON (a stable public contract, ADR-007),
-and Markdown templates. Output formatting must not leak into core or service
-logic. Renderers are re-exported here so callers can use ``rac.output.render_*``
-without depending on the internal split between human/json/templates.
+Presentation only: human-readable text, JSON (a stable public contract,
+ADR-007), SARIF, GitHub step summaries, the OKF/Portal export surfaces, and
+Markdown templates. Output formatting must not leak into core or service logic.
+
+This module is a pure re-export hub: every public renderer is imported from its
+sibling module and listed in ``__all__`` so callers reach them as
+``rac.output.render_*`` without depending on the internal human/json/... split.
 """
 
 from .github import render_watchkeeper_github, watchkeeper_annotations

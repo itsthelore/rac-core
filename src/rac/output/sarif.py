@@ -1,19 +1,21 @@
-"""SARIF rendering for `rac validate` — CI code scanning (ADR-054).
+"""SARIF 2.1.0 rendering for RAC's CI code-scanning surface (ADR-054).
 
-SARIF 2.1.0 is the format GitHub Code Scanning ingests to annotate a pull
-request inline. `rac validate <dir> --sarif` emits one SARIF run covering both
-core validation findings and OKF conformance findings, so a CI job can upload it
-and surface RAC's findings on the diff.
+GitHub Code Scanning ingests SARIF to annotate a pull request inline. Each
+``rac <command> --sarif`` invocation emits one SARIF *run* covering that
+command's findings, so a CI job can upload it and surface RAC's findings on the
+diff.
 
-The output is a *derived* machine contract, parallel to the JSON export (ADR-007),
-and fully deterministic and offline (ADR-002): the tool version comes from the
-installed package, results are sorted by ``(uri, line, ruleId)``, and no
-timestamps are emitted, so the same corpus state yields a byte-identical document.
+The document is a derived machine contract, parallel to the JSON export
+(ADR-007), and deterministic and offline (ADR-002): the tool version comes from
+the installed package, results are ordered by ``(uri, line, ruleId, message)``,
+and no timestamps are emitted — the same corpus state yields byte-identical
+output.
 """
 
 from __future__ import annotations
 
 import json
+from typing import Any
 from urllib.parse import quote
 
 from rac import __version__
@@ -37,18 +39,19 @@ from rac.services.validate import DirectoryValidation
 _SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 _INFORMATION_URI = "https://github.com/itsthelore/rac-core"
 
-# SARIF `level` is a closed set; RAC severities map onto it. Suppressed
-# (``off``) findings never reach here — they are dropped before rendering.
-# Review adds an advisory "info" severity, which maps to SARIF "note".
+# SARIF ``level`` is a closed set that RAC severities project onto. Suppressed
+# (``off``) findings never reach here — they are dropped before rendering. Review
+# adds an advisory "info" severity, which projects to SARIF "note".
 _LEVEL = {"error": "error", "warning": "warning", "info": "note"}
 
 
-def _result(rule_id: str, level: str, message: str, uri: str, line: int | None) -> dict:
-    # SARIF artifactLocation.uri is an RFC 3986 URI, not a raw path: a filename
-    # with a space or a non-ASCII character must be percent-encoded or Code
+def _result(rule_id: str, level: str, message: str, uri: str, line: int | None) -> dict[str, Any]:
+    # A SARIF artifactLocation.uri is an RFC 3986 URI, not a raw path: a filename
+    # carrying a space or non-ASCII character must be percent-encoded or Code
     # Scanning may reject or mislocate the finding. Path separators stay literal.
-    encoded = quote(uri, safe="/")
-    location: dict = {"physicalLocation": {"artifactLocation": {"uri": encoded}}}
+    location: dict[str, Any] = {
+        "physicalLocation": {"artifactLocation": {"uri": quote(uri, safe="/")}}
+    }
     if line is not None:
         location["physicalLocation"]["region"] = {"startLine": line}
     return {
@@ -61,27 +64,26 @@ def _result(rule_id: str, level: str, message: str, uri: str, line: int | None) 
 
 def render_validate_sarif(result: DirectoryValidation) -> str:
     """Render a directory validation result as a SARIF 2.1.0 document."""
-    results: list[dict] = []
-    for file in result.files:
-        for issue in file.issues:
-            results.append(
-                _result(issue.code, issue.severity, issue.message, file.path, issue.line)
-            )
+    results = [
+        _result(issue.code, issue.severity, issue.message, file.path, issue.line)
+        for file in result.files
+        for issue in file.issues
+    ]
     if result.okf is not None:
-        for finding in result.okf.findings:
-            results.append(
-                _result(finding.code, finding.severity, finding.message, finding.path, None)
-            )
-
+        # OKF conformance findings are file-level (no line anchor).
+        results += [
+            _result(finding.code, finding.severity, finding.message, finding.path, None)
+            for finding in result.okf.findings
+        ]
     return _document(results)
 
 
 def render_review_sarif(report: ReviewReport) -> str:
-    """Render a `rac review` report as a SARIF 2.1.0 document (ADR-054).
+    """Render a ``rac review`` report as a SARIF 2.1.0 document (ADR-054).
 
-    Review findings are file-level (no line anchor); the message carries the
-    suggested action so the fix is visible inline. Like the validate renderer,
-    the output is deterministic and offline (ADR-002).
+    Review findings are file-level; the message carries the suggested action so
+    the fix is visible inline. Deterministic and offline, like every renderer
+    here (ADR-002).
     """
     results = [
         _result(
@@ -96,17 +98,17 @@ def render_review_sarif(report: ReviewReport) -> str:
     return _document(results)
 
 
-# Relationship-validation findings map onto SARIF levels (ADR-054) via the
-# canonical intrinsic severity owned by the relationships service
-# (``RELATIONSHIP_SEVERITY``), so the SARIF annotation level and the `rac gate`
-# enforcement layer read one source and can never disagree. The PR gate blocks on
-# any non-zero exit, so a warning-level retired-decision reference still fails the
-# check — the level only sets the annotation severity, not the enforcement class.
+# Relationship-validation findings project onto SARIF levels via the canonical
+# intrinsic severity the relationships service owns (``RELATIONSHIP_SEVERITY``),
+# so the SARIF annotation level and the ``rac gate`` enforcement layer read one
+# source and can never disagree. The gate blocks on any non-zero exit, so a
+# warning-level retired-decision reference still fails the check — the level only
+# sets the annotation severity, never the enforcement class.
 _RELATIONSHIP_LEVEL = RELATIONSHIP_SEVERITY
 
-# Human-readable message per finding, keyed by code. Reference-style findings
-# format the relationship, target, and reason; repository-level findings
-# (duplicate identifier, cycle) format their own shape.
+# Human-readable reason per reference-style finding, keyed by code. Repository-
+# level findings (duplicate identifier, cycle, unsupported edge) format their own
+# shape below and never consult this table.
 _RELATIONSHIP_REASON = {
     ISSUE_TARGET_NOT_FOUND: "target not found",
     ISSUE_TARGET_AMBIGUOUS: "target is ambiguous",
@@ -116,12 +118,17 @@ _RELATIONSHIP_REASON = {
 }
 
 
-def _relationship_result(issue: RelationshipIssue) -> dict:
+def _relationship_result(issue: RelationshipIssue) -> dict[str, Any]:
     """One SARIF result for a relationship-validation finding.
 
+    Also the shared formatting source for ``rac gate``: ``services.gate`` imports
+    this function (lazily, to break an import cycle) so gate findings and
+    ``rac relationships --sarif`` can never drift in message or anchor. This
+    coupling makes the name a cross-module contract.
+
     Duplicate-identifier and cycle findings carry a ``paths`` list rather than a
-    single ``source_path``; the first path anchors the annotation and the
-    message names every involved file so the finding is actionable inline.
+    single ``source_path``; the first path anchors the annotation and the message
+    names every involved file so the finding is actionable inline.
     """
     label = (issue.relationship or "").replace("_", " ")
     if issue.code == ISSUE_DUPLICATE_IDENTIFIER:
@@ -143,43 +150,47 @@ def _relationship_result(issue: RelationshipIssue) -> dict:
 
 
 def render_relationships_sarif(validation: RelationshipValidation) -> str:
-    """Render `rac relationships --validate` as a SARIF 2.1.0 document (ADR-054).
+    """Render ``rac relationships --validate`` as a SARIF 2.1.0 document (ADR-054).
 
     This is the renderer the PR pipeline gate uploads to surface broken and
-    retired cross-artifact references inline on the diff. Like the validate and
-    review renderers, the output is deterministic and offline (ADR-002).
+    retired cross-artifact references inline on the diff. Deterministic and
+    offline (ADR-002).
     """
-    results = [_relationship_result(issue) for issue in validation.issues]
-    return _document(results)
+    return _document([_relationship_result(issue) for issue in validation.issues])
 
 
 def render_gate_sarif(report: GateReport) -> str:
-    """Render a `rac gate` report as a single SARIF 2.1.0 document (v0.21.14).
+    """Render a ``rac gate`` report as one SARIF 2.1.0 document (v0.21.14).
 
-    One combined run over *all* gate findings — blocking and advisory alike — so
-    the PR gate uploads a single SARIF under one Code Scanning category instead of
-    three. The finding's intrinsic ``severity`` drives the annotation level (an
-    advisory finding still annotates at its own severity); the enforcement class is
-    carried in the gate's exit code, not the SARIF level. Deterministic and offline
-    (ADR-002): results are sorted by ``_document`` and no timestamps are emitted.
+    A single combined run over *all* gate findings — blocking and advisory alike
+    — so the PR gate uploads one SARIF under one Code Scanning category instead of
+    three. Each finding's intrinsic ``severity`` drives its annotation level (an
+    advisory finding still annotates at its own severity); the enforcement class
+    lives in the gate's exit code, not the SARIF level. Deterministic and offline
+    (ADR-002).
     """
-    results = [_result(f.code, f.severity, f.message, f.path, f.line) for f in report.findings]
-    return _document(results)
-
-
-def _document(results: list[dict]) -> str:
-    # Deterministic ordering (ADR-002): a line of 0 sorts file-level findings
-    # ahead of line-anchored ones for the same file, then by rule then message.
-    results.sort(
-        key=lambda r: (
-            r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
-            r["locations"][0]["physicalLocation"].get("region", {}).get("startLine", 0),
-            r["ruleId"],
-            r["message"]["text"],
-        )
+    return _document(
+        [_result(f.code, f.severity, f.message, f.path, f.line) for f in report.findings]
     )
 
-    rules = [{"id": code} for code in sorted({r["ruleId"] for r in results})]
+
+def _sort_key(result: dict[str, Any]) -> tuple[str, int, str, str]:
+    # Deterministic ordering (ADR-002): a missing region sorts as line 0, placing
+    # file-level findings ahead of line-anchored ones for the same file, then by
+    # rule id, then message text.
+    location = result["locations"][0]["physicalLocation"]
+    return (
+        location["artifactLocation"]["uri"],
+        location.get("region", {}).get("startLine", 0),
+        result["ruleId"],
+        result["message"]["text"],
+    )
+
+
+def _document(results: list[dict[str, Any]]) -> str:
+    # ``sorted`` (not an in-place sort) so a caller's list is never mutated.
+    ordered = sorted(results, key=_sort_key)
+    rules = [{"id": code} for code in sorted({r["ruleId"] for r in ordered})]
     document = {
         "version": "2.1.0",
         "$schema": _SCHEMA,
@@ -193,7 +204,7 @@ def _document(results: list[dict]) -> str:
                         "rules": rules,
                     }
                 },
-                "results": results,
+                "results": ordered,
             }
         ],
     }
