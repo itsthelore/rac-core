@@ -64,9 +64,11 @@ ranking, the sequence, and the constraints that reviews must hold.
     validation second, the hardcoded OKF type map closed in the same
     acceptance; the public invitation stays behind GATE-2.
 - Deferred until their stated triggers:
-  - Team-scale serving (`lore-at-team-scale`): waits for the 50+ developer
-    signal its artifact names; when it comes, mandatory audit-on and cache
-    coherency guarantees are entry conditions.
+  - Team-scale serving (`lore-at-team-scale`): its 50+ developer trigger
+    has been met by an organisation-scale rollout, and the item has
+    graduated out of `future/` to its own scoped roadmap; the entry
+    conditions recorded here — mandatory audit-on and cache coherency
+    guarantees — are carried into that roadmap's initiatives.
   - Skill trust and surfacing (`skill-trust-and-surfacing`): waits for
     third-party skills becoming real.
 
@@ -167,3 +169,4 @@ seats; V/E divides VALUE by challenge.
 - growth-programme
 - relationship-vocabulary
 - corpus-sync
+- corpus-federation
