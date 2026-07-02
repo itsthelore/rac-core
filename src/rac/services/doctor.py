@@ -237,6 +237,21 @@ def _relationship_findings(
                 fix=f"Run: rac relationships {directory} --validate",
             )
         )
+    # Applies-to advisories (ADR-098): warnings here, never blocking anywhere —
+    # a stale scope is the drift signal, so the fix is to move the scope with
+    # the code, not to silence the finding.
+    for issue in result.advisories:
+        findings.append(
+            DoctorFinding(
+                path=_issue_path(issue),
+                code=issue.code,
+                severity=SEVERITY_WARNING,
+                problem=(
+                    f"## Applies To scope {issue.target!r} matches nothing in the working tree"
+                ),
+                fix="Update or remove the stale scope — a moved path is the drift signal.",
+            )
+        )
     return findings
 
 

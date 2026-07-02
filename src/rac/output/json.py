@@ -263,6 +263,10 @@ def render_relationship_validation_json(report: RelationshipValidation) -> str:
         "validation_issues": report.validation_issues,
         "issues": [issue.to_dict() for issue in report.issues],
     }
+    # Advisory findings (ADR-098): additive key, present only when non-empty so
+    # existing consumers and goldens are byte-identical on advisory-free corpora.
+    if report.advisories:
+        payload["advisories"] = [issue.to_dict() for issue in report.advisories]
     return json.dumps(payload, indent=2)
 
 

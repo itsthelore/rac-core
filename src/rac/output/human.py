@@ -717,6 +717,17 @@ def render_relationship_validation_human(report: RelationshipValidation) -> str:
             suffix = _REF_ISSUE_SUFFIX.get(issue.code, issue.code)
             lines.append(_red(f"  ✗ {issue.target} {suffix}"))
 
+    # Advisory findings (ADR-098): rendered last, only when present, and never
+    # counted in Validation Issues — visible, not blocking.
+    if report.advisories:
+        lines += ["", _bold("Advisories")]
+        current_source = None
+        for issue in report.advisories:
+            if issue.source_path != current_source:
+                current_source = issue.source_path
+                lines += ["", issue.source_path or "<input>"]
+            lines.append(f"  ~ Applies To scope {issue.target!r} matches nothing in the tree")
+
     return "\n".join(lines)
 
 
