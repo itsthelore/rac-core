@@ -446,6 +446,101 @@ def find_decisions(directory: str, topic: str, recursive: bool = True) -> Search
     return result
 
 
+@dataclass
+class PathDecision:
+    """One live decision whose declared scope governs a queried path (ADR-098)."""
+
+    artifact_id: str
+    title: str
+    status: str
+    path: str
+    scopes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.artifact_id,
+            "type": _DECISION_TYPE,
+            "title": self.title,
+            "status": self.status,
+            "path": self.path,
+            "scopes": self.scopes,
+        }
+
+
+@dataclass
+class PathDecisionsResult:
+    """Outcome of one path→decisions lookup (stable JSON contract, ADR-007)."""
+
+    query_path: str
+    matches: list[PathDecision] = field(default_factory=list)
+
+    @property
+    def match_count(self) -> int:
+        return len(self.matches)
+
+    def to_dict(self) -> dict:
+        return {
+            "schema_version": "1",
+            "path": self.query_path,
+            "type": _DECISION_TYPE,
+            "match_count": self.match_count,
+            "matches": [m.to_dict() for m in self.matches],
+        }
+
+
+def decisions_for_path(directory: str, path: str, recursive: bool = True) -> PathDecisionsResult:
+    """The live decisions whose ``## Applies To`` scopes govern ``path`` (ADR-098).
+
+    A pure function of the corpus and the queried path: declared path scopes are
+    matched with the pinned ``governs`` dialect; component labels never match;
+    liveness reuses the agent-rules predicate so the lookup and the committed
+    rules block can never disagree. Results are sorted by artifact path, each
+    carrying its status and the scopes that matched — bindings and their
+    evidence, never a verdict (ADR-067). An empty result is a valid answer.
+    """
+    from rac.core import applies_to
+    from rac.core.artifacts import spec_for
+    from rac.core.identity import artifact_identifier
+    from rac.services.agent_rules import artifact_status, is_live_decision
+    from rac.services.relationships import extract_relationships_full
+
+    query = path.replace("\\", "/").strip()
+    if query.startswith("./"):
+        query = query[2:]
+    query = query.rstrip("/")
+
+    matches: list[PathDecision] = []
+    if not query:
+        return PathDecisionsResult(query_path=query)
+    spec = spec_for(_DECISION_TYPE)
+    assert spec is not None  # the decision spec always exists
+    for entry in walk_corpus(directory, recursive=recursive):
+        if entry.artifact_type != _DECISION_TYPE or not is_live_decision(entry.product):
+            continue
+        refs = extract_relationships_full(entry.product, spec).get("applies_to", [])
+        scopes = []
+        for ref in refs:
+            scope = applies_to.normalize_entry(ref)
+            if (
+                applies_to.is_path_scope(scope)
+                and applies_to.malformed_reason(scope) is None
+                and applies_to.governs(query, scope)
+            ):
+                scopes.append(ref)
+        if scopes:
+            matches.append(
+                PathDecision(
+                    artifact_id=artifact_identifier(entry.product, spec, str(entry.path)),
+                    title=entry.product.title or "",
+                    status=artifact_status(entry.product),
+                    path=str(entry.path),
+                    scopes=scopes,
+                )
+            )
+    matches.sort(key=lambda m: m.path)
+    return PathDecisionsResult(query_path=query, matches=matches)
+
+
 # --- Deterministic relevance ranking (ADR-078): BM25 + RRF + graph boost -----
 #
 # Ordering replaces the old "best tier, then path" sort with a fused relevance
