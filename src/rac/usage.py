@@ -1,18 +1,19 @@
-"""CLI usage telemetry — content-free, consent-gated, local-only (v0.24, WS-E).
+"""CLI usage telemetry — content-free, consent-gated, local-only (ADR-046).
 
-ADR-046: when — and only when — sharing consent is recorded (ADR-041,
-`rac telemetry on`), each completed `rac` command appends one content-free event
-to a separate local log, `$XDG_STATE_HOME/rac/rac-usage.jsonl`. The event schema
-is pinned: ``schema_version``, ``ts`` (ISO 8601 UTC), ``session`` (random
-per-process hex), ``command`` (the subcommand name only), ``outcome``
-(``ok`` | ``error`` | ``exception``), and ``duration_ms``. Argv, flag values,
-positional arguments, file paths, artifact IDs, and repository content are never
-recorded — the named absent fields are a test, not a comment (ADR-040).
+When — and only when — sharing consent is recorded (ADR-041, ``rac telemetry
+on``), each completed ``rac`` command appends one content-free event to a
+*separate* local log, ``$XDG_STATE_HOME/rac/rac-usage.jsonl``. The event schema
+is pinned to exactly six fields: ``schema_version``, ``ts`` (ISO 8601 UTC),
+``session`` (a random per-process hex id), ``command`` (the subcommand name
+only), ``outcome`` (``ok`` | ``error`` | ``exception``), and ``duration_ms``.
+Argv, flag values, positionals, paths, artifact ids, and repository content are
+never recorded — that absence is a test, not a comment (ADR-040).
 
 Recording is write-only observability outside the command's output (ADR-032):
-the recorder runs after dispatch, never feeds back into a command, leaves exit
-codes unchanged, and disables itself silently when it cannot write — telemetry
-failure never breaks a command.
+it runs after dispatch, never feeds back into a command, leaves exit codes
+untouched, and disables itself silently when it cannot write. This module never
+imports the MCP SDK; the Guide summary reaches the read-back renderers as a
+plain dict.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,9 +35,12 @@ OUTCOME_OK = "ok"
 OUTCOME_ERROR = "error"
 OUTCOME_EXCEPTION = "exception"
 
-# One random session id per process, so the read-back can count sessions without
-# anything identifying. Generated at import, never persisted to config.
+# One random session id per process: the read-back can count sessions without
+# anything identifying. Minted at import, never persisted.
 _SESSION = secrets.token_hex(8)
+
+# Outcomes that count against a command in the summary.
+_FAILED = (OUTCOME_ERROR, OUTCOME_EXCEPTION)
 
 
 def usage_path() -> Path:
@@ -46,6 +50,7 @@ def usage_path() -> Path:
 
 
 def _event(command: str, outcome: str, duration_ms: int) -> dict[str, Any]:
+    """Build the pinned six-key event. No caller may add a seventh (ADR-046)."""
     return {
         "schema_version": SCHEMA_VERSION,
         "ts": datetime.now(UTC).isoformat(),
@@ -59,8 +64,9 @@ def _event(command: str, outcome: str, duration_ms: int) -> dict[str, Any]:
 def record_command(command: str, outcome: str, duration_ms: int) -> None:
     """Append one content-free usage event, if consent is recorded (ADR-046).
 
-    Silent on every failure path — no consent, no command name, or an
-    unwritable log all mean "record nothing", never an exception.
+    Silent on every failure path — no command name, no recorded consent, or an
+    unwritable log all mean "record nothing", never an exception, so telemetry
+    can never break a command.
     """
     if not command:
         return
@@ -78,14 +84,14 @@ def record_command(command: str, outcome: str, duration_ms: int) -> None:
 
 def read_usage(path: Path | None = None) -> list[dict[str, Any]]:
     """Read usage events; a missing or malformed log yields what is parseable."""
-    log = path if path is not None else usage_path()
-    events: list[dict[str, Any]] = []
+    log = usage_path() if path is None else path
     try:
         text = log.read_text(encoding="utf-8")
     except OSError:
-        return events
-    for line in text.splitlines():
-        line = line.strip()
+        return []
+    events: list[dict[str, Any]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
         if not line:
             continue
         try:
@@ -125,33 +131,43 @@ class UsageSummary:
 
 
 def summarize_usage(path: Path | None = None, *, days: int = 7) -> UsageSummary:
-    """Per-command counts, session count, and a recent-activity trend (REQ-001)."""
+    """Per-command counts, session count, and a recent-activity trend (REQ-001).
+
+    Only well-typed rows contribute: a string ``session`` counts as a session, a
+    string ``command`` groups a call, and a ``ts`` at least ten chars long dates
+    it. Commands sort by name and the trend keeps the last ``days`` buckets, both
+    ascending, so the read-back is deterministic (golden files bake these orders).
+    """
     events = read_usage(path)
+
     sessions = {ev["session"] for ev in events if isinstance(ev.get("session"), str)}
-    by_command: dict[str, list[dict]] = {}
+
+    by_command: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for ev in events:
         command = ev.get("command")
         if isinstance(command, str):
-            by_command.setdefault(command, []).append(ev)
+            by_command[command].append(ev)
     commands = [
         CommandUsage(
             command=command,
             calls=len(rows),
-            errors=sum(1 for ev in rows if ev.get("outcome") in (OUTCOME_ERROR, OUTCOME_EXCEPTION)),
+            errors=sum(1 for ev in rows if ev.get("outcome") in _FAILED),
         )
         for command, rows in sorted(by_command.items())
     ]
+
     day_counts: Counter[str] = Counter()
     for ev in events:
         ts = ev.get("ts")
         if isinstance(ts, str) and len(ts) >= 10:
             day_counts[ts[:10]] += 1
     recent = dict(sorted(day_counts.items())[-days:])
+
     return UsageSummary(total=len(events), sessions=len(sessions), commands=commands, recent=recent)
 
 
 # Read-back rendering (ADR-046): one surface summarises both the CLI-usage log
-# and the Guide log. The Guide summary is passed as a plain dict so this module
+# and the Guide log. The Guide summary arrives as a plain dict so this module
 # never imports the MCP SDK. Sharing reuses the local-first, user-submitted flow.
 
 SHARE_ISSUE_URL = "https://github.com/itsthelore/rac-core/issues/new"
