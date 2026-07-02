@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: 7f693642352f74bd5ca870cc752ced16f41d665303b41779f38bc68d52be5f78) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 0c499330c6558847fce241383f95b9c92153e44ad9b82e5a75670276155fb02a) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -94,4 +94,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KW6NQ4Y814N7** — ADR-094: Roadmaps Are Identified by Stable Codename, Not a vX.Y.Z Scope-Fence _(Process)_
 - **RAC-KW8ZTVEQJ366** — ADR-095: rac-connectors Repackage, PyPI Rename, and Outbound Field Rename _(Architecture)_
 - **RAC-KWBJJRZR84PT** — ADR-096: External-Target Verification Edge (`verified_by`) _(Technical)_
+- **RAC-KWGKWKEXP1TJ** — ADR-098: Decision Applies-To Scope and Path Lookup _(Technical)_
 <!-- END RAC MANAGED BLOCK -->

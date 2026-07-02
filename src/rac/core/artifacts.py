@@ -99,6 +99,8 @@ RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
     " .rac/config.yaml ticketing.provider (ADR-087)",
     "verified by": "External tests or traces that verify this capability; targets"
     " are file paths, not in-corpus artifacts (ADR-096)",
+    "applies to": "Code paths or components this decision governs; repo-relative"
+    " path globs or component labels, not in-corpus artifacts (ADR-098)",
 }
 
 
@@ -189,6 +191,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related decisions",
             "related tickets",
+            "applies to",
         ),
         metadata={
             "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
@@ -202,6 +205,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related decisions",
             "related tickets",
+            "applies to",
         ),
         guidance={
             "context": (

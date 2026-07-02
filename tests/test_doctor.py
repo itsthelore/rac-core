@@ -222,6 +222,29 @@ def test_clean_corpus_has_no_unlinked_false_positive(tmp_path):
     assert doctor.CODE_UNLINKED_REFERENCE not in _codes(report)
 
 
+def test_unmatched_applies_to_scope_warns_but_run_still_exits_zero(tmp_path):
+    # ADR-098 advisory: a decision scoped to a path that no longer exists warns
+    # in doctor and never blocks — the stale scope IS the drift signal.
+    root = tmp_path / "repo"
+    corpus = root / "rac"
+    corpus.mkdir(parents=True)
+    (root / ".rac").mkdir()
+    (root / ".rac" / "config.yaml").write_text("repository_key: RAC\n", encoding="utf-8")
+    (corpus / "scoped.md").write_text(
+        "---\nschema_version: 1\nid: RAC-SCPD00000001\ntype: decision\n---\n"
+        "# Scoped\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n\n"
+        "## Status\n\nAccepted\n\n## Applies To\n\n- src/vanished/\n",
+        encoding="utf-8",
+    )
+    report = doctor.diagnose(str(corpus))
+    stale = [f for f in report.findings if f.code == "applies-to-unmatched-path"]
+    assert len(stale) == 1
+    assert stale[0].severity == "warning"
+    assert "src/vanished/" in stale[0].problem
+    assert "drift signal" in stale[0].fix
+    assert report.ok  # warnings never fail doctor
+
+
 # --- contract: fixes, drift, determinism, exit codes -------------------------
 
 

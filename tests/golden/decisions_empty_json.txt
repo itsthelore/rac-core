@@ -1,0 +1,7 @@
+{
+  "schema_version": "1",
+  "path": "src/billing/none.py",
+  "type": "decision",
+  "match_count": 0,
+  "matches": []
+}

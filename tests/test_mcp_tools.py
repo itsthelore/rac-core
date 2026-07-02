@@ -28,7 +28,12 @@ from rac.mcp.budget import (
 from rac.mcp.server import build_server
 from rac.output import json as json_output
 from rac.services.portfolio import build_portfolio_summary
-from rac.services.resolve import find_artifacts, find_decisions, resolve_artifact
+from rac.services.resolve import (
+    decisions_for_path,
+    find_artifacts,
+    find_decisions,
+    resolve_artifact,
+)
 
 CORPUS = fixture_path("mcp", "corpus")
 DUPLICATE = fixture_path("mcp", "duplicate")
@@ -312,6 +317,108 @@ def test_find_decisions_empty_topic_is_not_an_error():
     assert "error" not in payload
 
 
+# --- decisions_for_path (ADR-098) ---------------------------------------------
+
+
+_SCOPED_LIVE = """---
+schema_version: 1
+id: RAC-DFP000000001
+type: decision
+---
+# Auth boundaries
+
+## Status
+
+Accepted
+
+## Context
+
+c
+
+## Decision
+
+d
+
+## Consequences
+
+q
+
+## Applies To
+
+- src/auth/
+"""
+
+_SCOPED_RETIRED = """---
+schema_version: 1
+id: RAC-DFP000000002
+type: decision
+---
+# Old auth boundaries
+
+## Status
+
+Superseded
+
+## Context
+
+c
+
+## Decision
+
+d
+
+## Consequences
+
+q
+
+## Applies To
+
+- src/auth/
+"""
+
+
+def _scoped_corpus(tmp_path) -> str:
+    root = tmp_path / "rac"
+    (root / "decisions").mkdir(parents=True)
+    (root / "decisions" / "live.md").write_text(_SCOPED_LIVE, encoding="utf-8")
+    (root / "decisions" / "old.md").write_text(_SCOPED_RETIRED, encoding="utf-8")
+    return str(root)
+
+
+def test_decisions_for_path_shape(tmp_path):
+    root = _scoped_corpus(tmp_path)
+    payload = call(root, "decisions_for_path", {"path": "src/auth/login.py"})
+    assert list(payload) == ["schema_version", "path", "type", "match_count", "matches", "filter"]
+    assert payload["type"] == "decision"
+    assert payload["filter"] == "live-decisions"
+    match = payload["matches"][0]
+    assert set(match) == {"id", "type", "title", "status", "path", "scopes"}
+    assert match["status"] == "Accepted"
+    assert match["scopes"] == ["src/auth/"]
+
+
+def test_decisions_for_path_excludes_retired(tmp_path):
+    root = _scoped_corpus(tmp_path)
+    payload = call(root, "decisions_for_path", {"path": "src/auth/login.py"})
+    ids = [m["id"] for m in payload["matches"]]
+    assert ids == ["RAC-DFP000000001"]  # the Superseded twin never appears
+
+
+def test_decisions_for_path_matches_service_one_source_of_truth(tmp_path):
+    root = _scoped_corpus(tmp_path)
+    payload = call(root, "decisions_for_path", {"path": "src/auth/login.py"})
+    service = decisions_for_path(root, "src/auth/login.py").to_dict()
+    assert {k: v for k, v in payload.items() if k != "filter"} == service
+
+
+def test_decisions_for_path_unmatched_path_is_not_an_error(tmp_path):
+    root = _scoped_corpus(tmp_path)
+    payload = call(root, "decisions_for_path", {"path": "src/billing/x.py"})
+    assert payload["match_count"] == 0
+    assert payload["matches"] == []
+    assert "error" not in payload
+
+
 # --- get_related -------------------------------------------------------------
 
 
@@ -408,6 +515,7 @@ def test_get_summary_matches_cli_portfolio_json():
         ("search_artifacts", {"query": "RAC-MCP"}),
         ("get_related", {"id": DEC}),
         ("get_summary", {}),
+        ("decisions_for_path", {"path": "src/x.py"}),
     ],
 )
 def test_tool_output_is_deterministic(tool, args):

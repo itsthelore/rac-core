@@ -16,9 +16,12 @@ recognized exactly where its schema allows it.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
+from rac.core import applies_to
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
 from rac.core.corpus import CorpusCache, CorpusEntry, walk_corpus
@@ -50,7 +53,7 @@ RELATED_SECTIONS: tuple[str, ...] = (
 # ticketing provider, ADR-088), never resolved. Kept separate from
 # RELATED_SECTIONS, which is exactly the per-artifact-type vocabulary (one
 # ``related <type>s`` per type).
-EXTERNAL_SECTIONS: tuple[str, ...] = ("related tickets", "verified by")
+EXTERNAL_SECTIONS: tuple[str, ...] = ("related tickets", "verified by", "applies to")
 
 # The full relationship-section vocabulary and its canonical ordering: the per-type
 # ``related *`` sections, then ``supersedes``, then the external-reference sections.
@@ -338,6 +341,11 @@ ISSUE_TARGET_TYPE_MISMATCH = "relationship-target-type-mismatch"
 # Acyclicity (v0.16.0, ADR-055): a cycle in a directional, acyclic edge kind
 # (``supersedes``), which an ordering/replacement relationship must not contain.
 ISSUE_RELATIONSHIP_CYCLE = "relationship-cycle"
+# Applies-to advisory (ADR-098): a declared ``## Applies To`` path scope matches
+# nothing in the working tree. ADVISORY ONLY — carried on the validation result's
+# separate ``advisories`` list, never ``issues``, so it can never fail
+# ``--validate`` or the gate; a moved path is the drift signal, not a blocker.
+ISSUE_APPLIES_TO_UNMATCHED = "applies-to-unmatched-path"
 
 # Canonical intrinsic severity per relationship finding (v0.21.14). Referential
 # integrity and graph-shape breakages are errors; advisory consistency findings
@@ -356,6 +364,9 @@ RELATIONSHIP_SEVERITY: dict[str, str] = {
     ISSUE_TARGET_SUPERSEDED: "warning",
     ISSUE_SELF_REFERENCE: "warning",
     ISSUE_EDGE_UNSUPPORTED: "warning",
+    # Advisory-only (ADR-098): never enters ``issues``, so this entry documents
+    # the intrinsic severity for renderers; SARIF and the gate never see it.
+    ISSUE_APPLIES_TO_UNMATCHED: "warning",
 }
 
 
@@ -433,6 +444,10 @@ class RelationshipValidation:
     recursive: bool
     relationships_checked: int
     issues: list[RelationshipIssue] = field(default_factory=list)
+    # Advisory findings (ADR-098): surfaced by ``--validate`` output but excluded
+    # from ``validation_issues``, ``ok``, the exit code, and SARIF — advisory can
+    # never mean blocking, because ``ok`` fails on ANY recorded issue.
+    advisories: list[RelationshipIssue] = field(default_factory=list)
 
     @property
     def validation_issues(self) -> int:
@@ -740,7 +755,60 @@ def _validate(
         recursive=recursive,
         relationships_checked=checked,
         issues=issues,
+        advisories=_applies_to_advisories(directory, items),
     )
+
+
+def _applies_to_advisories(
+    directory: str,
+    items: list[tuple[str, Product, ArtifactSpec | None]],
+) -> list[RelationshipIssue]:
+    """Advisory findings for ``## Applies To`` path scopes that match nothing (ADR-098).
+
+    A declared path scope that governs no file or directory in the working tree
+    is surfaced as an advisory — visible, never blocking. The repository root is
+    the parent of the nearest ``.rac`` config directory above ``directory``; with
+    no config (a bare corpus, most test fixtures) the pass is skipped entirely.
+    Deterministic per input: one sorted walk (``.git`` excluded), well-formed
+    path scopes only, results in sorted-source order like every other pass.
+    """
+    declared: list[tuple[str, str, str]] = []  # (source_path, raw_ref, scope)
+    for path, product, spec in items:
+        if spec is None or "applies to" not in spec.optional:
+            continue
+        for ref in extract_relationships_full(product, spec).get("applies_to", []):
+            scope = applies_to.normalize_entry(ref)
+            if applies_to.is_path_scope(scope) and applies_to.malformed_reason(scope) is None:
+                declared.append((path, ref, scope))
+    if not declared:
+        return []
+
+    # Lazy import: ``services.init`` pulls scaffolding this module never needs
+    # on its hot path (the same pattern ``resolve`` uses for ``agent_rules``).
+    from rac.services.init import find_config_file
+
+    config_path = find_config_file(directory)
+    if config_path is None:
+        return []
+    root = config_path.parent.parent
+
+    tree: list[str] = []
+    for current, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d != ".git")
+        rel = Path(current).relative_to(root).as_posix()
+        for name in sorted(filenames) + dirnames:
+            tree.append(name if rel == "." else f"{rel}/{name}")
+
+    return [
+        RelationshipIssue(
+            code=ISSUE_APPLIES_TO_UNMATCHED,
+            source_path=path,
+            relationship="applies_to",
+            target=ref,
+        )
+        for path, ref, scope in declared
+        if not any(applies_to.governs(candidate, scope) for candidate in tree)
+    ]
 
 
 def validate_relationships(

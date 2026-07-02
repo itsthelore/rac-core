@@ -50,6 +50,7 @@ def test_registry_declares_built_in_edges():
         "supersedes",
         "related_tickets",
         "verified_by",
+        "applies_to",
     }
     supersedes = edge_spec("supersedes")
     assert supersedes is not None

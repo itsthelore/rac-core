@@ -232,3 +232,7 @@ Evidence that this decision is working:
 Review before v1.0.0, or sooner if RAC accepts outside contributors who need pre-merge
 test feedback — which would warrant re-adding a `pull_request` trigger (rule 1) — or if
 the job count from the battery × version grid becomes burdensome.
+
+## Applies To
+
+- .github/workflows/

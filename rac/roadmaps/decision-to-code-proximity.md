@@ -3,14 +3,15 @@ schema_version: 1
 id: RAC-KVTRP9G4CN2N
 type: roadmap
 ---
-# RAC — Decision-to-Code Proximity (Future)
+# RAC — Decision-to-Code Proximity
 
 ## Status
 
 Planned
 
-Unscheduled — captured for future consideration from the team-scale (20+) market
-research. It graduates out of `future/` into a versioned series when prioritised.
+Scheduled — Tranche A, rank 1 of the `deterministic-substrate` programme.
+Graduated out of `future/` per that programme's success measures (ADR-093,
+ADR-094); execution is tracked on the epic referenced under Related Tickets.
 
 ## Context
 
@@ -101,7 +102,17 @@ changes (the `freshness-and-drift-detection` tie-in).
 - adr-074
 - adr-028
 - adr-065
+- adr-098
+
+## Related Requirements
+
+- rac-decision-applies-to-scope
 
 ## Related Roadmaps
 
 - freshness-and-drift-detection
+- deterministic-substrate
+
+## Related Tickets
+
+- itsthelore/rac-core#248

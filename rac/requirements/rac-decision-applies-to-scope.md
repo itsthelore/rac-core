@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 ## Problem
 
@@ -55,7 +55,9 @@ This is gap 7 of the traceability audit.
 
 - adr-016
 - adr-007
+- adr-098
 
 ## Related Roadmaps
 
 - relationship-vocabulary
+- decision-to-code-proximity

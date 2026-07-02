@@ -1274,6 +1274,52 @@ rac find markdown rac/ --explain        # show the relevance-score breakdown
 
 ---
 
+## decisions
+
+The live decisions whose declared `## Applies To` scopes govern a path
+(ADR-098) — scoped grounding at the point of work. Given a repository-relative
+file or directory, returns the Accepted, non-retired decisions that declare a
+path scope matching it, each with its status and the scope(s) that matched.
+Bindings and evidence, never a verdict: the lookup tells you which decisions
+bind the path; reading and judging them stays with the caller (ADR-067).
+
+- **Input:** `rac decisions <path> [directory]` — directory defaults to the
+  current directory.
+- **Options:** `--json` · `--top-level`
+- **Exit codes:** `0` lookup completed (matches or none) · `2` not a
+  directory, or an empty path
+
+Matching is deterministic and case-sensitive: a directory scope governs its
+whole subtree, `*` crosses `/`, and component labels (entries with whitespace
+or no separator, like `RAC Core`) never match a path query. An empty result is
+a valid outcome, not an error.
+
+```bash
+rac decisions src/auth/login.py rac/
+rac decisions src/auth/ rac/ --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "path": "src/auth/login.py",
+  "type": "decision",
+  "match_count": 1,
+  "matches": [
+    {
+      "id": "RAC-F1XTVREAVTH0",
+      "type": "decision",
+      "title": "Auth module boundaries",
+      "status": "Accepted",
+      "path": "rac/decisions/auth-boundaries.md",
+      "scopes": ["src/auth/"]
+    }
+  ]
+}
+```
+
+---
+
 ## migrate
 
 Bring existing artifacts onto canonical frontmatter identity. Every

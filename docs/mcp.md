@@ -139,7 +139,7 @@ and cite the decision ID in its response.
 If you are pointing at your own repository, substitute a topic you know
 a decision covers.
 
-## 5. The four tools
+## 5. The six tools
 
 | Tool | When the agent calls it |
 |---|---|
@@ -147,6 +147,8 @@ a decision covers.
 | `search_artifacts` | Before designing or implementing anything that a recorded decision might cover |
 | `get_artifact` | When an artifact ID appears, or before changing anything a decision covers |
 | `get_related` | After retrieving an artifact — finds what else the change could affect |
+| `find_decisions` | Before proposing anything a prior decision might have settled — the live (Accepted, non-retired) decisions binding a topic |
+| `decisions_for_path` | Before editing code — the live decisions whose declared `## Applies To` scopes govern the file or directory being changed (ADR-098) |
 
 `get_related` takes an optional `depth` (default `1`, capped at `5`): the default
 returns immediate neighbours only, while `depth>1` additionally returns a

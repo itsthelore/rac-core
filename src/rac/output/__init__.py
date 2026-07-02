@@ -9,6 +9,7 @@ without depending on the internal split between human/json/templates.
 from .github import render_watchkeeper_github, watchkeeper_annotations
 from .human import (
     render_agent_rules_human,
+    render_decisions_human,
     render_diff_human,
     render_dir_inspect_human,
     render_find_human,
@@ -45,6 +46,7 @@ from .human import (
 )
 from .json import (
     render_agent_rules_json,
+    render_decisions_json,
     render_diff_json,
     render_dir_inspect_json,
     render_documents_jsonl,
@@ -94,6 +96,8 @@ from .templates import render_improve_template, render_schema_template
 __all__ = [
     "render_agent_rules_human",
     "render_agent_rules_json",
+    "render_decisions_human",
+    "render_decisions_json",
     "render_diff_human",
     "render_diff_json",
     "render_find_human",

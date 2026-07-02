@@ -12,6 +12,7 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Literal
 
+from . import applies_to
 from .artifacts import ArtifactSpec, spec_for
 from .classification import classify
 from .identity import identity_conflict
@@ -44,6 +45,13 @@ _QUARTER_RE = re.compile(r"^Q[1-4]\s+\d{4}$")
 # validator is ever active per repository.
 MALFORMED_TICKET_REFERENCE = "malformed-ticket-reference"
 TICKETING_SECTION = "related tickets"  # normalized ## Related Tickets
+
+# Applies-to scope lint (ADR-098): path-classified ``## Applies To`` entries must
+# be portable repo-root-relative POSIX globs. Purely syntactic and config-free —
+# component labels are never linted, and existence against the tree is a separate
+# advisory (never blocking) surfaced by the relationships service.
+MALFORMED_APPLIES_TO = "malformed-applies-to"
+APPLIES_TO_SECTION = "applies to"  # normalized ## Applies To
 
 _TICKET_LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+\.)\s+")
 _URL_RE = re.compile(r"^https?://\S+$")
@@ -105,6 +113,7 @@ def validate(product: Product, *, ticketing_provider: str | None = None) -> list
     """
     issues = _validate_metadata(product)
     issues += _validate_ticketing_references(product, ticketing_provider)
+    issues += _validate_applies_to(product)
     artifact_type = classify(product).type
     if artifact_type == "decision":
         return issues + _validate_decision(product)
@@ -268,6 +277,38 @@ def _validate_ticketing_references(product: Product, provider: str | None) -> li
                     "error",
                     MALFORMED_TICKET_REFERENCE,
                     f"## Related Tickets entry {entry!r} is not a valid {label}.",
+                )
+            )
+    return issues
+
+
+def _validate_applies_to(product: Product) -> list[Issue]:
+    """Format-lint ``## Applies To`` path scopes (ADR-098).
+
+    Path-classified entries must be portable repo-root-relative POSIX globs; the
+    reasons mirror ``rac.core.applies_to.malformed_reason``. Component labels are
+    never linted, and nothing touches the filesystem — a pure function of the
+    product, like the ticketing lint but config-free. Only artifact types that
+    declare the section are checked.
+    """
+    spec = spec_for(classify(product).type)
+    if spec is None or APPLIES_TO_SECTION not in spec.optional:
+        return []
+    issues: list[Issue] = []
+    for line in product.sections.get(APPLIES_TO_SECTION, "").splitlines():
+        raw = _TICKET_LIST_MARKER_RE.sub("", line.strip(), count=1).strip()
+        if not raw:
+            continue
+        entry = applies_to.normalize_entry(raw)
+        if not applies_to.is_path_scope(entry):
+            continue
+        reason = applies_to.malformed_reason(entry)
+        if reason is not None:
+            issues.append(
+                Issue(
+                    "error",
+                    MALFORMED_APPLIES_TO,
+                    f"## Applies To entry {raw!r} is not a valid path scope: {reason}.",
                 )
             )
     return issues

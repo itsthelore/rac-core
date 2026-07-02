@@ -30,7 +30,7 @@ from rac.services.portfolio import PortfolioSummary
 from rac.services.quickstart import QuickstartResult
 from rac.services.relationships import RelationshipReport, RelationshipValidation
 from rac.services.rename import RenamePlan, RenameResult
-from rac.services.resolve import ResolutionResult, SearchResult
+from rac.services.resolve import PathDecisionsResult, ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
 from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
@@ -263,6 +263,10 @@ def render_relationship_validation_json(report: RelationshipValidation) -> str:
         "validation_issues": report.validation_issues,
         "issues": [issue.to_dict() for issue in report.issues],
     }
+    # Advisory findings (ADR-098): additive key, present only when non-empty so
+    # existing consumers and goldens are byte-identical on advisory-free corpora.
+    if report.advisories:
+        payload["advisories"] = [issue.to_dict() for issue in report.advisories]
     return json.dumps(payload, indent=2)
 
 
@@ -390,6 +394,11 @@ def render_find_json(result: SearchResult, *, explain: bool = False) -> str:
     ``search_artifacts`` tool emits (one source of truth, REQ-004).
     """
     return json.dumps(result.to_dict(include_evidence=explain), indent=2)
+
+
+def render_decisions_json(result: PathDecisionsResult) -> str:
+    """JSON `rac decisions` output (stable contract, ADR-007 / ADR-098)."""
+    return json.dumps(result.to_dict(), indent=2)
 
 
 # --- migrate (v0.7.13) ----------------------------------------------------------

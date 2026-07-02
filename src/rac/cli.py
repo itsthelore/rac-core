@@ -159,6 +159,7 @@ from rac.services.rename import apply_rename, compute_rename
 from rac.services.resolve import (
     OUTCOME_DUPLICATE,
     OUTCOME_RESOLVED,
+    decisions_for_path,
     find_artifacts,
     find_decisions,
     resolve_artifact,
@@ -943,6 +944,27 @@ def cmd_find(args: argparse.Namespace) -> int:
     else:
         print(outputs.render_find_human(result, explain=args.explain))
     # An empty result is a valid outcome, not an error (a query always succeeds).
+    return EXIT_OK
+
+
+def cmd_decisions(args: argparse.Namespace) -> int:
+    """The live decisions whose declared scopes govern a path (ADR-098).
+
+    Deterministic scoped grounding at the point of work: bindings and their
+    status, never a verdict (ADR-067). An empty result is a valid answer; a
+    query that normalises to nothing is a usage error, not "everything".
+    """
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    result = decisions_for_path(args.directory, args.path, recursive=not args.top_level)
+    if not result.query_path:
+        print("rac: empty path — name a file or directory to look up.", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    if args.json:
+        print(outputs.render_decisions_json(result))
+    else:
+        print(outputs.render_decisions_human(result))
     return EXIT_OK
 
 
@@ -2045,6 +2067,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_find.set_defaults(func=cmd_find)
+
+    p_decisions = sub.add_parser(
+        "decisions",
+        help="The live decisions whose declared ## Applies To scopes govern a path.",
+        parents=[version_parent],
+    )
+    p_decisions.add_argument(
+        "path",
+        help="Repository-relative file or directory to look up (e.g. src/auth/).",
+    )
+    p_decisions.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Corpus directory to scan recursively for *.md (default: current directory).",
+    )
+    p_decisions.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_decisions.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    p_decisions.set_defaults(func=cmd_decisions)
 
     p_eval = sub.add_parser(
         "eval",

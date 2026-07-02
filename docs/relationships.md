@@ -87,6 +87,38 @@ In `rac export --graph` an external edge carries `"external": true`,
 deliberate ticket link from a dangling in-corpus reference (both are unresolved,
 only the external one is marked).
 
+## Applies-to scope (decisions)
+
+`## Applies To` declares the code a decision governs (ADR-098) — the join that
+lets `rac decisions <path>` and the MCP `decisions_for_path` tool answer "which
+decisions govern the file I am editing?" deterministically. Decisions only, one
+entry per line:
+
+```markdown
+## Applies To
+- src/auth/
+- docs/*.md
+- the login surface
+```
+
+An entry is either a **path glob** (repo-root-relative, POSIX separators — any
+entry with a `/` or a glob character) or a **component label** (anything with
+whitespace, or a bare name like `rac-core` — recorded for humans, never
+resolved). A repository-root file opts into path-hood with `./`
+(`./pyproject.toml`). Matching is case-sensitive; a directory scope governs its
+whole subtree.
+
+Two checks, deliberately split (ADR-098):
+
+- `rac validate` **format-lints** path entries offline (`malformed-applies-to`:
+  absolute paths, backslashes, `.`/`..` segments) — blocking, like any
+  structural error.
+- A path scope that **matches nothing in the working tree** is an **advisory**:
+  `rac relationships --validate` reports it under a separate `advisories` key
+  (present only when non-empty) and `rac doctor` warns — but neither ever fails.
+  A moved path is the drift signal the freshness gate consumes, not a merge
+  blocker.
+
 ## Viewing relationships
 
 ```bash
