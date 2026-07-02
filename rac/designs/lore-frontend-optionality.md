@@ -31,8 +31,8 @@ greenfield. It already ships five human- and agent-facing surfaces:
 - a Textual TUI Explorer — keyboard-first terminal browsing (ADR-028);
 - `rac-localview` — a single-file React Portal (`rac export --html`) with a
   force-directed graph view; and
-- the `lore-vscode` extension — in-editor validation, navigation, and an
-  embedded graph webview (the v0.21.x editor series).
+- the `rac-editors` VS Code extension (`vscode/`) — in-editor validation,
+  navigation, and an embedded graph webview (the v0.21.x editor series).
 
 So the real question is **optionality**: which *thin shell over the stable
 contract* earns further investment, and what — if anything — Lore should borrow
