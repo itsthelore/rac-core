@@ -380,6 +380,26 @@ Keeping the fronted checkout current with `main` — a merge webhook or a period
 `git pull` — is a deployment concern outside the engine; a full container-and-
 keep-current recipe is documented separately for operators.
 
+### Derived-index cache (large corpora)
+
+By default every tool call rebuilds the derived structures — the repository
+index, the relationship graph, and the search token vectors — from disk. On a
+large corpus that re-indexing and re-tokenising costs real latency. Add
+`--cache` to reuse those structures across calls
+([ADR-099](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-099-derived-index-cache.md)):
+
+```bash
+rac mcp --root /path/to/your/repo --transport http --cache
+```
+
+The cache is **content-addressed and disposable**. It is keyed on a hash of the
+corpus bytes, so any change to any artifact — an edit, add, remove, or rename —
+changes the key and forces a rebuild; the key is recomputed every call, so no
+call ever serves stale state. Output with `--cache` is **byte-identical** to the
+uncached path. The cache lives at `$XDG_CACHE_HOME/rac/derived` (override with
+`RAC_CACHE_DIR`); deleting it costs only latency, never correctness — the files
+in git remain the single source of truth. It is off by default.
+
 ## 10. Troubleshooting
 
 ### Server not listed in the client
