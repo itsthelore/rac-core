@@ -205,6 +205,10 @@ everywhere.
 - rac-decision-applies-to-scope
 - rac-path-decisions-lookup
 
+## Related Designs
+
+- code-scope-consumption
+
 ## Related Tickets
 
 - itsthelore/rac-core#273
