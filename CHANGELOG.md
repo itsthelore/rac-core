@@ -8,9 +8,10 @@ details, release history over commit history.
 
 The **decision-to-code-proximity** programme: recorded decisions now know which
 code they govern, and you can ask which decisions govern a path — declared and
-validated, never inferred; deterministic and offline. Plus the first build of
+validated, never inferred; deterministic and offline. Plus the first builds of
 **lore-at-team-scale**: `rac mcp` can now serve the whole team over one
-always-current HTTP endpoint.
+always-current HTTP endpoint, with an optional content-addressed cache so
+per-call latency stops scaling with corpus size.
 
 ### Added
 
@@ -38,6 +39,13 @@ always-current HTTP endpoint.
   endpoint is read-only and unauthenticated by design — authentication belongs
   to your deployment proxy — and it is mandatory audit-on: it refuses to start
   without a working read-access audit log (ADR-098).
+- **Derived-index cache (`rac mcp --cache`).** For large corpora, an opt-in
+  content-addressed cache reuses the expensive derived structures — the
+  repository index, the relationship graph, and the search token vectors — so
+  repeated reads of an unchanged corpus skip re-indexing and re-tokenising.
+  It is disposable and never authoritative: keyed on a corpus content hash so
+  any byte change rebuilds it, byte-identical to the uncached path, and deleting
+  it costs only latency (ADR-099). Off by default.
 
 ## 2026.06.5 — the "rename" release
 
