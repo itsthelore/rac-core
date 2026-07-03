@@ -7,12 +7,17 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — per-call work stops scaling with corpus
 size. Initiative 2 of the `lore-at-team-scale` roadmap: a
 content-addressed, rebuild-on-change cache behind the ADR-032 seam,
-shipped under its own ADR.
+shipped under its own ADR. Delivered (itsthelore/rac-core#264): the
+`DerivedIndexCache` persists the repository index, resolved relationship
+graph, and tokenised field vectors keyed on `corpus_content_hash`, enabled
+opt-in via `rac mcp --cache`, byte-identical to the uncached path — under
+ADR-099, which answers ADR-032's review clause and revises its
+no-persistent-cache pin.
 
 ## Problem
 
@@ -79,6 +84,7 @@ uncached path.
 - adr-032
 - adr-066
 - adr-080
+- adr-099
 
 ## Related Roadmaps
 
