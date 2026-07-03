@@ -3,16 +3,22 @@ schema_version: 1
 id: RAC-KVJMA3FF260P
 type: roadmap
 ---
-# Corpus Export to External Memory and RAG Backends (Future)
+# Corpus Export to External Memory and RAG Backends
 
 ## Status
 
-Planned
+Achieved
 
-Unscheduled — captured as future intent, not yet on a release. This is the
-umbrella that generalizes the `lore-supermemory-grounding` item: Supermemory
-becomes the first reference adapter under a broader export capability. Gated on
-adoption signal; it must not displace nearer-term committed work.
+The recorded intent is realized (ADR-061): the ingestion-shaped projections
+shipped as `rac export --documents` and `--graph` in v0.25.0 under ADR-074
+(Accepted), and the reference connectors shipped as the `rac-connectors`
+companion (ADR-095) with cognee, letta, mem0, neo4j (self-hostable),
+supermemory, and zep modules. The residual Initiative-3 deliverable — the
+documentation page naming targets and the verify-in-Lore loop — is absorbed
+into the `corpus-sync` programme's contracts-documentation work
+(itsthelore/rac-core#255, itsthelore/rac-core#256). Consumption-plane
+evolution continues under `corpus-sync`; this artifact remains the durable
+record of the original intent.
 
 ## Context
 
@@ -157,10 +163,14 @@ It must:
 - ADR-066
 - ADR-068
 - ADR-073
+- ADR-074
+- ADR-095
 
 ## Related Roadmaps
 
 - lore-supermemory-grounding
+- corpus-sync
+- deterministic-substrate
 
 ## Related Designs
 
