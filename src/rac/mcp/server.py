@@ -53,7 +53,7 @@ from rac import consent as consent_record
 from rac.core.corpus import walk_corpus
 from rac.core.limits import MAX_TRAVERSAL_DEPTH
 from rac.core.markdown import parse
-from rac.mcp import audit, errors, ping, telemetry
+from rac.mcp import audit, errors, ping, telemetry, transport
 from rac.mcp.budget import (
     DEFAULT_BUDGET,
     HINT_RELATED,
@@ -417,11 +417,26 @@ def _maybe_start_sharing(root: str) -> None:
         )
 
 
-def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool = False) -> int:
-    """Run the Guide server over stdio until the client disconnects.
+def run_server(
+    root: str,
+    budget: int = DEFAULT_BUDGET,
+    telemetry_enabled: bool = False,
+    transport_name: str = transport.TRANSPORT_STDIO,
+    host: str = transport.DEFAULT_HOST,
+    port: int = transport.DEFAULT_PORT,
+    path: str = transport.DEFAULT_PATH,
+) -> int:
+    """Run the Guide server over stdio (default) or streamable HTTP.
 
     Returns ``0`` on clean shutdown. stdout belongs to the MCP protocol; any
     diagnostics a caller emits go to stderr (the CLI owns that channel).
+
+    ``transport_name`` selects the transport (ADR-098): ``"stdio"`` is the
+    default and byte-unchanged; ``"http"`` fronts an always-current
+    ``main``-backed checkout for the whole team over one endpoint, configured by
+    ``host``/``port``/``path`` and served statelessly (ADR-032). HTTP serving is
+    mandatory-audit-on: it refuses to start without a working audit sink
+    (ADR-084), asserted before the endpoint opens.
 
     Emits a one-line notice to stderr when the repository root contains no
     recognized artifacts (v0.10.1 startup hardening), and another when
@@ -448,8 +463,22 @@ def run_server(root: str, budget: int = DEFAULT_BUDGET, telemetry_enabled: bool 
             f"{audit_recorder.path}",
             file=sys.stderr,
         )
+    server = build_server(root, budget=budget, recorder=recorder, audit_recorder=audit_recorder)
+    if transport_name == transport.TRANSPORT_HTTP:
+        # Mandatory-audit-on entry condition (ADR-084): a shared endpoint
+        # without a working auditor refuses to start rather than serving reads
+        # no one can attribute. Checked before the port opens, and before the
+        # daily-sharing daemon starts, so a refused start is inert.
+        transport.ensure_audit_sink(audit_recorder)
+        print(
+            f"rac mcp: serving over HTTP at http://{host}:{port}{path} "
+            "(read-only, stateless per call; authentication belongs to the "
+            "deployment proxy, ADR-085).",
+            file=sys.stderr,
+        )
+        _maybe_start_sharing(root)
+        transport.serve_http(server, host=host, port=port, path=path)
+        return 0
     _maybe_start_sharing(root)
-    build_server(root, budget=budget, recorder=recorder, audit_recorder=audit_recorder).run(
-        transport="stdio"
-    )
+    server.run(transport="stdio")
     return 0
