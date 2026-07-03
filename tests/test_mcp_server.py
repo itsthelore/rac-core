@@ -69,6 +69,11 @@ def test_descriptions_name_the_trigger_moment():
     assert "what did we decide about X" in mcp_server.DESC_FIND_DECISIONS
     assert "is X ruled out" in mcp_server.DESC_FIND_DECISIONS
     assert "judge for yourself" in mcp_server.DESC_FIND_DECISIONS
+    # The additive path→decisions mode (decision-to-code-proximity Initiative 2):
+    # the description names the `path` argument and its "governs this code" intent
+    # so an agent editing a file knows to reach for it (deliberate ADR-030 revision).
+    assert "path" in mcp_server.DESC_FIND_DECISIONS
+    assert "govern" in mcp_server.DESC_FIND_DECISIONS
 
 
 def test_cli_registers_the_mcp_subcommand():
