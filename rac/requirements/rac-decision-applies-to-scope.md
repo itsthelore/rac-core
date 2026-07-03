@@ -9,6 +9,10 @@ type: requirement
 
 Proposed
 
+Adopted as Initiative 1 of the `decision-to-code-proximity` roadmap;
+delivery there also closes this item's decision-scope box on the
+traceability epic (itsthelore/rac-core#236).
+
 ## Problem
 
 A decision often governs a specific part of the repository — a directory, a
@@ -59,3 +63,4 @@ This is gap 7 of the traceability audit.
 ## Related Roadmaps
 
 - relationship-vocabulary
+- decision-to-code-proximity
