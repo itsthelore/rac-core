@@ -3,14 +3,19 @@ schema_version: 1
 id: RAC-KVTRPAX62TWJ
 type: roadmap
 ---
-# RAC — Lean Context Delivery (Future)
+# RAC — Lean Context Delivery
 
 ## Status
 
 Planned
 
-Unscheduled — captured for future consideration from the team-scale (20+) market
-research. It graduates out of `future/` into a versioned series when prioritised.
+Prioritised as the rank-9 Tranche A item of the deterministic-substrate
+programme, graduated out of `future/` alongside `integration-recipe-factory`
+now the programme's rank 1–4 items are live. Its concrete accounting method
+is recorded in the `lean-context-delivery-measurement` design; leanness is
+made a measured, regression-checked property here, never a semantic
+compression (ADR-066). Execution is tracked in GitHub (ADR-093): the epic in
+`## Related Tickets` carries ordering and task state.
 
 ## Context
 
@@ -102,3 +107,21 @@ it.
 - adr-033
 - adr-005
 - adr-066
+
+## Related Roadmaps
+
+- deterministic-substrate
+
+## Related Designs
+
+- lean-context-delivery-measurement
+
+## Related Requirements
+
+- rac-mcp-surface-budget
+- rac-selective-retrieval-default
+- rac-cli-first-delivery
+
+## Related Tickets
+
+- itsthelore/rac-core#248
