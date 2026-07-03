@@ -51,8 +51,13 @@ ranking, the sequence, and the constraints that reviews must hold.
     (staleness fields plus advisory finding only) recorded there.
   - Integration recipe factory (`integration-recipe-factory`): the
     reusable harness recipe and first verified examples; zero engine diff.
+    Graduated out of `future/` to its own scoped roadmap, with the boundary
+    constraint (context-supply and post-edit CI only, never pre-edit
+    interception) carried there.
   - Lean context delivery (`lean-context-delivery`): measure the MCP
-    tool-surface cost and hold it to a regression-checked budget.
+    tool-surface cost and hold it to a regression-checked budget. Graduated
+    out of `future/` to its own scoped roadmap, with the deterministic
+    accounting method recorded in a paired design.
 - Tranche B — reach:
   - Retrieval diagnostics (`retrieval-diagnostics`): explain-miss and the
     floor-ratio bounded-boost gate, golden-pinned.
