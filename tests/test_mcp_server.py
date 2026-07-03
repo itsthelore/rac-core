@@ -116,10 +116,12 @@ def test_cli_valid_root_runs_server_and_returns_zero(monkeypatch):
         host: str = "127.0.0.1",
         port: int = 8000,
         path: str = "/mcp",
+        cache_enabled: bool = False,
     ) -> int:
         captured["root"] = root
         captured["telemetry"] = telemetry_enabled
         captured["transport"] = transport_name
+        captured["cache"] = cache_enabled
         return 0
 
     monkeypatch.setattr("rac.mcp.server.run_server", _fake_run)
