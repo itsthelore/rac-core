@@ -45,6 +45,7 @@ from rac.services.review import (
     ReviewIssue,
     review_from_portfolio,
 )
+from rac.services.scope import decisions_for_path
 from rac.services.stats import collect_stats
 
 from . import editor as editor_mod
@@ -488,6 +489,28 @@ class ExplorerAdapter:
         rows = tuple(_row(a) for a in repository.artifacts_of_type(artifact_type))
         if not rows:
             return LookupState(rows=(), message=f"Nothing to browse: {artifact_type}")
+        return LookupState(rows=rows)
+
+    def governing_decisions(self, path: str) -> LookupState:
+        """Decisions whose `## Applies To` scope governs a code path (`/decisions-for`).
+
+        Consumes the same `decisions_for_path` core the `rac decisions-for` CLI
+        and the `find_decisions` MCP `path` argument use (decision-to-code-proximity
+        Initiative 2) — the one seam, no second vocabulary — and maps each governing
+        decision to its artifact row so a result opens like any other lookup. An
+        ungoverned or outside-repository path is a valid empty result with an
+        explanatory message, never an error.
+        """
+        repository = self.repository
+        if repository is None:
+            return LookupState(rows=(), message="Repository not loaded yet")
+        result = decisions_for_path(self.directory, path, recursive=self.recursive)
+        by_path = {a.path: a for a in repository.artifacts}
+        rows = tuple(_row(by_path[d.path]) for d in result.decisions if d.path in by_path)
+        if not rows:
+            if not result.in_repository:
+                return LookupState(rows=(), message=f"{result.query} is outside the repository")
+            return LookupState(rows=(), message=f"No decisions declare scope over {result.query}")
         return LookupState(rows=rows)
 
     def health_state(self) -> HealthState | None:

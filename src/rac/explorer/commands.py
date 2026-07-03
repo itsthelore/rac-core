@@ -50,6 +50,9 @@ REGISTRY: tuple[CommandSpec, ...] = (
     CommandSpec("new", "new <type> <path>", "Create an artifact from its template"),
     CommandSpec("import", "import <source> [target]", "Convert a document into Markdown"),
     CommandSpec("relationships", "relationships <ref>", "Traverse an artifact's relationships"),
+    CommandSpec(
+        "decisions-for", "decisions-for <path>", "List decisions whose scope governs a code path"
+    ),
     CommandSpec("resume", "resume", "Reopen the last artifact in this repository"),
     CommandSpec("schema", "schema [type]", "Show an artifact type's expected structure"),
     CommandSpec("settings", "settings", "View and change Explorer settings"),

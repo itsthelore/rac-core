@@ -684,6 +684,11 @@ class MainScreen(Screen[None]):
                 self._show_lookup(lookup)
                 return
             self.open_artifact(lookup.rows[0].path, tab="tab-links")
+        elif invocation.command == "decisions-for":
+            if not invocation.args:
+                self._show_message("Usage: /decisions-for <path>")
+                return
+            self._show_lookup(self.adapter.governing_decisions(invocation.args))
         elif invocation.command == "import":
             parts = invocation.args.split()
             if not parts:
