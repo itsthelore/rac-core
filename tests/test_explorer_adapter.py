@@ -752,3 +752,67 @@ def test_stats_state_renders_the_dashboard_sections():
     assert any("Requirements" in line and "valid" in line for line in lines)
     quality = dict(stats.sections)["Requirements & Quality"]
     assert any(line.startswith("Requirements    7") for line in quality)
+
+
+# --- governing decisions (/decisions-for, decision-to-code-proximity Init 3) -----
+
+
+def _decision_scoped(title: str, applies_to: list[str], status: str = "Accepted") -> str:
+    scope = "".join(f"- {e}\n" for e in applies_to)
+    return (
+        f"# {title}\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n"
+        f"\n## Status\n\n{status}\n\n## Applies To\n\n{scope}"
+    )
+
+
+def _scoped_corpus(tmp_path) -> ExplorerAdapter:
+    d = tmp_path / "decisions"
+    d.mkdir()
+    (d / "adr-a.md").write_text(_decision_scoped("A dir", ["src/auth/"]), encoding="utf-8")
+    (d / "adr-b.md").write_text(_decision_scoped("B glob", ["src/**/*.py"]), encoding="utf-8")
+    (d / "adr-c.md").write_text(
+        _decision_scoped("C retired", ["src/auth/"], status="Superseded"), encoding="utf-8"
+    )
+    adapter = ExplorerAdapter(str(tmp_path))
+    adapter.load()
+    return adapter
+
+
+def test_governing_decisions_returns_covering_live_decisions_as_rows(tmp_path):
+    # The directory scope and the glob both cover the nested file; the retired
+    # decision is excluded (live-only), and each row is an openable artifact row.
+    adapter = _scoped_corpus(tmp_path)
+    lookup = adapter.governing_decisions("src/auth/login.py")
+    assert lookup.message is None
+    assert {row.title for row in lookup.rows} == {"A dir", "B glob"}
+    assert all(row.path.endswith(".md") for row in lookup.rows)
+
+
+def test_governing_decisions_consumes_the_shared_core_no_second_vocabulary(tmp_path):
+    # The adapter answer is exactly the decisions_for_path service answer mapped
+    # to rows — the same seam the CLI and MCP faces read (authored once).
+    from rac.services.scope import decisions_for_path
+
+    adapter = _scoped_corpus(tmp_path)
+    lookup = adapter.governing_decisions("src/auth/login.py")
+    service = decisions_for_path(str(tmp_path), "src/auth/login.py")
+    assert [row.path for row in lookup.rows] == [d.path for d in service.decisions]
+
+
+def test_governing_decisions_ungoverned_path_is_an_explained_empty(tmp_path):
+    lookup = _scoped_corpus(tmp_path).governing_decisions("README.md")
+    assert lookup.rows == ()
+    assert "No decisions declare scope" in (lookup.message or "")
+
+
+def test_governing_decisions_outside_repository_is_an_explained_empty(tmp_path):
+    lookup = _scoped_corpus(tmp_path).governing_decisions("/etc/passwd")
+    assert lookup.rows == ()
+    assert "outside the repository" in (lookup.message or "")
+
+
+def test_governing_decisions_requires_a_loaded_repository(tmp_path):
+    adapter = ExplorerAdapter(str(tmp_path))  # not loaded
+    lookup = adapter.governing_decisions("src/auth/login.py")
+    assert lookup.rows == ()
+    assert "not loaded" in (lookup.message or "")

@@ -2345,3 +2345,48 @@ async def test_returning_users_never_see_the_editor_prompt():
         text = await _settled_panel_text(app, pilot)
         assert "Choose your editor" not in text
         assert not app.screen.query_one("#firstrun-editor", Input).display
+
+
+# --- /decisions-for path→decisions surface (decision-to-code-proximity Init 3) ---
+
+
+@pytest.mark.asyncio
+async def test_slash_decisions_for_lists_governing_decisions_in_results(tmp_path):
+    d = tmp_path / "decisions"
+    d.mkdir()
+    (d / "adr.md").write_text(
+        "# Scoped decision\n\n## Context\n\nc\n\n## Decision\n\nx\n\n## Consequences\n\nq\n"
+        "\n## Status\n\nAccepted\n\n## Applies To\n\n- src/auth/\n",
+        encoding="utf-8",
+    )
+    app = ExplorerApp(str(tmp_path))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        # A governed path lists the decision in the results view, openable.
+        app.screen.route_command("decisions-for src/auth/login.py")
+        await pilot.pause()
+        assert app.screen.current_view == "view-results"
+        region = app.screen.query_one("#context-region")
+        assert str(region.border_title) == "Results · 1"
+        # An ungoverned path is an explained empty, not an error.
+        app.screen.route_command("decisions-for docs/guide.md")
+        await pilot.pause()
+        results = app.screen.query_one("#command-results", OptionList)
+        listing = "\n".join(
+            str(results.get_option_at_index(i).prompt) for i in range(results.option_count)
+        )
+        assert "No decisions declare scope" in listing
+
+
+@pytest.mark.asyncio
+async def test_slash_decisions_for_without_a_path_shows_usage():
+    app = ExplorerApp(str(FIXTURES / "valid_clean"))
+    async with app.run_test() as pilot:
+        await _settled_panel_text(app, pilot)
+        app.screen.route_command("decisions-for")
+        await pilot.pause()
+        results = app.screen.query_one("#command-results", OptionList)
+        listing = "\n".join(
+            str(results.get_option_at_index(i).prompt) for i in range(results.option_count)
+        )
+        assert "Usage: /decisions-for <path>" in listing
