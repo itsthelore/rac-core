@@ -155,3 +155,7 @@ client gains protocol-level response streaming that changes the trade-off.
 ## Related Roadmaps
 
 - v0.10.0-guide-foundation
+
+## Applies To
+
+- src/rac/mcp/
