@@ -1274,6 +1274,57 @@ rac find markdown rac/ --explain        # show the relevance-score breakdown
 
 ---
 
+## decisions-for
+
+List the **live decisions whose `## Applies To` scope governs a code path** —
+the reverse of the [code-scope declaration](relationships.md#code-scope): given a
+file or directory, which recorded decisions constrain an edit there. The answer
+is a pure function of the declared scopes and the query path (no code parsing, no
+index); an ungoverned or outside-repository path is a valid empty result, not an
+error. Only *live* (Accepted, non-retired) decisions govern.
+
+Matching is deterministic and platform-independent (paths normalise to POSIX
+repository-relative form): a **literal path/directory** entry covers the query
+when the query equals it or is nested beneath it; a **glob** covers it
+segment-aware (`*` within a segment, `**` across — `src/**/*.py` matches
+`src/a/b.py`); **component-name** entries never match a path. The query resolves
+against the repository root (the nearest `.rac/`).
+
+- **Input:** `rac decisions-for <path> [directory]` — the corpus directory
+  defaults to the current directory.
+- **Options:** `--json` · `--top-level` · `--recursive`
+- **Exit codes:** `0` lookup completed (matches or none) · `2` the corpus
+  directory is not a directory
+
+```bash
+rac decisions-for src/rac/mcp/server.py rac/
+rac decisions-for .github/workflows/tests.yml rac/ --json
+```
+
+```json
+{
+  "schema_version": "1",
+  "query": "src/rac/mcp/server.py",
+  "in_repository": true,
+  "decisions": [
+    {
+      "id": "RAC-KTQ63DRPK57V",
+      "title": "ADR-023: Clean-Break Internal Refactors",
+      "status": "Accepted",
+      "path": "rac/decisions/adr-023-clean-break-internal-refactors.md",
+      "matching_entry": "src/rac/"
+    }
+  ]
+}
+```
+
+The same lookup is available to agents over MCP as an additive optional `path`
+argument on the `find_decisions` tool (the five-tool surface is unchanged);
+`find_decisions` called with a `topic` is byte-identical to before.
+
+
+---
+
 ## migrate
 
 Bring existing artifacts onto canonical frontmatter identity. Every

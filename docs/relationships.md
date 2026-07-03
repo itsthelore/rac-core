@@ -119,6 +119,11 @@ cannot name an in-repository scope and is reported not-found. Like a ticket, the
 edge is `"external": true`/`"resolved": false` in `rac export --graph` (with no
 provider), so a backend can surface a decision's declared code scope.
 
+To query the scope from the other direction — *which decisions govern this
+path?* — use [`rac decisions-for <path>`](cli.md#decisions-for), or the additive
+`path` argument on the `find_decisions` MCP tool. The lookup is where glob
+patterns are matched (segment-aware: `*` within a segment, `**` across).
+
 ## Viewing relationships
 
 ```bash
