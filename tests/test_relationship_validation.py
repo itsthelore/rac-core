@@ -573,9 +573,7 @@ def test_applies_to_does_not_shift_decision_classification(tmp_path):
 
 
 def test_applies_to_missing_path_cli_json_and_exit(tmp_path, capsys):
-    (tmp_path / "adr-001.md").write_text(
-        _decision_scoped("A", ["gone/"]), encoding="utf-8"
-    )
+    (tmp_path / "adr-001.md").write_text(_decision_scoped("A", ["gone/"]), encoding="utf-8")
     rc = main(["relationships", str(tmp_path), "--validate", "--json"])
     assert rc == 1
     payload = json.loads(capsys.readouterr().out)
@@ -586,8 +584,6 @@ def test_applies_to_missing_path_cli_json_and_exit(tmp_path, capsys):
 
 
 def test_applies_to_missing_path_cli_human_suffix(tmp_path, capsys):
-    (tmp_path / "adr-001.md").write_text(
-        _decision_scoped("A", ["gone/"]), encoding="utf-8"
-    )
+    (tmp_path / "adr-001.md").write_text(_decision_scoped("A", ["gone/"]), encoding="utf-8")
     assert main(["relationships", str(tmp_path), "--validate"]) == 1
     assert "✗ gone/ path not found" in capsys.readouterr().out
