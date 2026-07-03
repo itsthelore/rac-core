@@ -7,17 +7,18 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-Prioritised as the rank-1 Tranche A item of the deterministic-substrate
-programme, graduated out of `future/` now the programme's rank-3 and rank-4
-items are live: corpus export shipped and its evolution continues under
-`corpus-sync`, and team-scale serving is live as its own roadmap. The
-programme's constraint pattern is carried verbatim: **proximity references
-are declared and validated, never inferred; drift findings are advisory
-before they are ever a gate.** Execution is tracked in GitHub (ADR-093):
-the epic in `## Related Tickets` carries ordering and task state, with a
-sub-issue per initiative.
+Delivered across all three initiatives (epic itsthelore/rac-core#273):
+decisions declare validated code scope via `## Applies To` (#274); a
+deterministic path→decisions lookup answers over the `rac decisions-for` CLI
+and the additive `find_decisions` MCP `path` argument (#275); and the Explorer
+consumes the same shared reader through `/decisions-for` while the drift-gate
+handoff is recorded in the `code-scope-consumption` design (#276). Graduated as
+the rank-1 Tranche A item of the deterministic-substrate programme; its
+constraint pattern held throughout — **proximity references are declared and
+validated, never inferred; drift findings are advisory before they are ever a
+gate.** Execution was tracked in GitHub (ADR-093), a sub-issue per initiative.
 
 ## Context
 
