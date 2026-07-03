@@ -165,6 +165,7 @@ from rac.services.resolve import (
 )
 from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
 from rac.services.revisions import NotAGitRepository, RevisionNotFound
+from rac.services.scope import decisions_for_path
 from rac.services.skill import SkillFileExists, install_skills
 from rac.services.stats import collect_stats
 from rac.services.validate import (
@@ -943,6 +944,30 @@ def cmd_find(args: argparse.Namespace) -> int:
     else:
         print(outputs.render_find_human(result, explain=args.explain))
     # An empty result is a valid outcome, not an error (a query always succeeds).
+    return EXIT_OK
+
+
+def cmd_decisions_for(args: argparse.Namespace) -> int:
+    """List the live decisions whose `## Applies To` scope governs a code path.
+
+    The read side of the code-scope vocabulary (decision-to-code-proximity
+    Initiative 2): a pure function of declared `## Applies To` references and the
+    query path (ADR-066), reading fresh per call (ADR-032). An ungoverned or
+    outside-repository path is a valid empty result, not an error (a query always
+    succeeds).
+    """
+    if not Path(args.directory).is_dir():
+        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    result = decisions_for_path(
+        args.directory,
+        args.path,
+        recursive=not args.top_level,
+    )
+    if args.json:
+        print(outputs.render_decisions_for_json(result))
+    else:
+        print(outputs.render_decisions_for_human(result))
     return EXIT_OK
 
 
@@ -2045,6 +2070,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_find.set_defaults(func=cmd_find)
+
+    p_decisions_for = sub.add_parser(
+        "decisions-for",
+        help="List the decisions whose `## Applies To` scope governs a code path.",
+        parents=[version_parent],
+    )
+    p_decisions_for.add_argument(
+        "path",
+        help="Repository file or directory path (POSIX or native; repo-relative or absolute).",
+    )
+    p_decisions_for.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Corpus directory to scan recursively for *.md (default: current directory).",
+    )
+    p_decisions_for.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    p_decisions_for.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the corpus directory (no recursion).",
+    )
+    p_decisions_for.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
+    p_decisions_for.set_defaults(func=cmd_decisions_for)
 
     p_eval = sub.add_parser(
         "eval",
