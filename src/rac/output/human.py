@@ -75,6 +75,7 @@ from rac.services.review import (
     PRIORITY_UNKNOWN_ARTIFACT,
     ReviewReport,
 )
+from rac.services.scope import ScopeLookupResult
 from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
 from rac.services.validate import STATUS_INVALID, DirectoryValidation, StdinCorpusValidation
@@ -1000,6 +1001,29 @@ def render_resolve_human(result: ResolutionResult) -> str:
         f"Title: {artifact.title or '—'}\n"
         f"Path: {artifact.path}"
     )
+
+
+def render_decisions_for_human(result: ScopeLookupResult) -> str:
+    """Human `rac decisions-for` output: the decisions governing a path.
+
+    Aligned rows of ``id  status  title`` with the matching declared ``## Applies
+    To`` entry under each, or a valid empty result. An outside-repository query is
+    reported as such (a valid empty answer, not an error).
+    """
+    if not result.decisions:
+        if not result.in_repository:
+            return f"{result.query!r} is outside the repository — no governing decisions."
+        return f"No decisions declare scope over {result.query!r}."
+    id_w = max(len(d.id) for d in result.decisions)
+    status_w = max(len(d.status or "—") for d in result.decisions)
+    indent = f"{' ' * id_w}  {' ' * status_w}  "
+    lines: list[str] = []
+    for d in result.decisions:
+        lines.append(f"{d.id:<{id_w}}  {(d.status or '—'):<{status_w}}  {d.title or '—'}")
+        lines.append(f"{indent}↳ applies to: {d.matching_entry}")
+    lines.append("")
+    lines.append(f"{len(result.decisions)} decision(s) govern {result.query!r}.")
+    return "\n".join(lines)
 
 
 def render_find_human(result: SearchResult, *, explain: bool = False) -> str:

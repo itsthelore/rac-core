@@ -80,6 +80,7 @@ from rac.services.resolve import (
     resolve_in_index,
     search_index,
 )
+from rac.services.scope import decisions_for_path
 
 SERVER_NAME = "lore"
 
@@ -119,16 +120,20 @@ DESC_GET_RELATED = (
 )
 
 DESC_FIND_DECISIONS = (
-    "Find the team's already-settled decisions about a topic. Call this whenever "
-    "the user (or you) asks 'what did we decide about X', 'is X ruled out', 'did "
-    "we already decide this', 'what's our policy on X', or before proposing, "
-    "changing, or arguing for anything a prior decision might have settled — so "
-    "you respect recorded decisions instead of re-litigating them. Returns the "
-    "live (Accepted, non-retired) decisions ranked by relevance to the topic, "
-    "each with its identifier, title, path, category, and a snippet. It tells you "
-    "which decisions bind the topic; read them and judge for yourself — it does "
-    "not decide whether a change contradicts them. Use get_artifact to read a "
-    "decision's full text."
+    "Find the team's already-settled decisions about a topic — or the decisions "
+    "that govern a specific code path. Call this whenever the user (or you) asks "
+    "'what did we decide about X', 'is X ruled out', 'did we already decide this', "
+    "'what's our policy on X', or before proposing, changing, or arguing for "
+    "anything a prior decision might have settled — so you respect recorded "
+    "decisions instead of re-litigating them. Pass `topic` for a keyword query, or "
+    "pass `path` (a repository file or directory) to get the decisions whose "
+    "declared scope governs that code — the recorded decisions that constrain an "
+    "edit there. Returns the live (Accepted, non-retired) decisions, each with its "
+    "identifier, title, and path; a topic query ranks by relevance with category "
+    "and a snippet, a path query reports each decision's status and the matching "
+    "declared scope. It tells you which decisions bind; read them and judge for "
+    "yourself — it does not decide whether a change contradicts them. Use "
+    "get_artifact to read a decision's full text."
 )
 
 DESC_GET_SUMMARY = (
@@ -195,15 +200,19 @@ def _search_artifacts(root: str, query: str, artifact_type: str | None, budget: 
     return serialize(result.to_dict(), budget)
 
 
-def _find_decisions(root: str, topic: str, budget: int) -> str:
-    """Ranked live decisions binding ``topic`` (ADR-067, deterministic retrieval).
+def _find_decisions(root: str, topic: str, path: str | None, budget: int) -> str:
+    """Live decisions binding a ``topic`` — or governing a code ``path``.
 
-    Calls the same ``find_decisions`` service the CLI ``--decisions`` face uses
-    (one source of truth): structural search restricted to live decisions, no
-    semantic verdict. The payload is the search contract plus the live-filter
-    intent in ``type``/``filter`` so a reader knows the result is the *settled*
-    decisions, not every match.
+    Two modes over one tool (additive, ADR-007). With ``path`` set, this is the
+    path→decisions lookup (``decisions_for_path``, the same core the ``rac
+    decisions-for`` CLI uses, ADR-031): the live decisions whose declared
+    ``## Applies To`` scope covers the path, each with its status and matching
+    entry. Without ``path`` it is the existing topic query (``find_decisions``):
+    structural search restricted to live decisions, byte-identical to before.
+    Neither mode returns a verdict — the agent reads and judges (ADR-034/067).
     """
+    if path:
+        return serialize(decisions_for_path(root, path, recursive=True).to_dict(), budget)
     result = find_decisions(root, topic, recursive=True)
     payload = result.to_dict()
     # Make the live-decision intent explicit on the wire (additive, ADR-007): the
@@ -337,10 +346,11 @@ def build_server(
         )
 
     @server.tool(name="find_decisions", description=DESC_FIND_DECISIONS)
-    def find_decisions_tool(topic: str) -> str:
-        return observed(
-            "find_decisions", {"topic": topic}, lambda: _find_decisions(root, topic, budget)
-        )
+    def find_decisions_tool(topic: str = "", path: str | None = None) -> str:
+        # ``path`` only rides the audit args when supplied, so a topic query's
+        # recorded shape is byte-identical to before (additive, ADR-007).
+        args = {"topic": topic} if path is None else {"topic": topic, "path": path}
+        return observed("find_decisions", args, lambda: _find_decisions(root, topic, path, budget))
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
     def get_related(id: str, depth: int = 1) -> str:

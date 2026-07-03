@@ -32,6 +32,7 @@ from rac.services.relationships import RelationshipReport, RelationshipValidatio
 from rac.services.rename import RenamePlan, RenameResult
 from rac.services.resolve import ResolutionResult, SearchResult
 from rac.services.review import ReviewReport
+from rac.services.scope import ScopeLookupResult
 from rac.services.skill import SkillInstallation
 from rac.services.stats import PortfolioStats
 from rac.services.validate import DirectoryValidation, StdinCorpusValidation
@@ -378,6 +379,15 @@ def render_quickstart_json(result: QuickstartResult) -> str:
 
 def render_resolve_json(result: ResolutionResult) -> str:
     """JSON `rac resolve` output (stable contract, ADR-007)."""
+    return json.dumps(result.to_dict(), indent=2)
+
+
+def render_decisions_for_json(result: ScopeLookupResult) -> str:
+    """JSON `rac decisions-for` output (stable contract, ADR-007).
+
+    The same ``ScopeLookupResult`` the MCP ``find_decisions`` path argument
+    serializes, so the two faces stay payload-consistent (ADR-031).
+    """
     return json.dumps(result.to_dict(), indent=2)
 
 
