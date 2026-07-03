@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
@@ -52,13 +53,25 @@ RELATED_SECTIONS: tuple[str, ...] = (
 # ``related <type>s`` per type).
 EXTERNAL_SECTIONS: tuple[str, ...] = ("related tickets", "verified by")
 
+# Filesystem-scoped relationship sections (decision-to-code-proximity, Initiative
+# 1): recognized sections whose targets are repository file paths/components a
+# decision governs, not peer artifacts. Extracted and graphed like the others, but
+# their literal path/directory entries are existence-checked against the working
+# tree (see :func:`_scope_validation_issues`) rather than resolved by identifier.
+# Kept separate from EXTERNAL_SECTIONS, which are format-linted, never existence-
+# checked.
+SCOPE_SECTIONS: tuple[str, ...] = ("applies to",)
+
 # The full relationship-section vocabulary and its canonical ordering: the per-type
-# ``related *`` sections, then ``supersedes``, then the external-reference sections.
-# This module owns the ordering; ``stats`` and the ``relationships`` command both
-# render by-type output in this order. ``supersedes`` is the one section that does
-# *not* appear in the inspect ``relationships`` dict: there it stays a top-level
-# scalar for backwards compatibility (ADR-007).
-RELATIONSHIP_SECTIONS: tuple[str, ...] = RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS
+# ``related *`` sections, then ``supersedes``, then the external-reference sections,
+# then the filesystem-scoped sections. This module owns the ordering; ``stats`` and
+# the ``relationships`` command both render by-type output in this order.
+# ``supersedes`` is the one section that does *not* appear in the inspect
+# ``relationships`` dict: there it stays a top-level scalar for backwards
+# compatibility (ADR-007). Order is append-only (ADR-007).
+RELATIONSHIP_SECTIONS: tuple[str, ...] = (
+    RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS + SCOPE_SECTIONS
+)
 
 # A *well-formed* leading Markdown list marker: ``-``, ``*``, ``+``, or ``N.``
 # followed by whitespace. Only these are stripped; any other leading text is
@@ -113,10 +126,11 @@ def extract_relationships(product: Product, spec: ArtifactSpec) -> dict[str, lis
     """Cross-artifact references for ``rac inspect``.
 
     Excludes ``supersedes`` — that stays a top-level scalar in inspect output
-    (ADR-007). External-reference sections (``related tickets``) are included.
-    Order follows ``spec.optional`` (the artifact's own schema order).
+    (ADR-007). External-reference sections (``related tickets``) and filesystem-
+    scoped sections (``applies to``) are included. Order follows ``spec.optional``
+    (the artifact's own schema order).
     """
-    return _collect(product, spec, RELATED_SECTIONS + EXTERNAL_SECTIONS)
+    return _collect(product, spec, RELATED_SECTIONS + EXTERNAL_SECTIONS + SCOPE_SECTIONS)
 
 
 def extract_relationships_full(product: Product, spec: ArtifactSpec) -> dict[str, list[str]]:
@@ -338,6 +352,12 @@ ISSUE_TARGET_TYPE_MISMATCH = "relationship-target-type-mismatch"
 # Acyclicity (v0.16.0, ADR-055): a cycle in a directional, acyclic edge kind
 # (``supersedes``), which an ordering/replacement relationship must not contain.
 ISSUE_RELATIONSHIP_CYCLE = "relationship-cycle"
+# Code-scope existence (decision-to-code-proximity, Initiative 1): a filesystem-
+# scoped ``## Applies To`` literal path/directory entry that does not exist in the
+# repository working tree. Declared, never inferred (ADR-065/066); glob and
+# component-name entries are recorded without existence-checking, so they never
+# raise this.
+ISSUE_SCOPE_TARGET_NOT_FOUND = "applies-to-target-not-found"
 
 # Canonical intrinsic severity per relationship finding (v0.21.14). Referential
 # integrity and graph-shape breakages are errors; advisory consistency findings
@@ -353,6 +373,7 @@ RELATIONSHIP_SEVERITY: dict[str, str] = {
     ISSUE_TARGET_TYPE_MISMATCH: "error",
     ISSUE_RELATIONSHIP_CYCLE: "error",
     ISSUE_DUPLICATE_IDENTIFIER: "error",
+    ISSUE_SCOPE_TARGET_NOT_FOUND: "error",
     ISSUE_TARGET_SUPERSEDED: "warning",
     ISSUE_SELF_REFERENCE: "warning",
     ISSUE_EDGE_UNSUPPORTED: "warning",
@@ -627,6 +648,117 @@ def _cycle_issues(
     return issues
 
 
+# --- Filesystem-scoped edges (decision-to-code-proximity, Initiative 1) ------
+#
+# ``## Applies To`` entries are code paths/components a decision governs. They ride
+# the relationship machinery (extracted, graphed, surfaced via get_related) but are
+# resolved against the *file tree*, not the identifier index: a literal path or
+# directory entry is existence-checked relative to the repository root. Declared,
+# never inferred (ADR-065/066); a pure function of the declared entry and the tree
+# (ADR-066). Glob patterns (matched at lookup, #275) and component-name labels
+# (no registry this cycle) are recorded without existence-checking.
+
+# Glob metacharacters that mark an entry as a declared *pattern* rather than a
+# literal path — stdlib ``fnmatch``/``glob`` semantics, pinned for the lookup.
+_GLOB_METACHARS: tuple[str, ...] = ("*", "?", "[")
+
+# Config anchor for repository-root discovery (ADR-018), mirroring
+# ``rac.services.init.find_config_file`` without importing the services layer so
+# this module stays core-only in its dependencies.
+_CONFIG_DIR = ".rac"
+_CONFIG_FILE = "config.yaml"
+
+
+def _classify_scope_entry(entry: str) -> str:
+    """Classify one ``## Applies To`` entry as ``glob``, ``path``, or ``component``.
+
+    Deterministic (slash-or-glob rule): an entry containing a glob metacharacter
+    (``*``/``?``/``[``) is a declared ``glob`` pattern; otherwise an entry
+    containing a path separator ``/`` is a literal ``path`` (a file or directory);
+    otherwise it is a ``component`` label. Only ``path`` entries are existence-
+    checked — an author writes ``src/`` (not bare ``src``) to mean the directory.
+    """
+    if any(ch in entry for ch in _GLOB_METACHARS):
+        return "glob"
+    if "/" in entry:
+        return "path"
+    return "component"
+
+
+def _normalized_scope_path(entry: str) -> str | None:
+    """A literal path entry as a POSIX repo-relative string, or None if invalid.
+
+    Strips a leading ``./`` and trailing ``/`` and collapses ``.`` segments.
+    Returns None when the entry is absolute or escapes the repository root (a
+    ``..`` segment) — such an entry cannot name an in-repository scope, so it is
+    treated as not-found rather than followed outside the tree (ADR-065).
+    """
+    text = entry.strip()
+    if not text or text.startswith("/"):
+        return None
+    parts: list[str] = []
+    for part in PurePosixPath(text).parts:
+        if part == ".":
+            continue
+        if part == "..":
+            return None
+        parts.append(part)
+    return "/".join(parts) if parts else None
+
+
+def _repository_root(directory: str) -> Path:
+    """The repository root anchoring ``## Applies To`` paths (ADR-018).
+
+    The nearest directory at or above ``directory`` that holds ``.rac/config.yaml``
+    (the same discovery ``rac.services.init`` uses for identity and overrides).
+    Falls back to the resolved ``directory`` when no config is found, so the check
+    is deterministic even in an un-initialized tree.
+    """
+    resolved = Path(directory).resolve()
+    for candidate in (resolved, *resolved.parents):
+        if (candidate / _CONFIG_DIR / _CONFIG_FILE).is_file():
+            return candidate
+    return resolved
+
+
+def _scope_validation_issues(
+    directory: str,
+    items: list[tuple[str, Product, ArtifactSpec | None]],
+) -> list[RelationshipIssue]:
+    """One ``applies-to-target-not-found`` per missing literal path/dir entry.
+
+    Checks only filesystem-scoped edges (``edge.filesystem_scoped``) and only
+    their literal ``path`` entries: each is checked to exist relative to the
+    repository root. Glob patterns and component labels are recorded without
+    existence-checking. Deterministic — items in sorted-path order, entries in
+    declared order.
+    """
+    root = _repository_root(directory)
+    issues: list[RelationshipIssue] = []
+    for path, product, spec in items:
+        if spec is None:
+            continue
+        for section, refs in extract_relationships_full(product, spec).items():
+            edge = edge_spec(section)
+            if edge is None or not edge.filesystem_scoped:
+                continue
+            for ref in refs:
+                if _classify_scope_entry(ref) != "path":
+                    continue
+                normalized = _normalized_scope_path(ref)
+                if normalized is not None and (root / normalized).exists():
+                    continue
+                issues.append(
+                    RelationshipIssue(
+                        code=ISSUE_SCOPE_TARGET_NOT_FOUND,
+                        source_path=path,
+                        relationship=section,
+                        target=ref,
+                    )
+                )
+    return issues
+
+
 def _validate(
     directory: str,
     items: list[tuple[str, Product, ArtifactSpec | None]],
@@ -734,6 +866,11 @@ def _validate(
 
     checked, ref_issues, _ = _resolve_references(items, resolution_index)
     issues.extend(ref_issues)
+
+    # Code-scope existence (decision-to-code-proximity, Initiative 1): filesystem-
+    # scoped ``## Applies To`` literal paths are checked against the working tree.
+    # Appended last, so existing finding order is unchanged (ADR-007).
+    issues.extend(_scope_validation_issues(directory, items))
 
     return RelationshipValidation(
         directory=directory,
