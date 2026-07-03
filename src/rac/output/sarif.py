@@ -22,6 +22,7 @@ from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_EDGE_UNSUPPORTED,
     ISSUE_RELATIONSHIP_CYCLE,
+    ISSUE_SCOPE_TARGET_NOT_FOUND,
     ISSUE_SELF_REFERENCE,
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
@@ -113,6 +114,7 @@ _RELATIONSHIP_REASON = {
     ISSUE_SELF_REFERENCE: "self-reference",
     ISSUE_TARGET_SUPERSEDED: "target is superseded",
     ISSUE_TARGET_TYPE_MISMATCH: "target is the wrong artifact type",
+    ISSUE_SCOPE_TARGET_NOT_FOUND: "declared path does not exist in the repository",
 }
 
 
