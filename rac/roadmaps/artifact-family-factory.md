@@ -3,17 +3,24 @@ schema_version: 1
 id: RAC-KVV611BA0CB0
 type: roadmap
 ---
-# Artifact Family Factory (Future)
+# Artifact Family Factory
 
 ## Status
 
 Planned
 
-Unscheduled — captured as future intent, not yet on a release. This is the
-mechanism for growing RAC's *artifact* footprint on-thesis: more typed,
-deterministic, human-ratified families, never more stored content (ADR-024) and
-never work-tracking (ADR-017). It is scoped by proving the mechanism with one
-pilot family, not by adding an open-ended set at once.
+Prioritised as the rank-7 Tranche C item of the deterministic-substrate
+programme, graduated out of `future/` as the programme's ordered
+extensibility step — deliberately ahead of third-party artifact types
+(ADR-083), whose entry-point work builds on the contract proven here. This
+is the mechanism for growing RAC's *artifact* footprint on-thesis: more
+typed, deterministic, human-ratified families, never more stored content
+(ADR-024) and never work-tracking (ADR-017). It is scoped by proving the
+mechanism with one pilot family, not by adding an open-ended set at once.
+Instantiating a family — including the Risk pilot — lands its own ADR at
+implementation, scheduled here, not pre-drafted. Execution is tracked in
+GitHub (ADR-093): the epic in `## Related Tickets` carries ordering and
+task state.
 
 ## Context
 
@@ -156,4 +163,14 @@ part of the contract every future family repeats.
 
 ## Related Roadmaps
 
+- deterministic-substrate
 - growth-programme
+
+## Related Requirements
+
+- rac-family-creation-contract
+- rac-risk-pilot-family
+
+## Related Tickets
+
+- itsthelore/rac-core#248
