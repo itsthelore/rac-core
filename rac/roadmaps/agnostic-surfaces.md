@@ -141,3 +141,7 @@ graduates to execution with a GitHub issue per ADR-093.
 - ts-sdk-stable-release
 - rac-ci
 - deterministic-substrate
+
+## Related Tickets
+
+- itsthelore/rac-core#280
