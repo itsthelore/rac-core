@@ -7,11 +7,14 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — the decisions binding a file, in one call.
-Initiative 2 of the `decision-to-code-proximity` roadmap; consumes the
-`## Applies To` vocabulary of `rac-decision-applies-to-scope`.
+Delivered as Initiative 2 of the `decision-to-code-proximity` roadmap
+(itsthelore/rac-core#275): the `rac decisions-for` CLI subcommand and the
+additive `path` argument on the `find_decisions` MCP tool, over one shared
+core, consuming the `## Applies To` vocabulary of
+`rac-decision-applies-to-scope`.
 
 ## Problem
 
