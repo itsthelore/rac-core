@@ -4,6 +4,31 @@ User-visible changes to RAC, by release. Follows the spirit of
 [Keep a Changelog](https://keepachangelog.com/): user impact over implementation
 details, release history over commit history.
 
+## Unreleased
+
+The **decision-to-code-proximity** programme: recorded decisions now know which
+code they govern, and you can ask which decisions govern a path — declared and
+validated, never inferred; deterministic and offline.
+
+### Added
+
+- **Decisions can declare the code they govern.** A decision may list the paths
+  or components it applies to in an optional `## Applies To` section. Literal
+  path and directory entries are existence-checked by
+  `rac relationships --validate` — a new `applies-to-target-not-found` finding
+  flags a declared path that no longer exists; glob patterns and component-name
+  labels are recorded without existence-checking.
+- **`rac decisions-for <path>`** — a new read-only command listing the live
+  decisions whose declared scope governs a file or directory, so you see which
+  recorded decisions constrain an edit before you make it. An ungoverned or
+  outside-repository path is a valid empty result, never an error.
+- **`find_decisions` gains an optional `path` argument (MCP).** The Guide tool
+  that answers "what did we decide about X" now also answers "which decisions
+  govern this code path," over the same five-tool surface; called with a topic
+  it is unchanged.
+- **Explorer `/decisions-for <path>`** — the same lookup in the TUI: type a code
+  path to list the governing decisions, each openable like any other result.
+
 ## 2026.06.5 — the "rename" release
 
 The release that renames the package to match the project. The PyPI distribution
