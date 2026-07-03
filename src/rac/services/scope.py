@@ -190,6 +190,8 @@ def _governing(entry: CorpusEntry, query: str) -> GoverningDecision | None:
     if entry.artifact_type != _DECISION_TYPE or not is_live_decision(entry.product):
         return None
     spec = spec_for(entry.artifact_type)
+    if spec is None:  # the decision spec is always registered; narrow for the type checker
+        return None
     relationships = extract_relationships_full(entry.product, spec)
     for section in SCOPE_SECTIONS:
         for declared in relationships.get(section.replace(" ", "_"), []):
