@@ -28,7 +28,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from rac.core.corpus import walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.models import SearchSection
 from rac.services.index import build_repository_index, index_from_corpus
 
@@ -428,21 +428,53 @@ def find_decisions(directory: str, topic: str, recursive: bool = True) -> Search
     bind the topic and lets the agent judge contradiction (ADR-067). No semantic
     score is computed here or anywhere downstream.
     """
-    # Reuse the liveness predicate from the agent-rules projection rather than
-    # re-deriving "Accepted and not retired" — the definition must not fork
-    # (the same rule the committed rules block is built from).
+    entries = list(walk_corpus(directory, recursive=recursive))
+    live_paths = live_decision_paths(entries)
+    index = index_from_corpus(directory, entries, recursive=recursive).artifacts
+    return find_decisions_in(index, live_paths, topic)
+
+
+def live_decision_paths(entries: Sequence[CorpusEntry]) -> list[str]:
+    """The paths of the live (Accepted, non-retired) decisions in a snapshot.
+
+    A pure function of the corpus, so the derived-index cache (ADR-099) can
+    persist it alongside the index. Reuses the agent-rules liveness predicate
+    rather than re-deriving "Accepted and not retired" — the definition must not
+    fork (the same rule the committed rules block is built from).
+    """
     from rac.services.agent_rules import is_live_decision
 
-    entries = list(walk_corpus(directory, recursive=recursive))
-    live_paths = {
+    return [
         str(entry.path)
         for entry in entries
         if entry.artifact_type == _DECISION_TYPE and is_live_decision(entry.product)
-    }
-    index = index_from_corpus(directory, entries, recursive=recursive).artifacts
-    result = search_index(index, topic, artifact_type=_DECISION_TYPE)
+    ]
+
+
+def find_decisions_in(
+    index_entries: Sequence[SearchableArtifact],
+    live_paths: Sequence[str],
+    topic: str,
+    *,
+    field_tokens_by_path: dict[str, dict[str, list[str]]] | None = None,
+) -> SearchResult:
+    """Live-decision topic search over already-derived structures (ADR-067).
+
+    The cache-friendly core of :func:`find_decisions`: given the repository index,
+    the live-decision paths, and optionally the precomputed field tokens (all pure
+    functions of the corpus the derived-index cache persists, ADR-099), it runs
+    the same type-restricted tiered search and liveness filter, byte-identical to
+    the fresh path. Ranking/order is preserved; an empty result is a valid answer.
+    """
+    result = search_index(
+        index_entries,
+        topic,
+        artifact_type=_DECISION_TYPE,
+        field_tokens_by_path=field_tokens_by_path,
+    )
+    live = set(live_paths)
     # Drop matches that are decisions but not live; ranking/order is preserved.
-    result.matches = [m for m in result.matches if m.path in live_paths]
+    result.matches = [m for m in result.matches if m.path in live]
     return result
 
 
@@ -491,28 +523,48 @@ def _field_tokens(entry: SearchableArtifact) -> dict[str, list[str]]:
     }
 
 
+def field_tokens_for_entries(
+    entries: Sequence[SearchableArtifact],
+) -> dict[str, dict[str, list[str]]]:
+    """The per-entry BM25 field tokens for a whole corpus — the tokenised field
+    vectors the derived-index cache persists (ADR-099).
+
+    Uses the same tokeniser (:func:`_field_tokens`) the scorer consumes, so cached
+    tokens yield byte-identical search statistics and scores to the fresh path.
+    """
+    return {entry.path: _field_tokens(entry) for entry in entries}
+
+
 def _tf(term: str, tokens: Sequence[str]) -> int:
     """Term frequency under ADR-037 matching (equality or prefix), not substring."""
     return sum(1 for token in tokens if token == term or token.startswith(term))
 
 
 def _corpus_stats(
-    entries: Sequence[SearchableArtifact], terms: Sequence[str]
+    entries: Sequence[SearchableArtifact],
+    terms: Sequence[str],
+    field_tokens_by_path: dict[str, dict[str, list[str]]] | None = None,
 ) -> tuple[int, dict[str, int], dict[str, float], dict[str, dict[str, list[str]]]]:
     """Document count, per-term document frequency, mean field length, field tokens.
 
     Computed once over the whole corpus so IDF and length normalisation are
     global (standard BM25), and the per-entry field tokens are cached for reuse
     by the scorer.
+
+    ``field_tokens_by_path`` may be supplied precomputed — the derived-index cache
+    (ADR-099) persists exactly this tokenisation, the expensive per-call work — in
+    which case the re-tokenisation is skipped and only the cheap query-dependent
+    document frequencies are recounted. The derived counts (``n``, ``avglen``,
+    ``df``) are byte-identical either way: they are pure aggregates of the same
+    tokens, independent of how the tokens were obtained.
     """
-    field_tokens_by_path: dict[str, dict[str, list[str]]] = {}
+    if field_tokens_by_path is None:
+        field_tokens_by_path = {entry.path: _field_tokens(entry) for entry in entries}
     length_sums: dict[str, int] = dict.fromkeys(_FIELD_BOOSTS, 0)
     df: dict[str, int] = dict.fromkeys(terms, 0)
     n = 0
-    for entry in entries:
+    for fields in field_tokens_by_path.values():
         n += 1
-        fields = _field_tokens(entry)
-        field_tokens_by_path[entry.path] = fields
         for name in _FIELD_BOOSTS:
             length_sums[name] += len(fields[name])
         for term in terms:
@@ -572,6 +624,8 @@ def search_index(
     entries: Sequence[SearchableArtifact],
     query: str,
     artifact_type: str | None = None,
+    *,
+    field_tokens_by_path: dict[str, dict[str, list[str]]] | None = None,
 ) -> SearchResult:
     """Search already-discovered entries with `rac find` semantics (v0.8.1).
 
@@ -581,6 +635,10 @@ def search_index(
     field-weighted BM25 lexical signal and a bounded inbound-reference graph
     signal, fused by RRF, tie-broken by sorted path. The seam lets a loaded
     repository model serve searches without another directory walk.
+
+    ``field_tokens_by_path`` may be supplied precomputed (the derived-index cache,
+    ADR-099): it must cover exactly ``entries``, and the result is byte-identical
+    to computing it fresh — only the per-call re-tokenisation is skipped.
     """
     terms = tokenize(query)
     matched: list[tuple[SearchableArtifact, _Match]] = []
@@ -595,7 +653,7 @@ def search_index(
         return SearchResult(query=query, artifact_type=artifact_type, matches=[])
 
     # Corpus-wide BM25 statistics (global IDF and mean field length, ADR-078).
-    n, df, avglen, field_tokens_by_path = _corpus_stats(entries, terms)
+    n, df, avglen, field_tokens_by_path = _corpus_stats(entries, terms, field_tokens_by_path)
     bm25 = {e.path: _bm25f(field_tokens_by_path[e.path], terms, n, df, avglen) for e, _ in matched}
     inbound = {e.path: float(getattr(e, "inbound_count", 0)) for e, _ in matched}
     lexical_rank = _competition_ranks(bm25)
