@@ -824,10 +824,21 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     # to the MCP protocol, so any diagnostics here go to stderr.
     from rac.mcp.audit import MalformedAuditConfig
     from rac.mcp.server import run_server
+    from rac.mcp.transport import AuditSinkUnavailable
 
     try:
-        return run_server(args.root, telemetry_enabled=args.telemetry)
+        return run_server(
+            args.root,
+            telemetry_enabled=args.telemetry,
+            transport_name=args.transport,
+            host=args.host,
+            port=args.port,
+            path=args.path,
+        )
     except MalformedAuditConfig as exc:  # bad `audit:` stanza (ADR-084)
+        print(f"rac: {exc}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
+    except AuditSinkUnavailable as exc:  # HTTP without a working audit sink (ADR-084)
         print(f"rac: {exc}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE) from None
 
@@ -1816,7 +1827,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_mcp = sub.add_parser(
         "mcp",
-        help="Serve RAC repository knowledge to agents over MCP (stdio).",
+        help="Serve RAC repository knowledge to agents over MCP (stdio or HTTP).",
         parents=[version_parent],
     )
     p_mcp.add_argument(
@@ -1831,6 +1842,38 @@ def build_parser() -> argparse.ArgumentParser:
             "Record tool-call counts and metadata (never arguments or content) "
             "to a local log; off by default (ADR-040)."
         ),
+    )
+    # HTTP transport (ADR-098): stdio stays the default so every existing
+    # `.mcp.json` — including ADR-088 profile output — is byte-unchanged. HTTP
+    # fronts one always-current checkout for the whole team; it is mandatory
+    # audit-on and grows no authentication (auth belongs to the deployment
+    # proxy, ADR-085). Choices and defaults are literals here so the base CLI
+    # never pays the MCP SDK import cost; ``rac.mcp.transport`` is the runtime
+    # source of truth and a battery test pins these to it.
+    p_mcp.add_argument(
+        "--transport",
+        choices=("stdio", "http"),
+        default="stdio",
+        help=(
+            "Transport to serve on: 'stdio' (default, one process per developer) "
+            "or 'http' (one shared endpoint; mandatory audit-on, ADR-098)."
+        ),
+    )
+    p_mcp.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind for --transport http (default: 127.0.0.1; loopback).",
+    )
+    p_mcp.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind for --transport http (default: 8000).",
+    )
+    p_mcp.add_argument(
+        "--path",
+        default="/mcp",
+        help="HTTP path to serve for --transport http (default: /mcp).",
     )
     p_mcp.set_defaults(func=cmd_mcp)
 
