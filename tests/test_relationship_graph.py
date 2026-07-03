@@ -50,11 +50,20 @@ def test_registry_declares_built_in_edges():
         "supersedes",
         "related_tickets",
         "verified_by",
+        "applies_to",
     }
     supersedes = edge_spec("supersedes")
     assert supersedes is not None
     assert supersedes.directional and supersedes.acyclic
     assert supersedes.forbids_target_status is False  # the exemption is data-driven
+
+    # Filesystem-scoped edge (decision-to-code-proximity): external (no id
+    # resolution) but existence-checked against the working tree, unlike the
+    # format-linted external edges.
+    applies_to = edge_spec("applies_to")
+    assert applies_to is not None
+    assert applies_to.external and applies_to.filesystem_scoped
+    assert applies_to.directional and applies_to.range == ()
     assert edge_spec("related_decisions").range == ("decision",)
     assert edge_spec("related_decisions").forbids_target_status is True
     # External-reference edge (ADR-087): no artifact range, format-linted not resolved.

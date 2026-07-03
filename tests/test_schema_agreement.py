@@ -39,6 +39,7 @@ from rac.services.relationships import (
     EXTERNAL_SECTIONS,
     RELATED_SECTIONS,
     RELATIONSHIP_SECTIONS,
+    SCOPE_SECTIONS,
 )
 
 # --- single sources of truth -------------------------------------------------
@@ -121,9 +122,12 @@ def test_status_enums_agree_across_consumers():
 
 def test_relationship_kinds_agree_across_consumers():
     # The vocabulary is RELATED_SECTIONS (the per-type "related X" kinds), the
-    # standalone "supersedes", then the external-reference sections (ADR-087);
-    # get_related keys its `outgoing` object by it.
-    assert RELATIONSHIP_SECTIONS == RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS
+    # standalone "supersedes", the external-reference sections (ADR-087), then the
+    # filesystem-scoped sections (decision-to-code-proximity); get_related keys its
+    # `outgoing` object by it.
+    assert RELATIONSHIP_SECTIONS == (
+        RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS + SCOPE_SECTIONS
+    )
 
     # No spec invents a relationship section outside the vocabulary, and none of
     # the vocabulary is orphaned: the relationship sections appearing across the
