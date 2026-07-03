@@ -3,17 +3,22 @@ schema_version: 1
 id: RAC-KVV60ZNYKXQT
 type: roadmap
 ---
-# Integration Recipe Factory (Future)
+# Integration Recipe Factory
 
 ## Status
 
 Planned
 
-Unscheduled — captured as future intent, not yet on a release. This is the
-*harness* half of the integration story; the *backend/RAG* half lives in
+Prioritised as the rank-6 Tranche A item of the deterministic-substrate
+programme, graduated out of `future/` alongside `lean-context-delivery` now
+the programme's rank 1–4 items are live. This is the *harness* half of the
+integration story; the *backend/RAG* half lives in
 `corpus-export-to-rag-backends`, and the positioning/ecosystem framing in
-`growth-programme`. It must not displace nearer-term committed work, and it
-adds no engine code.
+`growth-programme`. It adds no engine code — every recipe is a
+documentation unit. The programme's boundary constraint is carried verbatim:
+**every recipe is context-supply and post-edit CI enforcement (ADR-067),
+never pre-edit interception.** Execution is tracked in GitHub (ADR-093): the
+epic in `## Related Tickets` carries ordering and task state.
 
 ## Context
 
@@ -115,6 +120,7 @@ between "documented" and "verified" explicit.
 
 - ADR-007
 - ADR-008
+- ADR-021
 - ADR-024
 - ADR-030
 - ADR-031
@@ -124,4 +130,14 @@ between "documented" and "verified" explicit.
 ## Related Roadmaps
 
 - corpus-export-to-rag-backends
+- deterministic-substrate
 - growth-programme
+
+## Related Requirements
+
+- rac-recipe-authoring-contract
+- rac-recipe-verification-gate
+
+## Related Tickets
+
+- itsthelore/rac-core#248
