@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: 33d890a7929472f7fb724e706d1db9f28a81afe911f02fc5562235ca79c2d430) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 6d0950ce0ec346d9bcb9ae758fc3dca55a867a9cf0b4ec23ac74a5ed4ea7a6da) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -95,4 +95,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KW8ZTVEQJ366** — ADR-095: rac-connectors Repackage, PyPI Rename, and Outbound Field Rename _(Architecture)_
 - **RAC-KWBJJRZR84PT** — ADR-096: External-Target Verification Edge (`verified_by`) _(Technical)_
 - **RAC-KWFVA38YT2C0** — ADR-097: Benchmark Family Contract _(Technical)_
+- **RAC-KWMW45KXHZJP** — ADR-098: Shared HTTP MCP Serving _(Architecture)_
 <!-- END RAC MANAGED BLOCK -->
