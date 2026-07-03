@@ -21,6 +21,7 @@ from rac.core.markdown import parse_file
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_EDGE_UNSUPPORTED,
+    ISSUE_SCOPE_TARGET_NOT_FOUND,
     ISSUE_SELF_REFERENCE,
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
@@ -480,3 +481,113 @@ def test_superseded_target_fails_cli_with_suffix(tmp_path, capsys):
     )
     assert main(["relationships", str(tmp_path), "--validate"]) == 1
     assert "✗ adr-001 superseded" in capsys.readouterr().out
+
+
+# --- code-scope declaration (decision-to-code-proximity, Initiative 1) -------
+#
+# ``## Applies To`` entries are code paths/components a decision governs. Literal
+# path/directory entries are existence-checked against the repository root (here
+# the tmp corpus dir, since no ``.rac/config.yaml`` sits above it); glob patterns
+# and component-name labels are recorded without existence-checking. A missing
+# literal path is an ``applies-to-target-not-found`` error.
+
+
+def _decision_scoped(title, scope_entries):
+    body = "\n".join(f"- {e}" for e in scope_entries)
+    return _DECISION.format(t=title) + f"\n## Applies To\n\n{body}\n"
+
+
+def test_applies_to_existing_path_and_directory_resolve(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "mod.py").write_text("x\n", encoding="utf-8")
+    (tmp_path / "adr-001.md").write_text(
+        _decision_scoped("A", ["src/", "src/mod.py"]), encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    # Filesystem-scoped entries are not id references, so they never inflate the
+    # id-resolution count (consistent with the external edges).
+    assert report.relationships_checked == 0
+
+
+def test_applies_to_missing_path_flagged(tmp_path):
+    (tmp_path / "adr-001.md").write_text(
+        _decision_scoped("A", ["does/not/exist/"]), encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert not report.ok
+    issue = report.issues[0]
+    assert issue.code == ISSUE_SCOPE_TARGET_NOT_FOUND
+    assert issue.relationship == "applies_to"
+    assert issue.target == "does/not/exist/"
+    assert issue.source_path.endswith("adr-001.md")
+
+
+def test_applies_to_glob_and_component_recorded_without_checking(tmp_path):
+    # A glob that matches nothing and a bare component label must NOT be flagged:
+    # globs are matched at lookup (#275), component names are recorded labels.
+    (tmp_path / "adr-001.md").write_text(
+        _decision_scoped("A", ["src/**/*.py", "RAC Core", "Explorer"]), encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    assert report.ok
+    assert ISSUE_SCOPE_TARGET_NOT_FOUND not in {i.code for i in report.issues}
+
+
+def test_applies_to_absolute_and_escaping_paths_flagged(tmp_path):
+    # Neither an absolute path nor one escaping the repo root can name an
+    # in-repository scope, so both are not-found rather than followed out of tree.
+    (tmp_path / "adr-001.md").write_text(
+        _decision_scoped("A", ["/etc/passwd", "../outside/"]), encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    codes = [i.code for i in report.issues]
+    assert codes == [ISSUE_SCOPE_TARGET_NOT_FOUND, ISSUE_SCOPE_TARGET_NOT_FOUND]
+    assert {i.target for i in report.issues} == {"/etc/passwd", "../outside/"}
+
+
+def test_applies_to_leading_dot_slash_normalises(tmp_path):
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "adr-001.md").write_text(_decision_scoped("A", ["./pkg/"]), encoding="utf-8")
+    assert validate_relationships(str(tmp_path)).ok
+
+
+def test_applies_to_only_supported_on_decisions(tmp_path):
+    # Adjacent-type guard: a requirement declaring ## Applies To is an unsupported
+    # edge for its type (ADR-049), not a scope check and not a misclassification.
+    (tmp_path / "req-001.md").write_text(
+        _REQUIREMENT.format(t="R") + "\n## Applies To\n\n- src/\n", encoding="utf-8"
+    )
+    report = validate_relationships(str(tmp_path))
+    codes = [i.code for i in report.issues]
+    assert ISSUE_EDGE_UNSUPPORTED in codes
+    assert ISSUE_SCOPE_TARGET_NOT_FOUND not in codes
+
+
+def test_applies_to_does_not_shift_decision_classification(tmp_path):
+    # Classification neutrality (REQ-004): the new section never moves a decision
+    # off its type.
+    doc = tmp_path / "adr-001.md"
+    doc.write_text(_decision_scoped("A", ["src/", "SomeComponent"]), encoding="utf-8")
+    assert classify(parse_file(str(doc))).type == "decision"
+
+
+def test_applies_to_missing_path_cli_json_and_exit(tmp_path, capsys):
+    (tmp_path / "adr-001.md").write_text(
+        _decision_scoped("A", ["gone/"]), encoding="utf-8"
+    )
+    rc = main(["relationships", str(tmp_path), "--validate", "--json"])
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    issue = payload["issues"][0]
+    assert set(issue) == {"source_path", "relationship", "target", "code"}
+    assert issue["code"] == ISSUE_SCOPE_TARGET_NOT_FOUND
+    assert issue["target"] == "gone/"
+
+
+def test_applies_to_missing_path_cli_human_suffix(tmp_path, capsys):
+    (tmp_path / "adr-001.md").write_text(
+        _decision_scoped("A", ["gone/"]), encoding="utf-8"
+    )
+    assert main(["relationships", str(tmp_path), "--validate"]) == 1
+    assert "✗ gone/ path not found" in capsys.readouterr().out
