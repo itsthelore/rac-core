@@ -76,15 +76,46 @@ def test_only_the_server_package_imports_the_mcp_sdk():
     assert _violations(other, ("mcp",)) == []
 
 
-# Network client modules; the ping module is RAC's entire network surface
+# Network client modules; the ping module is RAC's fenced outbound surface
 # (ADR-041). ``urllib.parse`` (string formatting for the share URL) is
 # deliberately not in this list.
 NETWORK_MODULES: tuple[str, ...] = ("urllib.request", "http.client")
 
+# The transport-layer modules the serving ADR (ADR-098) permits to reach
+# network/serving code: ``ping`` (the fenced outbound ping, ADR-041) and
+# ``transport`` (the HTTP serving layer). Every other module — all tool logic —
+# stays network-free. Widening this allowance is a recorded decision, never a
+# silent drift (REQ-005).
+NETWORK_ALLOWED: tuple[Path, ...] = (
+    SRC / "mcp" / "ping.py",
+    SRC / "mcp" / "transport.py",
+)
 
-def test_only_the_ping_module_imports_network_modules():
-    # The strongest trust statement in the codebase: "what does RAC phone
-    # home" is answerable by reading one file.
-    files = [f for f in SRC.rglob("*.py") if f != SRC / "mcp" / "ping.py"]
+# The Guide tool-logic modules: the server body and the read-only helpers it
+# calls. None of them may import a network module — the serving allowance above
+# is scoped to the transport layer, not to tool logic (ADR-098, REQ-005).
+TOOL_LOGIC_MODULES: tuple[str, ...] = (
+    "server",
+    "budget",
+    "errors",
+    "telemetry",
+    "audit",
+)
+
+
+def test_network_imports_are_confined_to_the_transport_layer():
+    # The trust statement, revised for HTTP serving (ADR-098): "what does RAC
+    # reach the network for" is answerable by reading two files — the outbound
+    # ping and the serving transport — and nothing else.
+    files = [f for f in SRC.rglob("*.py") if f not in NETWORK_ALLOWED]
     assert files
+    assert _violations(files, NETWORK_MODULES) == []
+
+
+def test_tool_logic_modules_are_network_free():
+    # The retained guard (ADR-098, REQ-005): the network allowance is scoped to
+    # the transport layer only. A tool-logic module that imports a network
+    # module must still fail this battery.
+    files = [SRC / "mcp" / f"{module}.py" for module in TOOL_LOGIC_MODULES]
+    assert all(f.exists() for f in files), "every named tool-logic module must exist"
     assert _violations(files, NETWORK_MODULES) == []
