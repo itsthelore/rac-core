@@ -87,6 +87,38 @@ In `rac export --graph` an external edge carries `"external": true`,
 deliberate ticket link from a dangling in-corpus reference (both are unresolved,
 only the external one is marked).
 
+## Code scope
+
+A decision can declare the code paths or components it governs with an optional
+`## Applies To` section, so "which recorded decisions apply to the file I'm
+editing?" becomes corpus data rather than prose (ADR-019,
+[decision-to-code-proximity](https://github.com/itsthelore/rac-core/blob/main/rac/roadmaps/decision-to-code-proximity.md)).
+The section is recognised on decisions only:
+
+```markdown
+## Applies To
+- src/rac/
+- .github/workflows/
+- src/**/*.py
+- Explorer
+```
+
+Each entry is classified deterministically (declared, never inferred — ADR-065/066):
+
+- A **literal path or directory** (contains `/`) is *existence-checked* against the
+  repository — the tree rooted at the nearest `.rac/`. A declared path that no
+  longer exists is reported by `rac relationships --validate` as
+  `applies-to-target-not-found`.
+- A **glob** (contains `*`, `?`, or `[`) is recorded as a declared match pattern;
+  its matching is handled by the path→decisions lookup, not existence-checked here.
+- A **component name** (no `/`, no glob) is a recorded label, not resolved.
+
+Paths normalise to POSIX repository-relative form, so the same corpus validates
+identically on any OS; an absolute path or one that escapes the repository root
+cannot name an in-repository scope and is reported not-found. Like a ticket, the
+edge is `"external": true`/`"resolved": false` in `rac export --graph` (with no
+provider), so a backend can surface a decision's declared code scope.
+
 ## Viewing relationships
 
 ```bash
@@ -124,6 +156,7 @@ each problem and exits `1`. The issue codes:
 | `relationship-target-type-mismatch` | A reference resolves to the wrong artifact type for the edge. |
 | `relationship-target-superseded` | A live artifact points at a retired (superseded/deprecated) target. |
 | `relationship-cycle` | A cycle in a directional, acyclic edge (`supersedes`). |
+| `applies-to-target-not-found` | A decision's `## Applies To` literal path/directory does not exist in the repository. |
 
 Exit codes follow the standard convention: `0` all references valid · `1` issues
 found · `2` path not found.
