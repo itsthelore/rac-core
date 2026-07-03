@@ -7,12 +7,19 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-Unscheduled member of the `agnostic-surfaces` programme, Track 1
-(distribution and CI reach). Named by the SDK expansion council as the
-single highest-leverage artifact for non-Python adoption: one image
-unlocks every docker-native CI platform with zero wrapper code.
+Delivered as recorded (ADR-061 terminal lifecycle): the root `Dockerfile`
+installs the released `rac-core` on a minimal Python base with `rac` as the
+entrypoint, and the official image publishes to `ghcr.io/itsthelore/rac`,
+CalVer- and digest-pinned in the quickstart with GitLab CI, Bitbucket, and
+Jenkins usage snippets — matching this item's recorded scope. A member of the
+`agnostic-surfaces` programme, Track 1 (distribution and CI reach), named by
+the SDK expansion council as the single highest-leverage artifact for
+non-Python adoption: one image unlocks every docker-native CI platform with
+zero wrapper code. This artifact remains the durable record; distribution
+evolution continues under `agnostic-surfaces`, and the `rac-ci` wrappers
+consume the image rather than re-solving installation.
 
 ## Outcomes
 
@@ -86,3 +93,7 @@ unlocks every docker-native CI platform with zero wrapper code.
 
 - agnostic-surfaces
 - rac-ci
+
+## Related Tickets
+
+- itsthelore/rac-core#280
