@@ -99,6 +99,9 @@ RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
     " .rac/config.yaml ticketing.provider (ADR-087)",
     "verified by": "External tests or traces that verify this capability; targets"
     " are file paths, not in-corpus artifacts (ADR-096)",
+    "applies to": "Code paths or components this decision governs; path entries are"
+    " existence-checked, component names recorded as labels (ADR-019,"
+    " decision-to-code-proximity)",
 }
 
 
@@ -182,6 +185,9 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         # ``supersedes`` stays first (the original v0.4.2 entry). The remaining
         # relationship sections are added in v0.7.0 (REQ-004). All are metadata
         # only; ``supersedes`` is also surfaced as a top-level scalar by inspect.
+        # ``applies to`` (decision-to-code-proximity Initiative 1) is appended last
+        # (append-only, ADR-007): the code paths/components a decision governs, a
+        # filesystem-scoped edge whose path entries are existence-checked.
         optional=(
             "supersedes",
             "related requirements",
@@ -189,6 +195,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related decisions",
             "related tickets",
+            "applies to",
         ),
         metadata={
             "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
@@ -202,6 +209,7 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "related designs",
             "related decisions",
             "related tickets",
+            "applies to",
         ),
         guidance={
             "context": (

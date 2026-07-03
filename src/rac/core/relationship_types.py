@@ -49,6 +49,13 @@ class EdgeSpec:
     # that provider. ``related_tickets`` sets this; ``verified_by`` (ADR-096) does
     # not — its targets are test/trace file paths, which have no provider.
     external_provider: bool = False
+    # Whether the edge's targets are repository file paths existence-checked
+    # against the working tree (decision-to-code-proximity, ``applies_to``). Unlike
+    # the format-linted external edges (``related_tickets``/``verified_by``), a
+    # filesystem-scoped edge's literal path/directory entries are checked to exist
+    # relative to the repository root; glob and component-name entries are recorded
+    # without existence-checking. Declared, never inferred (ADR-065/066).
+    filesystem_scoped: bool = False
 
 
 def _related(target_type: str) -> EdgeSpec:
@@ -98,6 +105,22 @@ REGISTRY: dict[str, EdgeSpec] = {
             directional=True,
             symmetric=False,
             inverse="verifies",
+        ),
+        # Code-scope declaration (decision-to-code-proximity, Initiative 1): a
+        # decision points at the repository paths/components it governs. Like the
+        # external edges it carries no artifact range and skips id resolution,
+        # range, and status checks, but — unlike them — its literal path/directory
+        # targets are existence-checked against the working tree
+        # (``filesystem_scoped``). Directional decision→code; the consumers are the
+        # path→decisions lookup, Explorer surfacing, and the freshness drift gate.
+        EdgeSpec(
+            name="applies_to",
+            range=(),
+            external=True,
+            filesystem_scoped=True,
+            directional=True,
+            symmetric=False,
+            inverse="governed_by",
         ),
     )
 }
