@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: 6d0950ce0ec346d9bcb9ae758fc3dca55a867a9cf0b4ec23ac74a5ed4ea7a6da) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: fdf6de5712cd9fcd3d6179d984795bf5c0eb312dbb5578632b42db966bb17333) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -71,4 +71,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWBJJRZR84PT** — ADR-096: External-Target Verification Edge (`verified_by`) _(Technical)_
 - **RAC-KWFVA38YT2C0** — ADR-097: Benchmark Family Contract _(Technical)_
 - **RAC-KWMW45KXHZJP** — ADR-098: Shared HTTP MCP Serving _(Architecture)_
+- **RAC-KWMZ3MR9DZ09** — ADR-099: Derived-Index Cache _(Technical)_
 <!-- END RAC MANAGED BLOCK -->
