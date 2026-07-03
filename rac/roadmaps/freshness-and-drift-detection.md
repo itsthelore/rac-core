@@ -204,3 +204,7 @@ benchmark evidence, not phase 1. No requirement is minted yet.
 - rac-drift-advisory-finding
 - rac-traceability-coverage-report
 - rac-doctor-diagnostic-validator
+
+## Related Tickets
+
+- itsthelore/rac-core#277
