@@ -3,16 +3,21 @@ schema_version: 1
 id: RAC-KVTP8MN27M64
 type: roadmap
 ---
-# RAC — Retrieval Diagnostics (Future)
+# RAC — Retrieval Diagnostics
 
 ## Status
 
 Planned
 
-Unscheduled — captured for future consideration from the agent-runtime deep dive
-(GBrain, Hermes). These are deterministic retrieval-tooling refinements that
-complement the planned relevance-ranking work (the v0.29 `deterministic-relevance-
-ranking` design and ADR-078); they graduate out of `future/` alongside or after it.
+Prioritised as the rank-8 Tranche B item of the deterministic-substrate
+programme, graduated out of `future/` now its recorded sequencing condition
+is met: the relevance-ranking work these refinements complement (the
+`deterministic-relevance-ranking` design and ADR-078) is Achieved, so the
+gate has a shipped boost to bound and explain-miss has a shipped
+explain-hit to mirror. Requirements are minted for Initiatives 1 and 2
+only; the two-tier recall framing (Initiative 3) is a documentation
+deliverable, not a behaviour. Execution is tracked in GitHub (ADR-093): the
+epic in `## Related Tickets` carries ordering and task state.
 
 ## Context
 
@@ -102,11 +107,25 @@ behaviour.
 
 ## Related Decisions
 
+- adr-002
+- adr-007
 - adr-037
 - adr-038
 - adr-066
-- adr-007
+- adr-078
+- adr-093
+
+## Related Roadmaps
+
+- deterministic-substrate
+- relevance-ranking
 
 ## Related Requirements
 
 - rac-explainable-retrieval
+- rac-explain-miss-diagnostics
+- rac-floor-ratio-boost-gate
+
+## Related Tickets
+
+- itsthelore/rac-core#248
