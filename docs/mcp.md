@@ -341,7 +341,46 @@ repository ACL plus human pull-request review — the log records who *claimed* 
 query, not a verified identity. When enabled, the server announces it on stderr at
 startup; it is never silent.
 
-## 9. Troubleshooting
+## 9. Shared HTTP endpoint (team scale)
+
+By default `rac mcp` speaks **stdio**: one server process per developer, against
+that developer's own checkout. At team scale you may instead want **one
+always-current endpoint** every agent points at, so reads come from a single
+`main`-backed source of truth rather than checkouts that lag between pulls. The
+server gains a streamable **HTTP transport** for exactly this
+([ADR-098](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-098-shared-http-mcp-serving.md)):
+
+```bash
+rac mcp --root /path/to/your/repo --transport http --host 127.0.0.1 --port 8000 --path /mcp
+```
+
+- **`--transport`** — `stdio` (default) or `http`. Bare `rac mcp` is unchanged,
+  so every existing `.mcp.json` keeps working.
+- **`--host` / `--port` / `--path`** — where the HTTP server binds and serves
+  (defaults `127.0.0.1`, `8000`, `/mcp`). It binds to loopback by default;
+  exposing it to a network is a deliberate deployment choice.
+
+The HTTP transport is **serving-layer only**: the five tools are unchanged, the
+server re-reads the repository per call (no cache, no session state), and an
+HTTP response is **payload-identical to stdio** for the same corpus bytes.
+
+**Authentication is your proxy's job, not the engine's.** The endpoint is
+read-only and unauthenticated by design — the engine grows no SSO, RBAC, or
+credential handling (ADR-085). Front it with a reverse proxy that authenticates
+callers and terminates TLS; identity in the audit log stays *attributable, not
+authenticated* (ADR-084).
+
+**HTTP serving is mandatory audit-on.** Because a shared endpoint serves reads
+no single developer's git identity can attribute, the HTTP transport **refuses
+to start without a working audit log** — enable the `audit:` stanza (see
+[section 8](#8-read-access-audit-log-enterprise-opt-in)) first, or the server
+exits with an actionable error. stdio is unaffected.
+
+Keeping the fronted checkout current with `main` — a merge webhook or a periodic
+`git pull` — is a deployment concern outside the engine; a full container-and-
+keep-current recipe is documented separately for operators.
+
+## 10. Troubleshooting
 
 ### Server not listed in the client
 

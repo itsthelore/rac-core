@@ -8,7 +8,9 @@ details, release history over commit history.
 
 The **decision-to-code-proximity** programme: recorded decisions now know which
 code they govern, and you can ask which decisions govern a path — declared and
-validated, never inferred; deterministic and offline.
+validated, never inferred; deterministic and offline. Plus the first build of
+**lore-at-team-scale**: `rac mcp` can now serve the whole team over one
+always-current HTTP endpoint.
 
 ### Added
 
@@ -28,6 +30,14 @@ validated, never inferred; deterministic and offline.
   it is unchanged.
 - **Explorer `/decisions-for <path>`** — the same lookup in the TUI: type a code
   path to list the governing decisions, each openable like any other result.
+- **Shared HTTP MCP transport (`rac mcp --transport http`).** Serve one
+  always-current endpoint for a whole team instead of a local server per
+  developer: `--transport http` (with `--host`, `--port`, `--path`) speaks the
+  streamable HTTP transport, stateless per call and payload-identical to stdio.
+  stdio stays the default, so every existing `.mcp.json` is unchanged. The
+  endpoint is read-only and unauthenticated by design — authentication belongs
+  to your deployment proxy — and it is mandatory audit-on: it refuses to start
+  without a working read-access audit log (ADR-098).
 
 ## 2026.06.5 — the "rename" release
 
