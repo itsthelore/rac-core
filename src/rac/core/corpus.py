@@ -93,6 +93,33 @@ def content_hash(path: Path) -> str:
         return hashlib.sha256(b"\x00rac-unreadable-artifact").hexdigest()
 
 
+def corpus_content_hash(directory: str, *, recursive: bool = True) -> str:
+    """A corpus-level content digest, extending the per-file :func:`content_hash`.
+
+    Hashes the sorted ``(repository-relative POSIX path, per-file content_hash)``
+    pairs together, so the digest is a pure function of the corpus's declared
+    bytes and layout (ADR-002): any byte change to any artifact, or any add,
+    remove, or rename, changes the digest, and nothing else does. Repository-
+    relative POSIX paths make it byte-identical across platforms; the per-file
+    primitive it composes is the same one ``CorpusCache`` keys on, so the two
+    cannot disagree about what "changed" means.
+
+    This is the content-addressed key a derived-index cache invalidates on: an
+    unchanged key means every artifact's bytes are unchanged, so the expensive
+    derived structures may be reused; any change forces a rebuild (ADR-080 — the
+    index is disposable, the files are truth).
+    """
+    root = Path(directory)
+    hasher = hashlib.sha256()
+    for path in find_markdown_files(directory, recursive=recursive):
+        rel = path.relative_to(root).as_posix()
+        hasher.update(rel.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(content_hash(path).encode("ascii"))
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
 class CorpusCache:
     """Per-invocation, content-hash-keyed corpus snapshot reuse (v0.23.0, WS8).
 
