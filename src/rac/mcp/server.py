@@ -64,7 +64,8 @@ from rac.mcp.budget import (
 )
 from rac.mcp.telemetry import TelemetryRecorder
 from rac.services.agent_rules import artifact_status
-from rac.services.index import build_repository_index, index_from_corpus
+from rac.services.derived_cache import DerivedIndexCache
+from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
 from rac.services.portfolio import build_portfolio_summary
 from rac.services.recency import artifact_provenance
 from rac.services.relationships import (
@@ -77,6 +78,7 @@ from rac.services.resolve import (
     OUTCOME_RESOLVED,
     ResolutionResult,
     find_decisions,
+    find_decisions_in,
     resolve_in_index,
     search_index,
 )
@@ -154,18 +156,34 @@ def _read_content(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-def _resolve(root: str, artifact_id: str) -> ResolutionResult:
-    """Resolve ``artifact_id`` against a fresh read of ``root`` (ADR-032).
+def _index_entries(root: str, cache: DerivedIndexCache | None) -> list[IndexEntry]:
+    """The repository index rows, from the derived-index cache or a fresh walk.
+
+    With ``cache`` set (ADR-099) the rows come from the content-addressed cache —
+    byte-identical to the fresh build, only the walk/index is skipped under an
+    unchanged corpus key. With ``cache`` None the serving path is exactly as
+    before (ADR-032): a fresh read every call.
+    """
+    if cache is not None:
+        return cache.load_or_build(root).index_entries
+    return build_repository_index(root, recursive=True).artifacts
+
+
+def _resolve(
+    root: str, artifact_id: str, cache: DerivedIndexCache | None = None
+) -> ResolutionResult:
+    """Resolve ``artifact_id`` against the repository index (ADR-032).
 
     Uses the repository index and the resolver's in-index semantics so a single
     walk serves both resolution and any follow-on shaping the tool needs.
     """
-    entries = build_repository_index(root, recursive=True).artifacts
-    return resolve_in_index(entries, artifact_id)
+    return resolve_in_index(_index_entries(root, cache), artifact_id)
 
 
-def _get_artifact(root: str, artifact_id: str, budget: int) -> str:
-    result = _resolve(root, artifact_id)
+def _get_artifact(
+    root: str, artifact_id: str, budget: int, cache: DerivedIndexCache | None = None
+) -> str:
+    result = _resolve(root, artifact_id, cache)
     if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
         return serialize(errors.from_resolution(result), budget)
     try:
@@ -194,13 +212,34 @@ def _get_artifact(root: str, artifact_id: str, budget: int) -> str:
     return serialize(payload, budget)
 
 
-def _search_artifacts(root: str, query: str, artifact_type: str | None, budget: int) -> str:
-    entries = build_repository_index(root, recursive=True).artifacts
-    result = search_index(entries, query, artifact_type=artifact_type)
+def _search_artifacts(
+    root: str,
+    query: str,
+    artifact_type: str | None,
+    budget: int,
+    cache: DerivedIndexCache | None = None,
+) -> str:
+    if cache is not None:
+        derived = cache.load_or_build(root)
+        result = search_index(
+            derived.index_entries,
+            query,
+            artifact_type=artifact_type,
+            field_tokens_by_path=derived.field_tokens_by_path,
+        )
+    else:
+        entries = build_repository_index(root, recursive=True).artifacts
+        result = search_index(entries, query, artifact_type=artifact_type)
     return serialize(result.to_dict(), budget)
 
 
-def _find_decisions(root: str, topic: str, path: str | None, budget: int) -> str:
+def _find_decisions(
+    root: str,
+    topic: str,
+    path: str | None,
+    budget: int,
+    cache: DerivedIndexCache | None = None,
+) -> str:
     """Live decisions binding a ``topic`` — or governing a code ``path``.
 
     Two modes over one tool (additive, ADR-007). With ``path`` set, this is the
@@ -213,7 +252,16 @@ def _find_decisions(root: str, topic: str, path: str | None, budget: int) -> str
     """
     if path:
         return serialize(decisions_for_path(root, path, recursive=True).to_dict(), budget)
-    result = find_decisions(root, topic, recursive=True)
+    if cache is not None:
+        derived = cache.load_or_build(root)
+        result = find_decisions_in(
+            derived.index_entries,
+            derived.live_decision_paths,
+            topic,
+            field_tokens_by_path=derived.field_tokens_by_path,
+        )
+    else:
+        result = find_decisions(root, topic, recursive=True)
     payload = result.to_dict()
     # Make the live-decision intent explicit on the wire (additive, ADR-007): the
     # type is always "decision" and the result is filtered to live decisions.
@@ -221,19 +269,27 @@ def _find_decisions(root: str, topic: str, path: str | None, budget: int) -> str
     return serialize(payload, budget)
 
 
-def _get_related(root: str, artifact_id: str, budget: int, depth: int = 1) -> str:
-    # One corpus walk feeds resolution, outgoing, and incoming, so the whole
-    # response reflects a single atomic snapshot of the repository (ADR-032):
-    # there is no window in which the relationship view drifts mid-call.
-    # Caching across calls remains forbidden — the snapshot lives and dies
-    # inside this call.
-    entries = list(walk_corpus(root, recursive=True))
-    index = index_from_corpus(root, entries, recursive=True).artifacts
+def _get_related(
+    root: str, artifact_id: str, budget: int, depth: int = 1, cache: DerivedIndexCache | None = None
+) -> str:
+    # One corpus snapshot feeds resolution, outgoing, and incoming, so the whole
+    # response reflects a single atomic view of the repository (ADR-032): there
+    # is no window in which the relationship view drifts mid-call. With the
+    # derived-index cache (ADR-099) the index and relationship graph come from
+    # one content-addressed snapshot; without it, one fresh walk feeds both.
+    # Either way the two are from the same snapshot and the output is identical.
+    if cache is not None:
+        derived = cache.load_or_build(root)
+        index = derived.index_entries
+        relationships = derived.relationships
+    else:
+        entries = list(walk_corpus(root, recursive=True))
+        index = index_from_corpus(root, entries, recursive=True).artifacts
+        relationships = relationships_from_corpus(entries)
     result = resolve_in_index(index, artifact_id)
     if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
         return serialize(errors.from_resolution(result), budget)
     artifact = result.artifact
-    relationships = relationships_from_corpus(entries)
     identity_by_path = {entry.path: (entry.id, entry.type, entry.title) for entry in index}
     outgoing = outgoing_references(relationships, artifact.path)
     incoming_result = incoming_references(relationships, identity_by_path, artifact.path)
@@ -311,6 +367,7 @@ def build_server(
     budget: int = DEFAULT_BUDGET,
     recorder: TelemetryRecorder | None = None,
     audit_recorder: audit.AuditRecorder | None = None,
+    cache: DerivedIndexCache | None = None,
 ) -> FastMCP:
     """Build the Guide MCP server bound to repository ``root``.
 
@@ -318,9 +375,12 @@ def build_server(
     startup; there is no per-call override. ``recorder`` enables opt-in usage
     telemetry (ADR-040) and ``audit_recorder`` enables the read-access audit log
     (ADR-084): with both ``None`` — the default — nothing is recorded and every
-    call is exactly the bare tool body. The returned :class:`FastMCP` instance
-    has the five pinned tools registered and is ready to run over any transport —
-    the CLI runs it over stdio.
+    call is exactly the bare tool body. ``cache`` enables the derived-index cache
+    (ADR-099): with ``None`` — the default — every tool re-reads and rebuilds from
+    disk (ADR-032); with a cache, the expensive derived structures are reused
+    under an unchanged corpus content hash, byte-identically. The returned
+    :class:`FastMCP` instance has the five pinned tools registered and is ready to
+    run over any transport — the CLI runs it over stdio.
     """
     server: FastMCP = FastMCP(SERVER_NAME)
 
@@ -335,14 +395,14 @@ def build_server(
 
     @server.tool(name="get_artifact", description=DESC_GET_ARTIFACT)
     def get_artifact(id: str) -> str:
-        return observed("get_artifact", {"id": id}, lambda: _get_artifact(root, id, budget))
+        return observed("get_artifact", {"id": id}, lambda: _get_artifact(root, id, budget, cache))
 
     @server.tool(name="search_artifacts", description=DESC_SEARCH_ARTIFACTS)
     def search_artifacts(query: str, type: str | None = None) -> str:
         return observed(
             "search_artifacts",
             {"query": query, "type": type},
-            lambda: _search_artifacts(root, query, type, budget),
+            lambda: _search_artifacts(root, query, type, budget, cache),
         )
 
     @server.tool(name="find_decisions", description=DESC_FIND_DECISIONS)
@@ -350,12 +410,16 @@ def build_server(
         # ``path`` only rides the audit args when supplied, so a topic query's
         # recorded shape is byte-identical to before (additive, ADR-007).
         args = {"topic": topic} if path is None else {"topic": topic, "path": path}
-        return observed("find_decisions", args, lambda: _find_decisions(root, topic, path, budget))
+        return observed(
+            "find_decisions", args, lambda: _find_decisions(root, topic, path, budget, cache)
+        )
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
     def get_related(id: str, depth: int = 1) -> str:
         return observed(
-            "get_related", {"id": id, "depth": depth}, lambda: _get_related(root, id, budget, depth)
+            "get_related",
+            {"id": id, "depth": depth},
+            lambda: _get_related(root, id, budget, depth, cache),
         )
 
     @server.tool(name="get_summary", description=DESC_GET_SUMMARY)
@@ -425,6 +489,7 @@ def run_server(
     host: str = transport.DEFAULT_HOST,
     port: int = transport.DEFAULT_PORT,
     path: str = transport.DEFAULT_PATH,
+    cache_enabled: bool = False,
 ) -> int:
     """Run the Guide server over stdio (default) or streamable HTTP.
 
@@ -437,6 +502,11 @@ def run_server(
     ``host``/``port``/``path`` and served statelessly (ADR-032). HTTP serving is
     mandatory-audit-on: it refuses to start without a working audit sink
     (ADR-084), asserted before the endpoint opens.
+
+    ``cache_enabled`` turns on the derived-index cache (ADR-099): the expensive
+    derived structures are persisted content-addressed and reused under an
+    unchanged corpus hash, byte-identically to the uncached path. Off by default —
+    the serving path is exactly ADR-032's re-read-per-call otherwise.
 
     Emits a one-line notice to stderr when the repository root contains no
     recognized artifacts (v0.10.1 startup hardening), and another when
@@ -463,7 +533,18 @@ def run_server(
             f"{audit_recorder.path}",
             file=sys.stderr,
         )
-    server = build_server(root, budget=budget, recorder=recorder, audit_recorder=audit_recorder)
+    cache: DerivedIndexCache | None = None
+    if cache_enabled:
+        cache = DerivedIndexCache()
+        print(
+            "rac mcp: derived-index cache on — reusing content-addressed derived "
+            f"structures under {cache.cache_dir} (disposable; byte-identical to the "
+            "uncached path, ADR-099).",
+            file=sys.stderr,
+        )
+    server = build_server(
+        root, budget=budget, recorder=recorder, audit_recorder=audit_recorder, cache=cache
+    )
     if transport_name == transport.TRANSPORT_HTTP:
         # Mandatory-audit-on entry condition (ADR-084): a shared endpoint
         # without a working auditor refuses to start rather than serving reads

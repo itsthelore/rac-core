@@ -834,6 +834,7 @@ def cmd_mcp(args: argparse.Namespace) -> int:
             host=args.host,
             port=args.port,
             path=args.path,
+            cache_enabled=args.cache,
         )
     except MalformedAuditConfig as exc:  # bad `audit:` stanza (ADR-084)
         print(f"rac: {exc}", file=sys.stderr)
@@ -1874,6 +1875,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--path",
         default="/mcp",
         help="HTTP path to serve for --transport http (default: /mcp).",
+    )
+    # Derived-index cache (ADR-099): opt-in, off by default. Reuses the expensive
+    # derived structures under an unchanged corpus content hash, byte-identically
+    # to the uncached path; location is $XDG_CACHE_HOME/rac/derived (RAC_CACHE_DIR
+    # overrides). Deleting the cache costs only latency.
+    p_mcp.add_argument(
+        "--cache",
+        action="store_true",
+        help=(
+            "Reuse content-addressed derived structures across calls for large "
+            "corpora; disposable and byte-identical to the uncached path "
+            "(off by default, ADR-099)."
+        ),
     )
     p_mcp.set_defaults(func=cmd_mcp)
 
