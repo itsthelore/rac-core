@@ -60,7 +60,9 @@ ranking, the sequence, and the constraints that reviews must hold.
     accounting method recorded in a paired design.
 - Tranche B — reach:
   - Retrieval diagnostics (`retrieval-diagnostics`): explain-miss and the
-    floor-ratio bounded-boost gate, golden-pinned.
+    floor-ratio bounded-boost gate, golden-pinned. Graduated out of
+    `future/` to its own scoped roadmap now its sequencing condition is
+    met — the relevance-ranking work it complements is Achieved.
   - Corpus export projections (`corpus-export-to-rag-backends`): stable
     documents and nodes+edges projections; reference adapters live in
     rac-connectors with at least one self-hostable target. Shipped as the
@@ -70,7 +72,9 @@ ranking, the sequence, and the constraints that reviews must hold.
 - Tranche C — extensibility, deliberately ordered:
   - Artifact family factory (`artifact-family-factory`): the family
     creation contract proven on one built-in Risk pilot first, with no
-    published plugin API commitment.
+    published plugin API commitment. Graduated out of `future/` to its
+    own scoped roadmap; each instantiated family lands its own ADR at
+    implementation.
   - Third-party artifact types (ADR-083): the entry-point registry —
     inert constant-to-function seam first, discovery and generic
     validation second, the hardcoded OKF type map closed in the same
