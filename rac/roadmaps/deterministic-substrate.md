@@ -42,9 +42,13 @@ ranking, the sequence, and the constraints that reviews must hold.
   - Decision-to-code proximity (`decision-to-code-proximity`): declared,
     validated code-scope references plus a deterministic path→decisions
     lookup across CLI and MCP. Precondition for the drift gate below.
+    Graduated out of `future/` to its own scoped roadmap; the Tranche A
+    constraint pattern is carried in that roadmap's constraints.
   - Freshness and drift detection, phase 1
     (`freshness-and-drift-detection`): additive git-derived staleness
-    fields and an advisory drift finding in doctor/review.
+    fields and an advisory drift finding in doctor/review. Graduated out
+    of `future/` to its own scoped roadmap, with the phase-1 fence
+    (staleness fields plus advisory finding only) recorded there.
   - Integration recipe factory (`integration-recipe-factory`): the
     reusable harness recipe and first verified examples; zero engine diff.
   - Lean context delivery (`lean-context-delivery`): measure the MCP
@@ -54,7 +58,10 @@ ranking, the sequence, and the constraints that reviews must hold.
     floor-ratio bounded-boost gate, golden-pinned.
   - Corpus export projections (`corpus-export-to-rag-backends`): stable
     documents and nodes+edges projections; reference adapters live in
-    rac-connectors with at least one self-hostable target.
+    rac-connectors with at least one self-hostable target. Shipped as the
+    v0.25.0 export projections (ADR-074) and the `rac-connectors`
+    companion (ADR-095); the residual documentation deliverable is
+    absorbed into `corpus-sync`, and the artifact is Achieved.
 - Tranche C — extensibility, deliberately ordered:
   - Artifact family factory (`artifact-family-factory`): the family
     creation contract proven on one built-in Risk pilot first, with no
