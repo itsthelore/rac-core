@@ -63,13 +63,14 @@ Obsidian vault, carrying its wikilink graph in as candidate relationships.
   covers when to run one, the container and authenticating-proxy recipe, keeping
   the checkout current with `main`, and where observability lives — the whole
   topology is deployment wrapper around an unchanged, database-free engine.
-- **Ingest an Obsidian vault (`rac ingest <dir>`).** Point `rac ingest` at a
-  note-tool export directory and each note becomes a reviewable RAC-shaped draft,
-  with `[[wikilinks]]` carried in as **candidate `## Related` references** for you
-  to promote — never asserted edges. Deterministic and offline (identical export
-  → byte-identical drafts), lossless (frontmatter and unmapped content preserved),
+- **Ingest an Obsidian vault or Logseq graph (`rac ingest <dir>`).** Point `rac
+  ingest` at a note-tool export directory and each note becomes a reviewable
+  RAC-shaped draft, with `[[wikilinks]]` / `[[page links]]` carried in as
+  **candidate `## Related` references** for you to promote — never asserted edges.
+  Deterministic and offline (identical export → byte-identical drafts), lossless
+  (frontmatter, and Logseq block references and properties, preserved verbatim),
   and it never overwrites an existing file. Ambiguous and unresolved links are
-  reported for review, never guessed (ADR-079). Logseq, Notion, and Roam follow.
+  reported for review, never guessed (ADR-079). Notion and Roam follow.
 
 ## 2026.06.5 — the "rename" release
 
