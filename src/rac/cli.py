@@ -1021,6 +1021,12 @@ def cmd_find(args: argparse.Namespace) -> int:
             artifact_type=args.type,
             recursive=not args.top_level,
         )
+    # Freshness phase 1 (ADR-045): join git-derived staleness onto matches after
+    # ranking, so the matched set and order are unchanged (REQ-005) and the fields
+    # degrade to null outside git (REQ-003).
+    from rac.services.recency import annotate_search_recency
+
+    annotate_search_recency(result.matches, args.directory)
     if args.json:
         print(outputs.render_find_json(result, explain=args.explain))
     else:

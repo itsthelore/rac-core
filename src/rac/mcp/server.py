@@ -67,7 +67,7 @@ from rac.services.agent_rules import artifact_status
 from rac.services.derived_cache import DerivedIndexCache
 from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
 from rac.services.portfolio import build_portfolio_summary
-from rac.services.recency import artifact_provenance
+from rac.services.recency import annotate_search_recency, artifact_provenance
 from rac.services.relationships import (
     incoming_references,
     neighborhood,
@@ -259,6 +259,9 @@ def _search_artifacts(
     else:
         entries = build_repository_index(root, recursive=True).artifacts
         result = search_index(entries, query, artifact_type=artifact_type)
+    # Freshness phase 1 (ADR-045): join git-derived staleness after ranking, so
+    # search order is unchanged and the fields degrade to null outside git.
+    annotate_search_recency(result.matches, root)
     return serialize(result.to_dict(), budget)
 
 

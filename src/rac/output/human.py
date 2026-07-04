@@ -1042,7 +1042,16 @@ def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
     indent = f"{' ' * id_w}  {' ' * type_w}  "
     lines: list[str] = []
     for m in result.matches:
-        lines.append(f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}")
+        row = f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}"
+        # Staleness marker (ADR-045): a match whose file has not been committed
+        # within the freshness window is flagged inline. It is an advisory
+        # signal read off git recency, never a validation error — fresh matches
+        # render exactly as before (REQ-004). Absent when recency is unresolved
+        # (e.g. outside a git repository).
+        if m.recency and m.recency.get("stale"):
+            age = m.recency.get("age_days")
+            row += _yellow(f"  ⚠ stale ({age}d)" if age is not None else "  ⚠ stale")
+        lines.append(row)
         # Heading/body matches carry a snippet; show the matched section and line
         # indented under the row so an agent or reader can triage without opening
         # the file (ADR-038). Metadata matches have no snippet and stay one line.
