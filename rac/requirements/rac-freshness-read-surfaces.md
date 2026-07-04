@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — staleness visible where artifacts are
 picked. Initiative 1 (phase 1) of the `freshness-and-drift-detection`
