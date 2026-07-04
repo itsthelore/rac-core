@@ -73,6 +73,7 @@ from rac.services.review import (
     PRIORITY_INVALID_ARTIFACT,
     PRIORITY_MISSING_RECOMMENDED,
     PRIORITY_STALE_CORPUS,
+    PRIORITY_SUSPECT_DRIFT,
     PRIORITY_UNKNOWN_ARTIFACT,
     ReviewReport,
 )
@@ -801,6 +802,7 @@ _PRIORITY_LABELS = {
     PRIORITY_UNKNOWN_ARTIFACT: "Unrecognized artifacts",
     PRIORITY_MISSING_RECOMMENDED: "Missing recommended information",
     PRIORITY_STALE_CORPUS: "Write cadence",
+    PRIORITY_SUSPECT_DRIFT: "Possible drift (review recommended)",
 }
 
 
