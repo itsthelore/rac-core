@@ -97,6 +97,18 @@ as candidate relationships.
   (ADR-087). It is warning-only (always exits `0`) and silent outside git or where
   history cannot answer. `rac review` surfaces the same finding beside its
   write-cadence advisory.
+- **A template and gate for harness integration recipes.** Connecting a coding
+  agent to RAC is documentation, not engine work — the same push
+  (`rac export --agent-rules`) / pull (`lore` MCP) / post-edit-enforcement shape
+  each time. A new [`examples/_recipe-template/`](examples/_recipe-template/) plus
+  an [authoring guide](docs/integration-recipes.md) capture that shape (the README
+  skeleton, the `lore` invocation in JSON/TOML/YAML, and the `examples/guide/`
+  verify close), so a contributor produces a consistent `examples/<client>/` recipe
+  by filling the template — with a fixed enforcement section that never drifts into
+  pre-edit interception (ADR-067) and zero `rac-core` engine diff. A recipe is
+  listed in [`docs/ecosystem.md`](docs/ecosystem.md) only after it is smoke-tested
+  against a released engine; until then it ships carrying a
+  `verify against <client> <version>` marker and stays off the table.
 
 ## 2026.06.5 — the "rename" release
 
