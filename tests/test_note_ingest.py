@@ -26,7 +26,9 @@ from rac.services.note_ingest import (
     converter_by_name,
     converter_names,
     detect_converter,
+    parse_roam_pages,
     parse_wikilinks,
+    roam_result_for_file,
     vault_converters,
 )
 
@@ -83,12 +85,11 @@ def test_detect_returns_none_without_marker(tmp_path):
 
 
 def test_registry_lookup():
-    assert converter_names() == ["logseq", "notion", "obsidian"]
-    assert converter_by_name("obsidian").name == "obsidian"
-    assert converter_by_name("logseq").name == "logseq"
-    assert converter_by_name("notion").name == "notion"
-    assert converter_by_name("roam") is None
-    assert {c.name for c in vault_converters()} == {"obsidian", "logseq", "notion"}
+    assert converter_names() == ["logseq", "notion", "obsidian", "roam"]
+    for name in ("obsidian", "logseq", "notion", "roam"):
+        assert converter_by_name(name).name == name
+    assert converter_by_name("evernote") is None
+    assert {c.name for c in vault_converters()} == {"obsidian", "logseq", "notion", "roam"}
 
 
 # --- normalisation -----------------------------------------------------------
@@ -400,3 +401,91 @@ def test_cli_notion_json_reports_skipped_csv(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["converter"] == "notion"
     assert payload["skipped_sources"] == [f"Tasks {_H3}.csv"]
+
+
+# --- Roam (a JSON graph export, not a Markdown directory; ADR-079) -----------
+
+
+def _roam_graph():
+    return [
+        {
+            "title": "Auth Policy",
+            "children": [
+                {
+                    "string": "Depends on [[Login Policy]]",
+                    "children": [{"string": "nested detail ((abc-123)) and #security"}],
+                },
+                {"string": "Unknown [[Ghost Page]] and self [[Auth Policy]]"},
+            ],
+        },
+        {"title": "Login Policy", "children": [{"string": "Back to [[Auth Policy]]"}]},
+    ]
+
+
+def _roam_file(tmp_path):
+    path = tmp_path / "my-graph.json"
+    path.write_text(json.dumps(_roam_graph()), encoding="utf-8")
+    return path
+
+
+def test_parse_roam_pages_accepts_graph_rejects_others():
+    assert parse_roam_pages(json.dumps(_roam_graph())) is not None
+    assert parse_roam_pages("not json") is None
+    assert parse_roam_pages("[]") is None
+    assert parse_roam_pages(json.dumps([{"no": "title"}])) is None
+
+
+def test_detects_roam_json_export(tmp_path):
+    _roam_file(tmp_path)
+    assert detect_converter(tmp_path).name == "roam"
+
+
+def test_roam_flattens_blocks_with_title_and_indent(tmp_path):
+    result = roam_result_for_file(_roam_file(tmp_path))
+    auth = next(d for d in result.drafts if d.source_path == "Auth Policy")
+    assert auth.markdown.startswith("# Auth Policy\n")
+    assert "- Depends on [Login Policy](<Login Policy.md>)" in auth.markdown
+    assert "  - nested detail" in auth.markdown  # nested block indented
+
+
+def test_roam_resolves_page_links_excluding_self(tmp_path):
+    result = roam_result_for_file(_roam_file(tmp_path))
+    auth = next(d for d in result.drafts if d.source_path == "Auth Policy")
+    assert auth.related == ["Login Policy.md"]  # self-link excluded
+    assert any("unresolved" in w and "Ghost Page" in w for w in auth.warnings)
+
+
+def test_roam_block_refs_and_tags_preserved(tmp_path):
+    result = roam_result_for_file(_roam_file(tmp_path))
+    auth = next(d for d in result.drafts if d.source_path == "Auth Policy")
+    assert "((abc-123))" in auth.markdown
+    assert "#security" in auth.markdown
+    assert "[[Ghost Page]]" in auth.markdown  # unresolved left verbatim
+
+
+def test_roam_reingest_is_byte_identical(tmp_path):
+    path = _roam_file(tmp_path)
+    first = roam_result_for_file(path)
+    second = roam_result_for_file(path)
+    assert [d.markdown for d in first.drafts] == [d.markdown for d in second.drafts]
+
+
+def test_cli_roam_bare_json_file_writes_drafts(tmp_path, capsys):
+    path = _roam_file(tmp_path)
+    out = tmp_path / "drafts"
+    assert cli.main(["ingest", str(path), "-o", str(out)]) == cli.EXIT_OK
+    written = {p.relative_to(out).as_posix() for p in out.rglob("*.md")}
+    assert written == {"Auth Policy.md", "Login Policy.md"}
+    assert "via roam" in capsys.readouterr().out
+
+
+def test_cli_non_roam_json_still_errors(tmp_path, capsys):
+    # A .json that is not a Roam export falls through to the unsupported-type error.
+    doc = tmp_path / "data.json"
+    doc.write_text('{"just": "config"}', encoding="utf-8")
+    try:
+        cli.main(["ingest", str(doc)])
+        raise AssertionError("expected SystemExit")
+    except SystemExit as exc:
+        assert exc.code == cli.EXIT_USAGE
+    assert "unsupported" in capsys.readouterr().err.lower()
