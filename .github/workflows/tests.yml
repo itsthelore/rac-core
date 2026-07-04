@@ -117,6 +117,8 @@ jobs:
             paths: "tests/test_revisions.py"
           - name: recency
             paths: "tests/test_recency.py tests/test_provenance.py"
+          - name: drift
+            paths: "tests/test_freshness_drift.py"
           - name: skill
             paths: "tests/test_skill.py"
           - name: hook

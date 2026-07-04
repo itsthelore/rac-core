@@ -36,6 +36,18 @@ _FIND_JSON_CASES = {"find_json", "find_explain_json"}
 _FIND_HUMAN_CASES = {"find_human"}
 _STALE_MARKER_RE = re.compile(r" ⚠ stale \(\d+d\)")
 
+# The advisory `suspect-artifact` drift finding (freshness-and-drift phase 1) is
+# git-derived and surfaces in doctor/review output. Neutralize git for these cases
+# so their byte-pinned goldens never depend on the repo's own commit history (the
+# council golden-stability constraint); drift's real behaviour is pinned under
+# controlled git in tests/test_freshness_drift.py.
+_DRIFT_SURFACE_CASES = {
+    "doctor_unlinked_human",
+    "doctor_unlinked_json",
+    "review_human",
+    "review_json",
+}
+
 
 def _strip_git_derived_recency(out: str, name: str) -> str:
     """Excise the git-derived recency fields so the golden stays time-stable."""
@@ -155,6 +167,10 @@ def test_golden(name, argv, expected_rc, capsys, monkeypatch):
     # A relative state home keeps the mcp-stats log path machine-independent
     # in golden output; only the mcp-stats cases read it.
     monkeypatch.setenv("XDG_STATE_HOME", "tests/fixtures/telemetry/state")
+    # Neutralize git for the drift-surfacing cases so their goldens do not depend
+    # on this repo's commit history (find recency uses the strip seam above).
+    if name in _DRIFT_SURFACE_CASES:
+        monkeypatch.setattr("rac.services.recency._repository_root", lambda directory: None)
 
     rc = main(argv)
     out = _strip_git_derived_recency(capsys.readouterr().out, name)
