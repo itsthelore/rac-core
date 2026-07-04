@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 # Directories that are tool configuration, not notes: never walked for content.
-_SKIP_DIRS = {".obsidian", ".trash", ".git"}
+_SKIP_DIRS = {".obsidian", ".trash", ".git", "logseq", "bak", ".recycle"}
 
 # A wikilink: optional ``!`` (embed/transclusion), then ``[[ ... ]]``. The inner
 # text is ``target`` with an optional ``#heading`` / ``^block`` fragment and an
@@ -270,6 +270,29 @@ def _walk_notes(root: Path) -> list[str]:
     return sorted(notes)
 
 
+def _convert_vault(root: Path, name: str) -> VaultIngestResult:
+    """Walk an export, normalise each note, and collect the drafts (ADR-079).
+
+    The shared body every wikilink-based note tool reuses: one deterministic walk
+    feeds the resolver and the per-note normalisation (frontmatter preserved,
+    resolved ``[[links]]`` rewritten and offered as candidate ``## Related``
+    references, everything else verbatim). Tool-specific syntax a converter does
+    not rewrite — Logseq block references and properties, media embeds — flows
+    through untouched, so losslessness holds by construction.
+    """
+    note_paths = _walk_notes(root)
+    resolver = _Resolver(note_paths)
+    result = VaultIngestResult(converter=name, root=str(root))
+    for rel in note_paths:
+        text = (root / rel).read_text(encoding="utf-8")
+        frontmatter, body = _split_frontmatter(text)
+        draft = NoteDraft(source_path=rel, suggested_filename=rel, markdown="")
+        normalised = _normalise_body(body, resolver, rel, draft)
+        draft.markdown = _assemble_draft(frontmatter, normalised, draft)
+        result.drafts.append(draft)
+    return result
+
+
 class ObsidianConverter:
     """Ingest an Obsidian vault: ``.md`` notes, ``[[wikilinks]]``, YAML frontmatter.
 
@@ -285,22 +308,33 @@ class ObsidianConverter:
         return (root / ".obsidian").is_dir()
 
     def convert_vault(self, root: Path) -> VaultIngestResult:
-        note_paths = _walk_notes(root)
-        resolver = _Resolver(note_paths)
-        result = VaultIngestResult(converter=self.name, root=str(root))
-        for rel in note_paths:
-            text = (root / rel).read_text(encoding="utf-8")
-            frontmatter, body = _split_frontmatter(text)
-            draft = NoteDraft(source_path=rel, suggested_filename=rel, markdown="")
-            normalised = _normalise_body(body, resolver, rel, draft)
-            draft.markdown = _assemble_draft(frontmatter, normalised, draft)
-            result.drafts.append(draft)
-        return result
+        return _convert_vault(root, self.name)
+
+
+class LogseqConverter:
+    """Ingest a Logseq graph: ``pages/`` and ``journals/`` Markdown, ``[[page links]]``.
+
+    Detects the graph by its ``logseq/`` configuration directory. Logseq shares
+    Obsidian's ``[[page]]`` link syntax, so it reuses the same resolver: page
+    links become candidate ``## Related`` references, ambiguous or unresolved ones
+    are reported, never guessed. Logseq-specific syntax — block references
+    ``((block-id))``, ``key:: value`` properties, and outliner ``- `` bullets — is
+    left verbatim (lossless); block-reference resolution and ``#tag`` page links
+    are later enhancements, not guessed here.
+    """
+
+    name = "logseq"
+
+    def detect(self, root: Path) -> bool:
+        return (root / "logseq").is_dir()
+
+    def convert_vault(self, root: Path) -> VaultIngestResult:
+        return _convert_vault(root, self.name)
 
 
 # Registry — first converter whose ``detect`` matches wins; ``--from`` selects by
-# name. Order is deterministic; adding Logseq/Notion/Roam appends here.
-_VAULT_CONVERTERS: list[VaultConverter] = [ObsidianConverter()]
+# name. Order is deterministic; adding Notion/Roam appends here.
+_VAULT_CONVERTERS: list[VaultConverter] = [ObsidianConverter(), LogseqConverter()]
 
 
 def vault_converters() -> list[VaultConverter]:
