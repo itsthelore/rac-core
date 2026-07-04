@@ -295,8 +295,16 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
 def cmd_ingest(args: argparse.Namespace) -> int:
     path = Path(args.file)
+    if path.is_dir():
+        return _cmd_ingest_vault(args, path)
     if not path.is_file():
-        print(f"rac: file not found: {args.file}", file=sys.stderr)
+        print(f"rac: path not found: {args.file}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    if args.from_tool:
+        print(
+            "rac: --from applies to a note-tool export directory, not a single file.",
+            file=sys.stderr,
+        )
         raise SystemExit(EXIT_USAGE)
 
     try:
@@ -330,6 +338,53 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             print(outputs.render_ingest_json(result, None))
         else:
             print(result.markdown)
+    return EXIT_OK
+
+
+def _cmd_ingest_vault(args: argparse.Namespace, root: Path) -> int:
+    """Ingest a note-tool export directory into RAC-shaped drafts (ADR-079).
+
+    Deterministic and offline: each note becomes a draft, wikilinks become
+    candidate ``## Related`` references (never asserted), and nothing is
+    overwritten. With ``-o`` the drafts are written for review; without it, a
+    summary previews what would convert and what needs human attention.
+    """
+    from rac.services.note_ingest import converter_by_name, converter_names, detect_converter
+
+    if args.stdout:
+        print(
+            "rac: --stdout is not supported for a directory export; use -o <dir>.", file=sys.stderr
+        )
+        raise SystemExit(EXIT_USAGE)
+
+    converter = converter_by_name(args.from_tool) if args.from_tool else detect_converter(root)
+    if converter is None:
+        print(
+            f"rac: could not detect a note-tool export in {root}. "
+            f"Pass --from with one of: {', '.join(converter_names())}",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_USAGE)
+
+    result = converter.convert_vault(root)
+
+    written: list[str] = []
+    skipped: list[str] = []
+    if args.output:
+        out_dir = Path(args.output)
+        for draft in result.drafts:
+            dest = out_dir / draft.suggested_filename
+            if dest.exists() and not args.force:
+                skipped.append(str(dest))  # never overwrite an existing artifact (REQ-006)
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(draft.markdown, encoding="utf-8")
+            written.append(str(dest))
+
+    if args.json:
+        print(outputs.render_vault_ingest_json(result, written, skipped, args.output))
+    else:
+        print(outputs.render_vault_ingest_human(result, written, skipped, args.output))
     return EXIT_OK
 
 
@@ -1357,19 +1412,37 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ingest = sub.add_parser(
         "ingest",
-        help="Convert a document (DOCX, PDF, HTML, PPTX, XLSX, Markdown) to Markdown.",
+        help=(
+            "Convert a document (DOCX, PDF, HTML, PPTX, XLSX, Markdown) — or a "
+            "note-tool export directory (Obsidian) — to RAC-shaped Markdown."
+        ),
         parents=[version_parent],
     )
-    p_ingest.add_argument("file", help="Path to the source document.")
+    p_ingest.add_argument("file", help="Path to the source document or note-tool export directory.")
     ingest_dest = p_ingest.add_mutually_exclusive_group()
-    ingest_dest.add_argument("-o", "--output", help="Write Markdown here instead of printing it.")
+    ingest_dest.add_argument(
+        "-o",
+        "--output",
+        help="Write Markdown here (a file for a document, a directory for a note-tool export).",
+    )
     ingest_dest.add_argument(
         "--stdout",
         action="store_true",
-        help="Write Markdown to stdout (the default; explicit for pipelines).",
+        help="Write Markdown to stdout (the default for a document; explicit for pipelines).",
+    )
+    # Note-tool export ingest (ADR-079): choices are literals so the base CLI does
+    # not import the ingest layer just to build the parser; the converter registry
+    # is the runtime source of truth and a battery test pins these to it.
+    p_ingest.add_argument(
+        "--from",
+        dest="from_tool",
+        choices=("obsidian",),
+        help="Force a note-tool converter for a directory export (default: auto-detect).",
     )
     p_ingest.add_argument(
-        "--force", action="store_true", help="Overwrite the output file if it exists."
+        "--force",
+        action="store_true",
+        help="Overwrite existing output; never overwrites by default.",
     )
     p_ingest.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human-readable text."

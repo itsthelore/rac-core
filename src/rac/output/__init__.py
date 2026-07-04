@@ -42,6 +42,7 @@ from .human import (
     render_unknown_schema,
     render_validate_dir_human,
     render_validation_human,
+    render_vault_ingest_human,
     render_watchkeeper_human,
 )
 from .json import (
@@ -81,6 +82,7 @@ from .json import (
     render_templates_json,
     render_validate_dir_json,
     render_validation_json,
+    render_vault_ingest_json,
     render_watchkeeper_json,
 )
 from .okf import render_okf_bundle
@@ -172,6 +174,8 @@ __all__ = [
     "render_validate_sarif",
     "render_validation_human",
     "render_validation_json",
+    "render_vault_ingest_human",
+    "render_vault_ingest_json",
     "render_watchkeeper_github",
     "render_watchkeeper_human",
     "render_watchkeeper_json",
