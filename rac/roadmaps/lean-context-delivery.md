@@ -7,15 +7,16 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-Prioritised as the rank-9 Tranche A item of the deterministic-substrate
-programme, graduated out of `future/` alongside `integration-recipe-factory`
-now the programme's rank 1–4 items are live. Its concrete accounting method
-is recorded in the `lean-context-delivery-measurement` design; leanness is
-made a measured, regression-checked property here, never a semantic
-compression (ADR-066). Execution is tracked in GitHub (ADR-093): the epic in
-`## Related Tickets` carries ordering and task state.
+Delivered across all three initiatives (PR #311): the measured,
+regression-checked MCP surface budget (`rac/mcp/surface.py` — standing surface
+~915 tokens under a 1000 budget), the selective-on-demand retrieval guarantee
+asserted in the suite, and the CLI-first delivery path documented in
+`docs/context-cost.md`. Leanness is made a measured property, never a semantic
+compression (ADR-066); the accounting method is recorded in the
+`lean-context-delivery-measurement` design. Was the rank-9 Tranche A item of the
+deterministic-substrate programme; execution tracked in GitHub (ADR-093).
 
 ## Context
 
