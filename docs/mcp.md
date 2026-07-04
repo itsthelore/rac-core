@@ -401,8 +401,9 @@ to start without a working audit log** — enable the `audit:` stanza (see
 exits with an actionable error. stdio is unaffected.
 
 Keeping the fronted checkout current with `main` — a merge webhook or a periodic
-`git pull` — is a deployment concern outside the engine; a full container-and-
-keep-current recipe is documented separately for operators.
+`git pull` — is a deployment concern outside the engine. The full recipe —
+container, authenticating proxy, keep-current step, and observability — is on the
+[Shared Server](shared-server.md) page.
 
 ### Derived-index cache (large corpora)
 
