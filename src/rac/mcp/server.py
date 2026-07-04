@@ -47,7 +47,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from rac import consent as consent_record
 from rac.core.corpus import walk_corpus
@@ -85,6 +85,34 @@ from rac.services.resolve import (
 from rac.services.scope import decisions_for_path
 
 SERVER_NAME = "lore"
+
+# The per-request attribution carrier the serving ADR fixes (ADR-098): a caller
+# on the shared HTTP endpoint asserts who it is with this header, and the audit
+# recorder records the assertion as the per-request principal
+# (rac-shared-server-audit-identity). Case-insensitive, like all HTTP headers.
+# Attribution, not authentication — the engine never verifies it (ADR-085).
+PRINCIPAL_HEADER = "x-lore-principal"
+
+
+def _request_principal(ctx: Context) -> str | None:
+    """The caller's asserted principal from the ``X-Lore-Principal`` header, or None.
+
+    HTTP only: the header rides the request the streamable transport carries. On
+    stdio there is no HTTP request, so this is always ``None`` and attribution
+    stays the recorder's locally resolved identity (stdio is byte-unchanged,
+    ADR-007). Defensive throughout — a missing request context or header is just
+    "no assertion", never an error.
+    """
+    try:
+        request = ctx.request_context.request
+    except (ValueError, AttributeError):
+        return None
+    if request is None:
+        return None
+    try:
+        return request.headers.get(PRINCIPAL_HEADER)
+    except AttributeError:
+        return None
 
 # --- Verbatim tool descriptions (pinned by guide-tool-surface; ADR-030) ------
 #
@@ -384,47 +412,65 @@ def build_server(
     """
     server: FastMCP = FastMCP(SERVER_NAME)
 
-    def observed(tool: str, args: dict, call: Callable[[], str]) -> str:
+    def observed(
+        tool: str, args: dict, call: Callable[[], str], principal: str | None = None
+    ) -> str:
         # Audit (content-bearing, ADR-084) runs innermost so its duration is the
         # pure call time; telemetry (content-free, ADR-040) wraps it and still
         # sees the unchanged payload. Each is a no-op when its recorder is None,
-        # so the default response stays byte-identical.
+        # so the default response stays byte-identical. ``principal`` is the
+        # caller's per-request assertion (ADR-098); it reaches only the audit
+        # record, never the tool body — attribution, not authorization.
         return telemetry.observe(
-            recorder, tool, lambda: audit.observe(audit_recorder, tool, args, call)
+            recorder,
+            tool,
+            lambda: audit.observe(audit_recorder, tool, args, call, request_principal=principal),
         )
 
     @server.tool(name="get_artifact", description=DESC_GET_ARTIFACT)
-    def get_artifact(id: str) -> str:
-        return observed("get_artifact", {"id": id}, lambda: _get_artifact(root, id, budget, cache))
+    def get_artifact(id: str, ctx: Context) -> str:
+        return observed(
+            "get_artifact",
+            {"id": id},
+            lambda: _get_artifact(root, id, budget, cache),
+            _request_principal(ctx),
+        )
 
     @server.tool(name="search_artifacts", description=DESC_SEARCH_ARTIFACTS)
-    def search_artifacts(query: str, type: str | None = None) -> str:
+    def search_artifacts(query: str, ctx: Context, type: str | None = None) -> str:
         return observed(
             "search_artifacts",
             {"query": query, "type": type},
             lambda: _search_artifacts(root, query, type, budget, cache),
+            _request_principal(ctx),
         )
 
     @server.tool(name="find_decisions", description=DESC_FIND_DECISIONS)
-    def find_decisions_tool(topic: str = "", path: str | None = None) -> str:
+    def find_decisions_tool(ctx: Context, topic: str = "", path: str | None = None) -> str:
         # ``path`` only rides the audit args when supplied, so a topic query's
         # recorded shape is byte-identical to before (additive, ADR-007).
         args = {"topic": topic} if path is None else {"topic": topic, "path": path}
         return observed(
-            "find_decisions", args, lambda: _find_decisions(root, topic, path, budget, cache)
+            "find_decisions",
+            args,
+            lambda: _find_decisions(root, topic, path, budget, cache),
+            _request_principal(ctx),
         )
 
     @server.tool(name="get_related", description=DESC_GET_RELATED)
-    def get_related(id: str, depth: int = 1) -> str:
+    def get_related(id: str, ctx: Context, depth: int = 1) -> str:
         return observed(
             "get_related",
             {"id": id, "depth": depth},
             lambda: _get_related(root, id, budget, depth, cache),
+            _request_principal(ctx),
         )
 
     @server.tool(name="get_summary", description=DESC_GET_SUMMARY)
-    def get_summary() -> str:
-        return observed("get_summary", {}, lambda: _get_summary(root, budget))
+    def get_summary(ctx: Context) -> str:
+        return observed(
+            "get_summary", {}, lambda: _get_summary(root, budget), _request_principal(ctx)
+        )
 
     return server
 
@@ -524,8 +570,12 @@ def run_server(
         )
     # The read-access audit log is config-driven (ADR-084), not a flag: enabled
     # by an ``audit:`` stanza in .rac/config.yaml. Default-absent — no stanza,
-    # no recorder, no file, and the response stays byte-identical.
-    audit_recorder = audit.create_recorder(audit.load_audit_config(root), root)
+    # no recorder, no file, and the response stays byte-identical. The transport
+    # shapes the shared-server posture (ADR-098): HTTP skips the host git identity
+    # and blocks on write failure (rac-shared-server-audit-identity).
+    audit_recorder = audit.create_recorder(
+        audit.load_audit_config(root), root, transport=transport_name
+    )
     if audit_recorder is not None:
         print(
             "rac mcp: audit on — appending one line per read-tool call "
