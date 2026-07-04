@@ -62,9 +62,11 @@ design is the durable home; the manuscript is its output.
 
 ### Initiative 2 — The evaluation (`rac-grounding-baseline-study`)
 
-Scope and then run the head-to-head study the paper needs: a
-none / RAG / rac-corpus grounding-arm design with a downstream
-task-success outcome, extending the `external-benchmark-evidence` programme.
+Mature the existing `decisiongrounding` head-to-head — published as
+**SWE-DecisionBench** — into a citable SWE-family study: two co-primary
+deterministic outcomes (decision-adherence and decision-conditioned
+executable resolution) across the `no_grounding` / `naive_rag` / `rac` /
+`context_dump` arms, extending the `external-benchmark-evidence` programme.
 The semantic baseline is reported as evidence, never a CI gate (ADR-066,
 ADR-097).
 
