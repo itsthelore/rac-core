@@ -68,7 +68,7 @@ markitdown decision for binary documents.
 
 ## Status
 
-Proposed
+Accepted
 
 ## Category
 
