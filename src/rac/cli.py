@@ -86,6 +86,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rac import consent, usage
 from rac import output as outputs
@@ -176,6 +177,9 @@ from rac.services.validate import (
 from rac.services.watchkeeper import build_watchkeeper_report
 
 from . import __version__
+
+if TYPE_CHECKING:
+    from rac.services.note_ingest import VaultIngestResult
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
@@ -300,6 +304,14 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if not path.is_file():
         print(f"rac: path not found: {args.file}", file=sys.stderr)
         raise SystemExit(EXIT_USAGE)
+    # A bare Roam JSON graph export ingests directly (its canonical export is one
+    # .json file, not a directory); non-Roam .json falls through to the error.
+    if path.suffix.lower() == ".json":
+        from rac.services.note_ingest import roam_result_for_file
+
+        roam_result = roam_result_for_file(path)
+        if roam_result is not None:
+            return _emit_vault_result(args, roam_result)
     if args.from_tool:
         print(
             "rac: --from applies to a note-tool export directory, not a single file.",
@@ -366,8 +378,11 @@ def _cmd_ingest_vault(args: argparse.Namespace, root: Path) -> int:
         )
         raise SystemExit(EXIT_USAGE)
 
-    result = converter.convert_vault(root)
+    return _emit_vault_result(args, converter.convert_vault(root))
 
+
+def _emit_vault_result(args: argparse.Namespace, result: VaultIngestResult) -> int:
+    """Write drafts (never overwriting) and print the summary for a vault ingest."""
     written: list[str] = []
     skipped: list[str] = []
     if args.output:
@@ -1414,7 +1429,8 @@ def build_parser() -> argparse.ArgumentParser:
         "ingest",
         help=(
             "Convert a document (DOCX, PDF, HTML, PPTX, XLSX, Markdown) — or a "
-            "note-tool export directory (Obsidian, Logseq, Notion) — to RAC-shaped Markdown."
+            "note-tool export (Obsidian, Logseq, Notion, or a Roam JSON graph) — "
+            "to RAC-shaped Markdown."
         ),
         parents=[version_parent],
     )
@@ -1436,7 +1452,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_ingest.add_argument(
         "--from",
         dest="from_tool",
-        choices=("obsidian", "logseq", "notion"),
+        choices=("obsidian", "logseq", "notion", "roam"),
         help="Force a note-tool converter for a directory export (default: auto-detect).",
     )
     p_ingest.add_argument(
