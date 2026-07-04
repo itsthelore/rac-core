@@ -7,18 +7,19 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-Prioritised as the rank-6 Tranche A item of the deterministic-substrate
-programme, graduated out of `future/` alongside `lean-context-delivery` now
-the programme's rank 1–4 items are live. This is the *harness* half of the
-integration story; the *backend/RAG* half lives in
-`corpus-export-to-rag-backends`, and the positioning/ecosystem framing in
-`growth-programme`. It adds no engine code — every recipe is a
-documentation unit. The programme's boundary constraint is carried verbatim:
-**every recipe is context-supply and post-edit CI enforcement (ADR-067),
-never pre-edit interception.** Execution is tracked in GitHub (ADR-093): the
-epic in `## Related Tickets` carries ordering and task state.
+Delivered across all three initiatives (PRs #309, #310): the recipe authoring
+template and contract, the verification gate, and the prioritised harness
+backlog — proven with four recipes authored from the template (Zed, Windsurf,
+Cline, opencode), each engine-half smoke-tested and carrying its
+`verify against` marker until harness-connected verification. Zero engine diff,
+as designed — every recipe is a documentation unit. The programme's boundary
+constraint held throughout: **every recipe is context-supply and post-edit CI
+enforcement (ADR-067), never pre-edit interception.** Was the rank-6 Tranche A
+item of the deterministic-substrate programme (the *harness* half of the
+integration story, beside `corpus-export-to-rag-backends`); execution tracked in
+GitHub (ADR-093).
 
 ## Context
 
