@@ -22,6 +22,7 @@ one tool's export-format drift cannot break another.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -418,12 +419,131 @@ class NotionConverter:
         return result
 
 
+# --- Roam (a JSON graph export, not a directory of Markdown) -----------------
+
+
+def parse_roam_pages(text: str) -> list[dict] | None:
+    """Parse Roam's JSON graph export, or None if ``text`` is not that shape.
+
+    Roam exports the whole graph as one JSON file: a list of page objects, each
+    with a ``title`` and a tree of ``children`` blocks (``{"string": ...,
+    "children": [...]}``). Recognised structurally so detection needs no marker
+    file.
+    """
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(data, list) or not data:
+        return None
+    if not all(isinstance(page, dict) for page in data):
+        return None
+    if not any("title" in page and "children" in page for page in data):
+        return None
+    return data
+
+
+def _flatten_roam_blocks(blocks: object, depth: int = 0) -> list[str]:
+    """Flatten a Roam block tree into indented Markdown outliner bullets.
+
+    Each block's ``string`` becomes a ``- `` bullet indented by its depth; nested
+    ``children`` recurse. Block strings (the content, including ``[[links]]``,
+    ``#tags``, and ``((block refs))``) are preserved verbatim; Roam's internal
+    block metadata (uids, timestamps) is structural, not content, and is not
+    carried.
+    """
+    lines: list[str] = []
+    if not isinstance(blocks, list):
+        return lines
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        string = block.get("string", "")
+        if not isinstance(string, str):
+            string = ""
+        lines.append("  " * depth + "- " + string)
+        lines.extend(_flatten_roam_blocks(block.get("children"), depth + 1))
+    return lines
+
+
+def _roam_filename(title: str) -> str:
+    """A flat, deterministic draft filename for a Roam page title."""
+    return f"{title.replace('/', '-').replace(chr(92), '-').strip()}.md"
+
+
+def convert_roam_pages(pages: list[dict], source: str) -> VaultIngestResult:
+    """Turn parsed Roam pages into drafts, reusing the shared wikilink machinery.
+
+    Each page's block tree is flattened to outliner Markdown with its title as an
+    ``# H1`` (so the title is never lost), then run through the same
+    ``[[wikilink]]`` normalisation as Obsidian and Logseq: ``[[Page]]`` links
+    resolve to candidate ``## Related`` references, ``((block refs))`` and
+    ``#tags`` stay verbatim. Deterministic and offline (ADR-079, ADR-002).
+    """
+    titled = [page for page in pages if isinstance(page.get("title"), str)]
+    note_paths = [_roam_filename(page["title"]) for page in titled]
+    resolver = _Resolver(note_paths)
+    result = VaultIngestResult(converter="roam", root=source)
+    for page in titled:
+        title = page["title"]
+        rel = _roam_filename(title)
+        body_lines = _flatten_roam_blocks(page.get("children"))
+        body = f"# {title}\n\n" + "\n".join(body_lines)
+        if body_lines:
+            body += "\n"
+        draft = NoteDraft(source_path=title, suggested_filename=rel, markdown="")
+        normalised = _normalise_body(body, resolver, rel, draft)
+        draft.markdown = _assemble_draft("", normalised, draft)
+        result.drafts.append(draft)
+    return result
+
+
+def roam_result_for_file(path: Path) -> VaultIngestResult | None:
+    """Ingest a bare Roam ``.json`` export file, or None if it is not one.
+
+    Lets ``rac ingest graph.json`` work directly — the common case, since Roam
+    exports the graph as a single JSON download rather than a directory.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    pages = parse_roam_pages(text)
+    if pages is None:
+        return None
+    return convert_roam_pages(pages, str(path))
+
+
+class RoamConverter:
+    """Ingest a Roam JSON graph export: one file, a tree of pages and blocks.
+
+    Detects a Roam ``.json`` export inside the directory (Roam exports one JSON
+    file for the whole graph). Unlike the Markdown-directory tools, its input is a
+    block tree, so it flattens each page to outliner Markdown and then reuses the
+    shared wikilink normalisation — ``[[page links]]`` become candidate
+    ``## Related`` references, block references and tags stay verbatim.
+    """
+
+    name = "roam"
+
+    def detect(self, root: Path) -> bool:
+        return any(roam_result_for_file(path) is not None for path in sorted(root.glob("*.json")))
+
+    def convert_vault(self, root: Path) -> VaultIngestResult:
+        for path in sorted(root.glob("*.json")):
+            result = roam_result_for_file(path)
+            if result is not None:
+                return result
+        return VaultIngestResult(converter=self.name, root=str(root))
+
+
 # Registry — first converter whose ``detect`` matches wins; ``--from`` selects by
-# name. Order is deterministic; adding Roam appends here.
+# name. Order is deterministic.
 _VAULT_CONVERTERS: list[VaultConverter] = [
     ObsidianConverter(),
     LogseqConverter(),
     NotionConverter(),
+    RoamConverter(),
 ]
 
 
