@@ -313,6 +313,7 @@ def render_vault_ingest_json(
         "note_count": result.note_count,
         "resolved_link_count": result.resolved_link_count,
         "warning_count": result.warning_count,
+        "skipped_sources": result.skipped_sources,
         "written": written,
         "skipped": skipped,
         "drafts": [
