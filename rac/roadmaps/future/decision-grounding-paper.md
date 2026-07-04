@@ -155,3 +155,7 @@ call at pickup.
 ## Related Requirements
 
 - rac-grounding-baseline-study
+
+## Related Tickets
+
+- itsthelore/rac-core#293
