@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — a contributor-facing authoring contract, not
 a CLI behaviour. Initiative 1 of the `integration-recipe-factory` roadmap.
