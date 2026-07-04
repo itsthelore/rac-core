@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[external]` — a user-facing, documented delivery path.
 Initiative 3 of the `lean-context-delivery` roadmap.
