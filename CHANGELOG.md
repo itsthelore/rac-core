@@ -108,7 +108,12 @@ as candidate relationships.
   pre-edit interception (ADR-067) and zero `rac-core` engine diff. A recipe is
   listed in [`docs/ecosystem.md`](docs/ecosystem.md) only after it is smoke-tested
   against a released engine; until then it ships carrying a
-  `verify against <client> <version>` marker and stays off the table.
+  `verify against <client> <version>` marker and stays off the table. Ships with
+  the first three recipes authored from the template —
+  [`examples/windsurf/`](examples/windsurf/README.md),
+  [`examples/cline/`](examples/cline/README.md), and
+  [`examples/zed/`](examples/zed/README.md) — each documented but not yet verified,
+  so they carry the marker and are not listed in `docs/ecosystem.md`.
 
 ## 2026.06.5 — the "rename" release
 
