@@ -489,3 +489,23 @@ def test_cli_non_roam_json_still_errors(tmp_path, capsys):
     except SystemExit as exc:
         assert exc.code == cli.EXIT_USAGE
     assert "unsupported" in capsys.readouterr().err.lower()
+
+
+# --- committed golden fixture (Initiative 4: pin byte-identical drafts) -------
+
+
+def test_obsidian_golden_fixture_is_byte_identical():
+    from pathlib import Path
+
+    base = Path(__file__).parent / "fixtures" / "note-ingest"
+    vault, golden = base / "obsidian-vault", base / "obsidian-golden"
+    generated = {
+        d.suggested_filename: d.markdown for d in ObsidianConverter().convert_vault(vault).drafts
+    }
+    expected = {
+        p.relative_to(golden).as_posix(): p.read_text(encoding="utf-8")
+        for p in golden.rglob("*.md")
+    }
+    assert set(generated) == set(expected), "draft set drifted from the golden fixture"
+    for name, text in expected.items():
+        assert generated[name] == text, f"golden drift on {name} — regenerate if intended"
