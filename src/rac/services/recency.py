@@ -402,6 +402,20 @@ def load_freshness_threshold(directory: str) -> int:
     return value
 
 
+def last_committed_for_paths(directory: str, paths: Iterable[str]) -> dict[str, datetime | None]:
+    """Git last-committed time for each of ``paths`` (the raw recency primitive).
+
+    One git boundary (ADR-045): the most-recent commit time per path, or ``None``
+    for an untracked path or when ``directory`` is not a repository — no exception
+    crosses the boundary (REQ-005). Drift detection compares these dates directly;
+    the staleness join layers a threshold on top of the same values.
+    """
+    repo_root = _repository_root(directory)
+    if repo_root is None:
+        return {path: None for path in paths}
+    return {path: _last_committed(repo_root, path) for path in paths}
+
+
 def recency_for_paths(
     directory: str,
     paths: Iterable[str],
@@ -417,12 +431,11 @@ def recency_for_paths(
     """
     if reference is None:
         reference = datetime.now(UTC)
-    repo_root = _repository_root(directory)
-    result: dict[str, Staleness] = {}
-    for path in paths:
-        last = _last_committed(repo_root, path) if repo_root is not None else None
-        result[path] = staleness(last, threshold_days=threshold_days, reference=reference)
-    return result
+    last_by_path = last_committed_for_paths(directory, paths)
+    return {
+        path: staleness(last, threshold_days=threshold_days, reference=reference)
+        for path, last in last_by_path.items()
+    }
 
 
 def annotate_search_recency(
