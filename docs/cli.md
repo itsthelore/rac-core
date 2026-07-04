@@ -452,6 +452,29 @@ ones are advisory and exit `0`):
 | `high-fan-out-hub` | warning | more resolved edges than `--hub-threshold` |
 | `injection-style-content` | warning | instruction-like content flagged for review |
 | `unlinked-reference` | warning | the body names another artifact with no declared edge |
+| `suspect-artifact` | warning | a referenced target's prose changed in git after this artifact last did |
+
+### suspect-artifact
+
+A referenced target can change while the artifact that references it stays put —
+the enterprise "suspect link". `rac doctor` surfaces it as an advisory warning
+when a **declared, resolvable** reference points at a target whose git history
+shows two things: its last commit is newer than the referring artifact's own last
+commit (the *touch*), **and** its meaning-bearing prose actually changed since the
+referrer was last touched (the *substance*). A link-only or metadata-only edit —
+adding a `## Related` or `## Applies To` section, a rename, reformatting — is not
+drift and is suppressed, so the signal reflects decisions that actually moved.
+`rac review` shows the same finding as a priority-5 advisory.
+
+It is a pure function of git recency (ADR-045) and the validated relationship
+graph (ADR-074) — no database, no AI — and names the newer target and the
+evidencing dates as facts, with a review-recommended suggestion. It **never
+auto-fixes** and **never gates** (always exits `0`); the trust boundary stays
+human PR review (ADR-065). External-reference sections (`## Related Tickets`,
+`## Verified By`) are format-linted, never resolved (ADR-087), and so never drift.
+Outside git, for untracked files, or in a shallow clone where the historical
+revision cannot be read, the check falls back conservatively or stays silent
+(absent, never wrong).
 
 ### unlinked-reference
 
