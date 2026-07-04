@@ -36,6 +36,7 @@ from typing import Any
 
 from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusCache, CorpusEntry
+from rac.services.drift import CODE_SUSPECT_ARTIFACT, drift_problem, suspect_drift
 from rac.services.links import detect_unlinked_references
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
@@ -64,6 +65,9 @@ CODE_ORPHANED_ARTIFACT = "orphaned-artifact"
 CODE_HIGH_FAN_OUT_HUB = "high-fan-out-hub"
 CODE_INJECTION_CONTENT = "injection-style-content"
 CODE_UNLINKED_REFERENCE = "unlinked-reference"
+# The git-native suspect-link finding (freshness-and-drift phase 1) is owned by
+# `rac.services.drift` (imported above as CODE_SUSPECT_ARTIFACT); `rac review`
+# consumes the same primitive, so the two surfaces cannot drift apart.
 
 # Heuristic injection-style idioms (REQ-005): instruction overrides, role/system
 # impersonation, concealment from the user, and steering away from recorded
@@ -170,7 +174,7 @@ def diagnose(
 ) -> DoctorReport:
     """Run validation, relationship integrity, and the two new checks in one pass.
 
-    All four phases share one per-invocation :class:`CorpusCache` (WS8), so each
+    The phases share one per-invocation :class:`CorpusCache` (WS8), so each
     artifact is parsed once for the whole run rather than re-parsed by the
     validation, relationship, and degree/injection phases independently. The
     short-circuit is a performance path only — the report is byte-identical to a
@@ -184,6 +188,7 @@ def diagnose(
     findings.extend(_degree_findings(entries, hub_threshold))
     findings.extend(_injection_findings(entries))
     findings.extend(_unlinked_reference_findings(directory, entries, recursive))
+    findings.extend(_suspect_artifact_findings(directory, entries))
     # Deterministic order: errors before warnings, then path, code, problem.
     findings.sort(key=lambda f: (_SEVERITY_RANK[f.severity], f.path, f.code, f.problem))
     return DoctorReport(directory=directory, hub_threshold=hub_threshold, findings=findings)
@@ -336,6 +341,32 @@ def _unlinked_reference_findings(
                     f"Add `{ref.suggested_line}` under `## {ref.related_section}` "
                     "if the link is intended — a suggestion to review; RAC writes "
                     "no edge (ADR-082)."
+                ),
+            )
+        )
+    return findings
+
+
+def _suspect_artifact_findings(directory: str, entries: list[CorpusEntry]) -> list[DoctorFinding]:
+    """Suspect-link drift: a referrer whose resolved target changed more recently.
+
+    Reuses the shared drift primitive (git recency over the validated relationship
+    graph). Advisory WARNINGs only — they name the newer target and both commit
+    dates as facts and recommend review, never a verdict or an auto-fix (REQ-004,
+    ADR-034). Empty outside git or for artifacts whose only references are external
+    (REQ-003, REQ-005), so warning-only runs still exit 0 (REQ-002).
+    """
+    findings: list[DoctorFinding] = []
+    for record in suspect_drift(directory, entries):
+        findings.append(
+            DoctorFinding(
+                path=record.source_path,
+                code=CODE_SUSPECT_ARTIFACT,
+                severity=SEVERITY_WARNING,
+                problem=drift_problem(record),
+                fix=(
+                    "Review whether this artifact still reflects the newer target and "
+                    "update it if needed. Advisory only — RAC changes nothing (ADR-034)."
                 ),
             )
         )
