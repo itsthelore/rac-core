@@ -120,6 +120,46 @@ This keeps the ecosystem table trustworthy and stops it drifting into a vague
 "works with any MCP client" claim. The gate is documentation and process
 discipline over the existing surfaces; it requires no engine change.
 
+## Harness backlog
+
+The harnesses worth a recipe, ordered by adoption signal — not completeness
+(chasing every MCP client is unbounded). The list is honest about what is
+*shipped*, *drafted*, or a *candidate*, and it is **dated**, because the landscape
+moves fast: a harness can be archived or superseded between releases, so re-check
+before starting one. Priority follows real adoption, not this table's row order.
+
+_Last reviewed: 2026-07-04._
+
+| Harness | Status | Notes |
+| --- | --- | --- |
+| Claude Code | Verified — listed | [`examples/claude-code/`](../examples/claude-code/README.md); reads `CLAUDE.md`, plus the skill and the pre-edit veto hook |
+| Cursor | Verified — listed | [`examples/cursor/`](../examples/cursor/README.md); reads `AGENTS.md` |
+| GitHub Copilot | Verified — listed | [`examples/copilot/`](../examples/copilot/README.md); reads `.github/copilot-instructions.md` |
+| OpenAI Codex | Verified — listed | [`examples/codex/`](../examples/codex/README.md); reads `AGENTS.md` |
+| Amp | Verified — listed | [`examples/amp/`](../examples/amp/README.md); reads `AGENTS.md` |
+| Omnigent | Documented | [`examples/omnigent/`](../examples/omnigent/README.md); in `docs/mcp.md`, not yet an ecosystem row |
+| Zed | Drafted — unverified | [`examples/zed/`](../examples/zed/README.md); reads `AGENTS.md` natively (clean); engine half smoke-tested |
+| Windsurf | Drafted — unverified | [`examples/windsurf/`](../examples/windsurf/README.md); own rules file + MCP pull |
+| Cline | Drafted — unverified | [`examples/cline/`](../examples/cline/README.md); own rules file + MCP pull |
+| opencode | Candidate — high | Most-starred open-source agent (2026); `AGENTS.md`-native + MCP — a clean recipe like Zed |
+| Goose | Candidate | Block's MCP-native agent; instruction surface to confirm on authoring |
+| Continue | Candidate | Open-source, VS Code + JetBrains; MCP + a rules file |
+| Kilo Code | Candidate | VS Code agent; MCP; the migration target for former Roo Code users |
+| JetBrains AI | Candidate | JetBrains IDE assistant; MCP + a guidelines file |
+
+**Superseded / not worth a recipe (as of 2026-07-04):**
+
+- **Gemini CLI** — Google is winding down request serving (mid-2026) in favour of
+  the closed-source **Antigravity CLI**; hold until the successor's integration
+  surfaces settle before drafting one.
+- **Roo Code** — archived and read-only (final release May 2026). Do not start a
+  recipe; its users are migrating to Cline or Kilo Code, both already listed above.
+
+To pick up a candidate: follow [the template](#the-template), draft
+`examples/<client>/`, ship it with its `verify against <client> <version>` marker,
+and move it to *Drafted* here. It reaches *Verified — listed* only after the
+harness-connected smoke test clears [the verification gate](#the-verification-gate).
+
 ## Related
 
 - [`docs/ecosystem.md`](ecosystem.md) — the verified-integration table these
