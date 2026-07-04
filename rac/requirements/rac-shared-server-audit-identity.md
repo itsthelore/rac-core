@@ -7,12 +7,18 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — every caller on a shared endpoint is
 attributable. Initiative 3 of the `lore-at-team-scale` roadmap:
 per-request principal resolution in the audit recorder, with mandatory
-audit-on as the shared-deployment entry condition.
+audit-on as the shared-deployment entry condition. Delivered
+(itsthelore/rac-core#265): the audit recorder resolves a per-request
+principal from the `X-Lore-Principal` header (the carrier ADR-098 fixes),
+with precedence assertion > env override > git (skipped on the shared
+transport) > unattributed; records grow additive `transport` and
+`attribution` fields; HTTP forces `on_write_error: block`; and the
+principal never enters a tool body — attribution, never authorization.
 
 ## Problem
 
@@ -77,6 +83,7 @@ concrete.
 - adr-032
 - adr-084
 - adr-085
+- adr-098
 
 ## Related Roadmaps
 
