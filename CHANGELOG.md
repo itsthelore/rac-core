@@ -86,6 +86,17 @@ as candidate relationships.
   a correctness verdict, and it never changes which artifacts match or their order;
   outside a git repository the fields degrade to `null`. Derived from git, never a
   stored frontmatter date (ADR-045).
+- **`rac doctor` flags suspect-artifact drift.** A new advisory `suspect-artifact`
+  finding surfaces the git-native "suspect link": a referring artifact whose
+  resolved relationship target was committed **more recently** than the referrer
+  itself, so the reference may no longer reflect the target. It names the newer
+  target and both commit dates as facts and recommends review — never a verdict,
+  never an auto-fix (ADR-034). Derived purely from git history and the validated
+  relationship graph (ADR-045, ADR-074); only declared, resolvable references
+  participate, so external references (tickets, `verified by`) are excluded
+  (ADR-087). It is warning-only (always exits `0`) and silent outside git or where
+  history cannot answer. `rac review` surfaces the same finding beside its
+  write-cadence advisory.
 
 ## 2026.06.5 — the "rename" release
 

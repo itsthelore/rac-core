@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — the git-native suspect link. Initiative 2
 (phase 1) of the `freshness-and-drift-detection` roadmap.

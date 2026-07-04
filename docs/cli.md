@@ -422,6 +422,12 @@ so it is safe in CI; it needs git history and is silent outside a git repository
 or on an empty corpus. The framing is capture cadence, not work tracking
 (ADR-017).
 
+Review also surfaces the advisory **`suspect-artifact` drift** finding — the same
+git-native signal `rac doctor` reports, beside the cadence nudge: a referring
+artifact whose resolved relationship target was committed more recently than it
+was. It is advisory (never changes the exit code) and silent outside git. See the
+[`doctor` section](#suspect-artifact) for the full definition.
+
 ## doctor
 
 One front door for **corpus health**. `rac doctor` runs validation and
@@ -452,6 +458,7 @@ ones are advisory and exit `0`):
 | `high-fan-out-hub` | warning | more resolved edges than `--hub-threshold` |
 | `injection-style-content` | warning | instruction-like content flagged for review |
 | `unlinked-reference` | warning | the body names another artifact with no declared edge |
+| `suspect-artifact` | warning | a resolved reference target changed after this artifact did |
 
 ### unlinked-reference
 
@@ -471,6 +478,24 @@ alias**. The `## Related` sections themselves, fenced code blocks, and
 self-references are excluded; title and free-text matching are out of scope. To
 promote a suggestion, add its line (for example `- adr-074`) under the named
 `## Related <Type>` section.
+
+### suspect-artifact
+
+A target artifact can change while everything referencing it stays untouched, so
+the reference silently goes stale. `suspect-artifact` is the git-native equivalent
+of the "suspect link" enterprise review tools surface: for every **resolved**
+relationship edge, it compares git's last-committed date of the target against the
+referrer's, and flags the referrer when the target changed **more recently**. The
+finding names the newer target and both commit dates as facts and recommends
+review — never a correctness verdict, and never an auto-fix (ADR-034).
+
+It is derived purely from git history and the validated relationship graph
+(ADR-045, ADR-074): only declared, resolvable references participate, so external
+references (tickets, `verified by`) are excluded (ADR-087). It is advisory (always
+exits `0`) and degrades to nothing outside a git repository or where history
+cannot answer (shallow clones, untracked files). `rac review` surfaces the same
+finding through its advisory channel. To clear one, review the referrer and commit
+any update it needs — a newer commit on the referrer resolves the finding.
 
 ## coverage
 
