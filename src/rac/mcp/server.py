@@ -114,6 +114,7 @@ def _request_principal(ctx: Context) -> str | None:
     except AttributeError:
         return None
 
+
 # --- Verbatim tool descriptions (pinned by guide-tool-surface; ADR-030) ------
 #
 # These strings are a designed product surface: the only interface an agent
