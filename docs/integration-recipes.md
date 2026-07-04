@@ -141,7 +141,7 @@ _Last reviewed: 2026-07-04._
 | Zed | Drafted — unverified | [`examples/zed/`](../examples/zed/README.md); reads `AGENTS.md` natively (clean); engine half smoke-tested |
 | Windsurf | Drafted — unverified | [`examples/windsurf/`](../examples/windsurf/README.md); own rules file + MCP pull |
 | Cline | Drafted — unverified | [`examples/cline/`](../examples/cline/README.md); own rules file + MCP pull |
-| opencode | Candidate — high | Most-starred open-source agent (2026); `AGENTS.md`-native + MCP — a clean recipe like Zed |
+| opencode | Drafted — unverified | [`examples/opencode/`](../examples/opencode/README.md); reads `AGENTS.md` natively (clean); engine half smoke-tested |
 | Goose | Candidate | Block's MCP-native agent; instruction surface to confirm on authoring |
 | Continue | Candidate | Open-source, VS Code + JetBrains; MCP + a rules file |
 | Kilo Code | Candidate | VS Code agent; MCP; the migration target for former Roo Code users |
