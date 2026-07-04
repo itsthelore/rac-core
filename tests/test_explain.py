@@ -18,6 +18,7 @@ from rac import cli
 from rac.mcp.server import build_server
 from rac.output import json as json_output
 from rac.services.index import build_repository_index
+from rac.services.recency import annotate_search_recency
 from rac.services.resolve import find_artifacts, search_index
 
 # One decision authored so each query term is unique to one match tier. The
@@ -169,11 +170,18 @@ def test_mcp_search_payload_equals_find_explain_json(tmp_path):
     server = build_server(root)
     contents, _ = asyncio.run(server.call_tool("search_artifacts", {"query": "photosynthesis"}))
     mcp_payload = json.loads(contents[0].text)
-    cli_payload = json.loads(
-        json_output.render_find_json(find_artifacts(root, "photosynthesis"), explain=True)
-    )
+    # `rac find --explain --json` joins git-derived recency the same way the MCP
+    # surface does (freshness-and-drift phase 1); annotate the CLI side to keep
+    # the one-source-of-truth equality exact. Both are computed from the same git
+    # state at the same instant, so the (volatile) values stay equal by
+    # construction — outside git, both degrade to the same null recency block.
+    cli_result = find_artifacts(root, "photosynthesis")
+    annotate_search_recency(cli_result.matches, root)
+    cli_payload = json.loads(json_output.render_find_json(cli_result, explain=True))
     assert mcp_payload == cli_payload
     assert mcp_payload["matches"][0]["evidence"]["field"] == "title"
+    # Recency rides additively on the surface payload (null outside git, REQ-003).
+    assert set(mcp_payload["matches"][0]["recency"]) == {"last_committed", "age_days", "stale"}
 
 
 # --- CLI --explain faces (REQ-004, REQ-006) ----------------------------------

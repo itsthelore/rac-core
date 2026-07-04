@@ -28,6 +28,7 @@ from rac.mcp.budget import (
 from rac.mcp.server import build_server
 from rac.output import json as json_output
 from rac.services.portfolio import build_portfolio_summary
+from rac.services.recency import annotate_search_recency
 from rac.services.resolve import find_artifacts, find_decisions, resolve_artifact
 
 CORPUS = fixture_path("mcp", "corpus")
@@ -45,6 +46,19 @@ def call(root: str, tool: str, args: dict, budget: int = DEFAULT_BUDGET) -> dict
     contents, _structured = asyncio.run(server.call_tool(tool, args))
     assert len(contents) == 1
     return json.loads(contents[0].text)
+
+
+def find_like_cli(root: str, query: str) -> dict:
+    """The `rac find --explain --json` payload, recency joined as `cmd_find` does.
+
+    The read surfaces (MCP `search_artifacts` and `rac find`) both annotate
+    git-derived recency post-ranking (freshness-and-drift phase 1). Mirroring
+    that here keeps the one-source-of-truth equivalence exact against the MCP
+    surface — both sides read the same git state at the same instant.
+    """
+    result = find_artifacts(root, query)
+    annotate_search_recency(result.matches, root)
+    return json.loads(json_output.render_find_json(result, explain=True))
 
 
 # --- get_artifact ------------------------------------------------------------
@@ -133,9 +147,20 @@ def test_search_artifacts_shape_and_order():
     assert payload["match_count"] == 3
     for match in payload["matches"]:
         # WS2: search results carry an additive `evidence` object (always present),
-        # now also carrying the ADR-078 relevance-score components.
-        assert list(match) == ["id", "type", "title", "path", "evidence"]
+        # now also carrying the ADR-078 relevance-score components. Freshness phase
+        # 1 adds a second additive object, `recency`, last (ADR-007). Both trail the
+        # metadata quartet.
+        assert list(match) == ["id", "type", "title", "path", "evidence", "recency"]
         assert set(match["evidence"]) == {"field", "terms", "tier", "score", "components"}
+        # The fixture is git-tracked, so recency populates from real history; pin
+        # its shape (string-or-null date, int-or-null age, bool-or-null flag),
+        # never the volatile values (the `provenance` precedent, REQ-006).
+        assert set(match["recency"]) == {"last_committed", "age_days", "stale"}
+        assert match["recency"]["last_committed"] is None or isinstance(
+            match["recency"]["last_committed"], str
+        )
+        assert match["recency"]["age_days"] is None or isinstance(match["recency"]["age_days"], int)
+        assert match["recency"]["stale"] is None or isinstance(match["recency"]["stale"], bool)
     assert "truncated" not in payload
 
 
@@ -148,11 +173,8 @@ def test_search_artifacts_type_filter():
 def test_search_artifacts_matches_cli_find_json():
     payload = call(CORPUS, "search_artifacts", {"query": "messaging"})
     # MCP search always carries evidence; the equal CLI face is `--explain --json`
-    # (REQ-004, one source of truth).
-    cli = json.loads(
-        json_output.render_find_json(find_artifacts(CORPUS, "messaging"), explain=True)
-    )
-    assert payload == cli
+    # (REQ-004, one source of truth). Both surfaces join recency identically.
+    assert payload == find_like_cli(CORPUS, "messaging")
 
 
 def test_search_artifacts_empty_result_is_not_an_error():
@@ -172,8 +194,7 @@ def test_search_artifacts_body_match_carries_snippet():
     assert match["id"] == REQ
     assert match["section"] == "Problem"
     assert match["snippet"] == "Services are tightly coupled."
-    cli = json.loads(json_output.render_find_json(find_artifacts(CORPUS, "tightly"), explain=True))
-    assert payload == cli
+    assert payload == find_like_cli(CORPUS, "tightly")
 
 
 def test_search_artifacts_metadata_match_omits_snippet_fields():
@@ -181,8 +202,9 @@ def test_search_artifacts_metadata_match_omits_snippet_fields():
     # (ADR-007): no section/snippet keys appear.
     payload = call(CORPUS, "search_artifacts", {"query": "decoupled", "type": "requirement"})
     assert [m["id"] for m in payload["matches"]] == [REQ]
-    # No section/snippet on a metadata match; `evidence` is still additive.
-    assert list(payload["matches"][0]) == ["id", "type", "title", "path", "evidence"]
+    # No section/snippet on a metadata match; `evidence` and `recency` are the
+    # additive trailers (ADR-007), never the per-match snippet fields.
+    assert list(payload["matches"][0]) == ["id", "type", "title", "path", "evidence", "recency"]
     evidence = payload["matches"][0]["evidence"]
     assert {k: evidence[k] for k in ("field", "terms", "tier")} == {
         "field": "title",
