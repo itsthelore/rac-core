@@ -17,6 +17,7 @@ gains a streamable HTTP transport. These tests hold the requirement's contract
 from __future__ import annotations
 
 import asyncio
+import json
 import socket
 import threading
 import time
@@ -237,3 +238,116 @@ def test_serve_http_configures_stateless_settings(monkeypatch):
     assert server.settings.stateless_http is True
     assert server.settings.json_response is True
     assert ran == ["streamable-http"]
+
+
+# --- shared-server audit identity over HTTP (#265) ---------------------------
+
+
+def _serve_with_audit(port: int, path: str, audit_recorder) -> threading.Thread:
+    from rac.mcp.server import build_server
+
+    def _serve() -> None:
+        server = build_server(str(CORPUS), audit_recorder=audit_recorder)
+        transport_mod.serve_http(server, host="127.0.0.1", port=port, path=path)
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    _wait_for_port("127.0.0.1", port)
+    return thread
+
+
+async def _call_as(port: int, path: str, principal: str | None, count: int) -> None:
+    import httpx
+    from mcp.client.session import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    headers = {"X-Lore-Principal": principal} if principal is not None else {}
+    async with httpx.AsyncClient(headers=headers, timeout=30.0) as http_client:
+        async with streamable_http_client(
+            f"http://127.0.0.1:{port}{path}", http_client=http_client
+        ) as (read, write, _sid):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                for _ in range(count):
+                    await session.call_tool("get_summary", {})
+
+
+def test_concurrent_clients_are_attributed_distinctly(tmp_path):
+    from rac.mcp.audit import AuditRecorder
+
+    recorder = AuditRecorder(tmp_path / "audit.jsonl", "host <h@example.com>", transport="http")
+    port, path = _free_port(), "/mcp"
+    _serve_with_audit(port, path, recorder)
+
+    async def _both() -> None:
+        await asyncio.gather(
+            _call_as(port, path, "alice <a@example.com>", 3),
+            _call_as(port, path, "bob <b@example.com>", 3),
+        )
+
+    asyncio.run(_both())
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "audit.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    principals = {ev["principal"] for ev in events}
+    assert "alice <a@example.com>" in principals
+    assert "bob <b@example.com>" in principals
+    assert "host <h@example.com>" not in principals  # host identity never leaks
+    for ev in events:
+        assert ev["transport"] == "http"
+        assert ev["attribution"] == "asserted"
+
+
+def test_unasserted_http_call_is_not_the_host_identity(tmp_path):
+    from rac.mcp.audit import AuditRecorder
+
+    # A shared recorder resolves its construction principal without git; an
+    # unasserted call is recorded with that fallback, never the host's identity.
+    recorder = AuditRecorder(tmp_path / "audit.jsonl", "unattributed", transport="http")
+    port, path = _free_port(), "/mcp"
+    _serve_with_audit(port, path, recorder)
+
+    asyncio.run(_call_as(port, path, None, 1))
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "audit.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(events) == 1
+    assert events[0]["principal"] == "unattributed"
+    assert events[0]["attribution"] == "local"
+    assert events[0]["transport"] == "http"
+
+
+def test_tool_output_is_identical_across_principals(tmp_path):
+    # Attribution never becomes authorization (REQ-005): two callers asserting
+    # different principals get byte-identical tool payloads.
+    import httpx
+    from mcp.client.session import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    from rac.mcp.audit import AuditRecorder
+
+    recorder = AuditRecorder(tmp_path / "audit.jsonl", "unattributed", transport="http")
+    port, path = _free_port(), "/mcp"
+    _serve_with_audit(port, path, recorder)
+
+    async def _get(principal: str) -> str:
+        async with httpx.AsyncClient(headers={"X-Lore-Principal": principal}, timeout=30.0) as hc:
+            async with streamable_http_client(f"http://127.0.0.1:{port}{path}", http_client=hc) as (
+                read,
+                write,
+                _sid,
+            ):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.call_tool("get_summary", {})
+                    return result.content[0].text
+
+    alice = asyncio.run(_get("alice"))
+    bob = asyncio.run(_get("bob"))
+    assert alice == bob

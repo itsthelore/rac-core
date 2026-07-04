@@ -36,6 +36,11 @@ AUDIT_FIELDS = [
     "ts",
     "session",
     "principal",
+    # Additive provenance (rac-shared-server-audit-identity, ADR-098): the
+    # transport that served the call and whether the principal was asserted
+    # per-request or resolved locally. Present on every record, additively.
+    "transport",
+    "attribution",
     "tool",
     "query",
     "returned",
@@ -281,3 +286,77 @@ def test_block_mode_refuses_the_call_on_write_failure(tmp_path, capsys):
     assert data["error"] == "audit-unavailable"
     assert data["tool"] == "get_artifact"
     assert "refusing tool calls" in capsys.readouterr().err
+
+
+# --- Shared-server audit identity (rac-shared-server-audit-identity, ADR-098) ---
+
+
+def test_http_recorder_skips_git_and_blocks(tmp_path, monkeypatch):
+    # On the shared HTTP transport the recorder must not borrow the host's git
+    # identity, and it blocks on write failure regardless of config (REQ-002/003).
+    monkeypatch.delenv("RAC_AUDIT_PRINCIPAL", raising=False)
+    monkeypatch.setenv("RAC_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    config = AuditConfig(enabled=True, path="", on_write_error="warn")
+    recorder = audit.create_recorder(config, ".", transport="http")
+    assert recorder is not None
+    assert recorder.transport == "http"
+    assert recorder.on_write_error == "block"  # elevated from warn for shared serving
+    assert recorder.principal == audit.UNATTRIBUTED  # git skipped; no env override
+
+
+def test_stdio_recorder_keeps_git_identity(tmp_path, monkeypatch):
+    # stdio is byte-unchanged: construction-time git identity still resolves.
+    monkeypatch.delenv("RAC_AUDIT_PRINCIPAL", raising=False)
+    monkeypatch.setenv("RAC_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    config = AuditConfig(enabled=True, path="", on_write_error="warn")
+    recorder = audit.create_recorder(config, ".", transport="stdio")
+    assert recorder is not None
+    assert recorder.transport == "stdio"
+    assert recorder.on_write_error == "warn"
+    # A repo with a git identity resolves it; the sentinel only when git is absent.
+    assert recorder.principal  # non-empty either way
+
+
+def test_resolve_principal_env_override_wins_on_http(monkeypatch):
+    monkeypatch.setenv("RAC_AUDIT_PRINCIPAL", "svc-lore <svc@example.com>")
+    assert audit.resolve_principal(".", allow_git=False) == "svc-lore <svc@example.com>"
+
+
+def test_observe_records_asserted_per_request_principal(tmp_path):
+    recorder = AuditRecorder(tmp_path / "audit.jsonl", "host <h@example.com>", transport="http")
+    audit.observe(
+        recorder, "get_summary", {}, lambda: "{}", request_principal="alice <a@example.com>"
+    )
+    event = events_in(recorder)[-1]
+    assert event["principal"] == "alice <a@example.com>"
+    assert event["attribution"] == "asserted"
+    assert event["transport"] == "http"
+
+
+def test_observe_falls_back_to_local_when_unasserted(tmp_path):
+    recorder = AuditRecorder(tmp_path / "audit.jsonl", "host <h@example.com>", transport="http")
+    audit.observe(recorder, "get_summary", {}, lambda: "{}", request_principal=None)
+    event = events_in(recorder)[-1]
+    assert event["principal"] == "host <h@example.com>"
+    assert event["attribution"] == "local"
+
+
+def test_blank_assertion_is_treated_as_unasserted(tmp_path):
+    recorder = AuditRecorder(tmp_path / "audit.jsonl", "host <h@example.com>", transport="http")
+    audit.observe(recorder, "get_summary", {}, lambda: "{}", request_principal="   ")
+    event = events_in(recorder)[-1]
+    assert event["principal"] == "host <h@example.com>"
+    assert event["attribution"] == "local"
+
+
+def test_asserted_principal_never_reaches_the_tool_body(tmp_path):
+    # Attribution, never authorization (REQ-005): the tool body sees no principal,
+    # so its output is identical whatever the caller asserts.
+    recorder = AuditRecorder(tmp_path / "audit.jsonl", "host <h@example.com>", transport="http")
+    out_a = audit.observe(
+        recorder, "get_summary", {}, lambda: '{"payload": "same"}', request_principal="alice"
+    )
+    out_b = audit.observe(
+        recorder, "get_summary", {}, lambda: '{"payload": "same"}', request_principal="bob"
+    )
+    assert out_a == out_b == '{"payload": "same"}'
