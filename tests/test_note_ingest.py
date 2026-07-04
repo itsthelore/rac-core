@@ -20,6 +20,7 @@ import json
 
 from rac import cli
 from rac.services.note_ingest import (
+    LogseqConverter,
     ObsidianConverter,
     converter_by_name,
     converter_names,
@@ -81,10 +82,11 @@ def test_detect_returns_none_without_marker(tmp_path):
 
 
 def test_registry_lookup():
-    assert converter_names() == ["obsidian"]
+    assert converter_names() == ["logseq", "obsidian"]
     assert converter_by_name("obsidian").name == "obsidian"
-    assert converter_by_name("logseq") is None
-    assert [c.name for c in vault_converters()] == ["obsidian"]
+    assert converter_by_name("logseq").name == "logseq"
+    assert converter_by_name("notion") is None
+    assert {c.name for c in vault_converters()} == {"obsidian", "logseq"}
 
 
 # --- normalisation -----------------------------------------------------------
@@ -252,3 +254,72 @@ def test_cli_from_choices_match_registry(capsys):
         raise AssertionError("expected a parse error for an unknown --from value")
     except SystemExit:
         pass
+
+
+# --- Logseq (reuses the shared resolver; ADR-079) ----------------------------
+
+
+def _logseq_graph(tmp_path):
+    """A small Logseq graph: pages + journals, page links, block refs, properties."""
+    root = tmp_path / "graph"
+    (root / "logseq").mkdir(parents=True)
+    (root / "logseq" / "config.edn").write_text("{}\n", encoding="utf-8")
+    (root / "pages").mkdir()
+    (root / "journals").mkdir()
+    (root / "pages" / "Auth.md").write_text(
+        "type:: decision\n"
+        "- Depends on [[Login Policy]]\n"
+        "- Block ref ((64f-abc-123)) and #sometag\n"
+        "- Unknown [[Ghost Page]]\n",
+        encoding="utf-8",
+    )
+    (root / "pages" / "Login Policy.md").write_text("- Back to [[Auth]]\n", encoding="utf-8")
+    (root / "journals" / "2026_07_04.md").write_text("- Reviewed [[Auth]]\n", encoding="utf-8")
+    return root
+
+
+def test_detects_logseq_graph(tmp_path):
+    assert detect_converter(_logseq_graph(tmp_path)).name == "logseq"
+
+
+def test_logseq_walks_pages_and_journals(tmp_path):
+    result = LogseqConverter().convert_vault(_logseq_graph(tmp_path))
+    sources = {d.source_path for d in result.drafts}
+    assert sources == {
+        "pages/Auth.md",
+        "pages/Login Policy.md",
+        "journals/2026_07_04.md",
+    }
+    # The logseq/ config directory is never walked as a note.
+    assert not any(s.startswith("logseq/") for s in sources)
+
+
+def test_logseq_resolves_page_links_like_obsidian(tmp_path):
+    result = LogseqConverter().convert_vault(_logseq_graph(tmp_path))
+    auth = next(d for d in result.drafts if d.source_path == "pages/Auth.md")
+    assert auth.related == ["pages/Login Policy.md"]
+    assert "[Login Policy](<pages/Login Policy.md>)" in auth.markdown
+    assert any("unresolved" in w and "Ghost Page" in w for w in auth.warnings)
+
+
+def test_logseq_block_refs_properties_and_tags_preserved(tmp_path):
+    result = LogseqConverter().convert_vault(_logseq_graph(tmp_path))
+    auth = next(d for d in result.drafts if d.source_path == "pages/Auth.md")
+    assert "((64f-abc-123))" in auth.markdown  # block reference verbatim
+    assert "type:: decision" in auth.markdown  # property verbatim
+    assert "#sometag" in auth.markdown  # tag verbatim (not a page-link candidate yet)
+
+
+def test_logseq_reingest_is_byte_identical(tmp_path):
+    root = _logseq_graph(tmp_path)
+    first = LogseqConverter().convert_vault(root)
+    second = LogseqConverter().convert_vault(root)
+    assert [d.markdown for d in first.drafts] == [d.markdown for d in second.drafts]
+
+
+def test_cli_from_logseq(tmp_path, capsys):
+    root = _logseq_graph(tmp_path)
+    out = tmp_path / "drafts"
+    assert cli.main(["ingest", str(root), "--from", "logseq", "-o", str(out)]) == cli.EXIT_OK
+    written = {p.relative_to(out).as_posix() for p in out.rglob("*.md")}
+    assert "pages/Auth.md" in written and "journals/2026_07_04.md" in written
