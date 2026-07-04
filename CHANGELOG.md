@@ -118,6 +118,17 @@ as candidate relationships.
   guide also carries a dated, adoption-ordered **harness backlog** — honest about
   what is shipped, drafted, or a candidate, and about which candidates are
   superseded (Gemini CLI is being wound down; Roo Code is archived).
+- **The MCP surface is measured and budgeted.** A knowledge server justifies
+  itself only if it stays lean, so the agent-facing footprint — the five tool
+  descriptions and their JSON schemas a client pays for every session — is now a
+  regression-checked property. A deterministic, offline token count (no model, no
+  network — ADR-066) holds the standing surface under a stated budget: today it
+  measures ~915 tokens against a 1000 budget (for context, comparable MCP servers
+  have been cited around 23k), so a description or schema edit that inflates the
+  surface fails CI rather than quietly taxing every session. Raising the budget
+  needs explicit justification and is itself capped; a representative response is
+  budgeted too. The served five-tool surface is unchanged — this measures, it does
+  not shrink (ADR-033).
 
 ## 2026.06.5 — the "rename" release
 

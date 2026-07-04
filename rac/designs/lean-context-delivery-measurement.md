@@ -7,11 +7,13 @@ type: design
 
 ## Status
 
-Proposed
+Accepted
 
 The concrete accounting method behind `lean-context-delivery` Initiative 1 —
 input to the implementation, not a substitute for the acceptance criteria in
-`rac-mcp-surface-budget`. The Open Questions below are the pickup agenda.
+`rac-mcp-surface-budget`. Implemented in `rac/mcp/surface.py` and checked by
+`tests/test_mcp_surface_budget.py`; the Open Questions below are now resolved and
+recorded there.
 
 ## Context
 
@@ -105,14 +107,27 @@ adjacent, so a change to either is reviewed together.
 
 ## Open Questions
 
-- The exact tokenisation rule to standardise on for the offline count, and how
-  to keep it stable if the surface's serialization changes.
-- The initial budget value and how much headroom to leave above today's
-  measured surface.
-- Whether the "typical response" should be a single representative page or a
-  small basket of queries averaged, and how to pin it against corpus growth.
-- Whether the standing cost (descriptions + schemas) and the per-call cost
-  (typical response) get separate budgets or one combined ceiling.
+All four are now resolved and encoded in `rac/mcp/surface.py`:
+
+- **Tokenisation rule** → a dependency-free deterministic count: word runs
+  (alphanumeric) and each standalone punctuation character count as one token
+  (regex `[A-Za-z0-9]+|[^\sA-Za-z0-9]`). A real model tokenizer would tie the
+  number to a model vocabulary and add a dependency, against the offline/lean
+  posture (ADR-066); the design's own Rationale accepts a faithful-enough proxy,
+  and this is it. Stable across serialization changes because it counts the
+  serialized bytes as advertised, not a model's view of them.
+- **Initial budget + headroom** → the standing surface measures ~915 tokens
+  today; the enforced budget is **1000**. It may be raised only with explicit
+  approval and written justification, up to a hard cap of **1250** (a test pins
+  that the budget constant itself stays within the cap, so a bump is never
+  silent).
+- **Typical response** → a small fixed basket — a representative
+  `search_artifacts` page and a `get_artifact` payload — measured over the pinned
+  `examples/guide` corpus, each held under a per-call ceiling.
+- **Separate vs combined budgets** → **separate**: a corpus-independent standing
+  budget (descriptions + schemas, the headline context-tax number) and a per-call
+  budget over the fixture basket. They catch different regressions — surface bloat
+  versus response-serialization bloat.
 
 ## Related Requirements
 

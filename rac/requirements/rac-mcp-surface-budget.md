@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — a measured, regression-checked property of the
 agent-facing surface. Initiative 1 of the `lean-context-delivery` roadmap.
