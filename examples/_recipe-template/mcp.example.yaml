@@ -1,0 +1,5 @@
+# The same `lore` server invocation as the JSON and TOML dialects, in YAML.
+mcpServers:
+  lore:
+    command: rac
+    args: [mcp, --root, .]
