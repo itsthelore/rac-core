@@ -63,17 +63,18 @@ Obsidian vault, carrying its wikilink graph in as candidate relationships.
   covers when to run one, the container and authenticating-proxy recipe, keeping
   the checkout current with `main`, and where observability lives — the whole
   topology is deployment wrapper around an unchanged, database-free engine.
-- **Ingest an Obsidian vault, Logseq graph, or Notion export (`rac ingest
-  <dir>`).** Point `rac ingest` at a note-tool export directory and each note
-  becomes a reviewable RAC-shaped draft, with the links you already drew
-  (`[[wikilinks]]`, Logseq `[[page links]]`, or Notion's Markdown links) carried
-  in as **candidate `## Related` references** for you to promote — never asserted
-  edges. Deterministic and offline (identical export → byte-identical drafts),
-  lossless (frontmatter, Logseq block references and properties, and Notion's
-  inline properties preserved verbatim), and it never overwrites an existing
-  file. Ambiguous and unresolved links are reported for review, never guessed;
-  Notion database CSVs are reported and skipped (rows arrive as their own pages).
-  Roam follows (ADR-079).
+- **Ingest a note-tool export — Obsidian, Logseq, Notion, or Roam (`rac
+  ingest`).** Point `rac ingest` at a note-tool export directory (or a Roam
+  `graph.json`) and each note becomes a reviewable RAC-shaped draft, with the
+  links you already drew (`[[wikilinks]]`, Logseq/Roam `[[page links]]`, or
+  Notion's Markdown links) carried in as **candidate `## Related` references** for
+  you to promote — never asserted edges. Deterministic and offline (identical
+  export → byte-identical drafts), lossless (frontmatter, block references,
+  properties, and inline metadata preserved verbatim), and it never overwrites an
+  existing file. Ambiguous and unresolved links are reported for review, never
+  guessed; Notion database CSVs are reported and skipped (rows arrive as their
+  own pages); a Roam JSON graph is flattened to outliner Markdown per page
+  (ADR-079).
 
 ## 2026.06.5 — the "rename" release
 
