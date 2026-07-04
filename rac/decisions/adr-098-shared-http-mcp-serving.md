@@ -59,6 +59,18 @@ following boundaries.
   deployment proxy that fronts the endpoint. The standing red lines — no SSO on
   a shared MCP, no RBAC on MCP tools, no hosted multi-tenant service — stand.
 
+- **The attribution carrier is the `X-Lore-Principal` request header.** A caller
+  on the shared endpoint asserts who it is by setting the `X-Lore-Principal`
+  HTTP header (case-insensitive); the audit recorder records that assertion as
+  the per-request principal (`rac-shared-server-audit-identity`). It is
+  *attribution, not authentication* (ADR-084): the engine records what the
+  caller claimed and never verifies it, and the principal is never an
+  access-control input — tool responses are identical whatever the header says.
+  Verifying the claim, if a deployment needs it, is the fronting proxy's job
+  (ADR-085): the proxy authenticates and sets the header it trusts. An unasserted
+  call falls back to the recorder's resolution, never silently borrowing the host
+  process's own git identity as if it were the caller's.
+
 - **Mandatory audit-on for HTTP.** A shared endpoint serves reads no single
   developer's git identity can attribute, so HTTP serving refuses to start
   without a working audit sink (ADR-084's fail-loud posture): the audit log
