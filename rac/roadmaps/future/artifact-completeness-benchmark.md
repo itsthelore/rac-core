@@ -153,3 +153,7 @@ honestly whichever way it falls.
 ## Related Requirements
 
 - rac-artifact-completeness-study
+
+## Related Tickets
+
+- itsthelore/rac-core#299
