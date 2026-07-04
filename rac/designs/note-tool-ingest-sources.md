@@ -126,10 +126,17 @@ as edges the tool has asserted.
 ## Open Questions
 
 - Whether vault-internal link resolution should also propose the *inverse*
-  candidate edge on the target note, or only the forward one.
+  candidate edge on the target note, or only the forward one. **Resolved (v1):
+  forward-only** — the inverse is derivable and would double the candidate noise;
+  a later enhancement may add it.
 - How Notion database CSVs map — as artifact metadata, as relationships, or as
-  separate artifacts.
+  separate artifacts. **Resolved (v1): skipped and reported** — Notion already
+  exports each database row as its own `.md` page, so the CSV is a redundant
+  index; converting it too would double-import. Mapping CSVs to artifacts (for
+  databases whose rows carry no page body) is a later enhancement.
 - Whether detection of export shape is automatic, flag-driven (`--from`), or both.
+  **Resolved (v1): both** — auto-detected by each tool's export marker, with
+  `--from <tool>` as an explicit override.
 
 ## Related Decisions
 
