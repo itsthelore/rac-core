@@ -42,6 +42,7 @@ from rac.services.migrate import (
     STATUS_SKIPPED_UNKNOWN,
     MigrationReport,
 )
+from rac.services.note_ingest import VaultIngestResult
 from rac.services.portfolio import PortfolioSummary
 from rac.services.quickstart import QuickstartResult
 from rac.services.relationships import (
@@ -1412,3 +1413,46 @@ def render_rename_result_human(result: RenameResult) -> str:
             ),
         ]
     )
+
+
+def render_vault_ingest_human(
+    result: VaultIngestResult,
+    written: list[str],
+    skipped: list[str],
+    output_dir: str | None,
+) -> str:
+    """Human summary for `rac ingest <dir>`: what converted, what needs review.
+
+    Leads with the conversion counts, then what needs human attention —
+    ambiguous and unresolved wikilinks — in the scannable style of the existing
+    ingest output. Candidate links are framed as suggestions to promote, never
+    edges the tool asserted (ADR-079).
+    """
+    lines = [
+        f"Ingested {result.note_count} note(s) from {result.root} via {result.converter}.",
+        f"  {result.resolved_link_count} wikilink(s) resolved to candidate ## Related references.",
+    ]
+    if result.warning_count:
+        lines.append(
+            f"  {result.warning_count} link(s) need review (ambiguous or unresolved) — "
+            "left inline, never guessed."
+        )
+    if output_dir is not None:
+        lines.append("")
+        lines.append(f"Wrote {len(written)} draft(s) to {output_dir}.")
+        if skipped:
+            lines.append(
+                f"Skipped {len(skipped)} draft(s) — an artifact already exists "
+                "(pass --force to overwrite):"
+            )
+            lines.extend(f"  - {path}" for path in skipped)
+    else:
+        lines.append("")
+        lines.append("Preview only — pass -o <dir> to write the drafts for review.")
+    if result.warning_count:
+        lines.append("")
+        lines.append("Links to review:")
+        for draft in result.drafts:
+            for warning in draft.warnings:
+                lines.append(f"  {draft.source_path}: {warning}")
+    return "\n".join(lines)

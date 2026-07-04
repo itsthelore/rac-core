@@ -26,6 +26,7 @@ from rac.services.ingest import IngestResult
 from rac.services.init import InitResult
 from rac.services.inspect import DirectoryInspection, InspectionResult
 from rac.services.migrate import MigrationReport
+from rac.services.note_ingest import VaultIngestResult
 from rac.services.portfolio import PortfolioSummary
 from rac.services.quickstart import QuickstartResult
 from rac.services.relationships import RelationshipReport, RelationshipValidation
@@ -289,6 +290,41 @@ def render_ingest_json(result: IngestResult, output_path: str | None) -> str:
         "converter": result.converter,
         "output": output_path,
         "markdown": result.markdown,
+    }
+    return json.dumps(payload, indent=2)
+
+
+def render_vault_ingest_json(
+    result: VaultIngestResult,
+    written: list[str],
+    skipped: list[str],
+    output_dir: str | None,
+) -> str:
+    """JSON `rac ingest <dir>` output (stable contract, ADR-007).
+
+    Carries every draft's normalised Markdown and its candidate relationships and
+    warnings, plus what was written or skipped, so a consumer can drive the review
+    step programmatically. Order mirrors the deterministic note walk.
+    """
+    payload = {
+        "converter": result.converter,
+        "root": result.root,
+        "output_dir": output_dir,
+        "note_count": result.note_count,
+        "resolved_link_count": result.resolved_link_count,
+        "warning_count": result.warning_count,
+        "written": written,
+        "skipped": skipped,
+        "drafts": [
+            {
+                "source": draft.source_path,
+                "suggested_filename": draft.suggested_filename,
+                "related": draft.related,
+                "warnings": draft.warnings,
+                "markdown": draft.markdown,
+            }
+            for draft in result.drafts
+        ],
     }
     return json.dumps(payload, indent=2)
 
