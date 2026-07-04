@@ -74,7 +74,7 @@ jobs:
           - name: index
             paths: "tests/test_index.py"
           - name: ingest
-            paths: "tests/test_ingest.py"
+            paths: "tests/test_ingest.py tests/test_note_ingest.py"
           - name: init
             paths: "tests/test_init.py tests/test_profiles.py"
           - name: quickstart
