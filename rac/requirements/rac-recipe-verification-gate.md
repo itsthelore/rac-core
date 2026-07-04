@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — governs when a recipe becomes a listed,
 verified integration. Initiative 3 of the `integration-recipe-factory`
