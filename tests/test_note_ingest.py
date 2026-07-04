@@ -21,6 +21,7 @@ import json
 from rac import cli
 from rac.services.note_ingest import (
     LogseqConverter,
+    NotionConverter,
     ObsidianConverter,
     converter_by_name,
     converter_names,
@@ -82,11 +83,12 @@ def test_detect_returns_none_without_marker(tmp_path):
 
 
 def test_registry_lookup():
-    assert converter_names() == ["logseq", "obsidian"]
+    assert converter_names() == ["logseq", "notion", "obsidian"]
     assert converter_by_name("obsidian").name == "obsidian"
     assert converter_by_name("logseq").name == "logseq"
-    assert converter_by_name("notion") is None
-    assert {c.name for c in vault_converters()} == {"obsidian", "logseq"}
+    assert converter_by_name("notion").name == "notion"
+    assert converter_by_name("roam") is None
+    assert {c.name for c in vault_converters()} == {"obsidian", "logseq", "notion"}
 
 
 # --- normalisation -----------------------------------------------------------
@@ -323,3 +325,78 @@ def test_cli_from_logseq(tmp_path, capsys):
     assert cli.main(["ingest", str(root), "--from", "logseq", "-o", str(out)]) == cli.EXIT_OK
     written = {p.relative_to(out).as_posix() for p in out.rglob("*.md")}
     assert "pages/Auth.md" in written and "journals/2026_07_04.md" in written
+
+
+# --- Notion (standard Markdown links, hashed files, CSVs; ADR-079) -----------
+
+_H1 = "a" * 32
+_H2 = "b" * 32
+_H3 = "c" * 32
+
+
+def _notion_export(tmp_path):
+    """A small Notion "Markdown & CSV" export: hashed pages, links, a database."""
+    root = tmp_path / "export"
+    root.mkdir()
+    (root / f"Auth Policy {_H1}.md").write_text(
+        f"# Auth Policy\n\nStatus: Active\n\n"
+        f"Depends on [Login Policy](Login%20Policy%20{_H2}.md).\n"
+        f"An [external site](https://example.com) and a [missing]({'d' * 32}.md).\n",
+        encoding="utf-8",
+    )
+    (root / f"Login Policy {_H2}.md").write_text(
+        f"# Login Policy\n\nBack to [Auth Policy](Auth%20Policy%20{_H1}.md).\n",
+        encoding="utf-8",
+    )
+    # A database: a CSV index plus its rows exported as pages in a folder.
+    (root / f"Tasks {_H3}.csv").write_text("Name,Status\nTask A,Done\n", encoding="utf-8")
+    (root / f"Tasks {_H3}").mkdir()
+    (root / f"Tasks {_H3}" / f"Task A {'e' * 32}.md").write_text(
+        "# Task A\n\nRow page body.\n", encoding="utf-8"
+    )
+    return root
+
+
+def test_detects_notion_export(tmp_path):
+    assert detect_converter(_notion_export(tmp_path)).name == "notion"
+
+
+def test_notion_resolves_internal_markdown_links(tmp_path):
+    result = NotionConverter().convert_vault(_notion_export(tmp_path))
+    auth = next(d for d in result.drafts if d.source_path.startswith("Auth Policy"))
+    assert auth.related == [f"Login Policy {_H2}.md"]
+    # External links and unresolved page links never become candidates.
+    assert not any("example.com" in r for r in auth.related)
+    assert any("unresolved" in w and "missing" in w for w in auth.warnings)
+
+
+def test_notion_body_is_preserved_verbatim(tmp_path):
+    result = NotionConverter().convert_vault(_notion_export(tmp_path))
+    auth = next(d for d in result.drafts if d.source_path.startswith("Auth Policy"))
+    assert "Status: Active" in auth.markdown  # inline properties kept
+    assert "https://example.com" in auth.markdown  # external link untouched
+
+
+def test_notion_row_pages_ingested_and_csv_skipped(tmp_path):
+    result = NotionConverter().convert_vault(_notion_export(tmp_path))
+    sources = {d.source_path for d in result.drafts}
+    # The database row exported as a page is ingested...
+    assert any(s.startswith(f"Tasks {_H3}/Task A") for s in sources)
+    # ...and the redundant CSV index is reported, not converted.
+    assert result.skipped_sources == [f"Tasks {_H3}.csv"]
+    assert not any(s.endswith(".csv") for s in sources)
+
+
+def test_notion_reingest_is_byte_identical(tmp_path):
+    root = _notion_export(tmp_path)
+    first = NotionConverter().convert_vault(root)
+    second = NotionConverter().convert_vault(root)
+    assert [d.markdown for d in first.drafts] == [d.markdown for d in second.drafts]
+
+
+def test_cli_notion_json_reports_skipped_csv(tmp_path, capsys):
+    root = _notion_export(tmp_path)
+    assert cli.main(["ingest", str(root), "--from", "notion", "--json"]) == cli.EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["converter"] == "notion"
+    assert payload["skipped_sources"] == [f"Tasks {_H3}.csv"]
