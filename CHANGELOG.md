@@ -13,8 +13,9 @@ validated, never inferred; deterministic and offline. Plus the completed
 always-current HTTP endpoint, with an optional content-addressed cache so
 per-call latency stops scaling with corpus size, per-caller audit attribution,
 and an operator guide for running it — servers and caches over git, no database.
-And the first of the **note-tool ingest sources**: `rac ingest` now imports an
-Obsidian vault, carrying its wikilink graph in as candidate relationships.
+And the completed **note-tool ingest sources**: `rac ingest` now imports
+Obsidian, Logseq, Notion, and Roam exports, carrying each source's link graph in
+as candidate relationships.
 
 ### Added
 

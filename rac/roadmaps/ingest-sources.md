@@ -7,7 +7,21 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
+
+Delivered across all four initiatives (itsthelore/rac-core#227). `rac ingest`
+now imports note-tool exports by normalisation through the ADR-072 registry
+(ADR-079): Obsidian vaults (#292), Logseq graphs (#297), Notion "Markdown & CSV"
+exports (#298), and Roam JSON graphs (#303). Each note becomes a reviewable
+RAC-shaped draft; the source's wikilinks / page links become **candidate**
+`## Related` references a human promotes, never asserted edges (ADR-074, ADR-065);
+conversion is deterministic and offline, lossless by default, and never
+overwrites an existing artifact (ADR-002). The four tool converters share one
+resolver and draft-assembly path so a format's drift cannot break another, and a
+committed golden fixture pins byte-identical drafts. The engine core and the
+markitdown binary-document path are unchanged. The design's Open Questions
+closed as recorded on `note-tool-ingest-sources` (forward-only candidates; Notion
+CSVs skipped as a redundant index; detection auto plus `--from`).
 
 ## Context
 
