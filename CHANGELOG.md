@@ -46,6 +46,15 @@ per-call latency stops scaling with corpus size.
   It is disposable and never authoritative: keyed on a corpus content hash so
   any byte change rebuilds it, byte-identical to the uncached path, and deleting
   it costs only latency (ADR-099). Off by default.
+- **Per-caller attribution on the shared server.** When serving over HTTP, each
+  caller asserts who it is with an `X-Lore-Principal` header, and the read-access
+  audit log records that per-request principal instead of the host identity — so
+  an auditor can answer "who read what, when" per caller. Records gain additive
+  `transport` and `attribution` fields marking asserted-over-HTTP versus locally
+  resolved identity. It stays attribution, not authentication (the engine never
+  verifies it; your proxy does), the principal never affects tool output, and
+  shared HTTP serving blocks a call if the audit sink write fails
+  (ADR-098). stdio behaviour is unchanged.
 
 ## 2026.06.5 — the "rename" release
 

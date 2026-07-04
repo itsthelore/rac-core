@@ -332,7 +332,8 @@ audit:
   and keeps serving; `block` refuses the call with an `audit-unavailable` error
   rather than returning un-audited content.
 
-Each line records `ts`, a per-process `session`, the `principal`, the `tool`, the
+Each line records `ts`, a per-process `session`, the `principal`, the `transport`
+(`stdio` or `http`), the `attribution` (`asserted` or `local`), the `tool`, the
 `query`, the `returned` artifact IDs, `outcome`, and `duration_ms`. The
 **principal is attributable, not authenticated** (ADR-084): it defaults to the git
 `user.name`/`user.email` in the served repository and can be overridden with the
@@ -340,6 +341,29 @@ Each line records `ts`, a per-process `session`, the `principal`, the `tool`, th
 repository ACL plus human pull-request review — the log records who *claimed* to
 query, not a verified identity. When enabled, the server announces it on stderr at
 startup; it is never silent.
+
+### Per-caller attribution on a shared server
+
+On a shared HTTP endpoint (`--transport http`) one process serves the whole team,
+so a single construction-time principal would record every caller as the host.
+Each request instead asserts who it is with the **`X-Lore-Principal`** header, and
+the audit line records that per-request principal with `transport: http` and
+`attribution: asserted`
+([ADR-098](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-098-shared-http-mcp-serving.md)):
+
+```
+X-Lore-Principal: Alice Ng <alice@example.com>
+```
+
+This stays **attribution, not authentication**: the engine records what the caller
+claimed and never verifies it, and the principal is never an access-control input —
+tool responses are identical whatever the header says. If you need the assertion to
+be trustworthy, your fronting proxy authenticates the caller and sets the header it
+trusts (ADR-085). A request that asserts nothing is recorded with `attribution:
+local`, and the shared server's fallback **skips the host's git identity** (it
+resolves `RAC_AUDIT_PRINCIPAL`, else `unattributed`) so a caller's read is never
+mislabelled as the host. Shared HTTP serving is also mandatory audit-on: it refuses
+to start without a working sink, and a sink write failure blocks the call.
 
 ## 9. Shared HTTP endpoint (team scale)
 
