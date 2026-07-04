@@ -171,15 +171,24 @@ def _git_identity(root: str) -> str | None:
     return email or name
 
 
-def resolve_principal(root: str) -> str:
+def resolve_principal(root: str, *, allow_git: bool = True) -> str:
     """The audit principal: ``RAC_AUDIT_PRINCIPAL`` > git identity > ``unattributed``.
 
     Attributable, not authenticated (ADR-084): records who *claimed* to query.
+
+    ``allow_git`` is ``False`` on a shared server (ADR-098): the served checkout's
+    git identity is the *host* process's, not any caller's, so a shared endpoint
+    must never borrow it as a per-call fallback. There the chain is the explicit
+    ``RAC_AUDIT_PRINCIPAL`` override, else ``unattributed``; a caller attributes
+    itself per request via the ``X-Lore-Principal`` header instead
+    (``rac-shared-server-audit-identity``).
     """
     override = os.environ.get(PRINCIPAL_ENV)
     if override and override.strip():
         return override.strip()
-    return _git_identity(root) or UNATTRIBUTED
+    if allow_git:
+        return _git_identity(root) or UNATTRIBUTED
+    return UNATTRIBUTED
 
 
 class AuditRecorder:
@@ -191,10 +200,20 @@ class AuditRecorder:
     un-recordable call rather than disabling itself after the first.
     """
 
-    def __init__(self, path: Path, principal: str, on_write_error: str = "warn") -> None:
+    def __init__(
+        self,
+        path: Path,
+        principal: str,
+        on_write_error: str = "warn",
+        transport: str = "stdio",
+    ) -> None:
         self.path = path
         self.principal = principal
         self.on_write_error = on_write_error
+        # The transport this recorder serves ("stdio" | "http"): stamped on every
+        # event so an auditor can tell shared-endpoint records from local ones
+        # (rac-shared-server-audit-identity, ADR-098).
+        self.transport = transport
         self.session = secrets.token_hex(8)
         self._warned = False
 
@@ -216,19 +235,39 @@ class AuditRecorder:
             return False
 
 
-def create_recorder(config: AuditConfig, root: str) -> AuditRecorder | None:
-    """Build an audit recorder when enabled, else ``None`` (the default-absent path)."""
+def create_recorder(
+    config: AuditConfig, root: str, *, transport: str = "stdio"
+) -> AuditRecorder | None:
+    """Build an audit recorder when enabled, else ``None`` (the default-absent path).
+
+    ``transport`` shapes the shared-server posture (ADR-098,
+    ``rac-shared-server-audit-identity``). On ``"http"`` the recorder is
+    *shared*: its construction-time principal skips the host git identity
+    (per-call attribution comes from the ``X-Lore-Principal`` header instead), and
+    write failures block the call (``on_write_error: block``) rather than warn, so
+    a shared endpoint never serves un-recordable reads. ``"stdio"`` is the local
+    default and is byte-unchanged.
+    """
     if not config.enabled:
         return None
+    shared = transport == "http"
     path = audit_path(config)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass  # the recorder's first write will fail loud
-    return AuditRecorder(path, resolve_principal(root), config.on_write_error)
+    principal = resolve_principal(root, allow_git=not shared)
+    on_write_error = "block" if shared else config.on_write_error
+    return AuditRecorder(path, principal, on_write_error, transport=transport)
 
 
-def observe(recorder: AuditRecorder | None, tool: str, args: dict, call: Callable[[], str]) -> str:
+def observe(
+    recorder: AuditRecorder | None,
+    tool: str,
+    args: dict,
+    call: Callable[[], str],
+    request_principal: str | None = None,
+) -> str:
     """Run ``call``, record one audit event, and return the payload unchanged.
 
     With no recorder this is exactly ``call()`` — audit off creates nothing and
@@ -237,16 +276,29 @@ def observe(recorder: AuditRecorder | None, tool: str, args: dict, call: Callabl
     (ADR-034). Under ``on_write_error: block`` a failed write refuses the call
     with a structured ``audit-unavailable`` error rather than serving un-audited
     content.
+
+    ``request_principal`` is the per-request attribution a shared endpoint
+    supplies (the ``X-Lore-Principal`` header, ADR-098): when present it is the
+    event's principal and the event is flagged ``attribution: "asserted"``;
+    otherwise the recorder's construction-time principal is used
+    (``attribution: "local"``). Attribution, never authorization
+    (``rac-shared-server-audit-identity``): the principal never enters ``call``,
+    so tool output is identical whatever it is.
     """
     if recorder is None:
         return call()
+    stripped = request_principal.strip() if request_principal else ""
+    asserted = bool(stripped)
+    principal = stripped if asserted else recorder.principal
     started = time.perf_counter()
     try:
         payload = call()
     except BaseException:
-        recorder.record(_event(recorder, tool, args, [], "exception", started))
+        recorder.record(_event(recorder, tool, args, [], "exception", started, principal, asserted))
         raise
-    event = _event(recorder, tool, args, _returned(payload), _outcome(payload), started)
+    event = _event(
+        recorder, tool, args, _returned(payload), _outcome(payload), started, principal, asserted
+    )
     if not recorder.record(event) and recorder.on_write_error == "block":
         return json.dumps(
             {"schema_version": SCHEMA_VERSION, "error": ERROR_AUDIT_UNAVAILABLE, "tool": tool},
@@ -262,12 +314,20 @@ def _event(
     returned: list[str],
     outcome: str,
     started: float,
+    principal: str,
+    asserted: bool,
 ) -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "ts": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "session": recorder.session,
-        "principal": recorder.principal,
+        "principal": principal,
+        # Provenance of the principal (additive, ADR-007): which transport served
+        # the call, and whether the principal was asserted per-request (over HTTP)
+        # or resolved locally at construction — so an auditor reads the trust
+        # status of each attribution straight from the record.
+        "transport": recorder.transport,
+        "attribution": "asserted" if asserted else "local",
         "tool": tool,
         "query": dict(args),
         "returned": returned,
