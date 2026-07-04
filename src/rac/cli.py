@@ -1414,7 +1414,7 @@ def build_parser() -> argparse.ArgumentParser:
         "ingest",
         help=(
             "Convert a document (DOCX, PDF, HTML, PPTX, XLSX, Markdown) — or a "
-            "note-tool export directory (Obsidian) — to RAC-shaped Markdown."
+            "note-tool export directory (Obsidian, Logseq) — to RAC-shaped Markdown."
         ),
         parents=[version_parent],
     )
@@ -1436,7 +1436,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_ingest.add_argument(
         "--from",
         dest="from_tool",
-        choices=("obsidian",),
+        choices=("obsidian", "logseq"),
         help="Force a note-tool converter for a directory export (default: auto-detect).",
     )
     p_ingest.add_argument(
