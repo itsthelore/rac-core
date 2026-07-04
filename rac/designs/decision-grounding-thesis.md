@@ -125,11 +125,17 @@ human-ratified. That is the layer, and it is where Lore sits (ADR-081's
    feature: reproducibility, auditability, air-gap, and the "settled"
    assertion (ADR-066, ADR-034); the Sourcegraph-reversed-out-of-embeddings
    data point (ADR-081) as external corroboration.
-6. **Evaluation** — the none / RAG / rac-corpus grounding-arm study with an
-   executable task-success outcome (`rac-grounding-baseline-study`).
+6. **Evaluation** — **SWE-DecisionBench** (the published identity of the
+   `decisiongrounding` benchmark), reporting two co-primary deterministic
+   outcomes over the `no_grounding` / `naive_rag` / `rac` / `context_dump`
+   arms: structural decision-adherence and decision-conditioned executable
+   resolution (`rac-grounding-baseline-study`).
 7. **Related work** — position off Böckeler's spec-driven axis (via the Spec
-   Growth Engine); contrast agent-memory/RAG (the `rac-growth-agent-memory-
-   positioning` taxonomy) and requirements-management tools.
+   Growth Engine); place SWE-DecisionBench in the SWE-bench lineage (SWE-bench
+   resolution → SWE-ContextBench episodic context → SWE-DecisionBench
+   governing-decision adherence); contrast agent-memory/RAG (the
+   `rac-growth-agent-memory-positioning` taxonomy) and requirements-management
+   tools.
 8. **Discussion and limits** — single-corpus scope; the external-edge
    limitation; honest treatment of a null or partial result.
 
