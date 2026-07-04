@@ -80,4 +80,15 @@ unconnected run violates: [`examples/guide/`](../guide/demo.md).
 | `lore` MCP | `~/.codeium/windsurf/mcp_config.json` → `rac mcp --root <abs>` | Calls `find_decisions` / `get_related` on demand |
 | CI gate | `rac validate` · `rac relationships --validate` | Enforces on every PR |
 
+## Verification status
+
+- **Engine half — mechanically verified (2026-07-04).** The `rac mcp` invocation
+  this recipe prescribes was smoke-tested over stdio against `examples/guide/`: the
+  five `lore` tools respond and `search_artifacts` / `get_artifact` / `get_related`
+  return the grounding decision. This is the RAC-owned half every recipe shares.
+- **Harness half — not yet verified.** Running the grounding demo *through Windsurf
+  itself* (config parsing plus a live agent) needs the released app and an API key
+  — a human/CI step. Until it is done, this recipe keeps the `verify against`
+  marker below and stays out of [`docs/ecosystem.md`](../../docs/ecosystem.md).
+
 <!-- TODO: verify against Windsurf <version> before listing in docs/ecosystem.md -->
