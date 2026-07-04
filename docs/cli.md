@@ -197,16 +197,19 @@ Conversion uses optional extras. Install the readers you need:
 `pip install 'rac-core[ingest]'` (DOCX/HTML), `[ingest-pdf]`,
 `[ingest-office]` (PPTX/XLSX), or `[ingest-all]`.
 
-### Note-tool exports (Obsidian)
+### Note-tool exports (Obsidian, Logseq)
 
 Point `rac ingest` at a **note-tool export directory** and it normalises the
 whole vault — each note becomes a RAC-shaped draft, and the wikilink graph you
 already drew is carried in as **candidate `## Related` references** rather than
-flattened to plain text. Obsidian is supported today; the converters need no
-extra to install.
+flattened to plain text. Obsidian and Logseq are supported today; the converters
+need no extra to install.
 
-- **Input:** `rac ingest <dir>` — the export directory (a vault). The tool is
-  auto-detected from its layout; force it with `--from obsidian`.
+- **Input:** `rac ingest <dir>` — the export directory (an Obsidian vault or a
+  Logseq graph). The tool is auto-detected from its layout; force it with
+  `--from obsidian` or `--from logseq`. Logseq's `pages/` and `journals/` notes
+  are walked; its `[[page links]]` resolve like Obsidian's, while block
+  references (`((id))`) and `key:: value` properties are preserved verbatim.
 - **Output:** `-o <dir>` writes one draft per note (mirroring the vault's
   structure) and **never overwrites an existing file** — pass `--force` to
   replace. Without `-o`, a summary previews what would convert and what needs
