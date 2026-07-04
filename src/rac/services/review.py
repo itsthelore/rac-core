@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from .drift import detect_drift
 from .portfolio import (
     ATTENTION_BROKEN_RELATIONSHIP,
     ATTENTION_INVALID,
@@ -41,9 +42,13 @@ PRIORITY_UNKNOWN_ARTIFACT = 3
 PRIORITY_MISSING_RECOMMENDED = 4
 # Write-cadence nudge (v0.13.3): below every other finding, never fails review.
 PRIORITY_STALE_CORPUS = 5
+# Suspect-link drift (freshness-and-drift-detection, phase 1): advisory, same
+# below-everything band as the cadence nudge; never fails review (REQ-002/007).
+PRIORITY_SUSPECT_ARTIFACT = 5
 
 REVIEW_UNKNOWN_ARTIFACT = "unknown-artifact"
 REVIEW_STALE_CORPUS = "stale-corpus"
+REVIEW_SUSPECT_ARTIFACT = "suspect-artifact"
 
 # Default cadence window when `--stale-after` is given without a value: two
 # weeks (v0.13.3).
@@ -72,6 +77,9 @@ _IMPACT = {
     REVIEW_UNKNOWN_ARTIFACT: "No schema matched, so required structure cannot be checked.",
     REVIEW_STALE_CORPUS: (
         "The write habit has stalled; product knowledge stops reflecting the work."
+    ),
+    REVIEW_SUSPECT_ARTIFACT: (
+        "A referenced target changed after this artifact, so the record may no longer reflect it."
     ),
 }
 
@@ -190,12 +198,47 @@ def build_review(
     """
     portfolio = build_portfolio_summary(directory, recursive=recursive)
     report = review_from_portfolio(directory, portfolio, recursive=recursive)
+    extra: list[ReviewIssue] = []
     if stale_after_days is not None:
         finding = _cadence_finding(directory, recursive, stale_after_days, now=now)
         if finding is not None:
-            report.issues.append(finding)
-            report.issues.sort(key=lambda i: (i.priority, i.path, i.code))
+            extra.append(finding)
+    # Advisory suspect links: a referenced target changed after its referrer
+    # (freshness-and-drift-detection phase 1). Deterministic, git-derived, and
+    # silent outside git; surfaced beside the cadence nudge (REQ-002), never
+    # failing the review (priority 5, below the 1–2 gating band).
+    extra.extend(_drift_advisories(directory, recursive))
+    if extra:
+        report.issues.extend(extra)
+        report.issues.sort(key=lambda i: (i.priority, i.path, i.code))
     return report
+
+
+def _drift_advisories(directory: str, recursive: bool) -> list[ReviewIssue]:
+    """Suspect-link drift as advisory review findings (REQ-002).
+
+    The same drift the doctor `suspect-artifact` finding reports, surfaced through
+    review's advisory channel with a runnable next step. Empty outside git.
+    """
+    advisories: list[ReviewIssue] = []
+    for d in detect_drift(directory, recursive=recursive):
+        advisories.append(
+            ReviewIssue(
+                priority=PRIORITY_SUSPECT_ARTIFACT,
+                severity="info",
+                path=d.source_path,
+                identifier=Path(d.source_path).stem,
+                code=REVIEW_SUSPECT_ARTIFACT,
+                message=(
+                    f"References {d.target_path}, which changed on "
+                    f"{d.target_committed.date().isoformat()} after this artifact's last "
+                    f"change ({d.source_committed.date().isoformat()}); review for staleness."
+                ),
+                action=f"Run: rac doctor {directory}",
+                impact=impact_for(REVIEW_SUSPECT_ARTIFACT),
+            )
+        )
+    return advisories
 
 
 def _cadence_finding(

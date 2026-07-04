@@ -104,6 +104,53 @@ def _first_committed(repo_root: str, path: str) -> datetime | None:
     return None
 
 
+# --- Revision reads (freshness-and-drift-detection, phase 1, ADR-045) ---------
+#
+# Drift's "content change, not touch" tuning needs to read an artifact as it stood
+# at a past commit. These reuse the same narrow git touchpoint (no third git
+# module) and degrade to ``None`` when git cannot answer, the revision is missing
+# (a shallow clone), or the file did not exist there — the caller then falls back
+# conservatively.
+
+
+def repository_root(directory: str) -> str | None:
+    """The work-tree root containing ``directory``, or ``None`` if not a repo."""
+    return _repository_root(directory)
+
+
+def last_change_sha(repo_root: str, path: str) -> str | None:
+    """Full SHA of the most recent commit that touched ``path``, or ``None``."""
+    result = _run_git(["log", "-1", "--format=%H", "--", _pathspec(repo_root, path)], cwd=repo_root)
+    if result is None or result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def first_change_sha(repo_root: str, path: str) -> str | None:
+    """Full SHA of the earliest commit that touched ``path``, or ``None``."""
+    result = _run_git(
+        ["log", "--reverse", "--format=%H", "--", _pathspec(repo_root, path)], cwd=repo_root
+    )
+    if result is None or result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        if line.strip():
+            return line.strip()
+    return None
+
+
+def file_at_revision(repo_root: str, rev: str, path: str) -> str | None:
+    """``path``'s text as of commit ``rev``, or ``None`` when git cannot answer.
+
+    ``None`` covers an unknown revision, a shallow clone missing it, or the file
+    not existing at that revision — all degrade to the caller's conservative path.
+    """
+    result = _run_git(["show", f"{rev}:{_pathspec(repo_root, path)}"], cwd=repo_root)
+    if result is None or result.returncode != 0:
+        return None
+    return result.stdout
+
+
 @dataclass
 class ArtifactRecency:
     """One artifact's authored times, or ``None`` when git does not know.

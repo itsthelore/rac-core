@@ -36,6 +36,7 @@ from typing import Any
 
 from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusCache, CorpusEntry
+from rac.services.drift import detect_drift
 from rac.services.links import detect_unlinked_references
 from rac.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
@@ -64,6 +65,10 @@ CODE_ORPHANED_ARTIFACT = "orphaned-artifact"
 CODE_HIGH_FAN_OUT_HUB = "high-fan-out-hub"
 CODE_INJECTION_CONTENT = "injection-style-content"
 CODE_UNLINKED_REFERENCE = "unlinked-reference"
+# The git-native suspect link (freshness-and-drift-detection, phase 1): a
+# referenced target changed after its referrer. Advisory WARNING; the stable code
+# admits additive code-scope-drift extension later without renaming (REQ-007).
+CODE_SUSPECT_ARTIFACT = "suspect-artifact"
 
 # Heuristic injection-style idioms (REQ-005): instruction overrides, role/system
 # impersonation, concealment from the user, and steering away from recorded
@@ -184,6 +189,7 @@ def diagnose(
     findings.extend(_degree_findings(entries, hub_threshold))
     findings.extend(_injection_findings(entries))
     findings.extend(_unlinked_reference_findings(directory, entries, recursive))
+    findings.extend(_drift_findings(directory, recursive, entries))
     # Deterministic order: errors before warnings, then path, code, problem.
     findings.sort(key=lambda f: (_SEVERITY_RANK[f.severity], f.path, f.code, f.problem))
     return DoctorReport(directory=directory, hub_threshold=hub_threshold, findings=findings)
@@ -336,6 +342,40 @@ def _unlinked_reference_findings(
                     f"Add `{ref.suggested_line}` under `## {ref.related_section}` "
                     "if the link is intended — a suggestion to review; RAC writes "
                     "no edge (ADR-082)."
+                ),
+            )
+        )
+    return findings
+
+
+def _drift_findings(
+    directory: str, recursive: bool, entries: list[CorpusEntry]
+) -> list[DoctorFinding]:
+    """Advisory suspect-artifact findings: a referenced target changed after its referrer.
+
+    The git-native suspect link (REQ-001/002): computed from the recency service
+    (ADR-045) and the validated relationship graph (ADR-074) over the shared corpus
+    snapshot, so no extra corpus walk happens here. Warning severity, exit 0
+    preserved; outside git the drift service returns nothing (ADR-045). Names the
+    newer target and the evidencing dates as facts, with a review-recommended fix
+    and never an auto-fix (ADR-034, REQ-004).
+    """
+    findings: list[DoctorFinding] = []
+    for d in detect_drift(directory, recursive=recursive, entries=entries):
+        findings.append(
+            DoctorFinding(
+                path=d.source_path,
+                code=CODE_SUSPECT_ARTIFACT,
+                severity=SEVERITY_WARNING,
+                problem=(
+                    f"references {d.target_path} (via {d.relationship}), which changed on "
+                    f"{d.target_committed.date().isoformat()} after this artifact's last "
+                    f"change on {d.source_committed.date().isoformat()} — possibly stale "
+                    "(suspect link)"
+                ),
+                fix=(
+                    "Review whether this artifact still reflects the referenced target and "
+                    "update it if needed. Advisory only — RAC writes nothing (ADR-034)."
                 ),
             )
         )
