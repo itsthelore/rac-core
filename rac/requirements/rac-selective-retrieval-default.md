@@ -7,7 +7,7 @@ type: requirement
 
 ## Status
 
-Proposed
+Accepted
 
 Classification: `[internal]` — a default-behaviour guarantee for the retrieval
 path. Initiative 2 of the `lean-context-delivery` roadmap.

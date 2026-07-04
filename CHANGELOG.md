@@ -129,6 +129,17 @@ as candidate relationships.
   needs explicit justification and is itself capped; a representative response is
   budgeted too. The served five-tool surface is unchanged — this measures, it does
   not shrink (ADR-033).
+- **Lean context delivery documented.** A new
+  [Context Cost](docs/context-cost.md) guide explains how Lore keeps the agent-
+  facing footprint small: the measured MCP budget, **selective on-demand retrieval
+  by default** (search and lookup return the relevant artifacts, never the whole
+  corpus — the antidote to context rot; bulk delivery is an explicit `rac export`,
+  not a default), and the **CLI as a first-class, lowest-tax delivery path**
+  (`find` / `resolve` / `relationships` ground an agent with zero standing token
+  cost, with when-to-use-which guidance against the MCP server — both stay
+  supported, neither is deprecated). Selectivity is by scoping, never by lossy
+  compression (ADR-066); the selective-by-default guarantee is now asserted in the
+  test suite.
 
 ## 2026.06.5 — the "rename" release
 
