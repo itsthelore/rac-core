@@ -19,13 +19,17 @@ cadence nudge, v0.13.3) stay inside ADR-017.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
+
+import yaml
 
 from rac.core.markdown import parse
 from rac.services.agent_rules import artifact_status
 from rac.services.index import build_repository_index
+from rac.services.init import find_config_file
 
 # Field separator for combined ``git log --format`` records. The unit-separator
 # control byte never appears in a commit date, author name, or email, so a
@@ -322,3 +326,126 @@ def artifact_provenance(directory: str, path: str) -> ArtifactProvenance:
         first_author=first_author,
         status_history=_status_history(repo_root, path),
     )
+
+
+# --- Staleness indicator (freshness-and-drift phase 1, ADR-045) ---------------
+#
+# A documented, deterministic function of an artifact's last-committed age
+# against a configurable threshold, reported as data beside its date — never a
+# score or verdict (ADR-034). The last-committed date is the git fact (stable for
+# a fixed git state); the derived ``age_days`` / ``stale`` are relative to a
+# reference time (``now`` by default, injectable so tests stay deterministic).
+
+# The documented default: an artifact untouched for this many days reads "stale".
+DEFAULT_STALE_AFTER_DAYS = 180
+
+
+@dataclass(frozen=True)
+class Staleness:
+    """One artifact's freshness: its last-committed date and derived indicator."""
+
+    last_committed: datetime | None
+    age_days: int | None
+    stale: bool | None
+
+    def to_dict(self) -> dict:
+        return {
+            "last_committed": self.last_committed.isoformat() if self.last_committed else None,
+            "age_days": self.age_days,
+            "stale": self.stale,
+        }
+
+
+def staleness(
+    last_committed: datetime | None,
+    *,
+    threshold_days: int = DEFAULT_STALE_AFTER_DAYS,
+    reference: datetime | None = None,
+) -> Staleness:
+    """The staleness of one last-committed date against ``threshold_days``.
+
+    ``age_days`` is whole days between ``reference`` (default: now, UTC) and
+    ``last_committed``; ``stale`` is ``age_days > threshold_days``. An unknown
+    date (outside git, untracked) yields all-``None`` — never a fabricated date
+    (ADR-045 degrade posture). Passing ``reference`` makes the result
+    deterministic for tests.
+    """
+    if last_committed is None:
+        return Staleness(None, None, None)
+    if reference is None:
+        reference = datetime.now(UTC)
+    age_days = (reference - last_committed).days
+    return Staleness(
+        last_committed=last_committed, age_days=age_days, stale=age_days > threshold_days
+    )
+
+
+def load_freshness_threshold(directory: str) -> int:
+    """The ``freshness.stale_after_days`` from the nearest ``.rac/config.yaml``.
+
+    Discovery reuses the shared ``.rac/config.yaml`` walk (:func:`find_config_file`).
+    Defaults to :data:`DEFAULT_STALE_AFTER_DAYS` when there is no config file, no
+    ``freshness`` stanza, or the value is not a positive integer — the config is
+    advisory, so a malformed value degrades to the default rather than raising.
+    """
+    config_path = find_config_file(directory)
+    if config_path is None:
+        return DEFAULT_STALE_AFTER_DAYS
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return DEFAULT_STALE_AFTER_DAYS
+    section = data.get("freshness") if isinstance(data, dict) else None
+    value = section.get("stale_after_days") if isinstance(section, dict) else None
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return DEFAULT_STALE_AFTER_DAYS
+    return value
+
+
+def recency_for_paths(
+    directory: str,
+    paths: Iterable[str],
+    *,
+    threshold_days: int = DEFAULT_STALE_AFTER_DAYS,
+    reference: datetime | None = None,
+) -> dict[str, Staleness]:
+    """Git-derived staleness for each of ``paths`` (the read-surface join).
+
+    One git boundary, reused (ADR-045): last-committed per path, then the
+    staleness indicator. Outside a repository every path maps to an unknown
+    :class:`Staleness` — no exception crosses the boundary (REQ-003).
+    """
+    if reference is None:
+        reference = datetime.now(UTC)
+    repo_root = _repository_root(directory)
+    result: dict[str, Staleness] = {}
+    for path in paths:
+        last = _last_committed(repo_root, path) if repo_root is not None else None
+        result[path] = staleness(last, threshold_days=threshold_days, reference=reference)
+    return result
+
+
+def annotate_search_recency(
+    matches: list,
+    directory: str,
+    *,
+    threshold_days: int | None = None,
+    reference: datetime | None = None,
+) -> None:
+    """Join git-derived staleness onto search matches (the read-surface enrichment).
+
+    Sets each match's ``recency`` dict in place, computed *after* ranking so the
+    matched set and order are untouched (REQ-005). The threshold defaults to the
+    corpus's ``freshness`` config (else 180 days). Duck-typed on ``.path`` /
+    ``.recency`` to avoid coupling recency to the resolver.
+    """
+    if not matches:
+        return
+    threshold = (
+        threshold_days if threshold_days is not None else load_freshness_threshold(directory)
+    )
+    by_path = recency_for_paths(
+        directory, [m.path for m in matches], threshold_days=threshold, reference=reference
+    )
+    for match in matches:
+        match.recency = by_path[match.path].to_dict()

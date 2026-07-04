@@ -132,6 +132,12 @@ class ResolvedArtifact:
     # is unchanged. Always set for a search match; the gate it answers to is
     # ``include_evidence`` so the CLI's default ``rac find`` JSON stays byte-stable.
     evidence: dict | None = None
+    # Git-derived staleness (freshness phase 1, additive): last-committed date
+    # plus the staleness indicator, joined by the read surface *after* ranking so
+    # matching and order are unchanged (ADR-045, ADR-078). None for resolution and
+    # for search until a surface enriches it, and absent from ``to_dict`` then, so
+    # the pre-freshness shape is byte-identical (ADR-007).
+    recency: dict | None = None
 
     def to_dict(self, *, include_evidence: bool = True) -> dict:
         payload: dict[str, Any] = {
@@ -146,6 +152,8 @@ class ResolvedArtifact:
             payload["snippet"] = self.snippet
         if include_evidence and self.evidence is not None:
             payload["evidence"] = self.evidence
+        if self.recency is not None:
+            payload["recency"] = self.recency
         return payload
 
     @classmethod
