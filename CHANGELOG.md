@@ -76,6 +76,16 @@ as candidate relationships.
   guessed; Notion database CSVs are reported and skipped (rows arrive as their
   own pages); a Roam JSON graph is flattened to outliner Markdown per page
   (ADR-079).
+- **Freshness on the surfaces where you pick artifacts.** `rac find` results and
+  the MCP `search_artifacts` tool now carry a git-derived `recency` object per
+  match — `last_committed`, `age_days`, and a `stale` flag — so you can see which
+  result has decayed without opening it. `stale` is `true` once an artifact's age
+  exceeds a freshness threshold (default 180 days; set `freshness.stale_after_days`
+  in `.rac/config.yaml` to change it). In the human `rac find` output a stale match
+  is flagged inline with `⚠ stale (Nd)`. It is advisory data beside its date, never
+  a correctness verdict, and it never changes which artifacts match or their order;
+  outside a git repository the fields degrade to `null`. Derived from git, never a
+  stored frontmatter date (ADR-045).
 
 ## 2026.06.5 — the "rename" release
 

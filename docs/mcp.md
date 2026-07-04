@@ -155,6 +155,16 @@ returns immediate neighbours only, while `depth>1` additionally returns a
 roadmap depends on. The walk is bounded (depth, frontier, visited-set, and a work
 budget) and deterministic; a truncation marker is set if any cap stops it.
 
+Each `search_artifacts` match carries an additive **`recency`** object —
+`last_committed`, `age_days`, and a `stale` flag derived from git history
+(ADR-045) — so an agent choosing between results can see which artifact has
+decayed without a follow-up `get_artifact`. `stale` is `true` once a file's age
+exceeds the freshness threshold (default 180 days, set per repository under
+`freshness.stale_after_days` in `.rac/config.yaml`). It is advisory data beside
+its date, never a correctness verdict, and never changes which artifacts match or
+their order; outside git the fields degrade to `null`. The join respects the
+response budget — matches truncate whole, exactly as before.
+
 The tool descriptions contain the trigger language; well-tuned agents call them
 without being told to.
 

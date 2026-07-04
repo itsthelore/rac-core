@@ -1291,6 +1291,25 @@ score and its components (`bm25`, `lexical_rank`, `graph_rank`, `inbound`), so a
 caller can see why one result outranks another. It is additive: the default
 output (without `--explain`) is unchanged, and `schema_version` stays `1`.
 
+Each match also carries a **`recency`** object — git-derived freshness so you
+can see which result has decayed without opening it (ADR-045). `last_committed`
+is the ISO date of the file's most recent commit; `age_days` is its age in whole
+days; `stale` is `true` when that age exceeds the freshness threshold. The
+threshold defaults to **180 days** and is configurable per repository in
+`.rac/config.yaml`:
+
+```yaml
+freshness:
+  stale_after_days: 90
+```
+
+The indicator is data beside its date, never a correctness verdict — a stale
+artifact may be perfectly correct, just untouched. Recency never changes which
+artifacts match or their order (ranking is unaffected). Outside a git
+repository, or for an untracked file, the three fields degrade to `null` rather
+than a fabricated date; in the human output a stale match is flagged inline with
+`⚠ stale (Nd)`.
+
 ```bash
 rac find markdown rac/
 rac find explorer rac/ --type decision
@@ -1309,7 +1328,12 @@ rac find markdown rac/ --explain        # show the relevance-score breakdown
       "id": "RAC-01JY4M8X2QZ7",
       "type": "decision",
       "title": "Markdown Is the Canonical Source Format",
-      "path": "rac/decisions/markdown-first.md"
+      "path": "rac/decisions/markdown-first.md",
+      "recency": {
+        "last_committed": "2026-01-04T12:00:00+00:00",
+        "age_days": 181,
+        "stale": true
+      }
     }
   ]
 }
