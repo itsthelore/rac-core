@@ -32,6 +32,7 @@ nav:
   - MCP Server: mcp.md
   - Shared Server: shared-server.md
   - CLI Reference: cli.md
+  - Context Cost: context-cost.md
   - Watchkeeper: watchkeeper.md
   - Artifacts: artifacts.md
   - Relationships: relationships.md
