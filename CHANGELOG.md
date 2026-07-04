@@ -8,10 +8,11 @@ details, release history over commit history.
 
 The **decision-to-code-proximity** programme: recorded decisions now know which
 code they govern, and you can ask which decisions govern a path — declared and
-validated, never inferred; deterministic and offline. Plus the first builds of
-**lore-at-team-scale**: `rac mcp` can now serve the whole team over one
+validated, never inferred; deterministic and offline. Plus the completed
+**lore-at-team-scale** programme: `rac mcp` can now serve the whole team over one
 always-current HTTP endpoint, with an optional content-addressed cache so
-per-call latency stops scaling with corpus size.
+per-call latency stops scaling with corpus size, per-caller audit attribution,
+and an operator guide for running it — servers and caches over git, no database.
 
 ### Added
 
@@ -55,6 +56,11 @@ per-call latency stops scaling with corpus size.
   verifies it; your proxy does), the principal never affects tool output, and
   shared HTTP serving blocks a call if the audit sink write fails
   (ADR-098). stdio behaviour is unchanged.
+- **Operator guide for the shared server.** A new
+  [Shared Server](https://itsthelore.github.io/rac-core/shared-server/) doc
+  covers when to run one, the container and authenticating-proxy recipe, keeping
+  the checkout current with `main`, and where observability lives — the whole
+  topology is deployment wrapper around an unchanged, database-free engine.
 
 ## 2026.06.5 — the "rename" release
 

@@ -7,18 +7,29 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-The recorded entry trigger has been met: an adopting organisation is
-expanding Lore toward multi-thousand-seat scale, far past the 50+ developer
-signal this artifact named. Per this artifact's own graduation clause and
-the deterministic-substrate programme's deferred list, it graduates out of
-`future/` as a live scoped roadmap. The substrate programme's two entry
-conditions are carried here explicitly: **mandatory audit-on for shared
-deployments** and **cache coherency guaranteed as byte-parity with the
-uncached path**. Execution is tracked in GitHub (ADR-093): the epic in
-`## Related Tickets` carries ordering and task state, with a sub-issue per
-initiative.
+Delivered across all four initiatives (epic itsthelore/rac-core#262). `rac mcp`
+gained a streamable HTTP transport so a team points every agent at one
+always-current `main`-backed endpoint (#263, under the serving decision ADR-098);
+an opt-in, content-addressed derived-index cache keeps per-call latency flat as
+the corpus grows, byte-identical to the uncached path (#264, ADR-099); the audit
+recorder resolves a per-request principal from the `X-Lore-Principal` header so
+every caller on the shared endpoint is attributed distinctly, never as the host
+(#265); and an operator recipe — container, authenticating proxy, keep-current
+step, and the observability boundary — documents how to run it (#266). Both
+substrate entry conditions held throughout: **mandatory audit-on for shared
+deployments** (HTTP refuses to start without a working sink and blocks on write
+failure) and **cache coherency guaranteed as byte-parity with the uncached
+path**. No database, no hosted service, no authentication in the engine — servers
+and caches over git `main`, exactly as scoped. Execution was tracked in GitHub
+(ADR-093), a sub-issue per initiative.
+
+The recorded entry trigger had been met: an adopting organisation expanding Lore
+toward multi-thousand-seat scale, far past the 50+ developer signal this artifact
+named. Per this artifact's own graduation clause and the deterministic-substrate
+programme's deferred list, it graduated out of `future/` as a live scoped
+roadmap.
 
 ## Context
 
