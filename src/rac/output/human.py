@@ -1437,6 +1437,11 @@ def render_vault_ingest_human(
             f"  {result.warning_count} link(s) need review (ambiguous or unresolved) — "
             "left inline, never guessed."
         )
+    if result.skipped_sources:
+        lines.append(
+            f"  {len(result.skipped_sources)} database CSV(s) skipped — Notion exports "
+            "each row as its own page; the CSV is a redundant index."
+        )
     if output_dir is not None:
         lines.append("")
         lines.append(f"Wrote {len(written)} draft(s) to {output_dir}.")

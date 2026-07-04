@@ -35,6 +35,10 @@ _SKIP_DIRS = {".obsidian", ".trash", ".git", "logseq", "bak", ".recycle"}
 # optional ``|alias``: ``[[target#frag|alias]]``.
 _WIKILINK_RE = re.compile(r"(?P<embed>!?)\[\[(?P<inner>[^\[\]]+)\]\]")
 
+# A standard Markdown inline link ``[text](url)``. Notion exports use these (with
+# URL-encoded relative paths to hashed ``.md`` files) rather than wikilinks.
+_MD_LINK_RE = re.compile(r"\[(?P<text>[^\]]*)\]\((?P<url>[^)]+)\)")
+
 
 @dataclass(frozen=True)
 class Wikilink:
@@ -66,11 +70,18 @@ class NoteDraft:
 
 @dataclass
 class VaultIngestResult:
-    """The full outcome of ingesting one export directory (ADR-003)."""
+    """The full outcome of ingesting one export directory (ADR-003).
+
+    ``skipped_sources`` names export files that were recognised but not converted
+    — Notion database CSVs, whose rows already arrive as their own ``.md`` page
+    exports (so converting the CSV too would double-import). Reported, never
+    silently dropped.
+    """
 
     converter: str
     root: str
     drafts: list[NoteDraft] = field(default_factory=list)
+    skipped_sources: list[str] = field(default_factory=list)
 
     @property
     def note_count(self) -> int:
@@ -184,7 +195,9 @@ class _Resolver:
                 if hit is not None:
                     return hit, False
             return None, False
-        stem_matches = self._by_stem.get(key.casefold(), [])
+        # A bare name resolves by stem, whether or not the link wrote the ``.md``
+        # extension (Obsidian omits it, Notion includes it).
+        stem_matches = self._by_stem.get(Path(key).stem.casefold(), [])
         if len(stem_matches) == 1:
             return stem_matches[0], False
         if len(stem_matches) > 1:
@@ -234,6 +247,39 @@ def _normalise_body(body: str, resolver: _Resolver, self_path: str, draft: NoteD
     draft.related = related
     draft.warnings = warnings
     return "".join(result)
+
+
+def _normalise_notion_body(body: str, resolver: _Resolver, self_path: str, draft: NoteDraft) -> str:
+    """Collect candidate links from a Notion page; leave the body verbatim.
+
+    Notion exports use standard Markdown links (``[text](Page%20Name%20<hash>.md)``)
+    with URL-encoded relative paths, not wikilinks. An internal link to another
+    exported ``.md`` page becomes a candidate ``## Related`` reference; external
+    links (``http``/``mailto``) and non-page links are left alone. The body is not
+    rewritten — the links are already valid Markdown — so it is lossless by
+    construction (REQ-007). Deterministic: a single left-to-right pass.
+    """
+    from urllib.parse import unquote
+
+    related: list[str] = []
+    warnings: list[str] = []
+    for match in _MD_LINK_RE.finditer(body):
+        url = match.group("url").strip()
+        if url.startswith(("http://", "https://", "mailto:", "#", "//")):
+            continue
+        target = unquote(url.split("#", 1)[0].split("?", 1)[0])
+        if not target.endswith(".md"):
+            continue  # only links to other exported pages are relationships
+        resolved, ambiguous = resolver.resolve(target)
+        if resolved is not None:
+            if resolved != self_path and resolved not in related:
+                related.append(resolved)
+        else:
+            reason = "ambiguous" if ambiguous else "unresolved"
+            warnings.append(f"{reason} link [{match.group('text')}]({url})")
+    draft.related = related
+    draft.warnings = warnings
+    return body
 
 
 _CANDIDATE_NOTE = (
@@ -332,9 +378,53 @@ class LogseqConverter:
         return _convert_vault(root, self.name)
 
 
+# The Notion export signature: a page filename ends in a space plus the page's
+# 32-hex id (dashes stripped), e.g. ``My Page 1a2b…f9.md``.
+_NOTION_FILE_RE = re.compile(r" [0-9a-f]{32}\.md$")
+
+
+class NotionConverter:
+    """Ingest a Notion "Markdown & CSV" export: hashed pages, standard links, CSVs.
+
+    Detected by Notion's hashed page filenames. Notion uses standard Markdown
+    links (not wikilinks), so it normalises through :func:`_normalise_notion_body`
+    rather than the wikilink resolver — internal page links become candidate
+    ``## Related`` references, everything else verbatim (lossless). Database CSVs
+    are reported as ``skipped_sources`` rather than converted: Notion already
+    exports each row as its own ``.md`` page, so the CSV is a redundant index
+    (mapping CSVs to artifacts is a later enhancement, per the design's open
+    question).
+    """
+
+    name = "notion"
+
+    def detect(self, root: Path) -> bool:
+        return any(_NOTION_FILE_RE.search(path.name) for path in root.rglob("*.md"))
+
+    def convert_vault(self, root: Path) -> VaultIngestResult:
+        note_paths = _walk_notes(root)
+        resolver = _Resolver(note_paths)
+        result = VaultIngestResult(converter=self.name, root=str(root))
+        for rel in note_paths:
+            text = (root / rel).read_text(encoding="utf-8")
+            frontmatter, body = _split_frontmatter(text)
+            draft = NoteDraft(source_path=rel, suggested_filename=rel, markdown="")
+            normalised = _normalise_notion_body(body, resolver, rel, draft)
+            draft.markdown = _assemble_draft(frontmatter, normalised, draft)
+            result.drafts.append(draft)
+        result.skipped_sources = sorted(
+            path.relative_to(root).as_posix() for path in root.rglob("*.csv")
+        )
+        return result
+
+
 # Registry — first converter whose ``detect`` matches wins; ``--from`` selects by
-# name. Order is deterministic; adding Notion/Roam appends here.
-_VAULT_CONVERTERS: list[VaultConverter] = [ObsidianConverter(), LogseqConverter()]
+# name. Order is deterministic; adding Roam appends here.
+_VAULT_CONVERTERS: list[VaultConverter] = [
+    ObsidianConverter(),
+    LogseqConverter(),
+    NotionConverter(),
+]
 
 
 def vault_converters() -> list[VaultConverter]:
