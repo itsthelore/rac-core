@@ -30,6 +30,7 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - MCP Server: mcp.md
+  - Shared Server: shared-server.md
   - CLI Reference: cli.md
   - Watchkeeper: watchkeeper.md
   - Artifacts: artifacts.md
