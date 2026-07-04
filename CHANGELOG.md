@@ -113,7 +113,10 @@ as candidate relationships.
   [`examples/windsurf/`](examples/windsurf/README.md),
   [`examples/cline/`](examples/cline/README.md), and
   [`examples/zed/`](examples/zed/README.md) — each documented but not yet verified,
-  so they carry the marker and are not listed in `docs/ecosystem.md`.
+  so they carry the marker and are not listed in `docs/ecosystem.md`. The guide
+  also carries a dated, adoption-ordered **harness backlog** — honest about what is
+  shipped, drafted, or a candidate, and about which candidates are superseded
+  (Gemini CLI is being wound down; Roo Code is archived).
 
 ## 2026.06.5 — the "rename" release
 
