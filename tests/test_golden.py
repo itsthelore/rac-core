@@ -14,7 +14,9 @@ then commit the diff.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,29 @@ from rac.cli import main
 
 REPO_ROOT = Path(__file__).parent.parent
 GOLDEN_DIR = Path(__file__).parent / "golden"
+
+# Find output carries a git-derived `recency` object per match (freshness-and-
+# drift phase 1). Its `age_days`/`stale` are wall-clock-relative, so leaving them
+# in a byte-pinned golden would make it time-fragile. REQ-006's remedy is to
+# exclude the git-derived fields from the byte-pinned goldens; the recency
+# contract itself is pinned deterministically, against controlled git state, in
+# tests/test_recency.py. These are the find cases whose output embeds it.
+_FIND_JSON_CASES = {"find_json", "find_explain_json"}
+_FIND_HUMAN_CASES = {"find_human"}
+_STALE_MARKER_RE = re.compile(r" ⚠ stale \(\d+d\)")
+
+
+def _strip_git_derived_recency(out: str, name: str) -> str:
+    """Excise the git-derived recency fields so the golden stays time-stable."""
+    if name in _FIND_JSON_CASES:
+        data = json.loads(out)
+        for match in data.get("matches", []):
+            match.pop("recency", None)
+        return json.dumps(data, indent=2) + "\n"
+    if name in _FIND_HUMAN_CASES:
+        return _STALE_MARKER_RE.sub("", out)
+    return out
+
 
 # (name, argv, expected exit code). Paths are relative to the repository root
 # (the tests chdir there) so golden files stay machine-independent.
@@ -132,7 +157,7 @@ def test_golden(name, argv, expected_rc, capsys, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", "tests/fixtures/telemetry/state")
 
     rc = main(argv)
-    out = capsys.readouterr().out
+    out = _strip_git_derived_recency(capsys.readouterr().out, name)
 
     golden = GOLDEN_DIR / f"{name}.txt"
     if os.environ.get("RAC_UPDATE_GOLDEN") == "1":
