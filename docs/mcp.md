@@ -21,6 +21,11 @@ Replace `/path/to/your/repo` with the absolute path to the directory that
 contains your RAC artifacts (or the `rac/` subdirectory within it). Use the
 path you would pass to `rac validate`.
 
+> Adding a client that is not listed here? Every harness connects on the same two
+> surfaces (the generated agent-instructions file and the `lore` MCP server), so a
+> new integration is a documented recipe, not engine work — follow the
+> [integration recipes authoring guide](integration-recipes.md).
+
 ### Claude Code
 
 **Command form** (adds the server to your Claude Code session):

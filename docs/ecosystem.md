@@ -30,3 +30,14 @@ An entry is one row in the table above. The criteria:
 Entries are added by a pull request changing the single table row.
 The project's contribution policy is pending; until it is published,
 external additions cannot yet be accepted.
+
+### Harness integration recipes
+
+A harness integration (a worked `examples/<client>/` setup connecting a
+coding agent to RAC) follows a template and a verification gate — see the
+[integration recipes authoring guide](integration-recipes.md). A recipe is
+listed here **only after it is smoke-tested against a released engine
+version** by running the grounding demo ([`examples/guide/`](https://github.com/itsthelore/rac-core/blob/main/examples/guide/demo.md))
+with the harness connected. Until then it ships as documentation carrying a
+`verify against <client> <version>` marker and stays off this table — the
+real-and-verified rule made a precondition of the row, not a courtesy.
