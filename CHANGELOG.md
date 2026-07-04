@@ -109,14 +109,15 @@ as candidate relationships.
   listed in [`docs/ecosystem.md`](docs/ecosystem.md) only after it is smoke-tested
   against a released engine; until then it ships carrying a
   `verify against <client> <version>` marker and stays off the table. Ships with
-  the first three recipes authored from the template —
+  the first four recipes authored from the template —
   [`examples/windsurf/`](examples/windsurf/README.md),
-  [`examples/cline/`](examples/cline/README.md), and
-  [`examples/zed/`](examples/zed/README.md) — each documented but not yet verified,
-  so they carry the marker and are not listed in `docs/ecosystem.md`. The guide
-  also carries a dated, adoption-ordered **harness backlog** — honest about what is
-  shipped, drafted, or a candidate, and about which candidates are superseded
-  (Gemini CLI is being wound down; Roo Code is archived).
+  [`examples/cline/`](examples/cline/README.md),
+  [`examples/zed/`](examples/zed/README.md), and
+  [`examples/opencode/`](examples/opencode/README.md) — each documented but not yet
+  verified, so they carry the marker and are not listed in `docs/ecosystem.md`. The
+  guide also carries a dated, adoption-ordered **harness backlog** — honest about
+  what is shipped, drafted, or a candidate, and about which candidates are
+  superseded (Gemini CLI is being wound down; Roo Code is archived).
 
 ## 2026.06.5 — the "rename" release
 
