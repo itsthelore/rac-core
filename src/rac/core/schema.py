@@ -24,6 +24,11 @@ class SchemaReference:
     descriptions: dict[str, str] = field(default_factory=dict)
     guidance: dict[str, list[str]] = field(default_factory=dict)
     metadata: dict[str, list[str]] = field(default_factory=dict)
+    # Validation-safe starter body per section, carried from the source
+    # :class:`ArtifactSpec`. Drives template rendering (see :func:`_starter_body`)
+    # without per-type branches. Deliberately excluded from :meth:`to_dict` — it
+    # is a template-render input, not part of the JSON schema contract.
+    starter_bodies: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -83,6 +88,7 @@ def _reference_from_spec(spec: ArtifactSpec) -> SchemaReference:
         descriptions=dict(spec.descriptions),
         guidance={section: list(lines) for section, lines in spec.guidance.items()},
         metadata={section: list(values) for section, values in spec.metadata.items()},
+        starter_bodies=dict(spec.starter_bodies),
     )
 
 
@@ -97,14 +103,15 @@ def _template_section(ref: SchemaReference, section: str) -> TemplateSection:
 
 
 def _starter_body(ref: SchemaReference, section: str, metadata_values: list[str]) -> str:
-    """Validation-safe starter body for one section."""
+    """Validation-safe starter body for one section.
+
+    Metadata-constrained sections derive their starter value from the allowed
+    values; every other section reads its text from the spec-driven
+    ``starter_bodies`` map, with a generic fallback. No per-type branches.
+    """
     if metadata_values:
         return _metadata_default(section, metadata_values)
-    if ref.type == "requirement" and section == "requirements":
-        return "- [REQ-001] TODO: describe a required system behaviour."
-    if ref.type == "design":
-        return _design_free_text_todo(section)
-    return _free_text_todo(section)
+    return ref.starter_bodies.get(section) or f"TODO: describe {section}."
 
 
 def _metadata_default(section: str, values: list[str]) -> str:
@@ -113,54 +120,6 @@ def _metadata_default(section: str, values: list[str]) -> str:
     if section == "category" and "Other" in values:
         return "Other"
     return values[0] if values else "TODO"
-
-
-def _free_text_todo(section: str) -> str:
-    messages = {
-        "problem": "TODO: describe the problem being solved and who experiences it.",
-        "success metrics": "TODO: describe how success will be measured.",
-        "risks": ("TODO: describe implementation, delivery, operational, or adoption risks."),
-        "assumptions": "TODO: describe conditions assumed to be true.",
-        "outcomes": "TODO: describe the outcomes this roadmap is intended to achieve.",
-        "initiatives": "TODO: describe the major initiatives that support the outcomes.",
-        "success measures": "TODO: describe how progress or success will be measured.",
-        "objective": "TODO: describe what this prompt is intended to achieve.",
-        "input": (
-            "TODO: describe the information, context, or source material the prompt expects."
-        ),
-        "instructions": ("TODO: describe the steps, rules, or approach the model should follow."),
-        "output": "TODO: describe the expected response format or result.",
-        "constraints": "TODO: describe any boundaries or restrictions.",
-        "examples": "TODO: provide example inputs and outputs if useful.",
-        "evaluation": "TODO: describe how the output should be judged.",
-        "context": "TODO: describe the situation, constraints, and background.",
-        "decision": "TODO: describe the decision that has been made.",
-        "consequences": ("TODO: describe the expected positive and negative consequences."),
-        "alternatives considered": (
-            "TODO: describe the options that were considered and why they were not chosen."
-        ),
-    }
-    return messages.get(section, f"TODO: describe {section}.")
-
-
-def _design_free_text_todo(section: str) -> str:
-    messages = {
-        "context": "TODO: describe the design context and why this design exists.",
-        "user need": ("TODO: describe who this design is for and what they need to accomplish."),
-        "design": (
-            "TODO: describe the proposed experience, interaction, layout, flow, or system behavior."
-        ),
-        "constraints": (
-            "TODO: describe technical, product, accessibility, platform, or "
-            "implementation constraints."
-        ),
-        "rationale": "TODO: explain why this design approach was chosen.",
-        "alternatives": "TODO: describe alternatives that were considered.",
-        "accessibility": "TODO: describe accessibility considerations.",
-        "style guidance": ("TODO: describe visual, tone, layout, or interaction style guidance."),
-        "open questions": "TODO: list unresolved design questions.",
-    }
-    return messages.get(section, _free_text_todo(section))
 
 
 def _snake(section: str) -> str:
