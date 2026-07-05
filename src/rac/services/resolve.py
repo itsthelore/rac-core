@@ -14,10 +14,13 @@ Search (v0.10.3, ADR-037/ADR-038) is deterministic, tiered, token-boundary
 matching: identifiers, title, path, section headings, and body text are
 tokenized on non-alphanumeric boundaries and camelCase transitions; a query
 term matches a token by casefolded equality or prefix; a multi-term query
-requires every term to match somewhere in the artifact (AND). Matches rank by
-the best field any term hit — identifier, then title, then path, then heading,
-then body — with sorted path as the tiebreak. Heading and body matches carry
-snippet fields (the matched heading and the matching line, as stored).
+requires every term to match somewhere in the artifact (AND). The matched set is
+ordered by a deterministic relevance score (ADR-078): a field-weighted BM25F
+lexical signal and a bounded inbound-reference graph signal, fused by Reciprocal
+Rank Fusion, with the fused score rounded to 12 places and the artifact path as
+the final tiebreak — the sort key is ``(-round(fused, 12), path)``. Heading and
+body matches carry snippet fields (the matched heading and the matching line, as
+stored).
 """
 
 from __future__ import annotations
@@ -28,9 +31,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusEntry, walk_corpus
+from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.models import SearchSection
-from rac.services.index import build_repository_index, index_from_corpus
+from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
 
 OUTCOME_RESOLVED = "resolved"
 OUTCOME_NOT_FOUND = "not-found"
@@ -229,8 +234,37 @@ def resolve_artifact(directory: str, artifact_id: str, recursive: bool = True) -
     relationship resolution uses. Multiple *distinct files* matching is a
     duplicate, reported with every path and never resolved by order.
     """
-    entries = build_repository_index(directory, recursive=recursive).artifacts
+    entries = _identity_index(directory, recursive=recursive)
     return resolve_in_index(entries, artifact_id)
+
+
+def _identity_index(directory: str, recursive: bool) -> list[IndexEntry]:
+    """Identity-only inventory for exact resolution (aliases + path).
+
+    Resolution reads only an entry's aliases and path (and, for the resolved
+    answer, its id/type/title). It never reads the inbound-edge graph signal or
+    the searchable sections, so this walk skips both — no relationship
+    resolution (``inbound_counts_from_corpus``) and no ``SearchSection``
+    construction — the work the full :func:`build_repository_index` does for the
+    *search* path but that a one-ID lookup wastes. The id/type/title/path/aliases
+    it produces are byte-identical to :func:`index_from_corpus`; only the unused
+    graph and section fields are left at their empty defaults.
+    """
+    entries: list[IndexEntry] = []
+    for entry in walk_corpus(directory, recursive=recursive):
+        path = str(entry.path)
+        product = entry.product
+        spec = spec_for(entry.artifact_type)  # None for Unknown
+        entries.append(
+            IndexEntry(
+                id=artifact_identifier(product, spec, path),
+                type=entry.artifact_type,
+                title=product.title,
+                path=path,
+                aliases=artifact_identifiers(product, spec, path),
+            )
+        )
+    return entries
 
 
 def resolve_in_index(entries: Sequence[SearchableArtifact], artifact_id: str) -> ResolutionResult:
@@ -317,7 +351,66 @@ def _id_tokens(entry: SearchableArtifact) -> list[str]:
     return tokens
 
 
-def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | None:
+@dataclass
+class _SectionTokens:
+    """One section tokenised once: heading plus each body line and its tokens.
+
+    Retains the section/line structure (in document order) the matcher needs to
+    pick a snippet — the first matching line in document order — which the flat
+    BM25 field vectors alone cannot reproduce.
+    """
+
+    heading: str
+    heading_tokens: list[str]
+    lines: list[tuple[str, list[str]]]
+
+
+@dataclass
+class _EntryTokens:
+    """An entry tokenised once per search call.
+
+    Carries both the flat per-field token vectors the BM25F scorer consumes
+    (``{id, title, path, heading, body}``) and the section structure the matcher
+    needs for snippet selection — both derived from a single tokenisation pass,
+    so a search tokenises each entry once rather than once to match and again to
+    score.
+    """
+
+    fields: dict[str, list[str]]
+    sections: list[_SectionTokens]
+
+
+def _tokenize_entry(entry: SearchableArtifact) -> _EntryTokens:
+    """Tokenise every scorable field of ``entry`` exactly once (ADR-037).
+
+    The flat ``heading``/``body`` vectors are the concatenation of the per-section
+    heading tokens and per-line body tokens in document order — byte-identical to
+    the previous separate :func:`_field_tokens` pass — while the section list
+    preserves the per-line structure the snippet rule depends on.
+    """
+    sections: list[_SectionTokens] = []
+    heading_tokens: list[str] = []
+    body_tokens: list[str] = []
+    for sec in entry.search_sections:
+        sec_heading_tokens = tokenize(sec.heading)
+        heading_tokens.extend(sec_heading_tokens)
+        sec_lines: list[tuple[str, list[str]]] = []
+        for line in sec.lines:
+            line_tokens = tokenize(line)
+            body_tokens.extend(line_tokens)
+            sec_lines.append((line, line_tokens))
+        sections.append(_SectionTokens(sec.heading, sec_heading_tokens, sec_lines))
+    fields = {
+        "id": _id_tokens(entry),
+        "title": tokenize(entry.title or ""),
+        "path": tokenize(entry.path),
+        "heading": heading_tokens,
+        "body": body_tokens,
+    }
+    return _EntryTokens(fields=fields, sections=sections)
+
+
+def _match_entry(entry_tokens: _EntryTokens, terms: Sequence[str]) -> _Match | None:
     """Best tiered match for an AND query, or None when a term matches nothing.
 
     Every term of ``terms`` must match somewhere in the artifact's matchable
@@ -325,10 +418,13 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
     best (lowest) tier *any* term hit (ADR-037). For a heading/body win, the
     snippet is the first matching line in document order — the heading itself
     for a heading hit, the body line for a body hit (ADR-038, deterministic).
+
+    Consumes an :class:`_EntryTokens` tokenised once by :func:`_tokenize_entry`,
+    so the same tokens feed matching and scoring without a second pass.
     """
-    id_tokens = _id_tokens(entry)
-    title_tokens = tokenize(entry.title or "")
-    path_tokens = tokenize(entry.path)
+    id_tokens = entry_tokens.fields["id"]
+    title_tokens = entry_tokens.fields["title"]
+    path_tokens = entry_tokens.fields["path"]
 
     # Per term: does any term hit each metadata tier? (AND requires every term
     # match *somewhere*; ranking uses the best tier any *single* term reached.)
@@ -351,15 +447,13 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
     # in document order. Headings rank above body; within each, document order.
     heading_hit: tuple[str, str] | None = None  # (section_heading, snippet_line)
     body_hit: tuple[str, str] | None = None
-    for sec in entry.search_sections:
-        heading_tokens = tokenize(sec.heading)
+    for sec in entry_tokens.sections:
         for term in terms:
-            if _term_hits_tokens(term, heading_tokens):
+            if _term_hits_tokens(term, sec.heading_tokens):
                 matched_terms.add(term)
                 if heading_hit is None:
                     heading_hit = (sec.heading, sec.heading)
-        for line in sec.lines:
-            line_tokens = tokenize(line)
+        for line, line_tokens in sec.lines:
             for term in terms:
                 if _term_hits_tokens(term, line_tokens):
                     matched_terms.add(term)
@@ -515,20 +609,12 @@ _FIELD_BOOSTS: dict[str, float] = {
 
 
 def _field_tokens(entry: SearchableArtifact) -> dict[str, list[str]]:
-    """Match tokens per scorable field, using the same tokeniser as matching."""
-    headings: list[str] = []
-    body: list[str] = []
-    for sec in entry.search_sections:
-        headings.extend(tokenize(sec.heading))
-        for line in sec.lines:
-            body.extend(tokenize(line))
-    return {
-        "id": _id_tokens(entry),
-        "title": tokenize(entry.title or ""),
-        "path": tokenize(entry.path),
-        "heading": headings,
-        "body": body,
-    }
+    """Match tokens per scorable field, using the same tokeniser as matching.
+
+    A thin projection of :func:`_tokenize_entry` to the flat BM25 field vectors,
+    so the cache-persistence path and the search path share one tokeniser.
+    """
+    return _tokenize_entry(entry).fields
 
 
 def field_tokens_for_entries(
@@ -641,8 +727,10 @@ def search_index(
     to hit somewhere, and the result carries the same `{field, terms, tier}`
     evidence. Ordering is the deterministic relevance score (ADR-078): a
     field-weighted BM25 lexical signal and a bounded inbound-reference graph
-    signal, fused by RRF, tie-broken by sorted path. The seam lets a loaded
-    repository model serve searches without another directory walk.
+    signal, fused by RRF, with the fused score rounded to 12 places and the
+    artifact path as the final tiebreak — the sort key is
+    ``(-round(fused, 12), path)``. The seam lets a loaded repository model serve
+    searches without another directory walk.
 
     ``field_tokens_by_path`` may be supplied precomputed (the derived-index cache,
     ADR-099): it must cover exactly ``entries``, and the result is byte-identical
@@ -650,17 +738,32 @@ def search_index(
     """
     terms = tokenize(query)
     matched: list[tuple[SearchableArtifact, _Match]] = []
+    # Field vectors of the entries the matcher tokenised this call, reused below
+    # for the corpus statistics so each entry is tokenised at most once.
+    matched_field_tokens: dict[str, dict[str, list[str]]] = {}
     if terms:  # an all-punctuation query tokenizes to nothing: no matches.
         for entry in entries:
             if artifact_type is not None and entry.type != artifact_type:
                 continue
-            match = _match_entry(entry, terms)
+            entry_tokens = _tokenize_entry(entry)
+            matched_field_tokens[entry.path] = entry_tokens.fields
+            match = _match_entry(entry_tokens, terms)
             if match is not None:
                 matched.append((entry, match))
     if not matched:
         return SearchResult(query=query, artifact_type=artifact_type, matches=[])
 
     # Corpus-wide BM25 statistics (global IDF and mean field length, ADR-078).
+    # On the fresh path, reuse the field vectors already tokenised during matching
+    # and only tokenise the entries the matcher skipped (a different ``--type``),
+    # so no entry is tokenised twice. A supplied cache replaces all of this.
+    if field_tokens_by_path is None:
+        field_tokens_by_path = {}
+        for entry in entries:
+            cached = matched_field_tokens.get(entry.path)
+            field_tokens_by_path[entry.path] = (
+                cached if cached is not None else _field_tokens(entry)
+            )
     n, df, avglen, field_tokens_by_path = _corpus_stats(entries, terms, field_tokens_by_path)
     bm25 = {e.path: _bm25f(field_tokens_by_path[e.path], terms, n, df, avglen) for e, _ in matched}
     inbound = {e.path: float(getattr(e, "inbound_count", 0)) for e, _ in matched}
@@ -687,7 +790,7 @@ def search_index(
                     bm25=bm25[e.path],
                     lexical_rank=lexical_rank[e.path],
                     graph_rank=graph_rank[e.path],
-                    inbound=int(inbound[e.path]),
+                    inbound=getattr(e, "inbound_count", 0),
                 ),
             )
             for e, m in matched
