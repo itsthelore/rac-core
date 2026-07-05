@@ -77,6 +77,7 @@ from rac.services.derived_cache import (
 )
 from rac.services.freshness import FreshnessTracker
 from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
+from rac.services.index_store import ReadModelView
 from rac.services.recency import annotate_search_recency, artifact_provenance
 from rac.services.relationships import (
     incoming_references,
@@ -276,12 +277,20 @@ def _search_artifacts(
 ) -> str:
     if reader is not None:
         derived = reader.read_model()
-        result = search_index(
-            derived.index_entries,
-            query,
-            artifact_type=artifact_type,
-            field_tokens_by_path=derived.field_tokens_by_path,
-        )
+        if isinstance(derived, ReadModelView):
+            # Served from the memory-mapped base (the delta is empty): the postings
+            # fast path touches only the query terms' prefix ranges and the matched
+            # docs' rows, byte-identical to a full-corpus walk (ADR-101).
+            result = derived.search(query, artifact_type=artifact_type)
+        else:
+            # A non-empty delta serves from the re-derived in-memory snapshot; its
+            # search is the whole-corpus scan, correct and already resident.
+            result = search_index(
+                derived.index_entries,
+                query,
+                artifact_type=artifact_type,
+                field_tokens_by_path=derived.field_tokens_by_path,
+            )
     else:
         entries = build_repository_index(root, recursive=True).artifacts
         result = search_index(entries, query, artifact_type=artifact_type)
@@ -316,12 +325,17 @@ def _find_decisions(
         return serialize(governing_decisions(derived.scope_rows, root, path).to_dict(), budget)
     if reader is not None:
         derived = reader.read_model()
-        result = find_decisions_in(
-            derived.index_entries,
-            derived.live_decision_paths,
-            topic,
-            field_tokens_by_path=derived.field_tokens_by_path,
-        )
+        if isinstance(derived, ReadModelView):
+            # Postings fast path: the decision-typed search plus the liveness
+            # filter over precomputed live paths, byte-identical to the fresh path.
+            result = derived.find_decisions(topic)
+        else:
+            result = find_decisions_in(
+                derived.index_entries,
+                derived.live_decision_paths,
+                topic,
+                field_tokens_by_path=derived.field_tokens_by_path,
+            )
     else:
         result = find_decisions(root, topic, recursive=True)
     payload = result.to_dict()

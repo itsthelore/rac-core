@@ -835,6 +835,33 @@ def search_index(
                 cached if cached is not None else _field_tokens(entry)
             )
     n, df, avglen, field_tokens_by_path = _corpus_stats(entries, terms, field_tokens_by_path)
+    return _rank_and_build(
+        query, artifact_type, matched, terms, n, df, avglen, field_tokens_by_path
+    )
+
+
+def _rank_and_build(
+    query: str,
+    artifact_type: str | None,
+    matched: list[tuple[SearchableArtifact, _Match]],
+    terms: Sequence[str],
+    n: int,
+    df: dict[str, int],
+    avglen: dict[str, float],
+    field_tokens_by_path: dict[str, dict[str, list[str]]],
+) -> SearchResult:
+    """Fuse, rank, and shape the matched set into a :class:`SearchResult` (ADR-078).
+
+    The single owner of the scoring tail every search path shares: the BM25F
+    lexical score (via :func:`_bm25f` over ``field_tokens_by_path``, which must
+    cover every matched path), the bounded inbound graph signal, their RRF fusion,
+    the ``(-round(fused, 12), path)`` sort, and the match evidence. The global
+    stats — ``n``, ``df``, ``avglen`` — are supplied by the caller: the fresh walk
+    computes them over the whole corpus, the persistent store from its integer
+    accumulators and prefix-range postings. Because those inputs are integers and
+    the arithmetic and its summation order are fixed, the two paths emit
+    byte-identical bytes.
+    """
     bm25 = {e.path: _bm25f(field_tokens_by_path[e.path], terms, n, df, avglen) for e, _ in matched}
     inbound = {e.path: float(getattr(e, "inbound_count", 0)) for e, _ in matched}
     lexical_rank = _competition_ranks(bm25)

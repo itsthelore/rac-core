@@ -121,13 +121,37 @@ serialisation surface that must round-trip losslessly is larger and binary rathe
 than a single JSON document; both are held honest by the parity-against-fresh-build
 battery. Stores for superseded corpus states are not garbage-collected in this
 bundle; they are disposable and bounded by the cache directory, and a later bundle
-may prune them. Two structures the format anticipates are deferred: term-major
-postings for *selective* prefix-range queries (this bundle's serving path is O(N)
-because freshness is unchanged, so it gains nothing from them; they are the flat
-line's substrate, ADR-102), and per-file validation blobs (the incremental-validate
-bundle owns their computation). The store persists the sorted term dictionary and
-the per-document forward token index, which are sufficient for the prefix-range df
-and tf mechanism and for byte-identical field-vector reconstruction.
+may prune them. Of the two structures the format anticipated, one is now built and
+one stays deferred. Term-major postings — term id → the docids holding it in any
+field — are added by the postings-served-search bundle once the flat line (ADR-102)
+made a store-fed search path worth its keep; the earlier persistence bundle rightly
+did not build them, because its serving path re-hashed the whole corpus per call and
+so gained nothing from selective postings. Per-file validation blobs remain deferred
+to the incremental-validate bundle that computes them. The store persists the sorted
+term dictionary, the per-document forward token index, and the term-major postings,
+which together support the prefix-range df and tf mechanism, byte-identical
+field-vector reconstruction, and O(matches) candidate discovery.
+
+### Postings-served search
+
+When the cached read-model is served from the memory-mapped base — the delta empty,
+the corpus unchanged since the base was written or last compacted — a search reads
+only the query terms' binary-searched prefix ranges in the term dictionary, the
+term-major postings rows those ranges cover, and the identity/section/token rows of
+the docs that match at least one term. Non-matching docs contribute solely through
+the global integer accumulators the header already carries (n and the per-field Σ
+token counts; avglen is one division per query) and the postings-derived df, so
+their rows are never touched. Candidate discovery is the union of the query terms'
+prefix-range postings; `resolve._match_entry` then applies the AND predicate and
+snippet selection per candidate, and the shared BM25F+RRF scoring code ranks them —
+the same terms × fields summation order, the same `(-round(fused, 12), path)` sort,
+the same `match_count` over every match — so the served bytes equal a fresh
+whole-corpus walk's. When the delta is non-empty the read-model is the re-derived
+in-memory snapshot and search is the whole-corpus scan over it (correct, already
+resident); the postings fast path is taken only in the delta-empty base-served
+state, the common unchanged-corpus case. Adding the postings segment bumps the
+segment format version, so a store written before it fails the version gate closed
+and is rebuilt — no half-old layout is ever read.
 
 The risks are ADR-099's, extended to a binary format. A serialisation change could
 silently rehydrate a stale shape — mitigated by the segment format version and the
