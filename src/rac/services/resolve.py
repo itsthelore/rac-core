@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -410,6 +410,77 @@ def _tokenize_entry(entry: SearchableArtifact) -> _EntryTokens:
     return _EntryTokens(fields=fields, sections=sections)
 
 
+# A tier matcher inspects one field family of an entry against the query terms
+# and returns ``(matched_terms, snippet)``: the set of terms that hit this tier
+# (whose non-emptiness makes the tier a candidate for ``best_rank``), and, for
+# the snippet-bearing tiers, the ``(section_heading, snippet_line)`` captured at
+# the first match in document order (``None`` for metadata tiers, which carry no
+# snippet — ADR-038). The set is order-independent; ``best_rank`` and the query
+# order of surfaced terms are recovered by :func:`_match_entry`, so a tier
+# matcher never needs to know the tier ladder it sits in.
+_TierMatcher = Callable[["_EntryTokens", Sequence[str]], tuple[set[str], tuple[str, str] | None]]
+
+
+def _match_field(field: str) -> _TierMatcher:
+    """A metadata tier matcher over one flat field vector (id/title/path).
+
+    Metadata matches carry no snippet (ADR-038): the returned snippet is always
+    ``None``; only the set of terms hitting the field is reported.
+    """
+
+    def matcher(entry_tokens: _EntryTokens, terms: Sequence[str]) -> tuple[set[str], None]:
+        tokens = entry_tokens.fields[field]
+        return {term for term in terms if _term_hits_tokens(term, tokens)}, None
+
+    return matcher
+
+
+def _match_headings(
+    entry_tokens: _EntryTokens, terms: Sequence[str]
+) -> tuple[set[str], tuple[str, str] | None]:
+    """The heading tier: terms hitting any section heading, snippet = the first
+    matching heading in document order (its own text — ADR-038)."""
+    matched: set[str] = set()
+    snippet: tuple[str, str] | None = None
+    for sec in entry_tokens.sections:
+        hits = {term for term in terms if _term_hits_tokens(term, sec.heading_tokens)}
+        if hits:
+            matched |= hits
+            if snippet is None:
+                snippet = (sec.heading, sec.heading)
+    return matched, snippet
+
+
+def _match_body(
+    entry_tokens: _EntryTokens, terms: Sequence[str]
+) -> tuple[set[str], tuple[str, str] | None]:
+    """The body tier: terms hitting any body line, snippet = the first matching
+    line in document order, sectioned under its heading (ADR-038)."""
+    matched: set[str] = set()
+    snippet: tuple[str, str] | None = None
+    for sec in entry_tokens.sections:
+        for line, line_tokens in sec.lines:
+            hits = {term for term in terms if _term_hits_tokens(term, line_tokens)}
+            if hits:
+                matched |= hits
+                if snippet is None:
+                    snippet = (sec.heading, line)
+    return matched, snippet
+
+
+# The tier ladder as data, not control flow (ADR-037/ADR-038): an ordered list of
+# ``(rank, matcher)`` from best to worst — id, title, path, heading, body. A
+# lower rank wins; :func:`_match_entry` iterates this in order, so the precedence
+# lives in the sequence, and each tier is independently testable.
+_TIERS: tuple[tuple[int, _TierMatcher], ...] = (
+    (_RANK_ID, _match_field("id")),
+    (_RANK_TITLE, _match_field("title")),
+    (_RANK_PATH, _match_field("path")),
+    (_RANK_HEADING, _match_headings),
+    (_RANK_BODY, _match_body),
+)
+
+
 def _match_entry(entry_tokens: _EntryTokens, terms: Sequence[str]) -> _Match | None:
     """Best tiered match for an AND query, or None when a term matches nothing.
 
@@ -417,70 +488,41 @@ def _match_entry(entry_tokens: _EntryTokens, terms: Sequence[str]) -> _Match | N
     fields (id, title, path, headings, body); the artifact then ranks by the
     best (lowest) tier *any* term hit (ADR-037). For a heading/body win, the
     snippet is the first matching line in document order — the heading itself
-    for a heading hit, the body line for a body hit (ADR-038, deterministic).
+    for a heading hit, the body line for a body hit (ADR-038, deterministic). A
+    metadata win carries no snippet even when a lower tier also matched.
 
-    Consumes an :class:`_EntryTokens` tokenised once by :func:`_tokenize_entry`,
-    so the same tokens feed matching and scoring without a second pass.
+    Runs the :data:`_TIERS` ladder in order over an :class:`_EntryTokens`
+    tokenised once by :func:`_tokenize_entry`, so the same tokens feed matching
+    and scoring without a second pass.
     """
-    id_tokens = entry_tokens.fields["id"]
-    title_tokens = entry_tokens.fields["title"]
-    path_tokens = entry_tokens.fields["path"]
-
-    # Per term: does any term hit each metadata tier? (AND requires every term
-    # match *somewhere*; ranking uses the best tier any *single* term reached.)
-    matched_terms = set()
+    matched_terms: set[str] = set()
     best_rank: int | None = None
+    snippets: dict[int, tuple[str, str]] = {}
+    for rank, matcher in _TIERS:
+        hits, snippet = matcher(entry_tokens, terms)
+        if not hits:
+            continue
+        matched_terms |= hits
+        if best_rank is None:  # _TIERS is ascending, so the first hit is the best rank.
+            best_rank = rank
+        if snippet is not None:
+            snippets[rank] = snippet
 
-    def consider(rank: int, tokens: Sequence[str]) -> None:
-        nonlocal best_rank
-        for term in terms:
-            if _term_hits_tokens(term, tokens):
-                matched_terms.add(term)
-                if best_rank is None or rank < best_rank:
-                    best_rank = rank
-
-    consider(_RANK_ID, id_tokens)
-    consider(_RANK_TITLE, title_tokens)
-    consider(_RANK_PATH, path_tokens)
-
-    # Heading/body tiers, with the snippet captured at the first matching line
-    # in document order. Headings rank above body; within each, document order.
-    heading_hit: tuple[str, str] | None = None  # (section_heading, snippet_line)
-    body_hit: tuple[str, str] | None = None
-    for sec in entry_tokens.sections:
-        for term in terms:
-            if _term_hits_tokens(term, sec.heading_tokens):
-                matched_terms.add(term)
-                if heading_hit is None:
-                    heading_hit = (sec.heading, sec.heading)
-        for line, line_tokens in sec.lines:
-            for term in terms:
-                if _term_hits_tokens(term, line_tokens):
-                    matched_terms.add(term)
-                    if body_hit is None:
-                        body_hit = (sec.heading, line)
-
-    if heading_hit is not None and (best_rank is None or _RANK_HEADING < best_rank):
-        best_rank = _RANK_HEADING
-    if body_hit is not None and (best_rank is None or _RANK_BODY < best_rank):
-        best_rank = _RANK_BODY
-
-    # AND semantics: every term must have matched at least one field.
-    if any(term not in matched_terms for term in terms):
-        return None
-    if best_rank is None:
+    # AND semantics: every term must have matched at least one field. (With no
+    # terms, or none matched, ``best_rank`` stays None — an empty query matches
+    # nothing.)
+    if not set(terms) <= matched_terms or best_rank is None:
         return None
 
     # Matched terms in query order (deduped) — the evidence the matcher already
     # has (WS2). AND semantics make this every distinct query term.
     ordered_terms = [term for term in dict.fromkeys(terms) if term in matched_terms]
 
-    if best_rank == _RANK_HEADING and heading_hit is not None:
-        return _Match(
-            rank=best_rank, section=heading_hit[0], snippet=heading_hit[1], terms=ordered_terms
-        )
-    if best_rank == _RANK_BODY and body_hit is not None:
-        return _Match(rank=best_rank, section=body_hit[0], snippet=body_hit[1], terms=ordered_terms)
+    # Only the winning tier's snippet is surfaced: metadata tiers store none, so a
+    # metadata win yields ``section``/``snippet`` None even if heading/body matched.
+    snippet = snippets.get(best_rank)
+    if snippet is not None:
+        return _Match(rank=best_rank, section=snippet[0], snippet=snippet[1], terms=ordered_terms)
     return _Match(rank=best_rank, terms=ordered_terms)
 
 
