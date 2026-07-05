@@ -7,14 +7,17 @@ type: design
 
 ## Status
 
-Proposed
+Accepted
 
 The durable argument behind the `decision-grounding-paper` roadmap: the gap
 taxonomy, the thesis, the section outline, and a draft arXiv abstract. This
 is the paper's design, not the manuscript; the manuscript is its output and,
 being external, is referenced in prose (there is no corpus edge for an
 unpublished document — see `growth-essay-mapping`). It states the positioning
-recorded in ADR-036 and ADR-081; it does not alter it.
+recorded in ADR-036 and ADR-081; it does not alter it. The Open Questions
+below are now resolved; the abstract's result sentence remains a placeholder
+until the SWE-DecisionBench funded run reports (Initiative 2), and external
+publication stays behind GATE-1.
 
 ## Context
 
@@ -191,16 +194,38 @@ faithfully, including a null or partial outcome.
 
 ## Open Questions
 
-- Venue after arXiv: which LLM4SE / agents-for-SE workshop, and on what
-  timeline relative to GATE-1.
-- Evaluation scale and task set: LongMemEval vs GitChameleon vs a bespoke
-  decision-governed set — resolved in `rac-grounding-baseline-study`.
-- Authorship and affiliation (maintainer's call), and whether an external
-  co-author strengthens credibility.
-- How to reference the manuscript from the corpus given no external-document
-  relationship type exists — prose only, or wait on that schema work.
-- Single-author position-and-evidence papers: is the empirical arm enough
-  for a peer venue, or is a larger study needed first.
+All five are now resolved:
+
+- **Venue after arXiv** → selected by criteria, not by a pinned CFP: an
+  LLM4SE / agents-for-SE workshop in the ICSE/FSE/ASE cycle that welcomes
+  benchmark-and-methodology papers and accepts single-author submissions.
+  The rule is the resolution: submit to the first qualifying deadline after
+  GATE-1 clears — pinning a named CFP now would lapse against an unknown
+  GATE-1 timeline.
+- **Evaluation scale and task set** → resolved in
+  `rac-grounding-baseline-study`: GitChameleon-seeded version-conditioned
+  tasks supply the executable co-primary outcome (decision-conditioned
+  resolution, upstream tests as the scorer), and the real-corpus adherence
+  arm scales from the 19-scenario pilot to a ~49-scenario study-grade
+  roster (PEP/RFC/W3C supersessions and prohibitions plus negative
+  controls). LongMemEval is rejected: it measures episodic conversational
+  memory, not durable decision grounding.
+- **Authorship and affiliation** → single author (the maintainer),
+  independent affiliation — consistent with GATE-1 being a personal-work
+  clearance. The arXiv first-submission endorsement requirement is the
+  recorded risk; the mitigation is to seek an endorsement or an affiliated
+  submitter early. An external co-author remains optional strengthening,
+  not a precondition.
+- **Referencing the manuscript from the corpus** → prose only; do not wait
+  on schema work. This matches the roadmap's recorded mitigation and the
+  `growth-essay-mapping` precedent for external documents.
+- **Single-author sufficiency for a peer venue** → the two co-primary
+  empirical outcomes are the answer: adherence plus executable resolution
+  is a full empirical arm, and the honesty rule (REQ-008 of
+  `rac-grounding-baseline-study`) makes a null or partial result
+  submissible rather than blocking. A larger multi-model study is recorded
+  follow-on work in the benchmark's own roadmap, not a precondition for
+  the workshop submission.
 
 ## Related Requirements
 
