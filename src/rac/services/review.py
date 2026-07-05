@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from rac.core.corpus import CorpusCache
+from rac.core.corpus import CorpusEntry, walk_corpus
 
 from .drift import CODE_SUSPECT_ARTIFACT, drift_problem, suspect_drift
 from .portfolio import (
@@ -33,9 +33,9 @@ from .portfolio import (
     ATTENTION_INVALID,
     ATTENTION_MISSING_RECOMMENDED,
     PortfolioSummary,
-    build_portfolio_summary,
+    portfolio_from_corpus,
 )
-from .recency import artifact_recency
+from .recency import last_committed_for_paths
 
 # Stable priority levels and the unknown-artifact code (JSON contract, ADR-007).
 PRIORITY_INVALID_ARTIFACT = 1
@@ -200,11 +200,17 @@ def build_review(
     (v0.13.3). It is informational and never changes the review's exit status.
     ``now`` is injectable for deterministic tests.
     """
-    portfolio = build_portfolio_summary(directory, recursive=recursive)
+    # One corpus walk feeds every analysis (mirrors ``build_gate``'s single-walk
+    # pattern, ``gate.py``): the portfolio, the drift advisories, and the cadence
+    # recency signal all read the same pre-walked snapshot instead of re-walking
+    # and re-parsing the tree three times. The result is byte-identical to the
+    # prior multi-walk composition — only corpus acquisition changed (ADR-023).
+    entries = list(walk_corpus(directory, recursive=recursive))
+    portfolio = portfolio_from_corpus(directory, entries, recursive=recursive)
     report = review_from_portfolio(directory, portfolio, recursive=recursive)
-    advisories: list[ReviewIssue] = list(_drift_findings(directory, recursive))
+    advisories: list[ReviewIssue] = list(_drift_findings(directory, entries))
     if stale_after_days is not None:
-        finding = _cadence_finding(directory, recursive, stale_after_days, now=now)
+        finding = _cadence_finding(directory, entries, stale_after_days, now=now)
         if finding is not None:
             advisories.append(finding)
     if advisories:
@@ -213,15 +219,15 @@ def build_review(
     return report
 
 
-def _drift_findings(directory: str, recursive: bool) -> list[ReviewIssue]:
+def _drift_findings(directory: str, entries: list[CorpusEntry]) -> list[ReviewIssue]:
     """Suspect-artifact drift advisories, beside the cadence nudge (REQ-002).
 
     Surfaces the same git-native signal ``rac doctor`` reports, through review's
     advisory channel: one finding per referrer whose resolved target changed more
     recently. Advisory only (priority below every blocking finding), so it never
     changes the review verdict; empty outside git or with no drift (REQ-005).
+    Reads the shared corpus snapshot (no second walk).
     """
-    entries = CorpusCache().collect(directory, recursive=recursive)
     issues: list[ReviewIssue] = []
     for record in suspect_drift(directory, entries):
         issues.append(
@@ -241,7 +247,7 @@ def _drift_findings(directory: str, recursive: bool) -> list[ReviewIssue]:
 
 def _cadence_finding(
     directory: str,
-    recursive: bool,
+    entries: list[CorpusEntry],
     window_days: int,
     *,
     now: datetime | None = None,
@@ -252,9 +258,17 @@ def _cadence_finding(
     and the newest artifact is older than ``window_days``. An empty corpus or
     unknown recency is suppressed — the v0.13.1 empty-corpus hint covers the
     day-one case, and a nudge on missing data would be noise.
+
+    Recency is derived from the shared snapshot rather than a third walk: the
+    newest git last-committed time across the recognised (non-unknown) artifacts.
+    This is byte-identical to ``artifact_recency(directory).most_recent`` — same
+    file set (``type != "unknown"``, in snapshot order), same git primitive
+    (``last_committed_for_paths``), same ``max`` aggregation — but pays no extra
+    corpus walk (mirrors ``build_gate``'s single-walk composition).
     """
-    recency = artifact_recency(directory, recursive=recursive)
-    most_recent = recency.most_recent
+    paths = [str(e.path) for e in entries if e.artifact_type != "unknown"]
+    committed = [d for d in last_committed_for_paths(directory, paths).values() if d is not None]
+    most_recent = max(committed) if committed else None
     if most_recent is None:
         return None
     moment = now or datetime.now(UTC)
