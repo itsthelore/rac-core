@@ -229,7 +229,12 @@ def resolve_artifact(directory: str, artifact_id: str, recursive: bool = True) -
     relationship resolution uses. Multiple *distinct files* matching is a
     duplicate, reported with every path and never resolved by order.
     """
-    entries = build_repository_index(directory, recursive=recursive).artifacts
+    # Exact resolution reads only identity (id/aliases/type/title/path); it never
+    # emits inbound_count, so skip the O(N+E) relationship-graph build (ADR-078
+    # signal) that search needs — byte-identical for resolve.
+    entries = build_repository_index(
+        directory, recursive=recursive, with_inbound_counts=False
+    ).artifacts
     return resolve_in_index(entries, artifact_id)
 
 
@@ -317,14 +322,23 @@ def _id_tokens(entry: SearchableArtifact) -> list[str]:
     return tokens
 
 
-def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | None:
-    """Best tiered match for an AND query, or None when a term matches nothing.
+def _match_entry(
+    entry: SearchableArtifact, terms: Sequence[str]
+) -> tuple[_Match | None, dict[str, list[str]]]:
+    """Best tiered match for an AND query (or None), plus the entry's field tokens.
 
     Every term of ``terms`` must match somewhere in the artifact's matchable
     fields (id, title, path, headings, body); the artifact then ranks by the
     best (lowest) tier *any* term hit (ADR-037). For a heading/body win, the
     snippet is the first matching line in document order — the heading itself
     for a heading hit, the body line for a body hit (ADR-038, deterministic).
+
+    The per-field tokens computed here for matching are returned alongside the
+    match so the caller can feed them to the BM25 stats pass instead of
+    tokenising the same fields a second time in one call. The returned dict is
+    byte-identical to :func:`_field_tokens` for the same entry (same tokeniser,
+    same document order), so scores are unchanged. Tokens are returned even when
+    the match is None, since global BM25 statistics count non-matching docs too.
     """
     id_tokens = _id_tokens(entry)
     title_tokens = tokenize(entry.title or "")
@@ -349,10 +363,15 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
 
     # Heading/body tiers, with the snippet captured at the first matching line
     # in document order. Headings rank above body; within each, document order.
+    # The flattened heading/body token lists are accumulated in the same order
+    # _field_tokens uses, so the returned field tokens are byte-identical.
+    heading_tokens_all: list[str] = []
+    body_tokens_all: list[str] = []
     heading_hit: tuple[str, str] | None = None  # (section_heading, snippet_line)
     body_hit: tuple[str, str] | None = None
     for sec in entry.search_sections:
         heading_tokens = tokenize(sec.heading)
+        heading_tokens_all.extend(heading_tokens)
         for term in terms:
             if _term_hits_tokens(term, heading_tokens):
                 matched_terms.add(term)
@@ -360,11 +379,20 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
                     heading_hit = (sec.heading, sec.heading)
         for line in sec.lines:
             line_tokens = tokenize(line)
+            body_tokens_all.extend(line_tokens)
             for term in terms:
                 if _term_hits_tokens(term, line_tokens):
                     matched_terms.add(term)
                     if body_hit is None:
                         body_hit = (sec.heading, line)
+
+    field_tokens: dict[str, list[str]] = {
+        "id": id_tokens,
+        "title": title_tokens,
+        "path": path_tokens,
+        "heading": heading_tokens_all,
+        "body": body_tokens_all,
+    }
 
     if heading_hit is not None and (best_rank is None or _RANK_HEADING < best_rank):
         best_rank = _RANK_HEADING
@@ -373,21 +401,27 @@ def _match_entry(entry: SearchableArtifact, terms: Sequence[str]) -> _Match | No
 
     # AND semantics: every term must have matched at least one field.
     if any(term not in matched_terms for term in terms):
-        return None
+        return None, field_tokens
     if best_rank is None:
-        return None
+        return None, field_tokens
 
     # Matched terms in query order (deduped) — the evidence the matcher already
     # has (WS2). AND semantics make this every distinct query term.
     ordered_terms = [term for term in dict.fromkeys(terms) if term in matched_terms]
 
     if best_rank == _RANK_HEADING and heading_hit is not None:
-        return _Match(
-            rank=best_rank, section=heading_hit[0], snippet=heading_hit[1], terms=ordered_terms
+        return (
+            _Match(
+                rank=best_rank, section=heading_hit[0], snippet=heading_hit[1], terms=ordered_terms
+            ),
+            field_tokens,
         )
     if best_rank == _RANK_BODY and body_hit is not None:
-        return _Match(rank=best_rank, section=body_hit[0], snippet=body_hit[1], terms=ordered_terms)
-    return _Match(rank=best_rank, terms=ordered_terms)
+        return (
+            _Match(rank=best_rank, section=body_hit[0], snippet=body_hit[1], terms=ordered_terms),
+            field_tokens,
+        )
+    return _Match(rank=best_rank, terms=ordered_terms), field_tokens
 
 
 def find_artifacts(
@@ -650,17 +684,37 @@ def search_index(
     """
     terms = tokenize(query)
     matched: list[tuple[SearchableArtifact, _Match]] = []
+    # The matcher tokenises each candidate's fields; keep those tokens so the
+    # BM25 stats pass reuses them instead of re-tokenising the same text within
+    # one call (byte-identical — same tokeniser, same inputs). Skipped when the
+    # caller injects precomputed tokens (the derived-index cache, ADR-099).
+    matched_field_tokens: dict[str, dict[str, list[str]]] = {}
+    collect_field_tokens = field_tokens_by_path is None
     if terms:  # an all-punctuation query tokenizes to nothing: no matches.
         for entry in entries:
             if artifact_type is not None and entry.type != artifact_type:
                 continue
-            match = _match_entry(entry, terms)
+            match, entry_field_tokens = _match_entry(entry, terms)
+            if collect_field_tokens:
+                matched_field_tokens[entry.path] = entry_field_tokens
             if match is not None:
                 matched.append((entry, match))
     if not matched:
         return SearchResult(query=query, artifact_type=artifact_type, matches=[])
 
-    # Corpus-wide BM25 statistics (global IDF and mean field length, ADR-078).
+    # Corpus-wide BM25 statistics (global IDF and mean field length, ADR-078),
+    # computed over the WHOLE corpus — not just the matched/type-filtered subset.
+    if field_tokens_by_path is None:
+        # The match loop already tokenised every candidate that passed the type
+        # filter; only type-filtered-out entries remain to tokenise, so each
+        # field is tokenised exactly once this call. Byte-identical to a fresh
+        # per-entry tokenisation (same tokeniser, same document order).
+        field_tokens_by_path = {
+            entry.path: matched_field_tokens[entry.path]
+            if entry.path in matched_field_tokens
+            else _field_tokens(entry)
+            for entry in entries
+        }
     n, df, avglen, field_tokens_by_path = _corpus_stats(entries, terms, field_tokens_by_path)
     bm25 = {e.path: _bm25f(field_tokens_by_path[e.path], terms, n, df, avglen) for e, _ in matched}
     inbound = {e.path: float(getattr(e, "inbound_count", 0)) for e, _ in matched}

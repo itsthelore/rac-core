@@ -88,14 +88,29 @@ class RepositoryIndex:
         }
 
 
-def build_repository_index(directory: str, recursive: bool = True) -> RepositoryIndex:
-    """Walk ``directory`` and inventory every Markdown artifact (one parse each)."""
+def build_repository_index(
+    directory: str, recursive: bool = True, *, with_inbound_counts: bool = True
+) -> RepositoryIndex:
+    """Walk ``directory`` and inventory every Markdown artifact (one parse each).
+
+    ``with_inbound_counts`` (default True) builds the inbound resolved-edge
+    counts the relevance ranker needs; callers that only read identity — e.g.
+    ``rac resolve``, whose output never carries ``inbound_count`` — pass False to
+    skip the O(N+E) relationship-graph build (byte-identical for those callers,
+    since the field defaults to 0 and they never emit it).
+    """
     entries = list(walk_corpus(directory, recursive=recursive))
-    return index_from_corpus(directory, entries, recursive=recursive)
+    return index_from_corpus(
+        directory, entries, recursive=recursive, with_inbound_counts=with_inbound_counts
+    )
 
 
 def index_from_corpus(
-    directory: str, entries: list[CorpusEntry], recursive: bool = True
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    *,
+    with_inbound_counts: bool = True,
 ) -> RepositoryIndex:
     """Inventory an already-walked corpus snapshot (v0.8.0).
 
@@ -105,10 +120,16 @@ def index_from_corpus(
     Each entry also carries its inbound resolved-edge count — the graph signal
     the relevance ranker fuses (ADR-078) — computed once from the same snapshot.
     The import is deferred to keep the index → relationships dependency one-way.
+    ``with_inbound_counts=False`` skips that graph build entirely (and its import)
+    for resolve-only callers; ``inbound_count`` then stays at its 0 default, which
+    those callers never serialise, so their output is unchanged.
     """
-    from rac.services.relationships import inbound_counts_from_corpus
+    if with_inbound_counts:
+        from rac.services.relationships import inbound_counts_from_corpus
 
-    inbound = inbound_counts_from_corpus(entries)
+        inbound = inbound_counts_from_corpus(entries)
+    else:
+        inbound = {}
     artifacts: list[IndexEntry] = []
     for entry in entries:
         path, product = entry.path, entry.product
