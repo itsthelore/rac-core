@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -306,6 +307,37 @@ def _assemble_draft(frontmatter: str, body: str, draft: NoteDraft) -> str:
     return text
 
 
+# A per-tool body normaliser: rewrites/collects candidate links against the
+# note's own path and records them on the draft, returning the body to assemble.
+_Normaliser = Callable[[str, _Resolver, str, NoteDraft], str]
+
+
+def _emit_draft(
+    source_path: str,
+    suggested_filename: str,
+    frontmatter: str,
+    body: str,
+    resolver: _Resolver,
+    normalise: _Normaliser,
+) -> NoteDraft:
+    """Assemble one note into a draft — the emit step every converter shares.
+
+    ``source_path`` and ``suggested_filename`` are carried **separately**: for
+    the Markdown-directory tools they are the same relative path, but Roam's
+    ``source_path`` is the raw page title while ``suggested_filename`` is its
+    sanitised :func:`_roam_filename` — both are byte-pinned, so they must not be
+    collapsed into one value. ``suggested_filename`` is the note's own path for
+    self-link detection. ``normalise`` (wikilink or Notion-Markdown) rewrites the
+    body and records candidate ``## Related`` targets on the draft;
+    :func:`_assemble_draft` then composes preserved frontmatter + normalised body
+    + candidate links.
+    """
+    draft = NoteDraft(source_path=source_path, suggested_filename=suggested_filename, markdown="")
+    normalised = normalise(body, resolver, suggested_filename, draft)
+    draft.markdown = _assemble_draft(frontmatter, normalised, draft)
+    return draft
+
+
 def _walk_notes(root: Path) -> list[str]:
     """Every ``.md`` note under ``root``, POSIX-relative, sorted (deterministic)."""
     notes: list[str] = []
@@ -317,15 +349,17 @@ def _walk_notes(root: Path) -> list[str]:
     return sorted(notes)
 
 
-def _convert_vault(root: Path, name: str) -> VaultIngestResult:
-    """Walk an export, normalise each note, and collect the drafts (ADR-079).
+def _convert_note_dir(root: Path, name: str, normalise: _Normaliser) -> VaultIngestResult:
+    """Walk a Markdown-directory export and emit one draft per note (ADR-079).
 
-    The shared body every wikilink-based note tool reuses: one deterministic walk
-    feeds the resolver and the per-note normalisation (frontmatter preserved,
-    resolved ``[[links]]`` rewritten and offered as candidate ``## Related``
-    references, everything else verbatim). Tool-specific syntax a converter does
-    not rewrite — Logseq block references and properties, media embeds — flows
-    through untouched, so losslessness holds by construction.
+    The shared body every directory-based note tool reuses: one deterministic
+    walk feeds the resolver and the per-note emit (frontmatter preserved, links
+    normalised via ``normalise`` and offered as candidate ``## Related``
+    references, everything else verbatim). Only the link ``normalise`` differs
+    between tools — wikilinks for Obsidian/Logseq, Markdown links for Notion —
+    so each converter passes its own. Tool-specific syntax a converter does not
+    rewrite (Logseq block references and properties, media embeds) flows through
+    untouched, so losslessness holds by construction.
     """
     note_paths = _walk_notes(root)
     resolver = _Resolver(note_paths)
@@ -333,11 +367,13 @@ def _convert_vault(root: Path, name: str) -> VaultIngestResult:
     for rel in note_paths:
         text = (root / rel).read_text(encoding="utf-8")
         frontmatter, body = _split_frontmatter(text)
-        draft = NoteDraft(source_path=rel, suggested_filename=rel, markdown="")
-        normalised = _normalise_body(body, resolver, rel, draft)
-        draft.markdown = _assemble_draft(frontmatter, normalised, draft)
-        result.drafts.append(draft)
+        result.drafts.append(_emit_draft(rel, rel, frontmatter, body, resolver, normalise))
     return result
+
+
+def _convert_vault(root: Path, name: str) -> VaultIngestResult:
+    """Ingest a wikilink-based vault (Obsidian, Logseq) through the shared walk."""
+    return _convert_note_dir(root, name, _normalise_body)
 
 
 class ObsidianConverter:
@@ -403,16 +439,7 @@ class NotionConverter:
         return any(_NOTION_FILE_RE.search(path.name) for path in root.rglob("*.md"))
 
     def convert_vault(self, root: Path) -> VaultIngestResult:
-        note_paths = _walk_notes(root)
-        resolver = _Resolver(note_paths)
-        result = VaultIngestResult(converter=self.name, root=str(root))
-        for rel in note_paths:
-            text = (root / rel).read_text(encoding="utf-8")
-            frontmatter, body = _split_frontmatter(text)
-            draft = NoteDraft(source_path=rel, suggested_filename=rel, markdown="")
-            normalised = _normalise_notion_body(body, resolver, rel, draft)
-            draft.markdown = _assemble_draft(frontmatter, normalised, draft)
-            result.drafts.append(draft)
+        result = _convert_note_dir(root, self.name, _normalise_notion_body)
         result.skipped_sources = sorted(
             path.relative_to(root).as_posix() for path in root.rglob("*.csv")
         )
@@ -491,10 +518,10 @@ def convert_roam_pages(pages: list[dict], source: str) -> VaultIngestResult:
         body = f"# {title}\n\n" + "\n".join(body_lines)
         if body_lines:
             body += "\n"
-        draft = NoteDraft(source_path=title, suggested_filename=rel, markdown="")
-        normalised = _normalise_body(body, resolver, rel, draft)
-        draft.markdown = _assemble_draft("", normalised, draft)
-        result.drafts.append(draft)
+        # source_path is the raw title, suggested_filename the sanitised
+        # _roam_filename — carried separately (both byte-pinned). No frontmatter:
+        # the H1-plus-outliner body is synthesised, not read from a file.
+        result.drafts.append(_emit_draft(title, rel, "", body, resolver, _normalise_body))
     return result
 
 
