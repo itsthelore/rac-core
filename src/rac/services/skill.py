@@ -36,7 +36,7 @@ class SkillFileExists(RACError):
     before anything is written (all-or-nothing).
     """
 
-    def __init__(self, paths: list[str]):
+    def __init__(self, paths: list[str]) -> None:
         self.paths = paths
         if len(paths) == 1:
             message = f"{paths[0]} already exists; rac skill install never overwrites"
