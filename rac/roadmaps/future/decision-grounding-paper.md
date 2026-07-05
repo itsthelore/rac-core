@@ -18,6 +18,14 @@ missing, with Lore (built on the RAC engine, ADR-036) as the reference
 implementation. It states positioning already recorded in ADR-036 and
 ADR-081; it does not alter it.
 
+Initiative 1 is complete: the `decision-grounding-thesis` design is Accepted
+with its open questions resolved. Initiative 2 is run-ready in
+`itsthelore/rac-benchmarks`: the paired-significance statistics, the
+GitChameleon executable co-primary pipeline, the 49-scenario study-grade
+roster, and the frozen analysis-plan amendment are landed; only the funded
+model runs remain (the refreshed funded-run handoff covers both co-primary
+outcomes). Initiative 3 remains blocked on GATE-1.
+
 ## Context
 
 The AI-coding-agent stack has converged on two ways to give an agent
