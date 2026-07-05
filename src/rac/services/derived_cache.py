@@ -35,24 +35,69 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from rac.core.corpus import corpus_content_hash, walk_corpus
+from rac.core.artifacts import spec_for
+from rac.core.corpus import CorpusEntry, corpus_content_hash, walk_corpus
+from rac.core.identity import artifact_identifier
 from rac.core.models import SearchSection
+from rac.services.agent_rules import artifact_status, is_live_decision
 from rac.services.index import IndexEntry, index_from_corpus
+from rac.services.portfolio import portfolio_from_corpus
+from rac.services.references import SCOPE_SECTIONS, extract_relationships_full
 from rac.services.relationships import Relationship, relationships_from_corpus
 from rac.services.resolve import field_tokens_for_entries, live_decision_paths
 
+# Byte-parity requires the identical scope matcher, and this bundle (ADR-100)
+# does not open `services/scope.py`, so the two path-mode matchers are reused as
+# imports rather than duplicated — duplicating the segment-aware glob compiler
+# would be a parity liability. A future public seam on `scope` would remove the
+# private reach; until then the coupling is one-directional (scope never imports
+# this module) and deliberate.
+from rac.services.scope import (  # noqa: PLC2701 - deliberate reuse; see note above
+    GoverningDecision,
+    ScopeLookupResult,
+    _entry_covers,
+    _normalize_query,
+)
+from rac.services.scope_paths import repository_root
+
 # Bumping this discards every existing cache file (they carry it and a mismatch
 # is treated as a miss), so a serialisation change can never rehydrate stale
-# shapes. A recorded decision, like any pinned schema (ADR-007).
-SCHEMA_VERSION = "1"
+# shapes. A recorded decision, like any pinned schema (ADR-007). Bumped to "2"
+# by ADR-100, which extends the cached bundle with the portfolio summary and the
+# per-decision scope rows — an old-shape "1" file fails the gate and rebuilds.
+SCHEMA_VERSION = "2"
+
+_DECISION_TYPE = "decision"
 
 CACHE_DIRNAME = "derived"
 CACHE_DIR_ENV = "RAC_CACHE_DIR"
 
 
 @dataclass(frozen=True)
+class ScopeRow:
+    """One live decision's declared ``## Applies To`` scope, precomputed (ADR-100).
+
+    The path mode of ``find_decisions`` matches a queried code path against every
+    live decision's declared scope entries. Carrying the identity plus the ordered
+    declared entries per live decision lets that answer be served from the cached
+    read-model instead of a fresh walk, byte-identically to ``decisions_for_path``.
+
+    ``scope_entries`` are the declared entries in the exact order
+    ``scope._governing`` scans them (``SCOPE_SECTIONS`` order, declared order
+    within each), so the reported ``matching_entry`` — the first covering entry —
+    is preserved.
+    """
+
+    id: str
+    title: str
+    status: str
+    path: str
+    scope_entries: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DerivedIndex:
-    """The expensive derived structures for one corpus snapshot (ADR-099).
+    """The expensive derived structures for one corpus snapshot (ADR-099/ADR-100).
 
     Each field is a pure function of the corpus bytes, so the whole bundle is
     content-addressable and losslessly serialisable:
@@ -63,12 +108,84 @@ class DerivedIndex:
     - ``field_tokens_by_path`` — the tokenised BM25 field vectors, keyed by path.
     - ``live_decision_paths`` — the Accepted, non-retired decision paths, so the
       ``find_decisions`` liveness filter needs no parsed products.
+    - ``portfolio_summary`` — the ``get_summary`` portfolio dict (ADR-100),
+      computed once through ``portfolio_from_corpus`` over the same snapshot, so
+      the heaviest tool builds through this one composer instead of re-walking.
+    - ``scope_rows`` — the per-live-decision ``## Applies To`` rows (ADR-100) the
+      path mode of ``find_decisions`` matches against, so it needs no fresh walk.
     """
 
     index_entries: list[IndexEntry]
     relationships: list[Relationship]
     field_tokens_by_path: dict[str, dict[str, list[str]]]
     live_decision_paths: list[str]
+    portfolio_summary: dict
+    scope_rows: list[ScopeRow]
+
+
+def _scope_rows_from_corpus(entries: list[CorpusEntry]) -> list[ScopeRow]:
+    """Precompute the path-mode scope rows for every live decision that declares scope.
+
+    Faithful to ``scope._governing``'s extraction: only live decisions, only the
+    ``## Applies To`` (``SCOPE_SECTIONS``) entries, flattened in scan order. A
+    decision that declares no scope can never cover a query, so it is omitted —
+    dropping it changes no answer, exactly as ``_governing`` would return ``None``.
+    """
+    rows: list[ScopeRow] = []
+    for entry in entries:
+        product = entry.product
+        if entry.artifact_type != _DECISION_TYPE or not is_live_decision(product):
+            continue
+        spec = spec_for(entry.artifact_type)
+        if spec is None:  # the decision spec is always registered; narrow for typing
+            continue
+        relationships = extract_relationships_full(product, spec)
+        declared: list[str] = []
+        for section in SCOPE_SECTIONS:
+            declared.extend(relationships.get(section.replace(" ", "_"), []))
+        if not declared:
+            continue
+        rows.append(
+            ScopeRow(
+                id=artifact_identifier(product, spec, str(entry.path)),
+                title=product.title or "",
+                status=artifact_status(product),
+                path=str(entry.path),
+                scope_entries=tuple(declared),
+            )
+        )
+    return rows
+
+
+def governing_decisions(scope_rows: list[ScopeRow], directory: str, path: str) -> ScopeLookupResult:
+    """The live decisions governing ``path``, matched over precomputed scope rows.
+
+    Byte-identical to :func:`rac.services.scope.decisions_for_path` for the same
+    corpus and path — the same repository-root discovery, query normalisation,
+    segment-aware coverage test, and ``(id.casefold(), path)`` ordering — but over
+    the read-model's precomputed rows (ADR-100), so no fresh walk is needed. The
+    server always builds the rows recursively, matching the tool's ``recursive``.
+    """
+    root = repository_root(directory)
+    query = _normalize_query(path, root)
+    if query is None:
+        return ScopeLookupResult(query=path.strip(), in_repository=False, decisions=[])
+    matches: list[GoverningDecision] = []
+    for row in scope_rows:
+        for declared in row.scope_entries:
+            if _entry_covers(declared, query):
+                matches.append(
+                    GoverningDecision(
+                        id=row.id,
+                        title=row.title,
+                        status=row.status,
+                        path=row.path,
+                        matching_entry=declared,
+                    )
+                )
+                break
+    matches.sort(key=lambda d: (d.id.casefold(), d.path))
+    return ScopeLookupResult(query=query, in_repository=True, decisions=matches)
 
 
 def build_derived_index(directory: str, *, recursive: bool = True) -> DerivedIndex:
@@ -76,6 +193,8 @@ def build_derived_index(directory: str, *, recursive: bool = True) -> DerivedInd
 
     One walk feeds every structure, exactly as the uncached consumers build them
     individually, so a cache-populated call and a fresh call are byte-identical.
+    The portfolio summary and scope rows (ADR-100) ride the same walk, so the two
+    formerly cache-bypassing tools build through this one composer too.
     """
     entries = list(walk_corpus(directory, recursive=recursive))
     index = index_from_corpus(directory, entries, recursive=recursive)
@@ -84,6 +203,8 @@ def build_derived_index(directory: str, *, recursive: bool = True) -> DerivedInd
         relationships=relationships_from_corpus(entries),
         field_tokens_by_path=field_tokens_for_entries(index.artifacts),
         live_decision_paths=live_decision_paths(entries),
+        portfolio_summary=portfolio_from_corpus(directory, entries, recursive=recursive).to_dict(),
+        scope_rows=_scope_rows_from_corpus(entries),
     )
 
 
@@ -136,6 +257,26 @@ def _relationship_from_obj(obj: dict) -> Relationship:
     )
 
 
+def _scope_row_to_obj(row: ScopeRow) -> dict:
+    return {
+        "id": row.id,
+        "title": row.title,
+        "status": row.status,
+        "path": row.path,
+        "scope_entries": list(row.scope_entries),
+    }
+
+
+def _scope_row_from_obj(obj: dict) -> ScopeRow:
+    return ScopeRow(
+        id=obj["id"],
+        title=obj["title"],
+        status=obj["status"],
+        path=obj["path"],
+        scope_entries=tuple(obj["scope_entries"]),
+    )
+
+
 def to_json_obj(derived: DerivedIndex) -> dict:
     """Serialise a :class:`DerivedIndex` to a JSON-ready object (lossless)."""
     return {
@@ -144,6 +285,10 @@ def to_json_obj(derived: DerivedIndex) -> dict:
         "relationships": [_relationship_to_obj(r) for r in derived.relationships],
         "field_tokens_by_path": derived.field_tokens_by_path,
         "live_decision_paths": list(derived.live_decision_paths),
+        # ADR-100: the portfolio dict is already the JSON get_summary serves, so it
+        # embeds directly; the scope rows are plain strings.
+        "portfolio_summary": derived.portfolio_summary,
+        "scope_rows": [_scope_row_to_obj(r) for r in derived.scope_rows],
     }
 
 
@@ -163,6 +308,8 @@ def from_json_obj(obj: dict) -> DerivedIndex:
             for path, fields in obj["field_tokens_by_path"].items()
         },
         live_decision_paths=list(obj["live_decision_paths"]),
+        portfolio_summary=obj["portfolio_summary"],
+        scope_rows=[_scope_row_from_obj(r) for r in obj["scope_rows"]],
     )
 
 
