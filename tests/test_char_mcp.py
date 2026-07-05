@@ -343,7 +343,10 @@ def test_get_related_budget_cuts_incoming_not_neighborhood(tmp_path):
 
 # =============================================================================
 # Finding #7 (LOW): on-disk cache filename shape and literal schema version.
-# Cache files are `{corpus_hash}.json`; the JSON carries schema_version == "1".
+# Cache files are `{corpus_hash}.json`; the JSON carries the current cache
+# schema version. The literal was "1" at the freeze; ADR-100 bumped it to "2"
+# when it extended the cached bundle (this is an internal cache-file detail, not
+# an externally observable wire byte — a conscious schema change, not drift).
 # =============================================================================
 
 
@@ -353,4 +356,4 @@ def test_cache_file_named_by_corpus_hash_carries_schema_version(tmp_path):
     expected = cache_dir / f"{corpus_content_hash(CORPUS)}.json"
     assert expected.exists()
     obj = json.loads(expected.read_text(encoding="utf-8"))
-    assert obj["schema_version"] == derived_cache.SCHEMA_VERSION == "1"
+    assert obj["schema_version"] == derived_cache.SCHEMA_VERSION == "2"

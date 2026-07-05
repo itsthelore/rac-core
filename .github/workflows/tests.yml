@@ -129,8 +129,10 @@ jobs:
             paths: "tests/test_watchkeeper.py tests/test_validate_action.py tests/test_pr_gate_action.py tests/test_gate.py tests/test_no_egress.py"
           # Characterization battery (roadmap rebuild-scale, Phase 0.5): pins
           # observable behavior that was unpinned before the examiner froze.
+          # Movement-B bundle B1 (ADR-100) adds test_b1_read_model.py here — it
+          # pins the unified read-model's byte-parity and cache invariants.
           - name: characterization
-            paths: "tests/test_char_enforce.py tests/test_char_retrieve.py tests/test_char_graph.py tests/test_char_report.py tests/test_char_mcp.py tests/test_char_author.py tests/test_char_compare.py tests/test_char_ingest.py tests/test_char_ops.py tests/test_char_core.py"
+            paths: "tests/test_char_enforce.py tests/test_char_retrieve.py tests/test_char_graph.py tests/test_char_report.py tests/test_char_mcp.py tests/test_char_author.py tests/test_char_compare.py tests/test_char_ingest.py tests/test_char_ops.py tests/test_char_core.py tests/test_b1_read_model.py"
           # Trust gates (v0.7.9): dogfood validates RAC's own rac/ corpus,
           # golden pins CLI stdout byte-for-byte against committed files.
           - name: dogfood

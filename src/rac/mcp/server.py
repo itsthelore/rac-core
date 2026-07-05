@@ -64,9 +64,13 @@ from rac.mcp.budget import (
 )
 from rac.mcp.telemetry import TelemetryRecorder
 from rac.services.agent_rules import artifact_status
-from rac.services.derived_cache import DerivedIndexCache
+from rac.services.derived_cache import (
+    DerivedIndex,
+    DerivedIndexCache,
+    build_derived_index,
+    governing_decisions,
+)
 from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
-from rac.services.portfolio import build_portfolio_summary
 from rac.services.recency import annotate_search_recency, artifact_provenance
 from rac.services.relationships import (
     incoming_references,
@@ -82,7 +86,6 @@ from rac.services.resolve import (
     resolve_in_index,
     search_index,
 )
-from rac.services.scope import decisions_for_path
 
 SERVER_NAME = "lore"
 
@@ -185,6 +188,20 @@ def _read_content(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
+def _read_model(root: str, cache: DerivedIndexCache | None) -> DerivedIndex:
+    """The derived read-model for one call: cached under a key, or built fresh (ADR-100).
+
+    One composer serves both cache modes. With ``cache`` set (ADR-099) the bundle
+    comes from the content-addressed cache; with ``cache`` None the read-model is
+    built fresh every call (ADR-032, the default), byte-identically. ``get_summary``
+    and ``find_decisions`` path mode reach the same structures every other tool
+    uses, instead of their own separate walks.
+    """
+    if cache is not None:
+        return cache.load_or_build(root)
+    return build_derived_index(root)
+
+
 def _index_entries(root: str, cache: DerivedIndexCache | None) -> list[IndexEntry]:
     """The repository index rows, from the derived-index cache or a fresh walk.
 
@@ -283,7 +300,11 @@ def _find_decisions(
     Neither mode returns a verdict — the agent reads and judges (ADR-034/067).
     """
     if path:
-        return serialize(decisions_for_path(root, path, recursive=True).to_dict(), budget)
+        # Path mode builds through the same read-model as every other tool
+        # (ADR-100), served from precomputed scope rows — byte-identical to
+        # ``decisions_for_path`` in both cache modes.
+        derived = _read_model(root, cache)
+        return serialize(governing_decisions(derived.scope_rows, root, path).to_dict(), budget)
     if cache is not None:
         derived = cache.load_or_build(root)
         result = find_decisions_in(
@@ -378,13 +399,15 @@ def _get_related(
     return serialize(payload, budget)
 
 
-def _get_summary(root: str, budget: int) -> str:
-    summary = build_portfolio_summary(root, recursive=True)
-    payload = summary.to_dict()
+def _get_summary(root: str, budget: int, cache: DerivedIndexCache | None = None) -> str:
+    # The portfolio summary builds through the one read-model composer (ADR-100),
+    # cache-backed or fresh — byte-identical to ``build_portfolio_summary``. A
+    # shallow copy so the additive guidance key never mutates a cached bundle.
+    payload = dict(_read_model(root, cache).portfolio_summary)
     # Additive empty-state pointer (v0.13.1, ADR-007): a cold agent session
     # against a fresh repository is told how the user begins authoring, rather
-    # than just seeing zeros.
-    if summary.total_artifacts == 0:
+    # than just seeing zeros. ``empty`` is ``total_artifacts == 0`` on the dict.
+    if payload["empty"]:
         payload["guidance"] = (
             "This repository has no RAC artifacts yet. The user can create the "
             "first one with `rac quickstart`, or with `rac init` then "
@@ -473,7 +496,7 @@ def build_server(
     @server.tool(name="get_summary", description=DESC_GET_SUMMARY)
     def get_summary(ctx: Context) -> str:
         return observed(
-            "get_summary", {}, lambda: _get_summary(root, budget), _request_principal(ctx)
+            "get_summary", {}, lambda: _get_summary(root, budget, cache), _request_principal(ctx)
         )
 
     return server
