@@ -234,15 +234,19 @@ def governing_decisions(scope_rows: list[ScopeRow], directory: str, path: str) -
     return ScopeLookupResult(query=query, in_repository=True, decisions=matches)
 
 
-def build_derived_index(directory: str, *, recursive: bool = True) -> DerivedIndex:
-    """Build the derived structures fresh from one corpus walk (the cache miss path).
+def build_derived_index_from_entries(
+    directory: str, entries: list[CorpusEntry], *, recursive: bool = True
+) -> DerivedIndex:
+    """Build the derived structures from an already-walked corpus snapshot.
 
-    One walk feeds every structure, exactly as the uncached consumers build them
-    individually, so a cache-populated call and a fresh call are byte-identical.
-    The portfolio summary and scope rows (ADR-100) ride the same walk, so the two
-    formerly cache-bypassing tools build through this one composer too.
+    The from-parts seam :func:`build_derived_index` composes, factored out so an
+    event-sourced serving tracker (ADR-102) that re-parses only the *changed*
+    files can re-derive the whole read-model over its incrementally-maintained
+    snapshot without a fresh walk — byte-identically to :func:`build_derived_index`
+    for the same corpus state, because ``entries`` is the same sorted-path snapshot
+    ``walk_corpus`` would yield. Every derived structure is a pure function of the
+    snapshot, so identical entries in identical order give identical bytes.
     """
-    entries = list(walk_corpus(directory, recursive=recursive))
     index = index_from_corpus(directory, entries, recursive=recursive)
     return DerivedIndex(
         index_entries=index.artifacts,
@@ -252,6 +256,18 @@ def build_derived_index(directory: str, *, recursive: bool = True) -> DerivedInd
         portfolio_summary=portfolio_from_corpus(directory, entries, recursive=recursive).to_dict(),
         scope_rows=_scope_rows_from_corpus(entries),
     )
+
+
+def build_derived_index(directory: str, *, recursive: bool = True) -> DerivedIndex:
+    """Build the derived structures fresh from one corpus walk (the cache miss path).
+
+    One walk feeds every structure, exactly as the uncached consumers build them
+    individually, so a cache-populated call and a fresh call are byte-identical.
+    The portfolio summary and scope rows (ADR-100) ride the same walk, so the two
+    formerly cache-bypassing tools build through this one composer too.
+    """
+    entries = list(walk_corpus(directory, recursive=recursive))
+    return build_derived_index_from_entries(directory, entries, recursive=recursive)
 
 
 def _index_entry_to_obj(entry: IndexEntry) -> dict:
