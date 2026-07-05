@@ -194,9 +194,15 @@ def validate_product(product: Product, start: str = ".") -> list[Issue]:
     and SDK callers share this one composition, so behind-the-gate analysis never
     drifts from what the interface reports (ADR-015).
     """
+    # Classify once and reuse for both dispatch and override resolution: the walk
+    # already pays for this on the directory path, and the single-file path should
+    # not re-derive the same pure result twice.
+    artifact_type = classify(product).type
     return apply_overrides(
-        validate(product, ticketing_provider=load_ticketing_provider(start)),
-        classify(product).type,
+        validate(
+            product, ticketing_provider=load_ticketing_provider(start), artifact_type=artifact_type
+        ),
+        artifact_type,
         load_overrides(start),
     )
 
@@ -259,8 +265,12 @@ def validate_corpus(
                 )
             )
             continue
+        # The walk already classified this entry; thread that type into
+        # ``validate`` so it is not re-derived per file (3× classify → 1×).
         issues = apply_overrides(
-            validate(product, ticketing_provider=provider), artifact_type, overrides
+            validate(product, ticketing_provider=provider, artifact_type=artifact_type),
+            artifact_type,
+            overrides,
         )
         files.append(
             FileValidation(
