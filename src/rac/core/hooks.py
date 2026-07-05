@@ -48,7 +48,7 @@ DEFAULT_STYLE = BUNDLED_HOOKS[0].style
 class HookNotFound(RACError):
     """The requested hook style is not in the bundled registry (usage error)."""
 
-    def __init__(self, style: str):
+    def __init__(self, style: str) -> None:
         self.style = style
         super().__init__(f"unknown hook style: {style} (available: {', '.join(available_hooks())})")
 
@@ -56,7 +56,7 @@ class HookNotFound(RACError):
 class HookResourceMissing(RACError):
     """A registered hook's packaged resource is absent (operational error)."""
 
-    def __init__(self, style: str):
+    def __init__(self, style: str) -> None:
         self.style = style
         super().__init__(
             f"packaged hook missing: {style}; the RAC installation appears to be broken"
