@@ -51,6 +51,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -76,7 +77,7 @@ from rac.services.derived_cache import (
     governing_decisions,
 )
 from rac.services.freshness import FreshnessTracker
-from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
+from rac.services.index import build_repository_index, index_from_corpus
 from rac.services.index_store import ReadModelView
 from rac.services.recency import annotate_search_recency, artifact_provenance
 from rac.services.relationships import (
@@ -211,29 +212,25 @@ def _read_model(root: str, reader: FreshnessTracker | None) -> CorpusReadModel:
     return build_derived_index(root)
 
 
-def _index_entries(root: str, reader: FreshnessTracker | None) -> list[IndexEntry]:
-    """The identity rows resolution reads, from the tracked read-model or a fresh walk.
-
-    With ``reader`` set the rows come from the store's point-accessed identity
-    projection (ADR-101) — id/type/title/path/aliases only, so resolution never
-    maps the section or token pages — byte-identical to the fields the full walk
-    exposes, since resolution reads only aliases and path. With ``reader`` None the
-    serving path is exactly as before (ADR-032): a fresh index build every call.
-    """
-    if reader is not None:
-        return reader.read_model().identity_entries
-    return build_repository_index(root, recursive=True).artifacts
-
-
 def _resolve(
     root: str, artifact_id: str, reader: FreshnessTracker | None = None
 ) -> ResolutionResult:
     """Resolve ``artifact_id`` against the repository index (ADR-032).
 
-    Uses the repository index and the resolver's in-index semantics so a single
-    walk serves both resolution and any follow-on shaping the tool needs.
+    Store fast path (ADR-101): when the read-model is served from the memory-mapped
+    base (a delta-empty :class:`ReadModelView`), resolution is a point lookup over
+    the persisted alias map — a binary search plus O(matches) row reads — instead of
+    reconstructing every identity row to scan it. A non-empty delta serves the
+    re-derived snapshot, whose identity rows are already resident, so it resolves
+    over them exactly as before; without the cache a fresh index build serves the
+    call (ADR-032). Every path is byte-identical to ``resolve_in_index``.
     """
-    return resolve_in_index(_index_entries(root, reader), artifact_id)
+    if reader is not None:
+        derived = reader.read_model()
+        if isinstance(derived, ReadModelView):
+            return derived.resolve(artifact_id)
+        return resolve_in_index(derived.identity_entries, artifact_id)
+    return resolve_in_index(build_repository_index(root, recursive=True).artifacts, artifact_id)
 
 
 def _get_artifact(
@@ -354,23 +351,39 @@ def _get_related(
     # derived-index cache (ADR-099) the index and relationship graph come from
     # one content-addressed snapshot; without it, one fresh walk feeds both.
     # Either way the two are from the same snapshot and the output is identical.
+    identity_by_path: dict[str, tuple[str, str, str | None]]
     if reader is not None:
         derived = reader.read_model()
-        # get_related reads only identity (resolve + id/type/title/path map) and the
-        # relationship graph — never sections or inbound counts — so the store's
-        # point-accessed identity rows serve it without mapping the token/section
-        # pages (ADR-101). Byte-identical to the full rows for this consumer.
-        index = derived.identity_entries
-        relationships = derived.relationships
+        if isinstance(derived, ReadModelView):
+            # Store fast path (ADR-101): resolution is a point lookup over the alias
+            # map, and ``identity_by_path`` is a lazy path->identity map that resolves
+            # only the edges near the artifact (incoming sources, discovered
+            # neighbours) through the path map — never the O(N) identity projection.
+            # The relationship graph is still read whole (finding incoming edges has
+            # no reverse index; it is Θ(edges) by contract), but identity assembly is
+            # no longer whole-corpus. Byte-identical values to the materialised dict.
+            result = derived.resolve(artifact_id)
+            relationships = derived.relationships
+            identity_by_path = cast(
+                "dict[str, tuple[str, str, str | None]]",
+                derived.lazy_identity_by_path(),
+            )
+        else:
+            # A non-empty delta serves the re-derived snapshot, whose identity rows
+            # are already resident, so it resolves and maps over them as before.
+            index = derived.identity_entries
+            relationships = derived.relationships
+            result = resolve_in_index(index, artifact_id)
+            identity_by_path = {e.path: (e.id, e.type, e.title) for e in index}
     else:
         entries = list(walk_corpus(root, recursive=True))
         index = index_from_corpus(root, entries, recursive=True).artifacts
         relationships = relationships_from_corpus(entries)
-    result = resolve_in_index(index, artifact_id)
+        result = resolve_in_index(index, artifact_id)
+        identity_by_path = {e.path: (e.id, e.type, e.title) for e in index}
     if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
         return serialize(errors.from_resolution(result), budget)
     artifact = result.artifact
-    identity_by_path = {entry.path: (entry.id, entry.type, entry.title) for entry in index}
     outgoing = outgoing_references(relationships, artifact.path)
     incoming_result = incoming_references(relationships, identity_by_path, artifact.path)
     incoming = [
