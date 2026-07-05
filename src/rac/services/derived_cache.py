@@ -34,6 +34,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusEntry, corpus_content_hash, walk_corpus
@@ -60,11 +61,14 @@ from rac.services.scope import (  # noqa: PLC2701 - deliberate reuse; see note a
 )
 from rac.services.scope_paths import repository_root
 
-# Bumping this discards every existing cache file (they carry it and a mismatch
-# is treated as a miss), so a serialisation change can never rehydrate stale
-# shapes. A recorded decision, like any pinned schema (ADR-007). Bumped to "2"
-# by ADR-100, which extends the cached bundle with the portfolio summary and the
-# per-decision scope rows — an old-shape "1" file fails the gate and rebuilds.
+# The bundle schema version — the *shape* of the derived structures. It gates
+# both the small marker file and the store header (a mismatch on either is a
+# miss, rebuilt fresh), so a shape change can never rehydrate a stale bundle
+# (ADR-007). Bumped to "2" by ADR-100 (portfolio summary + scope rows). ADR-101
+# changes the on-disk *encoding* (a memory-mapped segment directory, no longer a
+# JSON blob) but not the bundle shape, so the version stays "2"; the encoding is
+# versioned independently by the store's own segment-format and layout versions,
+# and an old JSON blob is simply never opened as a store (a miss).
 SCHEMA_VERSION = "2"
 
 _DECISION_TYPE = "decision"
@@ -121,6 +125,48 @@ class DerivedIndex:
     live_decision_paths: list[str]
     portfolio_summary: dict
     scope_rows: list[ScopeRow]
+
+    @property
+    def identity_entries(self) -> list[IndexEntry]:
+        """The identity-only projection resolution reads (aliases + path).
+
+        The read-model surface (:class:`CorpusReadModel`) is uniform across the
+        fresh :class:`DerivedIndex` and the store-backed view: the store serves
+        this from point-accessed identity rows without mapping the section/token
+        pages, and the fresh build projects it here so ``get_artifact`` /
+        ``get_related`` share one accessor. Byte-identical to reading the full
+        rows — only the searchable sections and inbound count are elided, and
+        resolution reads neither.
+        """
+        return [
+            IndexEntry(id=e.id, type=e.type, title=e.title, path=e.path, aliases=list(e.aliases))
+            for e in self.index_entries
+        ]
+
+
+class CorpusReadModel(Protocol):
+    """The read-model surface every serving-path consumer reads (ADR-099/ADR-101).
+
+    Both the fresh :class:`DerivedIndex` and the persistent store's lazily
+    materialised view satisfy it, so ``mcp/server.py`` consumes either without a
+    branch. The store maps only the pages a given member needs; the fresh build
+    holds them all in memory. Output is byte-identical across the two.
+    """
+
+    @property
+    def index_entries(self) -> list[IndexEntry]: ...
+    @property
+    def identity_entries(self) -> list[IndexEntry]: ...
+    @property
+    def relationships(self) -> list[Relationship]: ...
+    @property
+    def field_tokens_by_path(self) -> dict[str, dict[str, list[str]]]: ...
+    @property
+    def live_decision_paths(self) -> list[str]: ...
+    @property
+    def portfolio_summary(self) -> dict: ...
+    @property
+    def scope_rows(self) -> list[ScopeRow]: ...
 
 
 def _scope_rows_from_corpus(entries: list[CorpusEntry]) -> list[ScopeRow]:
@@ -326,48 +372,81 @@ def default_cache_dir() -> Path:
 
 
 class DerivedIndexCache:
-    """Disposable, content-addressed persistence of the derived structures (ADR-099).
+    """Disposable, content-addressed persistence of the derived structures (ADR-099/ADR-101).
 
-    :meth:`load_or_build` is the whole surface: it hashes the corpus, returns the
-    cached structures under an unchanged key, and otherwise rebuilds and persists
-    them. Every failure mode degrades to a fresh build — an unwritable directory,
-    a corrupt file, a schema mismatch — so enabling the cache can never change an
-    answer or fail a call, only its latency.
+    :meth:`load_or_build` is the whole surface: it hashes the corpus and, under an
+    unchanged key, returns a read-model *view* backed by the memory-mapped index
+    store (ADR-101) instead of rehydrating a JSON blob — point access, no per-call
+    peak-allocation spike. Otherwise it rebuilds through :func:`build_derived_index`,
+    writes the store, and returns a view over it. Every failure mode degrades to a
+    fresh build — an unwritable directory, a corrupt or truncated segment, a schema
+    or scoring-constant mismatch — so enabling the cache can never change an answer
+    or fail a call, only its latency.
+
+    On disk the cache dir holds a small ``{hash}.json`` marker (the fail-closed
+    schema gate) beside a ``store/`` subdirectory of the mapped segment files. A
+    marker present implies its store is present (the store is written first). An
+    old ADR-099/ADR-100 JSON blob under the same ``{hash}.json`` name has no store
+    beside it, so it opens as a miss and is rebuilt — old JSON files are ignored.
     """
 
     def __init__(self, cache_dir: Path | None = None) -> None:
         self.cache_dir = cache_dir if cache_dir is not None else default_cache_dir()
 
-    def _path_for(self, corpus_hash: str) -> Path:
+    def _marker_path(self, corpus_hash: str) -> Path:
         return self.cache_dir / f"{corpus_hash}.json"
 
-    def load_or_build(self, directory: str, *, recursive: bool = True) -> DerivedIndex:
+    def load_or_build(self, directory: str, *, recursive: bool = True) -> CorpusReadModel:
         # Freshness (REQ-006): the key is recomputed every call, so any corpus
         # change since the previous call is observed before anything is reused.
+        from rac.services.index_store import open_read_model, remove_store
+
         corpus_hash = corpus_content_hash(directory, recursive=recursive)
-        cached = self._read(corpus_hash)
-        if cached is not None:
-            return cached
+        if self._marker_valid(corpus_hash):
+            view = open_read_model(self.cache_dir, corpus_hash, SCHEMA_VERSION)
+            if view is not None:
+                return view
+            # The marker claimed a store but it is corrupt, truncated, or written
+            # under a stale format/scoring constant: clear it so the rebuild below
+            # writes a fresh store rather than skipping the unusable directory. The
+            # answer is still fresh either way — this only restores the cache.
+            remove_store(self.cache_dir, corpus_hash)
         derived = build_derived_index(directory, recursive=recursive)
-        self._write(corpus_hash, derived)
+        if self._write_marker(corpus_hash, self._write_store(corpus_hash, derived)):
+            view = open_read_model(self.cache_dir, corpus_hash, SCHEMA_VERSION)
+            if view is not None:
+                return view
+        # The store could not be written or reopened (unwritable dir, race); the
+        # freshly built bundle is a valid read-model in its own right (ADR-080).
         return derived
 
-    def _read(self, corpus_hash: str) -> DerivedIndex | None:
-        path = self._path_for(corpus_hash)
+    def _marker_valid(self, corpus_hash: str) -> bool:
         try:
-            obj = json.loads(path.read_text(encoding="utf-8"))
-            return from_json_obj(obj)
-        except (OSError, ValueError, KeyError, TypeError):
-            # Missing, unreadable, corrupt, or wrong-shaped: a miss, never fatal.
-            return None
+            obj = json.loads(self._marker_path(corpus_hash).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        # Only the schema version gates the marker; a wrong-version marker (an old
+        # JSON blob, or a hand-bumped file) fails closed to a miss. from_json_obj
+        # raises on that same version check, which the corrupt/schema tests assert.
+        return isinstance(obj, dict) and obj.get("schema_version") == SCHEMA_VERSION
 
-    def _write(self, corpus_hash: str, derived: DerivedIndex) -> None:
+    def _write_store(self, corpus_hash: str, derived: DerivedIndex) -> bool:
+        from rac.services.index_store import write_store
+
+        return write_store(self.cache_dir, corpus_hash, SCHEMA_VERSION, derived)
+
+    def _write_marker(self, corpus_hash: str, store_written: bool) -> bool:
+        """Write the schema-gate marker after the store landed; return success.
+
+        The store is the data and is written first, so a present marker always has
+        a present store beside it. Marker write is atomic (temp + ``os.replace``)
+        so a concurrent reader never sees a half-written gate.
+        """
+        if not store_written:
+            return False
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps(to_json_obj(derived), ensure_ascii=False)
-            # Atomic replace so a concurrent reader never sees a half-written file
-            # (two shared-server requests may build the same key at once; the
-            # content is identical, so last-writer-wins is safe).
+            payload = json.dumps({"schema_version": SCHEMA_VERSION, "corpus_hash": corpus_hash})
             handle = tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
@@ -379,14 +458,13 @@ class DerivedIndexCache:
             try:
                 with handle:
                     handle.write(payload)
-                os.replace(handle.name, self._path_for(corpus_hash))
+                os.replace(handle.name, self._marker_path(corpus_hash))
             except OSError:
                 _silent_unlink(handle.name)
                 raise
         except OSError:
-            # The cache is a nicety, not a requirement: if it cannot be written,
-            # the freshly built structures are already being returned (ADR-080).
-            pass
+            return False
+        return True
 
 
 def _silent_unlink(path: str) -> None:

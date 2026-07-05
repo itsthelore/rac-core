@@ -65,7 +65,7 @@ from rac.mcp.budget import (
 from rac.mcp.telemetry import TelemetryRecorder
 from rac.services.agent_rules import artifact_status
 from rac.services.derived_cache import (
-    DerivedIndex,
+    CorpusReadModel,
     DerivedIndexCache,
     build_derived_index,
     governing_decisions,
@@ -188,14 +188,14 @@ def _read_content(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-def _read_model(root: str, cache: DerivedIndexCache | None) -> DerivedIndex:
+def _read_model(root: str, cache: DerivedIndexCache | None) -> CorpusReadModel:
     """The derived read-model for one call: cached under a key, or built fresh (ADR-100).
 
-    One composer serves both cache modes. With ``cache`` set (ADR-099) the bundle
-    comes from the content-addressed cache; with ``cache`` None the read-model is
-    built fresh every call (ADR-032, the default), byte-identically. ``get_summary``
-    and ``find_decisions`` path mode reach the same structures every other tool
-    uses, instead of their own separate walks.
+    One composer serves both cache modes. With ``cache`` set the bundle comes from
+    the content-addressed store as a lazily materialised view (ADR-099/ADR-101);
+    with ``cache`` None the read-model is built fresh every call (ADR-032, the
+    default), byte-identically. ``get_summary`` and ``find_decisions`` path mode
+    reach the same structures every other tool uses, instead of their own walks.
     """
     if cache is not None:
         return cache.load_or_build(root)
@@ -203,15 +203,16 @@ def _read_model(root: str, cache: DerivedIndexCache | None) -> DerivedIndex:
 
 
 def _index_entries(root: str, cache: DerivedIndexCache | None) -> list[IndexEntry]:
-    """The repository index rows, from the derived-index cache or a fresh walk.
+    """The identity rows resolution reads, from the index store or a fresh walk.
 
-    With ``cache`` set (ADR-099) the rows come from the content-addressed cache —
-    byte-identical to the fresh build, only the walk/index is skipped under an
-    unchanged corpus key. With ``cache`` None the serving path is exactly as
-    before (ADR-032): a fresh read every call.
+    With ``cache`` set the rows come from the store's point-accessed identity
+    projection (ADR-101) — id/type/title/path/aliases only, so resolution never
+    maps the section or token pages — byte-identical to the fields the full walk
+    exposes, since resolution reads only aliases and path. With ``cache`` None the
+    serving path is exactly as before (ADR-032): a fresh index build every call.
     """
     if cache is not None:
-        return cache.load_or_build(root).index_entries
+        return cache.load_or_build(root).identity_entries
     return build_repository_index(root, recursive=True).artifacts
 
 
@@ -333,7 +334,11 @@ def _get_related(
     # Either way the two are from the same snapshot and the output is identical.
     if cache is not None:
         derived = cache.load_or_build(root)
-        index = derived.index_entries
+        # get_related reads only identity (resolve + id/type/title/path map) and the
+        # relationship graph — never sections or inbound counts — so the store's
+        # point-accessed identity rows serve it without mapping the token/section
+        # pages (ADR-101). Byte-identical to the full rows for this consumer.
+        index = derived.identity_entries
         relationships = derived.relationships
     else:
         entries = list(walk_corpus(root, recursive=True))
