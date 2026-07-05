@@ -524,25 +524,65 @@ def _build_resolution_index(
     return index
 
 
-def _resolve_references(
+@dataclass
+class _ResolvedCorpus:
+    """A corpus snapshot with its resolution index and extraction materialized once.
+
+    The redundancy this removes: ``_validate`` used to re-run
+    :func:`extract_relationships_full` (a fresh section-parse per artifact) five
+    times over the same items — once each for referential integrity, range,
+    status-consistency, acyclicity, and code-scope — and ``_summarize`` /
+    ``relationships_from_corpus`` each rebuilt their own resolution index. This
+    value object computes both exactly once per invocation and threads them
+    through the passes. It is *not* cached across calls (that is Movement-B work):
+    a fresh corpus is built per public entry.
+
+    ``extracted`` is a list parallel to ``items`` (one entry per item, ``{}`` for
+    Unknown/untyped items) rather than a path-keyed dict, so a corpus that carries
+    two items sharing one path — as
+    :func:`validate_document_against_corpus` produces when an edit changes an
+    artifact's identifier — still extracts each item independently, byte-identical
+    to the old per-item calls.
+    """
+
+    items: list[tuple[str, Product, ArtifactSpec | None]]
+    resolution_index: _IdentIndex
+    extracted: list[dict[str, list[str]]]
+
+
+def _resolve_corpus(
     items: list[tuple[str, Product, ArtifactSpec | None]],
-    index: _IdentIndex,
+) -> _ResolvedCorpus:
+    """Build the resolution index and materialize extraction once for ``items``."""
+    return _ResolvedCorpus(
+        items=items,
+        resolution_index=_build_resolution_index(items),
+        extracted=[
+            extract_relationships_full(product, spec) if spec is not None else {}
+            for _path, product, spec in items
+        ],
+    )
+
+
+def _resolve_references(
+    corpus: _ResolvedCorpus,
 ) -> tuple[int, list[RelationshipIssue], set[str]]:
-    """Resolve every explicit reference in ``items`` against ``index``.
+    """Resolve every explicit reference in ``corpus`` against its resolution index.
 
     Returns ``(checked, issues, resolved_target_paths)`` where
     ``resolved_target_paths`` is the set of paths that appear as a *resolved*
     target of at least one uniquely-matched reference — used by
     ``summarize_relationships`` for orphan detection.
     """
+    index = corpus.resolution_index
     issues: list[RelationshipIssue] = []
     resolved_targets: set[str] = set()
     checked = 0
 
-    for path, product, spec in items:
+    for (path, _product, spec), rels in zip(corpus.items, corpus.extracted, strict=True):
         if spec is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in rels.items():
             edge = edge_spec(section)
             if edge is not None and edge.external:
                 continue  # external refs (ADR-087) are format-linted, not resolved
@@ -565,23 +605,20 @@ def _resolve_references(
     return checked, issues, resolved_targets
 
 
-def _acyclic_adjacency(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
-    resolution_index: _IdentIndex,
-    kind: str,
-) -> dict[str, list[str]]:
+def _acyclic_adjacency(corpus: _ResolvedCorpus, kind: str) -> dict[str, list[str]]:
     """``{source_path -> sorted unique target paths}`` for edge ``kind``.
 
     Only uniquely-resolved, non-self edges contribute (self/ambiguous/unresolved
     are owned by referential integrity), so the graph reflects real directed edges.
     """
+    index = corpus.resolution_index
     adjacency: dict[str, list[str]] = {}
-    for path, product, spec in items:
+    for (path, _product, spec), rels in zip(corpus.items, corpus.extracted, strict=True):
         if spec is None:
             continue
         targets: set[str] = set()
-        for ref in extract_relationships_full(product, spec).get(kind, []):
-            resolved = [p for p, _ in resolution_index.get(ref.casefold(), [])]
+        for ref in rels.get(kind, []):
+            resolved = [p for p, _ in index.get(ref.casefold(), [])]
             if len(resolved) == 1 and resolved[0] != path:
                 targets.add(resolved[0])
         if targets:
@@ -633,14 +670,11 @@ def _cyclic_components(adjacency: dict[str, list[str]]) -> list[list[str]]:
     return sorted(components, key=lambda c: c[0])
 
 
-def _cycle_issues(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
-    resolution_index: _IdentIndex,
-) -> list[RelationshipIssue]:
+def _cycle_issues(corpus: _ResolvedCorpus) -> list[RelationshipIssue]:
     """One ``relationship-cycle`` per cyclic component of each acyclic edge kind."""
     issues: list[RelationshipIssue] = []
     for kind in sorted(name for name, edge in REGISTRY.items() if edge.acyclic):
-        adjacency = _acyclic_adjacency(items, resolution_index, kind)
+        adjacency = _acyclic_adjacency(corpus, kind)
         for component in _cyclic_components(adjacency):
             issues.append(
                 RelationshipIssue(code=ISSUE_RELATIONSHIP_CYCLE, relationship=kind, paths=component)
@@ -723,7 +757,7 @@ def _repository_root(directory: str) -> Path:
 
 def _scope_validation_issues(
     directory: str,
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    corpus: _ResolvedCorpus,
 ) -> list[RelationshipIssue]:
     """One ``applies-to-target-not-found`` per missing literal path/dir entry.
 
@@ -735,10 +769,10 @@ def _scope_validation_issues(
     """
     root = _repository_root(directory)
     issues: list[RelationshipIssue] = []
-    for path, product, spec in items:
+    for (path, _product, spec), rels in zip(corpus.items, corpus.extracted, strict=True):
         if spec is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in rels.items():
             edge = edge_spec(section)
             if edge is None or not edge.filesystem_scoped:
                 continue
@@ -764,13 +798,17 @@ def _validate(
     items: list[tuple[str, Product, ArtifactSpec | None]],
     recursive: bool,
 ) -> RelationshipValidation:
-    index = _build_identifier_index(items)
+    # One materialized pass: resolution index + extraction built once and threaded
+    # through every phase below (was 5-6 re-extractions + rebuilt indexes).
+    corpus = _resolve_corpus(items)
+    identifier_index = _build_identifier_index(items)
+    by_path = {path: (product, spec) for path, product, spec in items}
 
     issues: list[RelationshipIssue] = []
 
-    # Duplicate identifiers (repo-level), emitted first, sorted by identifier.
+    # Phase 1 — duplicate identifiers (repo-level), emitted first, sorted by identifier.
     duplicates: list[tuple[str, list[str]]] = []
-    for entries in index.values():
+    for entries in identifier_index.values():
         if len(entries) > 1:
             display = min(entries, key=lambda e: e[0])[1]  # first path's casing
             duplicates.append((display, sorted(p for p, _ in entries)))
@@ -779,52 +817,53 @@ def _validate(
             RelationshipIssue(code=ISSUE_DUPLICATE_IDENTIFIER, identifier=display, paths=dup_paths)
         )
 
-    # Edge-legality (v0.14.0, ADR-049): report relationship sections an artifact's
-    # type does not declare instead of silently dropping them. Deterministic —
-    # items in sorted-path order, sections in canonical RELATIONSHIP_SECTIONS order.
-    for path, product, spec in items:
-        if spec is None:
-            continue
-        for section in unsupported_relationship_sections(product, spec):
-            issues.append(
-                RelationshipIssue(
-                    code=ISSUE_EDGE_UNSUPPORTED, source_path=path, relationship=_snake(section)
-                )
-            )
-
-    resolution_index = _build_resolution_index(items)
-    by_path = {path: (product, spec) for path, product, spec in items}
-
     def _resolved(ref: str, source_path: str) -> str | None:
         """The unique non-self target path for ``ref``, or None.
 
         Unresolved/ambiguous/self references are owned by referential integrity;
         the graph checks below only reason about uniquely-resolved edges.
         """
-        targets = [p for p, _ in resolution_index.get(ref.casefold(), [])]
+        targets = [p for p, _ in corpus.resolution_index.get(ref.casefold(), [])]
         if len(targets) != 1 or targets[0] == source_path:
             return None
         return targets[0]
 
-    # Range (v0.16.0, ADR-055): a resolved target whose type is not in the edge's
-    # declared range is an illegal edge — e.g. a ``## Related Decisions`` reference
-    # that resolves to a requirement. Deterministic (sorted-path / spec.optional).
-    for path, product, spec in items:
+    # Phases 2-4 — one pass over items filling three ordered buckets, so each
+    # artifact's relationship sections are examined once. The buckets are then
+    # concatenated in the pinned finding order (edge-legality, range, status)
+    # that predates the single-pass merge (ADR-007): identical bytes, one walk.
+    edge_unsupported: list[RelationshipIssue] = []  # (2) edge-legality (v0.14.0, ADR-049)
+    range_issues: list[RelationshipIssue] = []  # (3) range (v0.16.0, ADR-055)
+    status_issues: list[RelationshipIssue] = []  # (4) status-consistency (ADR-051)
+    for (path, product, spec), rels in zip(corpus.items, corpus.extracted, strict=True):
         if spec is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        # Edge-legality scans product.sections (not the extraction map): an
+        # unsupported section is by definition absent from extract_relationships_full,
+        # so this pass cannot be memoized from ``rels`` — it keeps its own scan.
+        for section in unsupported_relationship_sections(product, spec):
+            edge_unsupported.append(
+                RelationshipIssue(
+                    code=ISSUE_EDGE_UNSUPPORTED, source_path=path, relationship=_snake(section)
+                )
+            )
+        # A retired source is exempt from status-consistency (historical chains);
+        # range still applies to it, so this gates only the status bucket.
+        source_retired = _is_retired_artifact(product, spec)
+        for section, refs in rels.items():
             edge = edge_spec(section)
             if edge is None or edge.external:
-                continue  # external edges (ADR-087) carry no artifact range
+                continue  # external edges (ADR-087) carry no artifact range or status gate
+            check_status = edge.forbids_target_status and not source_retired
             for ref in refs:
                 target = _resolved(ref, path)
                 if target is None:
                     continue
-                _, target_spec = by_path[target]
-                if target_spec is None:
-                    continue  # untyped document (ADR-010) — not a range violation
-                if target_spec.name not in edge.range:
-                    issues.append(
+                target_product, target_spec = by_path[target]
+                # Range: a resolved target whose type is not in the edge's declared
+                # range is illegal (untyped documents are exempt, ADR-010).
+                if target_spec is not None and target_spec.name not in edge.range:
+                    range_issues.append(
                         RelationshipIssue(
                             code=ISSUE_TARGET_TYPE_MISMATCH,
                             source_path=path,
@@ -832,25 +871,10 @@ def _validate(
                             target=ref,
                         )
                     )
-
-    # Status-consistency (v0.14.1, generalised in v0.16.0/ADR-051): a live artifact
-    # must not reference a retired target, except via an edge that permits it
-    # (``supersedes``, ``forbids_target_status=False``). Reads the resolved
-    # target's status from the materialised items — no second walk.
-    for path, product, spec in items:
-        if spec is None or _is_retired_artifact(product, spec):
-            continue  # unknown file, or a retired source (historical chains exempt)
-        for section, refs in extract_relationships_full(product, spec).items():
-            edge = edge_spec(section)
-            if edge is None or edge.external or not edge.forbids_target_status:
-                continue  # supersedes/external edges never gate on target status
-            for ref in refs:
-                target = _resolved(ref, path)
-                if target is None:
-                    continue
-                target_product, target_spec = by_path[target]
-                if _is_retired_artifact(target_product, target_spec):
-                    issues.append(
+                # Status-consistency: a live artifact must not reference a target
+                # the team retired, except via an edge that permits it (supersedes).
+                if check_status and _is_retired_artifact(target_product, target_spec):
+                    status_issues.append(
                         RelationshipIssue(
                             code=ISSUE_TARGET_SUPERSEDED,
                             source_path=path,
@@ -858,19 +882,22 @@ def _validate(
                             target=ref,
                         )
                     )
+    issues.extend(edge_unsupported)
+    issues.extend(range_issues)
+    issues.extend(status_issues)
 
-    # Acyclicity (v0.16.0, ADR-055): a cycle in a directional, acyclic edge kind
-    # (today ``supersedes``) is illegal — an ordering/replacement edge must not
-    # form a loop. Reported per strongly-connected component, deterministically.
-    issues.extend(_cycle_issues(items, resolution_index))
+    # Phase 5 — acyclicity (v0.16.0, ADR-055): a cycle in a directional, acyclic
+    # edge kind (today ``supersedes``) is illegal. Per strongly-connected component.
+    issues.extend(_cycle_issues(corpus))
 
-    checked, ref_issues, _ = _resolve_references(items, resolution_index)
+    # Phase 6 — referential integrity (not-found / ambiguous / self).
+    checked, ref_issues, _ = _resolve_references(corpus)
     issues.extend(ref_issues)
 
-    # Code-scope existence (decision-to-code-proximity, Initiative 1): filesystem-
-    # scoped ``## Applies To`` literal paths are checked against the working tree.
-    # Appended last, so existing finding order is unchanged (ADR-007).
-    issues.extend(_scope_validation_issues(directory, items))
+    # Phase 7 — code-scope existence (Initiative 1): filesystem-scoped ``## Applies
+    # To`` literal paths checked against the working tree. Appended last, so existing
+    # finding order is unchanged (ADR-007).
+    issues.extend(_scope_validation_issues(directory, corpus))
 
     return RelationshipValidation(
         directory=directory,
@@ -1025,8 +1052,8 @@ def _summarize(items: list[tuple[str, Product, ArtifactSpec | None]]) -> Relatio
     if not items:
         return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
 
-    index = _build_resolution_index(items)
-    checked, ref_issues, resolved_targets = _resolve_references(items, index)
+    corpus = _resolve_corpus(items)
+    checked, ref_issues, resolved_targets = _resolve_references(corpus)
 
     broken = len(ref_issues)
     valid = checked - broken
@@ -1037,10 +1064,11 @@ def _summarize(items: list[tuple[str, Product, ArtifactSpec | None]]) -> Relatio
     orphaned = len(all_known_paths - resolved_targets)
 
     # Coverage = fraction of known artifacts that declare >=1 outbound relationship.
+    # ``rels`` is the same materialized extraction the resolution pass consumed.
     artifacts_with_rels = sum(
         1
-        for path, product, spec in items
-        if spec is not None and extract_relationships_full(product, spec)
+        for (_path, _product, spec), rels in zip(corpus.items, corpus.extracted, strict=True)
+        if spec is not None and rels
     )
     coverage = artifacts_with_rels / len(all_known_paths) if all_known_paths else 1.0
 
@@ -1087,13 +1115,13 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
     order, sections in each artifact's own schema order, references in
     declaration order — matching ``_resolve_references``.
     """
-    items = _entry_items(entries)
-    index = _build_resolution_index(items)
+    corpus = _resolve_corpus(_entry_items(entries))
+    index = corpus.resolution_index
     relationships: list[Relationship] = []
-    for path, product, spec in items:
+    for (path, _product, spec), rels in zip(corpus.items, corpus.extracted, strict=True):
         if spec is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in rels.items():
             edge = edge_spec(section)
             external = edge is not None and edge.external
             for ref in refs:
