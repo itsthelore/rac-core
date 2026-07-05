@@ -8,6 +8,7 @@ Markdown templates in :mod:`rac.output.templates`.
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from rac.core.artifacts import ARTIFACT_SPECS, spec_for
@@ -117,6 +118,46 @@ def _bold(t: str) -> str:
 
 def _loc(file: str, line: int | None) -> str:
     return f"{file}:{line}" if line is not None else file
+
+
+# --- aligned columns --------------------------------------------------------
+# The index/migrate/skill/hook manifests and the find/decisions-for match lists
+# all render ragged string columns padded to a shared width. These two helpers
+# hold that one idiom so every table pads identically. CONSTRAINT: the output is
+# byte-frozen (goldens + characterization pins), so the padding must stay
+# `str.ljust(width)` (== the historical `f"{cell:<{width}}"`) and the final
+# column must stay UNPADDED — trailing whitespace would break the goldens.
+
+
+def _aligned_rows(
+    rows: Sequence[Sequence[str]],
+    *,
+    indent: str = "",
+    gap: str = "  ",
+) -> list[str]:
+    """Left-pad ragged string columns to a shared width, last column unpadded.
+
+    Each non-final column is padded to its widest cell; columns are joined by
+    ``gap`` and every line is prefixed by ``indent``. Callers needing a
+    continuation line under a row derive its indent from :func:`_aligned_indent`
+    over the same leading-column widths.
+    """
+    materialized = [list(row) for row in rows]
+    if not materialized:
+        return []
+    ncols = len(materialized[0])
+    widths = [max(len(row[c]) for row in materialized) for c in range(ncols - 1)]
+    lines: list[str] = []
+    for row in materialized:
+        cells = [row[c].ljust(widths[c]) for c in range(ncols - 1)]
+        cells.append(row[-1])
+        lines.append(indent + gap.join(cells))
+    return lines
+
+
+def _aligned_indent(widths: Sequence[int], *, gap: str = "  ") -> str:
+    """Blank continuation indent that lines up under padded leading columns."""
+    return "".join(" " * w + gap for w in widths)
 
 
 # Day-one next step shown when a corpus has no recognized artifacts yet
@@ -937,13 +978,13 @@ def render_index_human(index: RepositoryIndex) -> str:
         lines.append("(none)")
         return "\n".join(lines)
 
-    # Aligned columns: ID, type, title (— when absent), path last.
-    id_w = max(len(e.id) for e in index.artifacts)
-    type_w = max(len(e.type) for e in index.artifacts)
-    title_w = max(len(e.title or "—") for e in index.artifacts)
-    for e in index.artifacts:
-        title = e.title or "—"
-        lines.append(f"  {e.id:<{id_w}}  {e.type:<{type_w}}  {title:<{title_w}}  {e.path}")
+    # Aligned columns: ID, type, title (— when absent), path last (unpadded).
+    lines.extend(
+        _aligned_rows(
+            [(e.id, e.type, e.title or "—", e.path) for e in index.artifacts],
+            indent="  ",
+        )
+    )
     return "\n".join(lines)
 
 
@@ -1019,7 +1060,7 @@ def render_decisions_for_human(result: ScopeLookupResult) -> str:
         return f"No decisions declare scope over {result.query!r}."
     id_w = max(len(d.id) for d in result.decisions)
     status_w = max(len(d.status or "—") for d in result.decisions)
-    indent = f"{' ' * id_w}  {' ' * status_w}  "
+    indent = _aligned_indent([id_w, status_w])
     lines: list[str] = []
     for d in result.decisions:
         lines.append(f"{d.id:<{id_w}}  {(d.status or '—'):<{status_w}}  {d.title or '—'}")
@@ -1041,7 +1082,7 @@ def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
         return f"No artifacts match {result.query!r}."
     id_w = max(len(m.id) for m in result.matches)
     type_w = max(len(m.type) for m in result.matches)
-    indent = f"{' ' * id_w}  {' ' * type_w}  "
+    indent = _aligned_indent([id_w, type_w])
     lines: list[str] = []
     for m in result.matches:
         row = f"{m.id:<{id_w}}  {m.type:<{type_w}}  {m.title or '—'}"
@@ -1097,9 +1138,12 @@ def render_migrate_human(report: MigrationReport) -> str:
     verb = "Would migrate" if report.dry_run else "Migrated"
     if migrated:
         lines.append(_bold(f"{verb} {len(migrated)} artifact(s):"))
-        path_w = max(len(f.path) for f in migrated)
-        for f in migrated:
-            lines.append(f"  {f.path:<{path_w}}  {f.id}  ({f.type})")
+        lines.extend(
+            _aligned_rows(
+                [(f.path, f"{f.id}  ({f.type})") for f in migrated],
+                indent="  ",
+            )
+        )
     else:
         lines.append(f"{verb} 0 artifact(s) — nothing to migrate.")
 
@@ -1132,8 +1176,7 @@ def render_skill_install_human(installation: SkillInstallation) -> str:
 def render_skill_list_human(specs: list[SkillSpec]) -> str:
     """Human `rac skill list` output: the bundled skill set."""
     lines = [_bold("Bundled agent skills:"), ""]
-    name_w = max(len(spec.name) for spec in specs)
-    lines.extend(f"- {spec.name:<{name_w}}  {spec.description}" for spec in specs)
+    lines.extend(_aligned_rows([(spec.name, spec.description) for spec in specs], indent="- "))
     return "\n".join(lines)
 
 
@@ -1150,8 +1193,7 @@ def render_hook_install_human(installation: InstalledHook) -> str:
 def render_hook_list_human(specs: list[HookSpec]) -> str:
     """Human `rac hook list` output: the bundled hook set."""
     lines = [_bold("Bundled git hooks:"), ""]
-    style_w = max(len(spec.style) for spec in specs)
-    lines.extend(f"- {spec.style:<{style_w}}  {spec.description}" for spec in specs)
+    lines.extend(_aligned_rows([(spec.style, spec.description) for spec in specs], indent="- "))
     return "\n".join(lines)
 
 
