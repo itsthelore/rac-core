@@ -322,9 +322,14 @@ def _neg_name(name: str) -> tuple[int, ...]:
 _ValidityStat = TypeVar("_ValidityStat", RoadmapStat, PromptStat, DesignStat)
 
 
-def _error_codes(product: Product) -> list[str]:
-    """Error-severity issue codes for ``product`` (empty means it is valid)."""
-    return [i.code for i in validate(product) if i.severity == "error"]
+def _error_codes(product: Product, artifact_type: str) -> list[str]:
+    """Error-severity issue codes for ``product`` (empty means it is valid).
+
+    ``artifact_type`` is the walk's already-known classification, threaded into
+    ``validate`` so the type is resolved once per file rather than re-derived
+    (byte-invisible: a supplied value equals ``classify(product).type``).
+    """
+    return [i.code for i in validate(product, artifact_type=artifact_type) if i.severity == "error"]
 
 
 def _validity_stat(
@@ -332,9 +337,10 @@ def _validity_stat(
     path: Path,
     name: str,
     product: Product,
+    artifact_type: str,
 ) -> _ValidityStat:
     """Build a lightweight validity stat: valid iff there are no error issues."""
-    codes = _error_codes(product)
+    codes = _error_codes(product, artifact_type)
     return stat_cls(path=str(path), name=name, valid=not codes, error_codes=codes)
 
 
@@ -370,13 +376,13 @@ def collect_stats(directory: str) -> PortfolioStats:
             )
             continue
         if result.type == "roadmap":
-            stats.roadmaps.append(_validity_stat(RoadmapStat, path, name, product))
+            stats.roadmaps.append(_validity_stat(RoadmapStat, path, name, product, result.type))
             continue
         if result.type == "prompt":
-            stats.prompts.append(_validity_stat(PromptStat, path, name, product))
+            stats.prompts.append(_validity_stat(PromptStat, path, name, product, result.type))
             continue
         if result.type == "design":
-            stats.designs.append(_validity_stat(DesignStat, path, name, product))
+            stats.designs.append(_validity_stat(DesignStat, path, name, product, result.type))
             continue
         if result.type == "unknown":
             # ADR-010: a document that matches no known artifact schema is not a
@@ -390,7 +396,7 @@ def collect_stats(directory: str) -> PortfolioStats:
                 )
             )
             continue
-        error_codes = _error_codes(product)
+        error_codes = _error_codes(product, result.type)
         stats.features.append(
             FeatureStat(
                 path=str(path),

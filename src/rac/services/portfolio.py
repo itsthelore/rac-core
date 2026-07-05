@@ -217,7 +217,9 @@ def portfolio_from_corpus(
         path_to_identifier[str(path)] = identifier
 
         # Validation (overrides applied, ADR-053)
-        issues = apply_overrides(validate(product), artifact_type, overrides)
+        issues = apply_overrides(
+            validate(product, artifact_type=artifact_type), artifact_type, overrides
+        )
         if has_errors(issues):
             invalid_count += 1
             error_codes = [i.code for i in issues if i.severity == "error"]

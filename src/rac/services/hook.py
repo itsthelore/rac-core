@@ -28,7 +28,7 @@ from rac.errors import RACError
 class NotAGitWorkTree(RACError):
     """The target directory has no ``.git`` directory (usage error)."""
 
-    def __init__(self, directory: str):
+    def __init__(self, directory: str) -> None:
         self.directory = directory
         super().__init__(
             f"no .git directory in {directory}; run `rac hook install` from a git repository root"
@@ -38,7 +38,7 @@ class NotAGitWorkTree(RACError):
 class HookFileExists(RACError):
     """A target hook file already exists; RAC never overwrites it."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str) -> None:
         self.path = path
         super().__init__(f"{path} already exists; rac hook install never overwrites")
 

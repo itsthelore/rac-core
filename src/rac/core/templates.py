@@ -24,7 +24,7 @@ from rac.errors import RACError
 class TemplateNotFound(RACError):
     """The requested artifact type has no canonical template (usage error)."""
 
-    def __init__(self, artifact_type: str):
+    def __init__(self, artifact_type: str) -> None:
         self.artifact_type = artifact_type
         super().__init__(
             f"unsupported artifact type: {artifact_type} "
@@ -35,7 +35,7 @@ class TemplateNotFound(RACError):
 class TemplateResourceMissing(RACError):
     """A registered type's packaged template is absent (operational error)."""
 
-    def __init__(self, artifact_type: str):
+    def __init__(self, artifact_type: str) -> None:
         self.artifact_type = artifact_type
         super().__init__(
             f"packaged template missing for artifact type: {artifact_type}; "

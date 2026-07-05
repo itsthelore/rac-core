@@ -59,7 +59,7 @@ BUNDLED_SKILLS = (
 class SkillNotFound(RACError):
     """The requested skill is not in the bundled registry (usage error)."""
 
-    def __init__(self, skill_name: str):
+    def __init__(self, skill_name: str) -> None:
         self.skill_name = skill_name
         super().__init__(
             f"unknown skill: {skill_name} (available: {', '.join(available_skills())})"
@@ -69,7 +69,7 @@ class SkillNotFound(RACError):
 class SkillResourceMissing(RACError):
     """A registered skill's packaged resource is absent (operational error)."""
 
-    def __init__(self, skill_name: str):
+    def __init__(self, skill_name: str) -> None:
         self.skill_name = skill_name
         super().__init__(
             f"packaged skill missing: {skill_name}; the RAC installation appears to be broken"
