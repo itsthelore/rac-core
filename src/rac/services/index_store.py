@@ -38,7 +38,7 @@ from __future__ import annotations
 import json
 import mmap
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -62,7 +62,14 @@ from rac.services.resolve import (
     _FIELD_BOOSTS,
     _GRAPH_WEIGHT,
     _RRF_K,
+    SearchableArtifact,
+    SearchResult,
     _bm25f_scored,
+    _Match,
+    _match_entry,
+    _rank_and_build,
+    _tokenize_entry,
+    tokenize,
 )
 
 # The scorable field families, in the exact BM25F iteration order (ADR-078). The
@@ -83,6 +90,7 @@ _SEG_ENTRIES = "entries.seg"
 _SEG_SECTIONS = "sections.seg"
 _SEG_TOKENS = "tokens.seg"
 _SEG_TERMDICT = "termdict.seg"
+_SEG_POSTINGS = "postings.seg"
 _SEG_RELATIONSHIPS = "relationships.seg"
 _SEG_LIVE = "live.seg"
 _SEG_SCOPE = "scope.seg"
@@ -94,11 +102,17 @@ _ALL_SEGMENTS = (
     _SEG_SECTIONS,
     _SEG_TOKENS,
     _SEG_TERMDICT,
+    _SEG_POSTINGS,
     _SEG_RELATIONSHIPS,
     _SEG_LIVE,
     _SEG_SCOPE,
     _SEG_PORTFOLIO,
 )
+
+# The artifact type the live-decision topic query filters to (ADR-067), named
+# here so the store's decision-scoped search reads cleanly; it must equal
+# ``resolve._DECISION_TYPE``.
+_DECISION_TYPE = "decision"
 
 
 def scoring_fingerprint() -> str:
@@ -153,7 +167,14 @@ def _build_segments(
     entry_rows: list[bytes] = []
     section_rows: list[bytes] = []
     token_rows: list[bytes] = []
-    for entry in entries:
+    # Term-major postings: term id -> the docids holding that term in ANY field.
+    # Built by appending each docid as we walk entries in docid (sorted-path)
+    # order, so every list is sorted ascending by construction — deterministic,
+    # no post-sort. This is the segment the postings-served search reads: a query
+    # term's candidate docs and its distinct-docid df both come from the union of
+    # the term's prefix-range rows, touching O(matches) not O(corpus) (ADR-101).
+    postings_lists: list[list[int]] = [[] for _ in termdict]
+    for docid, entry in enumerate(entries):
         fields = field_tokens[entry.path]
         lengths = [len(fields[name]) for name in FIELDS]
         for i, value in enumerate(lengths):
@@ -177,12 +198,18 @@ def _build_segments(
             sec.text_list(list(section.lines))
         section_rows.append(sec.payload)
 
+        doc_term_ids: set[int] = set()
         tok = Writer()
         for name in FIELDS:
-            tok.u32_list([term_id[token] for token in fields[name]])
+            ids = [term_id[token] for token in fields[name]]
+            tok.u32_list(ids)
+            doc_term_ids.update(ids)
         token_rows.append(tok.payload)
+        for tid in doc_term_ids:
+            postings_lists[tid].append(docid)
 
     termdict_rows = [_encode_text(term) for term in termdict]
+    postings_rows = [_encode_u32_list(docids) for docids in postings_lists]
 
     relationships = Writer()
     rels: list[Relationship] = list(derived.relationships)
@@ -229,6 +256,7 @@ def _build_segments(
         _SEG_SECTIONS: encode_segment(write_indexed(section_rows)),
         _SEG_TOKENS: encode_segment(write_indexed(token_rows)),
         _SEG_TERMDICT: encode_segment(write_indexed(termdict_rows)),
+        _SEG_POSTINGS: encode_segment(write_indexed(postings_rows)),
         _SEG_RELATIONSHIPS: encode_segment(relationships.payload),
         _SEG_LIVE: encode_segment(live.payload),
         _SEG_SCOPE: encode_segment(scope.payload),
@@ -239,6 +267,12 @@ def _build_segments(
 def _encode_text(value: str) -> bytes:
     writer = Writer()
     writer.text(value)
+    return writer.payload
+
+
+def _encode_u32_list(values: list[int]) -> bytes:
+    writer = Writer()
+    writer.u32_list(values)
     return writer.payload
 
 
@@ -346,6 +380,7 @@ class MmapIndexReader:
             self.close()
             raise
         self._terms_cache: list[str] | None = None
+        self._postings_seg: IndexedSegment | None = None
 
     def _map(self, path: Path, name: str) -> None:
         fd = os.open(path, os.O_RDONLY)
@@ -516,6 +551,34 @@ class MmapIndexReader:
         hi = self._bisect_left(successor)
         return (lo, hi)
 
+    # --- term-major postings: term id -> docids holding it (ADR-101) ----------
+
+    def _postings(self) -> IndexedSegment:
+        # One IndexedSegment reused across a call: a prefix range walks many
+        # rows, so caching the offset table avoids re-reading the row count each
+        # time. Materialised lazily — a point lookup never opens the postings.
+        if self._postings_seg is None:
+            self._postings_seg = IndexedSegment(self._views[_SEG_POSTINGS])
+        return self._postings_seg
+
+    def postings(self, term_id: int) -> list[int]:
+        """The ascending docids that hold ``term_id`` in any field (delta-free base)."""
+        return self._postings().row(term_id).u32_list()
+
+    def prefix_docids(self, term: str) -> set[int]:
+        """Distinct base docids matching ``term`` under the prefix predicate (ADR-037).
+
+        The union of the postings rows across ``term``'s binary-searched prefix
+        range — every doc holding, in any field, a token ``term`` equals or
+        prefixes — which is exactly the set of docs a term match would find on a
+        walk. Touches only the range's postings, never the whole corpus.
+        """
+        lo, hi = self.prefix_range(term)
+        result: set[int] = set()
+        for term_id in range(lo, hi):
+            result.update(self.postings(term_id))
+        return result
+
     def relationships(self) -> list[Relationship]:
         reader = Reader(self._views[_SEG_RELATIONSHIPS])
         count = reader.u32()
@@ -555,6 +618,7 @@ class MmapIndexReader:
         return json.loads(Reader(self._views[_SEG_PORTFOLIO]).text())
 
     def close(self) -> None:
+        self._postings_seg = None  # drop the cached view reference before release
         for view in self._views.values():
             view.release()
         self._views.clear()
@@ -670,18 +734,32 @@ class Fold:
         """Document frequency of ``term`` under the prefix predicate (ADR-037).
 
         The count of live docs holding, in any field, a token in ``term``'s
-        prefix range — the same value ``_corpus_stats`` derives by walking tokens,
-        computed here from the sorted term dictionary's binary-searched range.
+        prefix range — the same value ``_corpus_stats`` derives by walking tokens.
+        Computed from the term-major postings: the distinct union of the prefix
+        range's rows, minus any tombstoned docid, so a doc holding both ``cache``
+        and ``caches`` counts once and the cost is O(matches), not O(corpus).
         """
-        lo, hi = self.base.prefix_range(term)
-        if lo >= hi:
-            return 0
-        count = 0
-        for docid in self.live_docids():
-            ids = self.base.forward_token_ids(docid)
-            if any(lo <= tid < hi for name in FIELDS for tid in ids[name]):
-                count += 1
-        return count
+        docids = self.base.prefix_docids(term)
+        tombstones = self.delta.tombstones
+        if tombstones:
+            docids -= tombstones
+        return len(docids)
+
+    def candidate_docids(self, terms: Sequence[str]) -> set[int]:
+        """Live docids matching at least one of ``terms`` — the candidate set.
+
+        The union of each term's prefix-range postings, tombstones removed. It is
+        a superset of the AND-matched set (a doc matching every term matches at
+        least one), so :func:`resolve._match_entry` — run per candidate — remains
+        the authoritative filter; a doc matching no term is never materialised.
+        """
+        tombstones = self.delta.tombstones
+        result: set[int] = set()
+        for term in terms:
+            result |= self.base.prefix_docids(term)
+        if tombstones:
+            result -= tombstones
+        return result
 
     def doc_field_tf(self, docid: int, term: str, field_name: str) -> int:
         """Term frequency of ``term`` in one field of one doc, prefix predicate."""
@@ -709,6 +787,43 @@ class Fold:
             avglen,
             tf_of=lambda term, name: self.doc_field_tf(docid, term, name),
             len_of=lambda name: self.base.field_length(docid, name),
+        )
+
+    # --- postings-served search (ADR-101; ADR-078 scoring unchanged) -----------
+
+    def search(self, query: str, artifact_type: str | None = None) -> SearchResult:
+        """`rac find` search served from the postings, byte-identical to a walk.
+
+        Reproduces :func:`resolve.search_index` without materialising the whole
+        corpus: the candidate set (docs matching at least one term) comes from the
+        term-major postings, only those candidates are reconstructed and matched,
+        and the global stats the scorer needs — ``n`` and the per-field Σ from the
+        header, ``df`` from the prefix ranges — carry the non-matching corpus's
+        contribution without touching its rows. Matching, snippet selection, and
+        the fused BM25F+RRF ranking all run through the shared scoring code on
+        inputs value-identical to the fresh walk, so the emitted bytes match.
+        """
+        terms = tokenize(query)
+        if not terms:
+            return SearchResult(query=query, artifact_type=artifact_type, matches=[])
+        matched: list[tuple[SearchableArtifact, _Match]] = []
+        field_tokens_by_path: dict[str, dict[str, list[str]]] = {}
+        for docid in sorted(self.candidate_docids(terms)):
+            entry = self.base.full_entry(docid)
+            if artifact_type is not None and entry.type != artifact_type:
+                continue
+            entry_tokens = _tokenize_entry(entry)
+            match = _match_entry(entry_tokens, terms)
+            if match is not None:
+                matched.append((entry, match))
+                field_tokens_by_path[entry.path] = entry_tokens.fields
+        if not matched:
+            return SearchResult(query=query, artifact_type=artifact_type, matches=[])
+        n = self.doc_count_live()
+        avglen = {name: (self.field_length_sum(name) / n if n else 0.0) for name in FIELDS}
+        df = {term: self.prefix_df(term) for term in terms}
+        return _rank_and_build(
+            query, artifact_type, matched, terms, n, df, avglen, field_tokens_by_path
         )
 
 
@@ -764,6 +879,30 @@ class ReadModelView:
             ScopeRow(id=row[0], title=row[1], status=row[2], path=row[3], scope_entries=row[4])
             for row in self._fold.scope_rows_raw()
         ]
+
+    def search(self, query: str, artifact_type: str | None = None) -> SearchResult:
+        """Postings-served `rac find` search — byte-identical to ``search_index``.
+
+        The store fast path a search-shaped tool takes when the read-model is
+        served from the memory-mapped base (the delta is empty): it touches only
+        the query terms' prefix ranges and the matched docs' rows, never the whole
+        corpus, while producing the same ordered matches, ``match_count``, and
+        evidence a fresh whole-corpus walk would.
+        """
+        return self._fold.search(query, artifact_type=artifact_type)
+
+    def find_decisions(self, topic: str) -> SearchResult:
+        """Live-decision topic search served from the postings (ADR-067).
+
+        The store analogue of :func:`resolve.find_decisions_in`: the decision-typed
+        postings search, then the liveness filter over the precomputed live-decision
+        paths (a cheap leaf-segment read, not a whole-corpus token materialisation),
+        byte-identical to the fresh path.
+        """
+        result = self._fold.search(topic, artifact_type=_DECISION_TYPE)
+        live = set(self.live_decision_paths)
+        result.matches = [m for m in result.matches if m.path in live]
+        return result
 
     def to_derived_index(self) -> DerivedIndex:
         return DerivedIndex(

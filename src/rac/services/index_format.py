@@ -29,8 +29,12 @@ import struct
 SEGMENT_MAGIC = b"RACIDX01"
 # The binary layout version. A bump makes every older segment file fail the gate
 # on open (a miss, rebuilt fresh), so a format change can never rehydrate a stale
-# shape — the same pinned-schema discipline the JSON cache used (ADR-007).
-SEGMENT_FORMAT_VERSION = 1
+# shape — the same pinned-schema discipline the JSON cache used (ADR-007). Bumped
+# to 2 by the postings-served search bundle (ADR-101), which adds the term-major
+# postings segment: a store written before the bump lacks it and, even were the
+# file present, fails this version gate closed, so the fast path never reads a
+# half-old layout.
+SEGMENT_FORMAT_VERSION = 2
 
 _U32 = struct.Struct("<I")
 _U64 = struct.Struct("<Q")
