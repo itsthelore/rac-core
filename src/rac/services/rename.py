@@ -12,7 +12,7 @@ Design (roadmap v0.21.18 — Safe Rename & Refactor, Initiative 1):
 
 * **Resolution reuses the one identity model.** ``old_ref`` is resolved against
   the same alias resolution index relationship validation uses
-  (:func:`rac.services.relationships._build_resolution_index`), so "what does
+  (:func:`rac.services.relationships.build_resolution_index`), so "what does
   this reference point at" has a single answer across the engine (ADR-016).
 * **The raw reference text is the source of truth (ADR-016).** An edit replaces
   exactly the ``old_ref`` token inside a relationship list line, preserving the
@@ -51,7 +51,7 @@ from rac.core.identity import artifact_identifiers
 from rac.core.models import Product
 from rac.services.relationships import (
     RELATIONSHIP_SECTIONS,
-    _build_resolution_index,
+    build_resolution_index,
 )
 
 # Stable reason codes for an empty/invalid plan (part of the JSON contract,
@@ -212,7 +212,7 @@ def _resolve_target(
     ``(None, REASON_*)`` when the reference is unknown or ambiguous. Reuses the
     same alias resolution index relationship validation uses (ADR-016).
     """
-    index = _build_resolution_index(items)
+    index = build_resolution_index(items)
     targets = sorted({p for p, _ in index.get(old_ref.casefold(), [])})
     if not targets:
         return None, REASON_OLD_NOT_FOUND
