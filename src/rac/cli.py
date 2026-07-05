@@ -86,7 +86,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from rac import consent, usage
 from rac import output as outputs
@@ -109,14 +109,21 @@ from rac.core.templates import (
 )
 from rac.core.validation import TICKETING_PROVIDER_NAMES, has_errors
 from rac.output.portal import PortalSeamMissing, PortalShellMissing
-from rac.services import coverage as coverage_service
+
+# Per-command service imports are deferred into their cmd_* handlers so a single
+# invocation loads only the service stack it runs (Movement B / ADR-046 hot path).
+# Two groups stay resident at module scope:
+#   * symbols build_parser() reads eagerly for help text/defaults — its module
+#     loads every invocation regardless, so deferring is pointless churn:
+#     doctor.DEFAULT_HUB_THRESHOLD, eval defaults, init.DEFAULT_KEY,
+#     profiles.PROFILE_NAMES, quickstart.DEFAULT_TYPE, review.DEFAULT_STALE_AFTER_DAYS
+#     (init also owns the repository-config errors several handlers catch);
+#   * create_artifact and install_skills, which the frozen tests monkeypatch as
+#     ``rac.cli.<name>`` — deferring them would remove the module attribute and
+#     break ``monkeypatch.setattr`` (test_create.py, test_skill.py). Their whole
+#     module loads with them, so the sibling create/skill symbols stay too.
 from rac.services import doctor
 from rac.services import eval as eval_service
-from rac.services.agent_rules import (
-    check_agent_rules,
-    generate_agent_rules,
-    unknown_clients,
-)
 from rac.services.create import (
     IdGenerationExhausted,
     MissingRepositoryConfig,
@@ -124,17 +131,6 @@ from rac.services.create import (
     OutputPathExists,
     create_artifact,
 )
-from rac.services.diff import diff as diff_asts
-from rac.services.export import (
-    build_corpus_export,
-    build_documents_export,
-    build_graph_export,
-)
-from rac.services.gate import build_gate
-from rac.services.hook import HookFileExists, NotAGitWorkTree, install_hook
-from rac.services.improve import improve_product
-from rac.services.index import build_repository_index
-from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
 from rac.services.init import (
     DEFAULT_KEY,
     InvalidProfile,
@@ -144,46 +140,61 @@ from rac.services.init import (
     RepositoryKeyConflict,
     init_repository,
 )
-from rac.services.inspect import build_inspection, inspect_directory
-from rac.services.migrate import migrate_metadata
-from rac.services.portfolio import build_portfolio_summary
 from rac.services.profiles import PROFILE_NAMES
 from rac.services.quickstart import DEFAULT_TYPE, CorpusNotEmpty, quickstart
-from rac.services.recency import artifact_recency
-from rac.services.relationships import (
-    build_relationship_report,
-    build_relationship_report_file,
-    validate_relationships,
-    validate_relationships_file,
-)
-from rac.services.rename import apply_rename, compute_rename
-from rac.services.resolve import (
-    OUTCOME_DUPLICATE,
-    OUTCOME_RESOLVED,
-    find_artifacts,
-    find_decisions,
-    resolve_artifact,
-)
 from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
-from rac.services.revisions import NotAGitRepository, RevisionNotFound
-from rac.services.scope import decisions_for_path
 from rac.services.skill import SkillFileExists, install_skills
-from rac.services.stats import collect_stats
-from rac.services.validate import (
-    validate_directory,
-    validate_product,
-    validate_stdin_against_corpus,
-)
-from rac.services.watchkeeper import build_watchkeeper_report
 
 from . import __version__
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rac.services.note_ingest import VaultIngestResult
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
 EXIT_USAGE = 2
+
+
+def _usage_error(message: str) -> NoReturn:
+    """Print ``rac: <message>`` to stderr and exit with EXIT_USAGE.
+
+    Centralises the uniform usage-guard stanza (a hand-written ``rac:`` stderr
+    line paired with ``raise SystemExit(EXIT_USAGE)``). Sites that build a
+    differently prefixed message (eval's ``rac eval:`` namespace, the schema
+    renderer-built unknown-name blob), print to stderr *without* raising
+    (resolve duplicate/not-found, rename's dry-run refusal, watchkeeper's
+    github annotations), or signal usage with ``return EXIT_USAGE`` instead of
+    a raise (telemetry) keep their explicit form.
+    """
+    print(f"rac: {message}", file=sys.stderr)
+    raise SystemExit(EXIT_USAGE)
+
+
+def _emit(
+    args: argparse.Namespace,
+    *,
+    human: Callable[[], str],
+    json: Callable[[], str] | None = None,
+    sarif: Callable[[], str] | None = None,
+) -> None:
+    """Print the format-appropriate rendering to stdout for a uniform output fork.
+
+    Owns the shared ``--sarif`` → ``--json`` → human precedence ladder that
+    nearly every handler repeats. Each renderer is a zero-argument callable, so
+    only the selected format is built — byte-for-byte the behaviour of the
+    hand-written ladders it replaces. Handlers that route a rendering to stderr,
+    add a mode the ladder omits (``--template``/``--share``/``--verbose``/
+    ``github``), or branch the exit code on the render outcome keep their
+    explicit ladder rather than calling this.
+    """
+    if sarif is not None and args.sarif:
+        print(sarif())
+    elif json is not None and args.json:
+        print(json())
+    else:
+        print(human())
 
 
 def _read(path: str) -> Product:
@@ -194,12 +205,10 @@ def _read(path: str) -> Product:
     gracefully so one bad file never aborts the walk (WS4, REQ-005).
     """
     if not Path(path).is_file():
-        print(f"rac: file not found: {path}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(f"file not found: {path}")
     product = parse_file(path)
     if any(issue.code == "unreadable-artifact" for issue in product.parse_issues):
-        print(f"rac: cannot read {path}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(f"cannot read {path}")
     return product
 
 
@@ -211,6 +220,12 @@ def _read_validate_input(target: str) -> Product:
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
+    from rac.services.validate import (
+        validate_directory,
+        validate_product,
+        validate_stdin_against_corpus,
+    )
+
     corpus = getattr(args, "corpus", None)
 
     # Directory? Validate every recognized artifact beneath it (v0.7.9).
@@ -221,22 +236,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
             # --corpus resolves *one proposed document* against a corpus; a
             # directory target already validates every artifact in place, so the
             # flag is redundant and ambiguous there (ADR-067, v0.21.17).
-            print("rac: --corpus applies to stdin ('-') or a single file", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _usage_error("--corpus applies to stdin ('-') or a single file")
         result = validate_directory(args.file, recursive=not args.top_level)
-        if args.sarif:
-            print(outputs.render_validate_sarif(result))
-        elif args.json:
-            print(outputs.render_validate_dir_json(result))
-        else:
-            print(outputs.render_validate_dir_human(result))
+        _emit(
+            args,
+            human=lambda: outputs.render_validate_dir_human(result),
+            json=lambda: outputs.render_validate_dir_json(result),
+            sarif=lambda: outputs.render_validate_sarif(result),
+        )
         return EXIT_OK if result.ok else EXIT_VALIDATION_FAILED
 
     if args.sarif:
         # SARIF is a repository-scan artifact for CI code scanning (ADR-054);
         # there is no single-file SARIF surface.
-        print("rac: --sarif applies to directory validation", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--sarif applies to directory validation")
 
     product = _read_validate_input(args.file)
 
@@ -248,45 +261,51 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # reference finding fails the run.
     if corpus is not None:
         if not Path(corpus).is_dir():
-            print(f"rac: --corpus is not a directory: {corpus}", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _usage_error(f"--corpus is not a directory: {corpus}")
         source_path = "-" if args.file == "-" else str(Path(args.file))
         corpus_result = validate_stdin_against_corpus(product, corpus, source_path=source_path)
-        if args.json:
-            print(outputs.render_stdin_corpus_json(corpus_result))
-        else:
-            print(outputs.render_stdin_corpus_human(corpus_result))
+        _emit(
+            args,
+            human=lambda: outputs.render_stdin_corpus_human(corpus_result),
+            json=lambda: outputs.render_stdin_corpus_json(corpus_result),
+        )
         return EXIT_OK if corpus_result.ok else EXIT_VALIDATION_FAILED
 
     start = "." if args.file == "-" else str(Path(args.file).parent)
     issues = validate_product(product, start)
-    if args.json:
-        print(outputs.render_validation_json(product, issues))
-    else:
-        print(outputs.render_validation_human(product, issues))
+    _emit(
+        args,
+        human=lambda: outputs.render_validation_human(product, issues),
+        json=lambda: outputs.render_validation_json(product, issues),
+    )
     return EXIT_VALIDATION_FAILED if has_errors(issues) else EXIT_OK
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
+    from rac.services.diff import diff as diff_asts
+
     old = _read(args.old)
     new = _read(args.new)
     result = diff_asts(old, new)
-    if args.json:
-        print(outputs.render_diff_json(result, args.old, args.new))
-    else:
-        print(outputs.render_diff_human(result, args.old, args.new))
+    _emit(
+        args,
+        human=lambda: outputs.render_diff_human(result, args.old, args.new),
+        json=lambda: outputs.render_diff_json(result, args.old, args.new),
+    )
     return EXIT_OK
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
+    from rac.services.stats import collect_stats
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     stats = collect_stats(args.directory)
-    if args.json:
-        print(outputs.render_stats_json(stats))
-    else:
-        print(outputs.render_stats_human(stats))
+    _emit(
+        args,
+        human=lambda: outputs.render_stats_human(stats),
+        json=lambda: outputs.render_stats_json(stats),
+    )
     # Success as long as the portfolio has analysable content (at least one valid
     # feature/decision/roadmap/prompt/design) or is an empty day-one corpus.
     # `has_meaningful_content` and `is_empty` are computed behind the gate
@@ -298,12 +317,13 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
+    from rac.services.ingest import ConversionError, UnsupportedDocument, ingest
+
     path = Path(args.file)
     if path.is_dir():
         return _cmd_ingest_vault(args, path)
     if not path.is_file():
-        print(f"rac: path not found: {args.file}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"path not found: {args.file}")
     # A bare Roam JSON graph export ingests directly (its canonical export is one
     # .json file, not a directory); non-Roam .json falls through to the error.
     if path.suffix.lower() == ".json":
@@ -313,17 +333,12 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         if roam_result is not None:
             return _emit_vault_result(args, roam_result)
     if args.from_tool:
-        print(
-            "rac: --from applies to a note-tool export directory, not a single file.",
-            file=sys.stderr,
-        )
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--from applies to a note-tool export directory, not a single file.")
 
     try:
         result = ingest(args.file)
     except UnsupportedDocument as exc:  # unhandled type / missing extra
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except ConversionError as exc:  # recognized file, failed to convert
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
@@ -331,11 +346,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if args.output:
         out = Path(args.output)
         if out.exists() and not args.force:
-            print(
-                f"rac: {args.output} already exists; pass --force to overwrite",
-                file=sys.stderr,
-            )
-            raise SystemExit(EXIT_USAGE)
+            _usage_error(f"{args.output} already exists; pass --force to overwrite")
         out.write_text(result.markdown, encoding="utf-8")
         if args.json:
             print(outputs.render_ingest_json(result, str(out)))
@@ -364,19 +375,14 @@ def _cmd_ingest_vault(args: argparse.Namespace, root: Path) -> int:
     from rac.services.note_ingest import converter_by_name, converter_names, detect_converter
 
     if args.stdout:
-        print(
-            "rac: --stdout is not supported for a directory export; use -o <dir>.", file=sys.stderr
-        )
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--stdout is not supported for a directory export; use -o <dir>.")
 
     converter = converter_by_name(args.from_tool) if args.from_tool else detect_converter(root)
     if converter is None:
-        print(
-            f"rac: could not detect a note-tool export in {root}. "
-            f"Pass --from with one of: {', '.join(converter_names())}",
-            file=sys.stderr,
+        _usage_error(
+            f"could not detect a note-tool export in {root}. "
+            f"Pass --from with one of: {', '.join(converter_names())}"
         )
-        raise SystemExit(EXIT_USAGE)
 
     return _emit_vault_result(args, converter.convert_vault(root))
 
@@ -396,10 +402,11 @@ def _emit_vault_result(args: argparse.Namespace, result: VaultIngestResult) -> i
             dest.write_text(draft.markdown, encoding="utf-8")
             written.append(str(dest))
 
-    if args.json:
-        print(outputs.render_vault_ingest_json(result, written, skipped, args.output))
-    else:
-        print(outputs.render_vault_ingest_human(result, written, skipped, args.output))
+    _emit(
+        args,
+        human=lambda: outputs.render_vault_ingest_human(result, written, skipped, args.output),
+        json=lambda: outputs.render_vault_ingest_json(result, written, skipped, args.output),
+    )
     return EXIT_OK
 
 
@@ -409,30 +416,29 @@ def _read_markdown_input(target: str, command: str) -> str:
         return sys.stdin.read()
     path = Path(target)
     if not path.is_file():
-        print(f"rac: file not found: {target}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"file not found: {target}")
     if path.suffix.lower() not in (".md", ".markdown"):
-        print(
-            f"rac: {command} expects a Markdown file; convert it first with: rac ingest {target}",
-            file=sys.stderr,
+        _usage_error(
+            f"{command} expects a Markdown file; convert it first with: rac ingest {target}"
         )
-        raise SystemExit(EXIT_USAGE)
     try:
         return path.read_text(encoding="utf-8")
     except OSError as exc:
-        print(f"rac: cannot read {target}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(f"cannot read {target}: {exc}")
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
+    from rac.services.inspect import build_inspection, inspect_directory
+
     # Directory? Aggregate per-file results into type counts.
     if args.file != "-" and Path(args.file).is_dir():
         recursive = not args.top_level
         result = inspect_directory(args.file, recursive=recursive)
-        if args.json:
-            print(outputs.render_dir_inspect_json(result))
-        else:
-            print(outputs.render_dir_inspect_human(result))
+        _emit(
+            args,
+            human=lambda: outputs.render_dir_inspect_human(result),
+            json=lambda: outputs.render_dir_inspect_json(result),
+        )
         return EXIT_OK
 
     # Single file (or stdin).
@@ -450,6 +456,8 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
 
 def cmd_improve(args: argparse.Namespace) -> int:
+    from rac.services.improve import improve_product
+
     text = _read_markdown_input(args.file, "improve")
     result = improve_product(parse(text))
     if args.json:
@@ -466,20 +474,18 @@ def cmd_schema(args: argparse.Namespace) -> int:
     names = available_schemas()
     if args.list:
         if args.template:
-            print("rac: --template cannot be used with --list", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _usage_error("--template cannot be used with --list")
         if args.schema:
-            print("rac: schema name cannot be used with --list", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
-        if args.json:
-            print(outputs.render_schema_list_json(names))
-        else:
-            print(outputs.render_schema_list_human(names))
+            _usage_error("schema name cannot be used with --list")
+        _emit(
+            args,
+            human=lambda: outputs.render_schema_list_human(names),
+            json=lambda: outputs.render_schema_list_json(names),
+        )
         return EXIT_OK
 
     if not args.schema:
-        print("rac: schema name required unless --list is passed", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("schema name required unless --list is passed")
 
     ref = schema_reference(args.schema)
     if ref is None:
@@ -496,9 +502,15 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 
 def cmd_relationships(args: argparse.Namespace) -> int:
+    from rac.services.relationships import (
+        build_relationship_report,
+        build_relationship_report_file,
+        validate_relationships,
+        validate_relationships_file,
+    )
+
     if args.sarif and not args.validate:
-        print("rac: relationships --sarif requires --validate", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("relationships --sarif requires --validate")
     path = Path(args.path)
     # --recursive is the default; --top-level disables it. If both are given,
     # --top-level wins (mirrors `rac inspect`).
@@ -506,28 +518,25 @@ def cmd_relationships(args: argparse.Namespace) -> int:
         is_dir = True
     elif path.is_file():
         if path.suffix.lower() not in (".md", ".markdown"):
-            print(
-                f"rac: relationships expects a Markdown file or directory; "
-                f"convert it first with: rac ingest {args.path}",
-                file=sys.stderr,
+            _usage_error(
+                f"relationships expects a Markdown file or directory; "
+                f"convert it first with: rac ingest {args.path}"
             )
-            raise SystemExit(EXIT_USAGE)
         is_dir = False
     else:
-        print(f"rac: path not found: {args.path}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"path not found: {args.path}")
 
     if args.validate:
         if is_dir:
             report = validate_relationships(args.path, recursive=not args.top_level)
         else:
             report = validate_relationships_file(args.path)
-        if args.sarif:
-            print(outputs.render_relationships_sarif(report))
-        elif args.json:
-            print(outputs.render_relationship_validation_json(report))
-        else:
-            print(outputs.render_relationship_validation_human(report))
+        _emit(
+            args,
+            human=lambda: outputs.render_relationship_validation_human(report),
+            json=lambda: outputs.render_relationship_validation_json(report),
+            sarif=lambda: outputs.render_relationships_sarif(report),
+        )
         # Validation-style exit codes (REQ-007): 0 when everything resolves, 1 when
         # any issue is found, 2 (above) for usage errors.
         return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
@@ -536,10 +545,11 @@ def cmd_relationships(args: argparse.Namespace) -> int:
         rel_report = build_relationship_report(args.path, recursive=not args.top_level)
     else:
         rel_report = build_relationship_report_file(args.path)
-    if args.json:
-        print(outputs.render_relationships_json(rel_report))
-    else:
-        print(outputs.render_relationships_human(rel_report))
+    _emit(
+        args,
+        human=lambda: outputs.render_relationships_human(rel_report),
+        json=lambda: outputs.render_relationships_json(rel_report),
+    )
     # A completed inspection always succeeds — finding no relationships is a valid
     # outcome, not an error (REQ-010).
     return EXIT_OK
@@ -555,10 +565,11 @@ def cmd_rename(args: argparse.Namespace) -> int:
     ``--apply`` writes the edits and reports what changed. The engine owns the
     edit set (ADR-063); the CLI only renders and applies it.
     """
+    from rac.services.rename import apply_rename, compute_rename
+
     directory = Path(args.directory)
     if not directory.is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
 
     plan = compute_rename(args.directory, args.old, args.new, recursive=not args.top_level)
 
@@ -575,37 +586,37 @@ def cmd_rename(args: argparse.Namespace) -> int:
         return EXIT_VALIDATION_FAILED
 
     if not args.apply:
-        if args.json:
-            print(outputs.render_rename_json(plan))
-        else:
-            print(outputs.render_rename_human(plan))
+        _emit(
+            args,
+            human=lambda: outputs.render_rename_human(plan),
+            json=lambda: outputs.render_rename_json(plan),
+        )
         # A valid dry-run preview always succeeds.
         return EXIT_OK
 
     result = apply_rename(plan)
-    if args.json:
-        print(outputs.render_rename_result_json(result))
-    else:
-        print(outputs.render_rename_result_human(result))
+    _emit(
+        args,
+        human=lambda: outputs.render_rename_result_human(result),
+        json=lambda: outputs.render_rename_result_json(result),
+    )
     return EXIT_OK
 
 
 def cmd_review(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     if args.stale_after is not None and args.stale_after < 0:
-        print("rac: --stale-after must be a non-negative number of days", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--stale-after must be a non-negative number of days")
     report = build_review(
         args.directory, recursive=not args.top_level, stale_after_days=args.stale_after
     )
-    if args.sarif:
-        print(outputs.render_review_sarif(report))
-    elif args.json:
-        print(outputs.render_review_json(report))
-    else:
-        print(outputs.render_review_human(report))
+    _emit(
+        args,
+        human=lambda: outputs.render_review_human(report),
+        json=lambda: outputs.render_review_json(report),
+        sarif=lambda: outputs.render_review_sarif(report),
+    )
     # Priority 1-2 findings (invalid artifacts, broken relationships) fail the
     # review; priority 3-4 findings are advisory (REQ-Repository-Review-Mode).
     return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
@@ -619,17 +630,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     relationship-integrity error; orphan/hub/injection warnings exit 0 (REQ-007).
     """
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     report = doctor.diagnose(
         args.directory,
         recursive=not args.top_level,
         hub_threshold=args.hub_threshold,
     )
-    if args.json:
-        print(doctor.render_doctor_json(report))
-    else:
-        print(doctor.render_doctor_human(report))
+    _emit(
+        args,
+        human=lambda: doctor.render_doctor_human(report),
+        json=lambda: doctor.render_doctor_json(report),
+    )
     return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
 
 
@@ -640,50 +651,54 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     from the relationship graph (rac-traceability-coverage-report, WS-F). Coverage
     is a completeness signal for human judgement, so it always exits 0 (REQ-005).
     """
+    from rac.services import coverage as coverage_service
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     report = coverage_service.analyze_coverage(args.directory)
-    if args.json:
-        print(coverage_service.render_coverage_json(report))
-    else:
-        print(coverage_service.render_coverage_human(report))
+    _emit(
+        args,
+        human=lambda: coverage_service.render_coverage_human(report),
+        json=lambda: coverage_service.render_coverage_json(report),
+    )
     return EXIT_OK
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
+    from rac.services.gate import build_gate
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     try:
         report = build_gate(args.directory, recursive=not args.top_level)
     except MalformedRepositoryConfig as exc:  # unreadable/invalid .rac/config.yaml
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
-    if args.sarif:
-        print(outputs.render_gate_sarif(report))
-    elif args.json:
-        print(outputs.render_gate_json(report))
-    else:
-        print(outputs.render_gate_human(report))
+    _emit(
+        args,
+        human=lambda: outputs.render_gate_human(report),
+        json=lambda: outputs.render_gate_json(report),
+        sarif=lambda: outputs.render_gate_sarif(report),
+    )
     # The gate fails when any finding is blocking under the corpus enforcement
     # policy; advisory findings annotate but never fail (ADR-049 / v0.21.14).
     return EXIT_OK if report.ok else EXIT_VALIDATION_FAILED
 
 
 def cmd_watchkeeper(args: argparse.Namespace) -> int:
+    from rac.services.revisions import NotAGitRepository, RevisionNotFound
+    from rac.services.watchkeeper import build_watchkeeper_report
+
     if args.directory is None:
         # ADR-018: rac/ is the conventional knowledge root — compare it when it
         # exists; otherwise the current directory.
         args.directory = "rac" if Path("rac").is_dir() else "."
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     try:
         report = build_watchkeeper_report(args.directory, base=args.base, head=args.head)
     except (NotAGitRepository, RevisionNotFound) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     output_format = "json" if args.json else args.format
     if output_format == "json":
         print(outputs.render_watchkeeper_json(report))
@@ -709,28 +724,32 @@ def cmd_watchkeeper(args: argparse.Namespace) -> int:
 
 
 def cmd_portfolio(args: argparse.Namespace) -> int:
+    from rac.services.portfolio import build_portfolio_summary
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     recursive = not args.top_level
     summary = build_portfolio_summary(args.directory, recursive=recursive)
-    if args.json:
-        print(outputs.render_portfolio_json(summary))
-    else:
-        print(outputs.render_portfolio_human(summary))
+    _emit(
+        args,
+        human=lambda: outputs.render_portfolio_human(summary),
+        json=lambda: outputs.render_portfolio_json(summary),
+    )
     return EXIT_OK
 
 
 def cmd_index(args: argparse.Namespace) -> int:
+    from rac.services.index import build_repository_index
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     recursive = not args.top_level
     index = build_repository_index(args.directory, recursive=recursive)
-    if args.json:
-        print(outputs.render_index_json(index))
-    else:
-        print(outputs.render_index_human(index))
+    _emit(
+        args,
+        human=lambda: outputs.render_index_human(index),
+        json=lambda: outputs.render_index_json(index),
+    )
     return EXIT_OK
 
 
@@ -751,9 +770,14 @@ def _agent_rules_root(directory: str, out: str | None) -> Path:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
+    from rac.services.export import (
+        build_corpus_export,
+        build_documents_export,
+        build_graph_export,
+    )
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
 
     # Agent-rules is a distinct mode (ADR-067): a distilled, drift-guarded
     # projection of live decisions into per-client managed blocks. It owns --out
@@ -762,18 +786,14 @@ def cmd_export(args: argparse.Namespace) -> int:
     if args.agent_rules:
         return _cmd_agent_rules(args)
     if args.check:
-        print("rac: --check requires --agent-rules", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--check requires --agent-rules")
     if args.client:
-        print("rac: --client requires --agent-rules", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--client requires --agent-rules")
 
     if args.json and (args.html or args.okf):
-        print("rac: --json cannot combine with --html or --okf", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--json cannot combine with --html or --okf")
     if args.out is not None and not (args.html or args.okf):
-        print("rac: --out requires --html or --okf (--json writes to stdout)", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error("--out requires --html or --okf (--json writes to stdout)")
 
     # Documents projection (v0.25.0 WS1, ADR-073): an ingestion-ready JSONL
     # stream for external memory/RAG backends — Markdown bodies, not the viewer's
@@ -795,6 +815,8 @@ def cmd_export(args: argparse.Namespace) -> int:
     # OKF bundle (ADR-048): a derived tree of Markdown files written to a
     # directory, parallel to the JSON/HTML views. Recency feeds log.md (ADR-045).
     if args.okf:
+        from rac.services.recency import artifact_recency
+
         recency = artifact_recency(args.directory, with_creation=True)
         bundle = outputs.render_okf_bundle(export, recency, args.directory)
         out = args.out if args.out is not None else "okf-bundle"
@@ -804,8 +826,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(content, encoding="utf-8")
         except OSError as exc:
-            print(f"rac: cannot write {out}: {exc}", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE) from None
+            _usage_error(f"cannot write {out}: {exc}")
         edges = len(export.relationships)
         print(f"wrote {out}/ — {export.artifact_count} artifact(s), {edges} relationship(s)")
         return EXIT_OK
@@ -819,14 +840,12 @@ def cmd_export(args: argparse.Namespace) -> int:
     try:
         html = outputs.render_export_html(export)
     except (PortalShellMissing, PortalSeamMissing) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     out = args.out if args.out is not None else "lore-export.html"
     try:
         Path(out).write_text(html, encoding="utf-8")
     except OSError as exc:
-        print(f"rac: cannot write {out}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(f"cannot write {out}: {exc}")
     edges = len(export.relationships)
     print(f"wrote {out} — {export.artifact_count} artifact(s), {edges} relationship(s)")
     return EXIT_OK
@@ -840,11 +859,16 @@ def _cmd_agent_rules(args: argparse.Namespace) -> int:
     on drift (a stale or missing block) — the CI gate. Output is human by
     default; --json emits the machine contract.
     """
+    from rac.services.agent_rules import (
+        check_agent_rules,
+        generate_agent_rules,
+        unknown_clients,
+    )
+
     bad = unknown_clients(args.client)
     if bad:
         valid = "claude, agents, cursor, copilot"
-        print(f"rac: unknown --client: {', '.join(bad)} (choose from {valid})", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"unknown --client: {', '.join(bad)} (choose from {valid})")
 
     root = _agent_rules_root(args.directory, args.out)
     try:
@@ -853,13 +877,13 @@ def _cmd_agent_rules(args: argparse.Namespace) -> int:
         else:
             result = generate_agent_rules(args.directory, str(root), clients=args.client)
     except OSError as exc:
-        print(f"rac: cannot write under {root}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(f"cannot write under {root}: {exc}")
 
-    if args.json:
-        print(outputs.render_agent_rules_json(result))
-    else:
-        print(outputs.render_agent_rules_human(result))
+    _emit(
+        args,
+        human=lambda: outputs.render_agent_rules_human(result),
+        json=lambda: outputs.render_agent_rules_json(result),
+    )
 
     if args.check and result.drifted:
         return EXIT_VALIDATION_FAILED
@@ -872,8 +896,7 @@ def cmd_explorer(args: argparse.Namespace) -> int:
         # exists; otherwise the current directory (v0.8.1).
         args.directory = "rac" if Path("rac").is_dir() else "."
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     # Imported lazily: launch decides whether the explorer extra is installed,
     # and the base CLI must not pay an import cost for the optional TUI.
     from rac.explorer.launch import ExplorerUnavailable, run_explorer
@@ -881,14 +904,12 @@ def cmd_explorer(args: argparse.Namespace) -> int:
     try:
         return run_explorer(args.directory, recursive=not args.top_level)
     except ExplorerUnavailable as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
 
 
 def cmd_mcp(args: argparse.Namespace) -> int:
     if not Path(args.root).is_dir():
-        print(f"rac: not a directory: {args.root}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.root}")
     # Imported lazily: the MCP SDK is only needed when serving, and the base
     # CLI must not pay its import cost for every other command. stdout belongs
     # to the MCP protocol, so any diagnostics here go to stderr.
@@ -907,11 +928,9 @@ def cmd_mcp(args: argparse.Namespace) -> int:
             cache_enabled=args.cache,
         )
     except MalformedAuditConfig as exc:  # bad `audit:` stanza (ADR-084)
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except AuditSinkUnavailable as exc:  # HTTP without a working audit sink (ADR-084)
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
 
 
 def cmd_mcp_stats(args: argparse.Namespace) -> int:
@@ -954,15 +973,13 @@ def cmd_new(args: argparse.Namespace) -> int:
     try:
         created = create_artifact(args.type, args.output_path)
     except TemplateNotFound as exc:  # unsupported type → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except (
         OutputPathExists,
         OutputDirectoryMissing,
         MissingRepositoryConfig,
     ) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except (
         TemplateResourceMissing,  # broken installation
         MalformedRepositoryConfig,  # unreadable .rac/config.yaml
@@ -970,17 +987,19 @@ def cmd_new(args: argparse.Namespace) -> int:
     ) as exc:  # operational errors
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
-    if args.json:
-        print(outputs.render_new_json(created))
-    else:
-        print(outputs.render_new_human(created))
+    _emit(
+        args,
+        human=lambda: outputs.render_new_human(created),
+        json=lambda: outputs.render_new_json(created),
+    )
     return EXIT_OK
 
 
 def cmd_resolve(args: argparse.Namespace) -> int:
+    from rac.services.resolve import OUTCOME_DUPLICATE, OUTCOME_RESOLVED, resolve_artifact
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     result = resolve_artifact(args.directory, args.id, recursive=not args.top_level)
     if args.json:
         print(outputs.render_resolve_json(result))
@@ -1001,9 +1020,10 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 
 def cmd_find(args: argparse.Namespace) -> int:
+    from rac.services.resolve import find_artifacts, find_decisions
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     if args.decisions:
         # `--decisions` is the live decision query (ADR-067): it implies the
         # decision type filter *and* restricts to live (Accepted, non-retired)
@@ -1027,10 +1047,11 @@ def cmd_find(args: argparse.Namespace) -> int:
     from rac.services.recency import annotate_search_recency
 
     annotate_search_recency(result.matches, args.directory)
-    if args.json:
-        print(outputs.render_find_json(result, explain=args.explain))
-    else:
-        print(outputs.render_find_human(result, explain=args.explain))
+    _emit(
+        args,
+        human=lambda: outputs.render_find_human(result, explain=args.explain),
+        json=lambda: outputs.render_find_json(result, explain=args.explain),
+    )
     # An empty result is a valid outcome, not an error (a query always succeeds).
     return EXIT_OK
 
@@ -1044,18 +1065,20 @@ def cmd_decisions_for(args: argparse.Namespace) -> int:
     outside-repository path is a valid empty result, not an error (a query always
     succeeds).
     """
+    from rac.services.scope import decisions_for_path
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     result = decisions_for_path(
         args.directory,
         args.path,
         recursive=not args.top_level,
     )
-    if args.json:
-        print(outputs.render_decisions_for_json(result))
-    else:
-        print(outputs.render_decisions_for_human(result))
+    _emit(
+        args,
+        human=lambda: outputs.render_decisions_for_human(result),
+        json=lambda: outputs.render_decisions_for_json(result),
+    )
     return EXIT_OK
 
 
@@ -1096,9 +1119,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 
 def cmd_migrate(args: argparse.Namespace) -> int:
+    from rac.services.migrate import migrate_metadata
+
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     try:
         report = migrate_metadata(
             args.directory,
@@ -1106,15 +1130,15 @@ def cmd_migrate(args: argparse.Namespace) -> int:
             recursive=not args.top_level,
         )
     except MissingRepositoryConfig as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except (MalformedRepositoryConfig, IdGenerationExhausted) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
-    if args.json:
-        print(outputs.render_migrate_json(report))
-    else:
-        print(outputs.render_migrate_human(report))
+    _emit(
+        args,
+        human=lambda: outputs.render_migrate_human(report),
+        json=lambda: outputs.render_migrate_json(report),
+    )
     # Completed migration (or dry run) always succeeds — nothing to migrate
     # is a valid outcome.
     return EXIT_OK
@@ -1122,41 +1146,37 @@ def cmd_migrate(args: argparse.Namespace) -> int:
 
 def cmd_init(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     try:
         result = init_repository(
             args.directory, key=args.key, ticketing=args.ticketing, profile=args.profile
         )
     except (InvalidRepositoryKey, InvalidTicketingProvider, InvalidProfile) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except (RepositoryKeyConflict, MalformedRepositoryConfig) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
-    if args.json:
-        print(outputs.render_init_json(result))
-    else:
-        print(outputs.render_init_human(result))
+    _emit(
+        args,
+        human=lambda: outputs.render_init_human(result),
+        json=lambda: outputs.render_init_json(result),
+    )
+    if not args.json:
         _maybe_ask_usage_sharing()
     return EXIT_OK
 
 
 def cmd_quickstart(args: argparse.Namespace) -> int:
     if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.directory}")
     try:
         result = quickstart(args.directory, key=args.key, artifact_type=args.type)
     except TemplateNotFound as exc:  # unsupported type → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except InvalidRepositoryKey as exc:  # bad key syntax → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except OutputDirectoryMissing as exc:  # parent missing → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except (
         CorpusNotEmpty,  # corpus already has artifacts → refused
         RepositoryKeyConflict,  # established key differs → refused
@@ -1171,10 +1191,12 @@ def cmd_quickstart(args: argparse.Namespace) -> int:
     ) as exc:  # operational errors
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
-    if args.json:
-        print(outputs.render_quickstart_json(result))
-    else:
-        print(outputs.render_quickstart_human(result))
+    _emit(
+        args,
+        human=lambda: outputs.render_quickstart_human(result),
+        json=lambda: outputs.render_quickstart_json(result),
+    )
+    if not args.json:
         _maybe_ask_usage_sharing()
     return EXIT_OK
 
@@ -1284,72 +1306,74 @@ def cmd_telemetry(args: argparse.Namespace) -> int:
 def cmd_skill(args: argparse.Namespace) -> int:
     if args.action == "list":
         if args.name is not None:
-            print("rac: skill list takes no skill name", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _usage_error("skill list takes no skill name")
         specs = skill_specs()
-        if args.json:
-            print(outputs.render_skill_list_json(specs))
-        else:
-            print(outputs.render_skill_list_human(specs))
+        _emit(
+            args,
+            human=lambda: outputs.render_skill_list_human(specs),
+            json=lambda: outputs.render_skill_list_json(specs),
+        )
         return EXIT_OK
 
     if not Path(args.dir).is_dir():
-        print(f"rac: not a directory: {args.dir}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.dir}")
     try:
         installation = install_skills(args.dir, args.name)
     except SkillNotFound as exc:  # unknown skill name → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except SkillFileExists as exc:  # refused; every existing file is untouched
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
     except SkillResourceMissing as exc:  # broken installation
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
-    if args.json:
-        print(outputs.render_skill_install_json(installation))
-    else:
-        print(outputs.render_skill_install_human(installation))
+    _emit(
+        args,
+        human=lambda: outputs.render_skill_install_human(installation),
+        json=lambda: outputs.render_skill_install_json(installation),
+    )
     return EXIT_OK
 
 
 def cmd_hook(args: argparse.Namespace) -> int:
+    from rac.services.hook import HookFileExists, NotAGitWorkTree, install_hook
+
     if args.action == "list":
         specs = hook_specs()
-        if args.json:
-            print(outputs.render_hook_list_json(specs))
-        else:
-            print(outputs.render_hook_list_human(specs))
+        _emit(
+            args,
+            human=lambda: outputs.render_hook_list_human(specs),
+            json=lambda: outputs.render_hook_list_json(specs),
+        )
         return EXIT_OK
 
     if not Path(args.dir).is_dir():
-        print(f"rac: not a directory: {args.dir}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _usage_error(f"not a directory: {args.dir}")
     try:
         installation = install_hook(args.dir, args.style)
     except (HookNotFound, NotAGitWorkTree) as exc:  # usage errors → exit 2
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _usage_error(str(exc))
     except HookFileExists as exc:  # refused; existing hook untouched
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
     except HookResourceMissing as exc:  # broken installation
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
-    if args.json:
-        print(outputs.render_hook_install_json(installation))
-    else:
-        print(outputs.render_hook_install_human(installation))
+    _emit(
+        args,
+        human=lambda: outputs.render_hook_install_human(installation),
+        json=lambda: outputs.render_hook_install_json(installation),
+    )
     return EXIT_OK
 
 
 def cmd_templates(args: argparse.Namespace) -> int:
     names = available_templates()
-    if args.json:
-        print(outputs.render_templates_json(names))
-    else:
-        print(outputs.render_templates_human(names))
+    _emit(
+        args,
+        human=lambda: outputs.render_templates_human(names),
+        json=lambda: outputs.render_templates_json(names),
+    )
     return EXIT_OK
 
 
@@ -1360,6 +1384,30 @@ def build_parser() -> argparse.ArgumentParser:
     # subcommand (e.g. `rac ingest foo.docx --version`).
     version_parent = argparse.ArgumentParser(add_help=False)
     version_parent.add_argument("--version", action="version", version=version_str)
+
+    # Shared flag vocabularies added to subcommands via ``parents=[…]`` so the
+    # repeated --json / --top-level / --recursive definitions live in one place.
+    # Only subcommands whose flag help and defaults match byte-for-byte use these:
+    # a bespoke --json help (export/eval/watchkeeper), a --json inside a mutually
+    # exclusive group (validate/improve/schema/gate/mcp-stats/usage), or a
+    # differently-worded --top-level (validate/inspect/relationships/rename/
+    # decisions-for) keeps its inline definition. dest/default/behaviour are
+    # unchanged; only the definition site moves.
+    json_parent = argparse.ArgumentParser(add_help=False)
+    json_parent.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
+    scope_parent = argparse.ArgumentParser(add_help=False)
+    scope_parent.add_argument(
+        "--top-level",
+        action="store_true",
+        help="Only the top-level files in the directory (no recursion).",
+    )
+    scope_parent.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subdirectories (the default; accepted for clarity).",
+    )
 
     parser = argparse.ArgumentParser(
         prog="rac",
@@ -1411,24 +1459,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_diff = sub.add_parser(
         "diff",
         help="Compare two versions of a requirement file.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_diff.add_argument("old", help="Path to the old version.")
     p_diff.add_argument("new", help="Path to the new version.")
-    p_diff.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_diff.set_defaults(func=cmd_diff)
 
     p_stats = sub.add_parser(
         "stats",
         help="Summarize a directory of requirement files.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_stats.add_argument("directory", help="Directory to scan recursively for *.md.")
-    p_stats.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_stats.set_defaults(func=cmd_stats)
 
     p_ingest = sub.add_parser(
@@ -1438,7 +1480,7 @@ def build_parser() -> argparse.ArgumentParser:
             "note-tool export (Obsidian, Logseq, Notion, or a Roam JSON graph) — "
             "to RAC-shaped Markdown."
         ),
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_ingest.add_argument("file", help="Path to the source document or note-tool export directory.")
     ingest_dest = p_ingest.add_mutually_exclusive_group()
@@ -1466,22 +1508,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite existing output; never overwrites by default.",
     )
-    p_ingest.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_ingest.set_defaults(func=cmd_ingest)
 
     p_inspect = sub.add_parser(
         "inspect",
         help="Identify a Markdown document's artifact type and structure.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_inspect.add_argument(
         "file",
         help="A Markdown file, a directory, or '-' to read from stdin.",
-    )
-    p_inspect.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_inspect.add_argument(
         "--verbose",
@@ -1549,12 +1585,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_relationships = sub.add_parser(
         "relationships",
         help="Inspect explicit relationships across a directory (or single file).",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_relationships.add_argument("path", help="A directory to scan, or a single Markdown file.")
-    p_relationships.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_relationships.add_argument(
         "--validate",
         action="store_true",
@@ -1582,14 +1615,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_rename = sub.add_parser(
         "rename",
         help="Safely rename an artifact id across the corpus (dry run; --apply writes).",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_rename.add_argument("old", help="The existing artifact id (or alias) to rename.")
     p_rename.add_argument("new", help="The new artifact id, e.g. ADR-099.")
     p_rename.add_argument("directory", help="The corpus directory to scan.")
-    p_rename.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_rename.add_argument(
         "--apply",
         action="store_true",
@@ -1605,26 +1635,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_review = sub.add_parser(
         "review",
         help="Review a repository: prioritized issues and suggested actions.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent, scope_parent],
     )
     p_review.add_argument("directory", help="Directory to scan recursively for *.md.")
-    p_review.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_review.add_argument(
         "--sarif",
         action="store_true",
         help="Emit SARIF 2.1.0 for GitHub Code Scanning (CI pull-request enforcement).",
-    )
-    p_review.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_review.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_review.add_argument(
         "--stale-after",
@@ -1646,16 +1663,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor = sub.add_parser(
         "doctor",
         help="Diagnose corpus health in one pass, with a paste-ready fix per finding.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent, scope_parent],
     )
     p_doctor.add_argument(
         "directory",
         nargs="?",
         default=".",
         help="Directory to diagnose recursively for *.md (default: current directory).",
-    )
-    p_doctor.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_doctor.add_argument(
         "--hub-threshold",
@@ -1666,31 +1680,18 @@ def build_parser() -> argparse.ArgumentParser:
             f"as high-fan-out hubs (default {doctor.DEFAULT_HUB_THRESHOLD})."
         ),
     )
-    p_doctor.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_doctor.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
-    )
     p_doctor.set_defaults(func=cmd_doctor)
 
     p_coverage = sub.add_parser(
         "coverage",
         help="Report typed traceability coverage gaps (advisory, never blocking).",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_coverage.add_argument(
         "directory",
         nargs="?",
         default=".",
         help="Directory to analyse recursively for *.md (default: current directory).",
-    )
-    p_coverage.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_coverage.set_defaults(func=cmd_coverage)
 
@@ -1773,47 +1774,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_portfolio = sub.add_parser(
         "portfolio",
         help="Repository intelligence summary: artifact counts, health score, and attention items.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent, scope_parent],
     )
     p_portfolio.add_argument("directory", help="Directory to scan recursively for *.md.")
-    p_portfolio.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
-    p_portfolio.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_portfolio.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
-    )
     p_portfolio.set_defaults(func=cmd_portfolio)
 
     p_index = sub.add_parser(
         "index",
         help="Inventory every artifact in a repository (id, type, title, path).",
-        parents=[version_parent],
+        parents=[version_parent, json_parent, scope_parent],
     )
     p_index.add_argument(
         "directory",
         nargs="?",
         default=".",
         help="Directory to scan recursively for *.md (default: current directory).",
-    )
-    p_index.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
-    p_index.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_index.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_index.set_defaults(func=cmd_index)
 
@@ -1901,23 +1876,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_explorer = sub.add_parser(
         "explorer",
         help="Launch the interactive terminal Explorer (needs the explorer extra).",
-        parents=[version_parent],
+        parents=[version_parent, scope_parent],
     )
     p_explorer.add_argument(
         "directory",
         nargs="?",
         default=None,
         help="Repository to explore (default: rac/ when present, else the current directory).",
-    )
-    p_explorer.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_explorer.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_explorer.set_defaults(func=cmd_explorer)
 
@@ -2051,7 +2016,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_new = sub.add_parser(
         "new",
         help="Create a new artifact from its canonical template.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_new.add_argument(
         "type",
@@ -2061,25 +2026,19 @@ def build_parser() -> argparse.ArgumentParser:
         "output_path",
         help="Where to write the artifact (taken literally; never overwritten).",
     )
-    p_new.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_new.set_defaults(func=cmd_new)
 
     p_templates = sub.add_parser(
         "templates",
         help="List the canonical artifact templates available to `rac new`.",
-        parents=[version_parent],
-    )
-    p_templates.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+        parents=[version_parent, json_parent],
     )
     p_templates.set_defaults(func=cmd_templates)
 
     p_init = sub.add_parser(
         "init",
         help="Establish the repository identity namespace (.rac/config.yaml).",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_init.add_argument(
         "directory",
@@ -2112,15 +2071,12 @@ def build_parser() -> argparse.ArgumentParser:
         "(enterprise) an enforcement-policy stanza — configuration only, never "
         "prose; never overwrites an existing file (ADR-088).",
     )
-    p_init.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_init.set_defaults(func=cmd_init)
 
     p_quickstart = sub.add_parser(
         "quickstart",
         help="Guided first run: establish identity and scaffold a first artifact in one step.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_quickstart.add_argument(
         "directory",
@@ -2140,15 +2096,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Starter artifact type (default: requirement). One of the "
         "canonical templates from `rac templates`.",
     )
-    p_quickstart.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_quickstart.set_defaults(func=cmd_quickstart)
 
     p_resolve = sub.add_parser(
         "resolve",
         help="Resolve an artifact ID to its type, title, and path.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent, scope_parent],
     )
     p_resolve.add_argument("id", help="Artifact ID (canonical or legacy alias).")
     p_resolve.add_argument(
@@ -2157,25 +2110,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Directory to scan recursively for *.md (default: current directory).",
     )
-    p_resolve.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
-    p_resolve.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_resolve.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
-    )
     p_resolve.set_defaults(func=cmd_resolve)
 
     p_find = sub.add_parser(
         "find",
         help="Search artifacts by ID, title, filename, or path.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent, scope_parent],
     )
     p_find.add_argument("query", help="Case-insensitive substring to search for.")
     p_find.add_argument(
@@ -2201,9 +2141,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_find.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
-    p_find.add_argument(
         "--explain",
         action="store_true",
         help=(
@@ -2211,22 +2148,12 @@ def build_parser() -> argparse.ArgumentParser:
             "tier (additive `evidence`, ADR-037/ADR-038)."
         ),
     )
-    p_find.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_find.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
-    )
     p_find.set_defaults(func=cmd_find)
 
     p_decisions_for = sub.add_parser(
         "decisions-for",
         help="List the decisions whose `## Applies To` scope governs a code path.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_decisions_for.add_argument(
         "path",
@@ -2237,9 +2164,6 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=".",
         help="Corpus directory to scan recursively for *.md (default: current directory).",
-    )
-    p_decisions_for.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_decisions_for.add_argument(
         "--top-level",
@@ -2303,7 +2227,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_migrate = sub.add_parser(
         "migrate",
         help="Migrate existing artifacts onto canonical frontmatter identity.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent, scope_parent],
     )
     p_migrate.add_argument(
         "target",
@@ -2319,25 +2243,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Report what would be migrated without writing any file.",
     )
-    p_migrate.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
-    p_migrate.add_argument(
-        "--top-level",
-        action="store_true",
-        help="Only the top-level files in the directory (no recursion).",
-    )
-    p_migrate.add_argument(
-        "--recursive",
-        action="store_true",
-        help="Recurse into subdirectories (the default; accepted for clarity).",
-    )
     p_migrate.set_defaults(func=cmd_migrate)
 
     p_skill = sub.add_parser(
         "skill",
         help="Install or list the bundled Claude Code agent skills.",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_skill.add_argument(
         "action",
@@ -2355,15 +2266,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Target project directory (default: current directory).",
     )
-    p_skill.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
-    )
     p_skill.set_defaults(func=cmd_skill)
 
     p_hook = sub.add_parser(
         "hook",
         help="Install or list the bundled git hooks (commit-time cadence nudge).",
-        parents=[version_parent],
+        parents=[version_parent, json_parent],
     )
     p_hook.add_argument(
         "action",
@@ -2383,9 +2291,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--dir",
         default=".",
         help="Target git repository directory (default: current directory).",
-    )
-    p_hook.add_argument(
-        "--json", action="store_true", help="Emit JSON instead of human-readable text."
     )
     p_hook.set_defaults(func=cmd_hook)
 
