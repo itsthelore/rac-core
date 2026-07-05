@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: 94fca31da6f1e31641a3f2ab086ecdd00d58a945930de99d13c1f6475d411c2a) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: d7da5b611eb3e34b66da354bfc0916e05c5a89188fb22c748620f3aabc9bd611) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -98,4 +98,6 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWFVA38YT2C0** — ADR-097: Benchmark Family Contract _(Technical)_
 - **RAC-KWMW45KXHZJP** — ADR-098: Shared HTTP MCP Serving _(Architecture)_
 - **RAC-KWMZ3MR9DZ09** — ADR-099: Derived-Index Cache _(Technical)_
+- **RAC-KWS8TRXGQWHC** — ADR-100: Persistent Corpus Index with Changeset Invalidation _(Technical)_
+- **RAC-KWS8TTSKMGQA** — ADR-101: Recency Materialised into the Persistent Index _(Technical)_
 <!-- END RAC MANAGED BLOCK -->
