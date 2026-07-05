@@ -226,6 +226,72 @@ def test_edit_after_startup_reflected_next_call_fallback(tmp_path):
         provider.close()
 
 
+class _StubWatcher:
+    """A live watcher stand-in whose drain hands back an injected dirty set once.
+
+    Lets the watcher-mode splice be exercised deterministically — the server maps
+    the injected absolute paths to candidates and refreshes exactly them — without
+    depending on inotify delivery timing.
+    """
+
+    def __init__(self, dirty: set[str] | None = None) -> None:
+        self.available = True
+        self._dirty: set[str] = set(dirty or set())
+
+    @property
+    def alive(self) -> bool:
+        return True
+
+    def inject(self, *paths: str) -> None:
+        self._dirty.update(paths)
+
+    def drain(self) -> set[str]:
+        paths = self._dirty
+        self._dirty = set()
+        return paths
+
+    def stop(self) -> None:  # pragma: no cover — no resources to release
+        pass
+
+
+def test_watcher_mode_edit_via_injected_drain(tmp_path):
+    # Watcher-live path: the drained dirty set becomes refresh candidates, so an
+    # edited file shows on the next call (byte-identical to a fresh server), and an
+    # empty drain refreshes nothing — the event is the trigger.
+    root = str(_git_corpus(tmp_path))
+    build_index(root, str(tmp_path / "idx"), workers=1)
+    pindex = load_index(str(tmp_path / "idx"))
+    target = Path(root) / "adr-002.md"
+    watcher = _StubWatcher()
+    provider = IndexProvider(pindex, root, watcher=watcher)
+    on = build_server(root, index=provider)
+    try:
+        # Edit the file and inject its path as the drained dirty set.
+        target.write_text(
+            target.read_text(encoding="utf-8").replace(
+                "# ADR-2 Recency column", "# ADR-2 Recency photosynthesis"
+            ),
+            encoding="utf-8",
+        )
+        watcher.inject(str(target))
+        q = {"query": "photosynthesis"}
+        after = json.loads(_tool_text(on, "search_artifacts", q))
+        fresh = json.loads(_tool_text(build_server(root), "search_artifacts", q))
+        assert after == fresh, "watcher-mode candidate splice did not match the fresh server"
+        assert len(after["matches"]) == 1
+
+        # A further edit with NO injected event drains empty → no refresh → the
+        # change stays invisible until an event marks it dirty.
+        target.write_text(
+            target.read_text(encoding="utf-8").replace("photosynthesis", "mitochondria"),
+            encoding="utf-8",
+        )
+        unseen = json.loads(_tool_text(on, "search_artifacts", {"query": "mitochondria"}))
+        assert unseen["matches"] == [], "empty drain must not trigger a refresh"
+    finally:
+        provider.close()
+
+
 def test_get_related_and_get_artifact_reflect_edit_no_stale_memo(tmp_path):
     # The memoised index seams (resolution map, per-node edge groups, neighbourhood
     # adjacency) must not serve a pre-edit answer after the corpus changes: an added

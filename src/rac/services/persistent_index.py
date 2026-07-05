@@ -62,7 +62,7 @@ import shutil
 import struct
 import subprocess
 from array import array
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -1141,21 +1141,43 @@ class PersistentIndex:
         manifest = json.loads((self._dir / _MANIFEST).read_text(encoding="utf-8"))
         return {rel: (sha, size, mtime) for rel, sha, size, mtime in manifest["entries"]}
 
-    def refresh(self, root: str, *, verify: bool = False) -> int:
+    def refresh(
+        self, root: str, candidates: Collection[str] | None = None, *, verify: bool = False
+    ) -> int:
         """Changeset refresh (ADR-100): stat-diff, hash candidates, splice truth.
 
-        Enumerates with stat-only calls, selects candidates whose ``(size,
-        mtime_ns)`` differ from the manifest plus path-set adds/removes, reads and
-        hashes ONLY the candidates, and re-indexes only files whose content hash
-        actually changed. Mtime is a hint to avoid reading unchanged bytes, never an
-        authority — the sha256 confirms or dismisses each candidate. ``verify``
-        re-hashes every file, recovering the strict per-call byte guarantee (and
-        catching the rare byte edit that preserves size+mtime, which the stat hint
-        alone cannot see). Returns the number of files re-parsed (added + changed).
+        Two entry modes over the same splice-and-write tail:
 
-        NOTE: with zero changes this does stat-only work and returns 0 without
-        reading any artifact bytes or rewriting the index.
+        - **Full scan (``candidates`` is None).** Enumerates every file with
+          stat-only calls, selects the ones whose ``(size, mtime_ns)`` differ from
+          the manifest plus path-set adds/removes, reads and hashes only those, and
+          re-indexes only files whose content hash actually changed. Mtime is a hint
+          to avoid reading unchanged bytes, never an authority — the sha256 confirms
+          or dismisses each candidate. ``verify`` re-hashes every file, recovering
+          the strict per-call byte guarantee (and catching the rare byte edit that
+          preserves size+mtime, which the stat hint alone cannot see).
+        - **Candidate fast path (``candidates`` provided).** The watcher contract
+          (ADR-100): events are the trigger, the server already knows the dirty
+          paths, so the full O(N) enumerate is skipped. Only the named relpaths are
+          considered — each may be modified (bytes differ → reindex), unchanged
+          (hash equal → skip), added (not in manifest → reindex) or deleted (missing
+          on disk → drop). Bytes stay the authority for named paths, so every named
+          file that exists is hashed regardless of the stat hint. Everything not
+          named stays trusted — its manifest row and mapped record are reused
+          untouched, never re-stat'd or re-read. A dirty path that is a directory or
+          otherwise unresolvable falls back to the full scan for safety (a
+          directory-level event can hide any changeset). The full stat-scan and
+          ``verify`` remain the fallbacks.
+
+        Returns the number of files re-parsed (added + changed). With zero changes
+        this returns 0 without rewriting the index.
         """
+        if candidates is not None:
+            outcome = self._refresh_from_candidates(root, candidates)
+            if outcome is not None:
+                return outcome
+            # A directory / unresolvable candidate forced the safe full scan.
+
         root_path = Path(root)
         old_manifest = self._manifest()
         current: dict[str, Path] = {_relpath(root_path, p): p for p in find_markdown_files(root)}
@@ -1175,14 +1197,13 @@ class PersistentIndex:
 
         # Confirm suspects and adds by byte hash — bytes decide.
         changed: set[str] = set()
-        new_sha: dict[str, str] = {}
-        new_stat: dict[str, tuple[int, int]] = {}
+        override: dict[str, tuple[str, int, int]] = {}
         for rel in added | suspects:
             path = current[rel]
-            new_sha[rel] = _sha256(path)
+            sha = _sha256(path)
             st = path.stat()
-            new_stat[rel] = (st.st_size, st.st_mtime_ns)
-            if rel in added or new_sha[rel] != old_manifest[rel][0]:
+            override[rel] = (sha, st.st_size, st.st_mtime_ns)
+            if rel in added or sha != old_manifest[rel][0]:
                 changed.add(rel)
 
         reindexed = added | changed
@@ -1191,31 +1212,101 @@ class PersistentIndex:
         if not reindexed and not removed and not head_moved:
             return 0  # zero-change fast path: stat only, no rewrite
 
-        # Load the surviving document records from the mapped store (no corpus
-        # reads) and splice: drop removed + changed, (re)parse added + changed.
-        drop = removed | changed
+        # Manifest: reuse the survivors' stored hashes; only candidates were read.
+        manifest: list[tuple[str, str, int, int]] = []
+        for rel in current:
+            sha, size, mtime = override.get(rel) or old_manifest[rel]
+            manifest.append((rel, sha, size, mtime))
+
+        return self._write_changeset(root, root_path, reindexed, removed | changed, manifest)
+
+    def _refresh_from_candidates(self, root: str, candidates: Collection[str]) -> int | None:
+        """Splice only the named dirty relpaths, or return None to force a full scan.
+
+        Bytes are the authority for a named path: every candidate that exists on
+        disk is hashed and confirmed against the manifest, so an event whose
+        ``(size, mtime)`` happened to match still splices. Untouched files are never
+        enumerated, stat'd or re-read — the whole point of the watcher fast path
+        (ADR-100). Returns None (fall back to the full scan) when any candidate is a
+        directory or cannot be resolved under the root; a directory-level event can
+        conceal an arbitrary changeset, so the safe answer is a full stat scan.
+        """
+        root_path = Path(root)
+        old_manifest = self._manifest()
+
+        added: set[str] = set()
+        changed: set[str] = set()
+        removed: set[str] = set()
+        override: dict[str, tuple[str, int, int]] = {}
+
+        for raw in candidates:
+            rel = _candidate_relpath(root_path, raw)
+            if rel is None:
+                return None  # outside the root / unresolvable → safe full scan
+            path = root_path / rel
+            try:
+                is_dir = path.is_dir()
+            except OSError:
+                return None
+            if is_dir:
+                return None  # a directory-level event → safe full scan
+            if not _is_corpus_relpath(rel):
+                continue  # non-markdown or dotted path is never a corpus file
+            if not path.is_file():
+                if rel in old_manifest:
+                    removed.add(rel)
+                continue
+            sha = _sha256(path)
+            st = path.stat()
+            if rel not in old_manifest:
+                added.add(rel)
+                override[rel] = (sha, st.st_size, st.st_mtime_ns)
+            elif sha != old_manifest[rel][0]:
+                changed.add(rel)
+                override[rel] = (sha, st.st_size, st.st_mtime_ns)
+            # else: bytes match the manifest — an event with no real change; skip.
+
+        reindexed = added | changed
+        head_moved = _git_head(root) != self.git_head
+        if not reindexed and not removed and not head_moved:
+            return 0  # named paths all resolved unchanged: no rewrite
+
+        new_map = dict(old_manifest)
+        for rel in removed:
+            new_map.pop(rel, None)
+        new_map.update(override)
+        manifest = [(rel, sha, size, mtime) for rel, (sha, size, mtime) in new_map.items()]
+
+        return self._write_changeset(root, root_path, reindexed, removed | changed, manifest)
+
+    def _write_changeset(
+        self,
+        root: str,
+        root_path: Path,
+        reindexed: set[str],
+        drop: set[str],
+        manifest: list[tuple[str, str, int, int]],
+    ) -> int:
+        """Splice survivors + reparsed candidates, then write and adopt the index.
+
+        The shared tail of both refresh modes: surviving records come from the
+        mapped store (no corpus read), ``drop`` (removed + changed) is excised, and
+        each ``reindexed`` relpath is (re)parsed from ``root / rel``. Order and ids
+        are re-established canonically, then the new index is assembled, written to a
+        temp dir and atomically adopted. Returns the re-parsed count.
+        """
         rebuilt: list[dict] = [
             self._survivor_record(rec)
             for i in range(self.n)
             if (rec := self._record(i))["relpath"] not in drop
         ]
         for rel in sorted(reindexed):
-            rebuilt.append(_parse_one(root, -1, str(current[rel])))
+            rebuilt.append(_parse_one(root, -1, str(root_path / rel)))
 
         # Re-establish canonical document order and ids.
         rebuilt.sort(key=lambda r: _sort_key(root_path, r["relpath"]))
         for doc_id, rec in enumerate(rebuilt):
             rec["doc_id"] = doc_id
-
-        # Manifest: reuse the survivors' stored hashes; only candidates were read.
-        manifest: list[tuple[str, str, int, int]] = []
-        for rel in current:
-            if rel in new_sha:
-                size, mtime = new_stat[rel]
-                manifest.append((rel, new_sha[rel], size, mtime))
-            else:
-                sha, size, mtime = old_manifest[rel]
-                manifest.append((rel, sha, size, mtime))
 
         data = _assemble(root, rebuilt, manifest)
         self.close()
@@ -1285,3 +1376,32 @@ def _stat_differs(path: Path, manifest_row: tuple[str, int, int]) -> bool:
     _sha, size, mtime = manifest_row
     st = path.stat()
     return st.st_size != size or st.st_mtime_ns != mtime
+
+
+def _is_corpus_relpath(rel: str) -> bool:
+    """True when ``rel`` is a file ``find_markdown_files`` would include.
+
+    The same membership predicate the enumerate applies: a ``*.md`` file with no
+    dotted path component (``.git``, ``.venv``, a dotfile). A candidate that is not
+    a corpus file — a non-markdown edit, a dotted path — is never spliced, so the
+    fast path stays byte-identical to the enumerate for the named changeset.
+    """
+    if not rel.endswith(".md"):
+        return False
+    return not any(part.startswith(".") for part in rel.split("/"))
+
+
+def _candidate_relpath(root_path: Path, raw: str) -> str | None:
+    """Normalise a dirty path to a corpus-relative POSIX relpath, or None.
+
+    Accepts either a relpath (as the server maps it) or an absolute path under the
+    root (robustness): an absolute path outside the root cannot be classified, so
+    it returns None and the caller falls back to the full scan.
+    """
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        try:
+            return candidate.relative_to(root_path).as_posix()
+        except ValueError:
+            return None
+    return candidate.as_posix()

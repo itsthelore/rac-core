@@ -174,17 +174,38 @@ class IndexProvider:
         with self._lock:
             watcher = self._watcher
             if watcher is not None and watcher.available and watcher.alive:
-                # Watcher mode: splice only when an event marked the corpus dirty.
-                if watcher.drain():
-                    self._refresh()
+                # Watcher mode: splice only when an event marked the corpus dirty,
+                # and splice exactly that changeset — the drained dirty paths are
+                # handed to refresh as candidates, so an unchanged corpus costs one
+                # empty drain and a dirty one only rehashes the named paths (ADR-100).
+                dirty = watcher.drain()
+                if dirty:
+                    self._refresh(self._dirty_relpaths(dirty))
             else:
                 # Fallback: no usable watcher — stat-scan refresh every call.
                 self._refresh()
             return self._index
 
-    def _refresh(self) -> None:
+    def _dirty_relpaths(self, dirty: set[str]) -> set[str] | None:
+        """Map absolute event paths to corpus-relative POSIX relpaths for refresh.
+
+        Every watched path lives under the root (files in new subdirectories
+        included), so ``relative_to`` yields the manifest key the changeset splice
+        needs. An event path outside the root cannot be classified; returning None
+        forces refresh onto the safe full stat scan rather than mis-splicing.
+        """
+        root_path = Path(self._root)
+        rels: set[str] = set()
+        for abs_path in dirty:
+            try:
+                rels.add(Path(abs_path).relative_to(root_path).as_posix())
+            except ValueError:
+                return None
+        return rels
+
+    def _refresh(self, candidates: set[str] | None = None) -> None:
         try:
-            self._index.refresh(self._root)
+            self._index.refresh(self._root, candidates=candidates)
         except Exception as exc:  # pragma: no cover — defensive; refresh is pinned
             # Never crash the call on a refresh error; serve the current mapped
             # state and record the degradation on stderr (stdout is the protocol).

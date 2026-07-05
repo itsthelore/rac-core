@@ -204,6 +204,140 @@ def test_zero_change_refresh_reindexes_nothing(tmp_path):
         assert index.refresh(str(root)) == 0
 
 
+# --- 2b. candidate fast path: splice only the named changeset -----------------
+
+
+def test_candidates_fast_path_matches_full_and_skips_untouched(tmp_path, monkeypatch):
+    # The watcher already knows the dirty paths, so refresh(candidates=...) must
+    # splice exactly those — an edit, an add (in a new subdirectory), and a delete —
+    # WITHOUT ever enumerating the corpus or touching any unnamed file, yet produce
+    # an index byte-identical to a fresh full build over the final corpus.
+    import rac.services.persistent_index as pi
+
+    root = tmp_path / "corpus"
+    _edge_case_corpus(root)
+    idx = _index_dir(tmp_path)
+    build_index(str(root), idx, workers=1)
+    index = load_index(idx)
+
+    # Edit adr-002, add sub/adr-009 (a new subdirectory file), delete req-001.
+    (root / "adr-002.md").write_text(
+        (root / "adr-002.md")
+        .read_text(encoding="utf-8")
+        .replace("# ADR-2 Relationships format", "# ADR-2 Edited photosynthesis"),
+        encoding="utf-8",
+    )
+    (root / "sub").mkdir()
+    (root / "sub" / "adr-009.md").write_text(
+        "# ADR-9 Added quantum\n\n"
+        "## Status\n\nAccepted\n\n"
+        "## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nk\n",
+        encoding="utf-8",
+    )
+    (root / "req-001.md").unlink()
+    candidates = ["adr-002.md", "sub/adr-009.md", "req-001.md"]
+
+    # Isolation: the fast path must never call the full enumerate, and must only
+    # hash / parse the named files — the untouched adr-001 is never read.
+    def _no_enumerate(*_a, **_k):
+        raise AssertionError("candidate fast path must not enumerate the corpus")
+
+    hashed: list[str] = []
+    parsed: list[str] = []
+    real_sha, real_parse = pi._sha256, pi._parse_one
+    monkeypatch.setattr(pi, "find_markdown_files", _no_enumerate)
+    monkeypatch.setattr(pi, "_sha256", lambda p: (hashed.append(str(p)), real_sha(p))[1])
+    monkeypatch.setattr(
+        pi, "_parse_one", lambda r, d, p: (parsed.append(str(p)), real_parse(r, d, p))[1]
+    )
+
+    # Edit + add re-index (2); the delete drops without a reparse.
+    assert index.refresh(str(root), candidates=candidates) == 2
+
+    # The untouched survivor was never hashed nor parsed.
+    assert not any("adr-001" in p for p in hashed), hashed
+    assert not any("adr-001" in p for p in parsed), parsed
+    # Only the named files were hashed/parsed.
+    assert all(("adr-002" in p or "adr-009" in p or "req-001" in p) for p in hashed), hashed
+    assert all(("adr-002" in p or "adr-009" in p) for p in parsed), parsed
+
+    # Parity: byte-identical to a fresh full build over the final corpus. (The
+    # monkeypatch only rebinds persistent_index's names; build_repository_index
+    # walks via its own import, so the comparison is unaffected.)
+    _assert_full_search_parity(index, str(root))
+    index.close()
+
+
+def test_candidates_unchanged_named_path_is_a_noop(tmp_path):
+    # A named candidate whose bytes still match the manifest (an event with no real
+    # change) splices nothing and rewrites nothing.
+    root = tmp_path / "corpus"
+    _edge_case_corpus(root)
+    idx = _index_dir(tmp_path)
+    build_index(str(root), idx, workers=1)
+    with load_index(idx) as index:
+        assert index.refresh(str(root), candidates=["adr-002.md"]) == 0
+        # An empty candidate set is likewise a no-op.
+        assert index.refresh(str(root), candidates=[]) == 0
+
+
+def test_candidates_hash_authority_over_stat_hint(tmp_path):
+    # Bytes stay the authority for a NAMED path: a size+mtime-preserving edit that
+    # the full-scan stat hint would miss is still caught when the path is named,
+    # because a named candidate is always hashed.
+    root = tmp_path / "corpus"
+    _edge_case_corpus(root)
+    idx = _index_dir(tmp_path)
+    build_index(str(root), idx, workers=1)
+    index = load_index(idx)
+
+    target = root / "adr-002.md"
+    before = target.read_text(encoding="utf-8")
+    stat = target.stat()
+    edited = before.replace("format", "forms.")  # same byte length as "format"
+    assert len(edited) == len(before) and edited != before
+    target.write_text(edited, encoding="utf-8")
+    os.utime(target, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+
+    # Naming the path forces the hash — the edit is spliced without verify mode.
+    assert index.refresh(str(root), candidates=["adr-002.md"]) == 1
+    _assert_full_search_parity(index, str(root))
+    index.close()
+
+
+def test_directory_candidate_falls_back_to_full_enumerate(tmp_path, monkeypatch):
+    # A directory-level dirty path can hide an arbitrary changeset, so refresh must
+    # abandon the fast path and run the full stat scan, which still finds the file
+    # created inside the new subdirectory.
+    import rac.services.persistent_index as pi
+
+    root = tmp_path / "corpus"
+    _edge_case_corpus(root)
+    idx = _index_dir(tmp_path)
+    build_index(str(root), idx, workers=1)
+    index = load_index(idx)
+
+    (root / "sub").mkdir()
+    (root / "sub" / "adr-009.md").write_text(
+        "# ADR-9 Added quantum\n\n"
+        "## Status\n\nAccepted\n\n"
+        "## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nk\n",
+        encoding="utf-8",
+    )
+
+    enumerated: list[int] = []
+    real = pi.find_markdown_files
+    monkeypatch.setattr(
+        pi, "find_markdown_files", lambda *a, **k: (enumerated.append(1), real(*a, **k))[1]
+    )
+
+    # The candidate is the new directory itself; refresh must fall back.
+    assert index.refresh(str(root), candidates=["sub"]) == 1
+    assert enumerated, "a directory candidate must fall back to the full enumerate"
+    _assert_full_search_parity(index, str(root))
+    index.close()
+
+
 # --- 3. mtime-hint safety: verify catches a size+mtime-preserving edit --------
 
 
@@ -359,9 +493,9 @@ def test_memoised_seams_match_frozen_path_and_survive_refresh(tmp_path):
     # title, add a new artifact, remove one. If any memo were stale the seams would
     # answer for the pre-edit corpus.
     (root / "adr-002.md").write_text(
-        (root / "adr-002.md").read_text(encoding="utf-8").replace(
-            "# ADR-2 Relationships format", "# ADR-2 Relationships format quantum"
-        )
+        (root / "adr-002.md")
+        .read_text(encoding="utf-8")
+        .replace("# ADR-2 Relationships format", "# ADR-2 Relationships format quantum")
         + "\n## Related Decisions\n\n- adr-001\n",
         encoding="utf-8",
     )
