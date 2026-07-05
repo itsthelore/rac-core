@@ -87,7 +87,12 @@ def has_errors(issues: list[Issue]) -> bool:
     return any(issue.severity == "error" for issue in issues)
 
 
-def validate(product: Product, *, ticketing_provider: str | None = None) -> list[Issue]:
+def validate(
+    product: Product,
+    *,
+    ticketing_provider: str | None = None,
+    artifact_type: str | None = None,
+) -> list[Issue]:
     """Check ``product`` and return all structural and quality findings.
 
     Dispatches on artifact type. Each type with its own schema is routed
@@ -102,10 +107,18 @@ def validate(product: Product, *, ticketing_provider: str | None = None) -> list
     pure ``validate(product)`` callers are unaffected; the config-aware service
     layer injects the repository's configured provider (ADR-088). Stays
     deterministic — a pure function of ``(product, ticketing_provider)``.
+
+    ``artifact_type`` lets a caller that already classified ``product`` (the
+    corpus walk stores ``classify`` on each ``CorpusEntry``) pass that result in,
+    so the type is resolved once per file rather than re-derived here and in the
+    metadata/ticketing helpers. ``classify`` is a pure function of ``product``, so
+    a supplied value must equal ``classify(product).type``; it defaults to ``None``
+    (classify here) and is byte-invisible either way.
     """
-    issues = _validate_metadata(product)
-    issues += _validate_ticketing_references(product, ticketing_provider)
-    artifact_type = classify(product).type
+    if artifact_type is None:
+        artifact_type = classify(product).type
+    issues = _validate_metadata(product, artifact_type)
+    issues += _validate_ticketing_references(product, ticketing_provider, artifact_type)
     if artifact_type == "decision":
         return issues + _validate_decision(product)
     if artifact_type == "roadmap":
@@ -215,16 +228,18 @@ def _validate_status_metadata(product: Product, spec: ArtifactSpec) -> list[Issu
     return issues
 
 
-def _validate_metadata(product: Product) -> list[Issue]:
+def _validate_metadata(product: Product, artifact_type: str) -> list[Issue]:
     """Frontmatter envelope findings (ADR-025/026, v0.7.11).
 
     Parse and schema issues come from the parser; the identity conflict check
     (frontmatter ``id`` vs a differing legacy ``## ID`` / ``spec.id_field``
     declaration) is detected here because it needs the classified spec. RAC
-    never silently picks one identity (Initiative 7).
+    never silently picks one identity (Initiative 7). ``artifact_type`` is the
+    already-resolved classification, so the spec is looked up without re-running
+    ``classify``.
     """
     issues = list(product.metadata_issues) + list(product.parse_issues)
-    spec = spec_for(classify(product).type)
+    spec = spec_for(artifact_type)
     conflict = identity_conflict(product, spec)
     if conflict is not None:
         frontmatter_id, legacy_id = conflict
@@ -240,7 +255,9 @@ def _validate_metadata(product: Product) -> list[Issue]:
     return issues
 
 
-def _validate_ticketing_references(product: Product, provider: str | None) -> list[Issue]:
+def _validate_ticketing_references(
+    product: Product, provider: str | None, artifact_type: str
+) -> list[Issue]:
     """Format-lint ``## Related Tickets`` against the configured provider (ADR-087).
 
     Each entry must be a well-formed key or URL for the repository's ticketing
@@ -255,7 +272,7 @@ def _validate_ticketing_references(product: Product, provider: str | None) -> li
     rule = TICKETING_PROVIDERS.get(provider)
     if rule is None:
         return []  # the config layer validates the name; be lenient here
-    spec = spec_for(classify(product).type)
+    spec = spec_for(artifact_type)
     if spec is None or TICKETING_SECTION not in spec.optional:
         return []
     is_valid, label = rule
