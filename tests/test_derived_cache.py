@@ -145,11 +145,16 @@ def test_find_decisions_parity_with_derived_core():
 
 
 def test_second_call_is_a_hit_not_a_rebuild(tmp_path, monkeypatch):
+    # The cold miss now builds through the parallel cold-build seam (ADR-104); the
+    # rebuild counter observes that entrypoint. Intent is unchanged: the second
+    # unchanged-corpus call must read the store, not rebuild.
+    from rac.services import parallel_build
+
     builds: list[int] = []
-    original = derived_cache.build_derived_index
+    original = parallel_build.build_derived_index_parallel
     monkeypatch.setattr(
-        derived_cache,
-        "build_derived_index",
+        parallel_build,
+        "build_derived_index_parallel",
         lambda *a, **k: (builds.append(1), original(*a, **k))[1],
     )
     cache = DerivedIndexCache(tmp_path / "cache")
