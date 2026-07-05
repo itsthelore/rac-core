@@ -41,7 +41,7 @@ CONFIG_FILE = "config.yaml"
 class InvalidRepositoryKey(RACError):
     """The requested repository key fails the syntax contract (usage error)."""
 
-    def __init__(self, key: str):
+    def __init__(self, key: str) -> None:
         self.key = key
         super().__init__(
             f"invalid repository key: {key!r} (expected 2-10 uppercase "
@@ -52,7 +52,7 @@ class InvalidRepositoryKey(RACError):
 class InvalidTicketingProvider(RACError):
     """The requested ticketing provider is not a recognised provider (usage error)."""
 
-    def __init__(self, provider: str):
+    def __init__(self, provider: str) -> None:
         self.provider = provider
         super().__init__(
             f"invalid ticketing provider: {provider!r} "
@@ -63,7 +63,7 @@ class InvalidTicketingProvider(RACError):
 class InvalidProfile(RACError):
     """The requested init profile is not a recognised built-in profile (usage error)."""
 
-    def __init__(self, profile: str):
+    def __init__(self, profile: str) -> None:
         self.profile = profile
         super().__init__(
             f"invalid profile: {profile!r} (expected one of {', '.join(PROFILE_NAMES)})"
@@ -73,7 +73,7 @@ class InvalidProfile(RACError):
 class RepositoryKeyConflict(RACError):
     """An established repository key differs from the requested one."""
 
-    def __init__(self, existing: str, requested: str, config_path: str):
+    def __init__(self, existing: str, requested: str, config_path: str) -> None:
         self.existing = existing
         self.requested = requested
         self.config_path = config_path
@@ -87,7 +87,7 @@ class RepositoryKeyConflict(RACError):
 class MalformedRepositoryConfig(RACError):
     """An existing configuration file cannot be read (operational error)."""
 
-    def __init__(self, config_path: str, reason: str):
+    def __init__(self, config_path: str, reason: str) -> None:
         self.config_path = config_path
         super().__init__(f"malformed repository config {config_path}: {reason}")
 
@@ -130,11 +130,28 @@ class InitResult:
         }
 
 
-def _read_config(config_path: Path) -> RepositoryConfig:
+def _parse_config_yaml(config_path: Path) -> object:
+    """Read and YAML-parse one config file at an explicit path (parse only).
+
+    The single point that reads ``.rac/config.yaml`` and turns a
+    :class:`yaml.YAMLError` into :class:`MalformedRepositoryConfig` — every
+    reader (``_read_config`` and the three ``load_*`` loaders) shares this parse
+    so the file is read once per call and the invalid-YAML message is identical.
+
+    It imposes *no* structure: it returns whatever ``yaml.safe_load`` yields (a
+    mapping, a scalar, or ``None`` for an empty file). The post-parse shape check
+    stays with each caller, because they disagree — ``_read_config`` raises on a
+    non-mapping, while the ``load_*`` loaders treat one as "no section" and
+    return their default leniently.
+    """
     try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        return yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+
+
+def _read_config(config_path: Path) -> RepositoryConfig:
+    data = _parse_config_yaml(config_path)
     if not isinstance(data, dict) or not isinstance(data.get("repository_key"), str):
         raise MalformedRepositoryConfig(
             str(config_path), "missing required string field 'repository_key'"
@@ -176,10 +193,7 @@ def load_overrides(start_dir: str) -> SeverityOverrides:
     config_path = find_config_file(start_dir)
     if config_path is None:
         return EMPTY
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    data = _parse_config_yaml(config_path)
     section = data.get("validation") if isinstance(data, dict) else None
     if section is None:
         return EMPTY
@@ -217,10 +231,7 @@ def load_enforcement_policy(start_dir: str) -> EnforcementPolicy:
     config_path = find_config_file(start_dir)
     if config_path is None:
         return EMPTY_POLICY
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    data = _parse_config_yaml(config_path)
     section = data.get("enforcement") if isinstance(data, dict) else None
     if section is None:
         return EMPTY_POLICY
@@ -292,10 +303,7 @@ def load_ticketing_provider(start_dir: str) -> str | None:
     config_path = find_config_file(start_dir)
     if config_path is None:
         return None
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise MalformedRepositoryConfig(str(config_path), f"invalid YAML: {exc}") from exc
+    data = _parse_config_yaml(config_path)
     section = data.get("ticketing") if isinstance(data, dict) else None
     if section is None:
         return None

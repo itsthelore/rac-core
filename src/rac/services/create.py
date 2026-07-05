@@ -45,7 +45,7 @@ _MAX_ID_ATTEMPTS = 5
 class OutputPathExists(RACError):
     """The requested output path already exists; RAC never overwrites it."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str) -> None:
         self.path = path
         super().__init__(f"{path} already exists; rac new never overwrites")
 
@@ -53,7 +53,7 @@ class OutputPathExists(RACError):
 class OutputDirectoryMissing(RACError):
     """The output path's parent directory does not exist (no auto-create)."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str) -> None:
         self.path = path
         super().__init__(f"directory does not exist: {path}")
 
@@ -61,7 +61,7 @@ class OutputDirectoryMissing(RACError):
 class MissingRepositoryConfig(RACError):
     """No repository identity namespace is established (run `rac init`)."""
 
-    def __init__(self, start_dir: str):
+    def __init__(self, start_dir: str) -> None:
         self.start_dir = start_dir
         super().__init__(
             f"no repository identity found at or above {start_dir}; "
@@ -72,7 +72,7 @@ class MissingRepositoryConfig(RACError):
 class IdGenerationExhausted(RACError):
     """Repeated ID collisions — the entropy source is not behaving."""
 
-    def __init__(self, attempts: int):
+    def __init__(self, attempts: int) -> None:
         self.attempts = attempts
         super().__init__(f"could not generate a unique artifact ID in {attempts} attempts")
 
