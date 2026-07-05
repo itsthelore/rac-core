@@ -291,3 +291,46 @@ def test_timing_line_is_stderr_only_and_opt_in(tmp_path, capsys, monkeypatch):
     timed = capsys.readouterr()
     assert "rac-timing" not in timed.out, "stdout is a frozen contract"
     assert _TIMING_RE.search(timed.err), f"timing line shape wrong: {timed.err!r}"
+
+
+def test_stale_format_store_is_replaced_not_bricked(tmp_path):
+    """A same-hash store left by an older segment format must be replaced.
+
+    write_store's skip-if-exists shortcut is sound only within one format
+    version: a stale dir is unreadable (fail-closed), and skipping it would
+    leave every future compaction "successful" yet every open a miss — the
+    serving path silently degraded forever. This pins the heal: probe, replace,
+    and end with a tracker that really serves the memory-mapped base.
+    """
+    root = _build_corpus(tmp_path / "corpus", 40)
+    cache = DerivedIndexCache(tmp_path / "cache")
+    from rac.core.corpus import corpus_content_hash
+    from rac.services.derived_cache import SCHEMA_VERSION
+    from rac.services.index_store import ReadModelView
+
+    corpus_hash = corpus_content_hash(str(root))
+    derived = build_derived_index(str(root))
+    assert write_store(cache.cache_dir, corpus_hash, SCHEMA_VERSION, derived)
+    directory = store_dir(cache.cache_dir, corpus_hash)
+
+    # Forge a stale format: rewrite every segment's version field to 1.
+    for segment in directory.iterdir():
+        raw = bytearray(segment.read_bytes())
+        raw[8:10] = (1).to_bytes(2, "little")
+        segment.write_bytes(bytes(raw))
+    assert open_read_model(cache.cache_dir, corpus_hash, SCHEMA_VERSION) is None
+
+    # The heal: a rewrite over the stale dir must land and open.
+    assert write_store(cache.cache_dir, corpus_hash, SCHEMA_VERSION, derived)
+    assert open_read_model(cache.cache_dir, corpus_hash, SCHEMA_VERSION) is not None
+
+    # End-to-end: forge staleness again, then a fresh tracker's cold compaction
+    # must replace the dir and serve the mapped base, not the resident snapshot.
+    for segment in directory.iterdir():
+        raw = bytearray(segment.read_bytes())
+        raw[8:10] = (1).to_bytes(2, "little")
+        segment.write_bytes(bytes(raw))
+    tracker = FreshnessTracker(cache, str(root), use_inotify=False)
+    model = tracker.read_model()
+    assert isinstance(model, ReadModelView), type(model).__name__
+    tracker.close()

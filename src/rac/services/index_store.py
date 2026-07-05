@@ -292,7 +292,14 @@ def write_store(
     root = store_root(cache_dir)
     final = root / corpus_hash
     if final.is_dir():
-        return True
+        # Content addressing makes a same-hash store byte-equivalent only within
+        # one segment format. A dir left by an older format version is unreadable
+        # (fail-closed on open) and skipping here would brick this hash forever:
+        # every compaction would "succeed", every open would miss, and serving
+        # would silently stay on the slow path. Probe readability; replace if bad.
+        if _store_is_openable(final, corpus_hash, bundle_version):
+            return True
+        _remove_tree(final)
     segments = _build_segments(corpus_hash, bundle_version, derived)
     tmp = root / f".{corpus_hash}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
     try:
@@ -312,6 +319,22 @@ def write_store(
     except OSError:
         _remove_tree(tmp)
         return False
+
+
+def _store_is_openable(directory: Path, corpus_hash: str, bundle_version: str) -> bool:
+    """Whether an existing store dir opens under the CURRENT format and version.
+
+    The full reader open is the one truthful gate — it applies every fail-closed
+    check (magic, format version, bundle version, scoring fingerprint, hash echo,
+    truncation) exactly as serving would. Runs only on the rare
+    write-with-existing-dir path, never per call.
+    """
+    try:
+        reader = MmapIndexReader(directory, corpus_hash, bundle_version)
+    except (IndexFormatError, OSError, ValueError):
+        return False
+    reader.close()
+    return True
 
 
 def remove_store(cache_dir: Path, corpus_hash: str) -> None:
