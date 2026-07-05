@@ -126,6 +126,22 @@ def _issue(code: str, message: str, line: int | None = None) -> Issue:
     return Issue("error", code, message, line)
 
 
+def _expect(ok: bool, issues: list[Issue], message: str) -> bool:
+    """Shared structural gate for the per-field frontmatter validators.
+
+    Records an ``invalid-metadata-field`` issue with ``message`` unless ``ok``
+    holds, and returns ``ok`` so a caller can short-circuit. Each validator owns
+    its predicate and its message but routes rejection through here, so every
+    wrong-shape field reports under the one code (ADR-060: share structural
+    validation across per-type validators). Field problems that carry a *different*
+    code — ``unsupported-schema-version``, ``invalid-id-syntax`` — are emitted
+    directly by their validator, not through this helper.
+    """
+    if not ok:
+        issues.append(_issue("invalid-metadata-field", message))
+    return ok
+
+
 def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
     """Parse and schema-validate raw frontmatter YAML.
 
@@ -133,8 +149,40 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
     unusable (malformed YAML, not a mapping, duplicate keys); field-level
     problems return the partially valid metadata alongside their issues so
     callers can still read what parsed.
+
+    Issue order is part of the contract: unknown fields first, then
+    ``schema_version``, ``id``, ``type``, ``relationships``, ``tags`` — the order
+    the validators run below.
     """
-    issues: list[Issue] = []
+    data, issues = _load_frontmatter_mapping(raw)
+    if data is None:
+        return None, issues
+
+    _check_unknown_fields(data, issues)
+    schema_version = _validate_schema_version(data, issues)
+    artifact_id = _validate_id(data, issues)
+    artifact_type = _validate_type(data, issues)
+    relationships = _validate_relationships(data, issues)
+    tags = _parse_tags(data, issues)
+
+    metadata = ArtifactMetadata(
+        schema_version=schema_version if isinstance(schema_version, int) else 0,
+        id=artifact_id,
+        type=artifact_type,
+        relationships=relationships,
+        tags=tags,
+    )
+    return metadata, issues
+
+
+def _load_frontmatter_mapping(raw: str) -> tuple[dict | None, list[Issue]]:
+    """Decode the raw YAML envelope into a mapping, or report why it is unusable.
+
+    Returns ``(data, issues)``. On any envelope-level failure — oversize, invalid
+    YAML, a duplicate key, or a non-mapping top level — ``data`` is None and
+    ``issues`` holds the single terminal issue. On success ``data`` is the mapping
+    and ``issues`` is empty, ready for the per-field validators to append to.
+    """
     # Cap the raw block before PyYAML sees it (WS4, REQ-002), so an oversized
     # front matter cannot allocate unbounded ahead of validation.
     if exceeds_byte_cap(raw, MAX_FRONTMATTER_BYTES):
@@ -165,7 +213,11 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
                 "frontmatter must be a YAML mapping of supported fields",
             )
         ]
+    return data, []
 
+
+def _check_unknown_fields(data: dict, issues: list[Issue]) -> None:
+    """Flag every key outside the canonical schema (ADR-025), in document order."""
     for key in data:
         if key not in _SUPPORTED_FIELDS:
             issues.append(
@@ -176,23 +228,29 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
                 )
             )
 
+
+def _validate_schema_version(data: dict, issues: list[Issue]) -> int | None:
+    """Validate the required ``schema_version`` field.
+
+    Returns the version when it is a supported int (an unsupported-but-integer
+    version is returned as-is, with only its issue recorded); returns None when
+    the field is absent or not an integer. ``bool`` is excluded because it is an
+    ``int`` subclass but never a valid version.
+    """
     schema_version = data.get("schema_version")
-    if "schema_version" not in data:
-        issues.append(
-            _issue(
-                "invalid-metadata-field",
-                "frontmatter is missing required field 'schema_version'",
-            )
-        )
-    elif not isinstance(schema_version, int) or isinstance(schema_version, bool):
-        issues.append(
-            _issue(
-                "invalid-metadata-field",
-                "frontmatter field 'schema_version' must be an integer",
-            )
-        )
-        schema_version = None
-    elif schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+    if not _expect(
+        "schema_version" in data,
+        issues,
+        "frontmatter is missing required field 'schema_version'",
+    ):
+        return schema_version
+    if not _expect(
+        isinstance(schema_version, int) and not isinstance(schema_version, bool),
+        issues,
+        "frontmatter field 'schema_version' must be an integer",
+    ):
+        return None
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         issues.append(
             _issue(
                 "unsupported-schema-version",
@@ -200,76 +258,64 @@ def parse_frontmatter(raw: str) -> tuple[ArtifactMetadata | None, list[Issue]]:
                 f"(supported: {', '.join(str(v) for v in SUPPORTED_SCHEMA_VERSIONS)})",
             )
         )
+    return schema_version
 
+
+def _validate_id(data: dict, issues: list[Issue]) -> str | None:
+    """Validate the optional ``id`` field, returning the normalized id or None."""
     artifact_id = data.get("id")
-    if artifact_id is not None:
-        if not isinstance(artifact_id, str):
-            issues.append(
-                _issue(
-                    "invalid-metadata-field",
-                    "frontmatter field 'id' must be a string",
-                )
+    if artifact_id is None:
+        return None
+    if not _expect(isinstance(artifact_id, str), issues, "frontmatter field 'id' must be a string"):
+        return None
+    if not is_valid_id(artifact_id):
+        issues.append(
+            _issue(
+                "invalid-id-syntax",
+                f"invalid artifact ID syntax: {artifact_id!r} "
+                "(expected <KEY>-<12-char Crockford base32 suffix>, "
+                "e.g. RAC-01JY4M8X2QZ7)",
             )
-            artifact_id = None
-        elif not is_valid_id(artifact_id):
-            issues.append(
-                _issue(
-                    "invalid-id-syntax",
-                    f"invalid artifact ID syntax: {artifact_id!r} "
-                    "(expected <KEY>-<12-char Crockford base32 suffix>, "
-                    "e.g. RAC-01JY4M8X2QZ7)",
-                )
-            )
-            artifact_id = None
-        else:
-            artifact_id = normalize_id(artifact_id)
+        )
+        return None
+    return normalize_id(artifact_id)
 
+
+def _validate_type(data: dict, issues: list[Issue]) -> str | None:
+    """Validate the optional ``type`` field against the artifact spec registry."""
     artifact_type = data.get("type")
-    if artifact_type is not None:
-        # Registered against the spec registry lazily to avoid a core cycle.
-        from .artifacts import spec_for
+    if artifact_type is None:
+        return None
+    # Registered against the spec registry lazily to avoid a core cycle.
+    from .artifacts import spec_for
 
-        if not isinstance(artifact_type, str) or spec_for(artifact_type) is None:
-            issues.append(
-                _issue(
-                    "invalid-metadata-field",
-                    f"frontmatter field 'type' is not a registered artifact type: "
-                    f"{artifact_type!r}",
-                )
-            )
-            artifact_type = None
+    if not _expect(
+        isinstance(artifact_type, str) and spec_for(artifact_type) is not None,
+        issues,
+        f"frontmatter field 'type' is not a registered artifact type: {artifact_type!r}",
+    ):
+        return None
+    return artifact_type
 
+
+def _validate_relationships(data: dict, issues: list[Issue]) -> dict[str, list[str]]:
+    """Validate the optional ``relationships`` map and normalize its target ids."""
     relationships = data.get("relationships")
-    parsed_relationships: dict[str, list[str]] = {}
-    if relationships is not None:
-        if not isinstance(relationships, dict) or not all(
-            isinstance(kind, str)
-            and isinstance(targets, list)
-            and all(isinstance(t, str) for t in targets)
-            for kind, targets in relationships.items()
-        ):
-            issues.append(
-                _issue(
-                    "invalid-metadata-field",
-                    "frontmatter field 'relationships' must map relationship "
-                    "kinds to lists of artifact IDs",
-                )
-            )
-        else:
-            parsed_relationships = {
-                kind: [normalize_id(t) for t in targets] for kind, targets in relationships.items()
-            }
-
-    tags = _parse_tags(data, issues)
-
-    metadata = ArtifactMetadata(
-        schema_version=schema_version if isinstance(schema_version, int) else 0,
-        id=artifact_id,
-        type=artifact_type,
-        relationships=parsed_relationships,
-        tags=tags,
+    if relationships is None:
+        return {}
+    well_formed = isinstance(relationships, dict) and all(
+        isinstance(kind, str)
+        and isinstance(targets, list)
+        and all(isinstance(t, str) for t in targets)
+        for kind, targets in relationships.items()
     )
-    return metadata, issues
+    if not _expect(
+        well_formed,
+        issues,
+        "frontmatter field 'relationships' must map relationship kinds to lists of artifact IDs",
+    ):
+        return {}
+    return {kind: [normalize_id(t) for t in targets] for kind, targets in relationships.items()}
 
 
 def _parse_tags(data: dict, issues: list[Issue]) -> list[str]:
@@ -277,12 +323,10 @@ def _parse_tags(data: dict, issues: list[Issue]) -> list[str]:
     tags = data.get("tags")
     if tags is None:
         return []
-    if not isinstance(tags, list) or not all(isinstance(t, str) and t.strip() for t in tags):
-        issues.append(
-            _issue(
-                "invalid-metadata-field",
-                "frontmatter field 'tags' must be a list of non-empty strings",
-            )
-        )
+    if not _expect(
+        isinstance(tags, list) and all(isinstance(t, str) and t.strip() for t in tags),
+        issues,
+        "frontmatter field 'tags' must be a list of non-empty strings",
+    ):
         return []
     return [t.strip() for t in tags]
