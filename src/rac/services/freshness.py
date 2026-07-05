@@ -100,6 +100,61 @@ def _relposix(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
+def stat_scan(
+    root: Path,
+    root_str: str,
+    prev_manifest: dict[str, FileState],
+    *,
+    content_confirm_all: bool,
+) -> tuple[dict[str, FileState], set[str]]:
+    """Diff the corpus against ``prev_manifest`` by stat, content-confirming changes.
+
+    The stat-manifest rung (v2 §2.2) factored out so both the long-lived
+    :class:`FreshnessTracker` and the one-shot CLI incremental-validate path
+    (ADR-103) share one differ — the manifest-scan machinery is identical, so it
+    is defined once here rather than copied. Pure over ``(filesystem, root,
+    prev_manifest)`` with no tracker state, so a caller can drive it with any
+    persisted manifest.
+
+    Enumerates the walk's files (``find_markdown_files`` — the exact walk scope),
+    stats each for ``(size, mtime_ns)``, and reuses the previous manifest's hash
+    when the stat proxy is unchanged (the S5-accepted stat rung) unless
+    ``content_confirm_all`` forces a read (cold build and the ``verify`` floor).
+    Enumeration makes add / remove / rename staleness-free — a vanished relpath is
+    a change even though no file was read for it. Returns the rebuilt manifest and
+    the set of relpaths whose *content* changed, plus removals; the caller owns
+    what to do with them (re-parse, re-validate, drop) and where to persist the
+    manifest.
+    """
+    changed: set[str] = set()
+    new_manifest: dict[str, FileState] = {}
+    for path in find_markdown_files(root_str):
+        rel = _relposix(root, path)
+        try:
+            st = path.stat()
+        except OSError:
+            # Vanished between enumeration and stat — treat as absent; it simply
+            # does not enter the new manifest and the next scan settles it.
+            continue
+        prev = prev_manifest.get(rel)
+        if (
+            not content_confirm_all
+            and prev is not None
+            and prev.size == st.st_size
+            and prev.mtime_ns == st.st_mtime_ns
+        ):
+            new_manifest[rel] = prev  # stat proxy unchanged — S5 accepted miss
+            continue
+        digest = content_hash(path)  # content confirm — the trigger's truth
+        new_manifest[rel] = FileState(content_hash=digest, size=st.st_size, mtime_ns=st.st_mtime_ns)
+        if prev is None or prev.content_hash != digest:
+            changed.add(rel)
+    for rel in prev_manifest:
+        if rel not in new_manifest:
+            changed.add(rel)  # removed (or renamed away) — enumeration is truth
+    return new_manifest, changed
+
+
 def _corpus_hash_from_manifest(root: Path, manifest: dict[str, FileState]) -> str:
     """Reproduce :func:`corpus_content_hash` from the manifest's cached hashes.
 
@@ -427,34 +482,9 @@ class FreshnessTracker:
         forces a read (cold build and the full-rehash floor). The returned set is
         the relpaths whose *content* actually changed, plus removals.
         """
-        changed: set[str] = set()
-        new_manifest: dict[str, FileState] = {}
-        for path in find_markdown_files(self._root_str):
-            rel = _relposix(self._root, path)
-            try:
-                st = path.stat()
-            except OSError:
-                # Vanished between enumeration and stat — treat as absent; the next
-                # scan settles it. It simply will not enter the new manifest.
-                continue
-            prev = self._manifest.get(rel)
-            if (
-                not content_confirm_all
-                and prev is not None
-                and prev.size == st.st_size
-                and prev.mtime_ns == st.st_mtime_ns
-            ):
-                new_manifest[rel] = prev  # stat proxy unchanged — S5 accepted miss
-                continue
-            digest = content_hash(path)  # content confirm — the trigger's truth
-            new_manifest[rel] = FileState(
-                content_hash=digest, size=st.st_size, mtime_ns=st.st_mtime_ns
-            )
-            if prev is None or prev.content_hash != digest:
-                changed.add(rel)
-        for rel in self._manifest:
-            if rel not in new_manifest:
-                changed.add(rel)  # removed (or renamed away) — enumeration is truth
+        new_manifest, changed = stat_scan(
+            self._root, self._root_str, self._manifest, content_confirm_all=content_confirm_all
+        )
         self._manifest = new_manifest
         return changed
 

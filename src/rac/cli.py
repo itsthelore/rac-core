@@ -222,6 +222,7 @@ def _read_validate_input(target: str) -> Product:
 def cmd_validate(args: argparse.Namespace) -> int:
     from rac.services.validate import (
         validate_directory,
+        validate_directory_incremental,
         validate_product,
         validate_stdin_against_corpus,
     )
@@ -237,7 +238,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
             # directory target already validates every artifact in place, so the
             # flag is redundant and ambiguous there (ADR-067, v0.21.17).
             _usage_error("--corpus applies to stdin ('-') or a single file")
-        result = validate_directory(args.file, recursive=not args.top_level)
+        # --cache reuses per-file results across runs (ADR-103), byte-identical
+        # to the uncached path; off by default keeps today's path untouched.
+        result = (
+            validate_directory_incremental(args.file, recursive=not args.top_level)
+            if getattr(args, "cache", False)
+            else validate_directory(args.file, recursive=not args.top_level)
+        )
         _emit(
             args,
             human=lambda: outputs.render_validate_dir_human(result),
@@ -1452,6 +1459,20 @@ def build_parser() -> argparse.ArgumentParser:
             "(stdin '-' or a single file only). Reports references to retired or "
             "missing decisions in addition to structural findings. Used by the "
             "generated Claude Code pre-edit hook."
+        ),
+    )
+    # Incremental directory validation (ADR-103): opt-in, off by default. Reuses
+    # per-file validation results keyed by content-hash × config fingerprint, so a
+    # re-validate after a small changeset recomputes only the changed files —
+    # byte-identical to the uncached run. Disposable cache under
+    # $XDG_CACHE_HOME/rac (RAC_CACHE_DIR overrides); deleting it costs only latency.
+    p_validate.add_argument(
+        "--cache",
+        action="store_true",
+        help=(
+            "Reuse per-file validation results across runs for large corpora, "
+            "recomputing only changed files; disposable and byte-identical to the "
+            "uncached run (directory validation only, off by default, ADR-103)."
         ),
     )
     p_validate.set_defaults(func=cmd_validate)
