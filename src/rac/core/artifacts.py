@@ -61,6 +61,14 @@ class ArtifactSpec:
     # stem. A forward hook — no spec sets it today; relationship resolution works
     # from the ``## ID`` section and filename stem until a type opts in.
     id_field: str | None = None
+    # Validation-safe starter body per normalized section name, rendered by
+    # ``rac schema --template`` / ``rac improve --template``. Spec-driven so
+    # template rendering stays data-driven with no per-type branches. Metadata
+    # sections (e.g. a Decision's ``status``/``category``) are intentionally
+    # omitted — their starter value derives from the allowed metadata values, not
+    # from this map. Sections absent from this map fall back to a generic
+    # ``TODO: describe <section>.`` line at render time.
+    starter_bodies: dict[str, str] = field(default_factory=dict)
 
     @property
     def expected(self) -> tuple[str, ...]:
@@ -176,6 +184,13 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "kpis": "success metrics",
             "kpi": "success metrics",
         },
+        starter_bodies={
+            "problem": "TODO: describe the problem being solved and who experiences it.",
+            "requirements": "- [REQ-001] TODO: describe a required system behaviour.",
+            "success metrics": "TODO: describe how success will be measured.",
+            "risks": "TODO: describe implementation, delivery, operational, or adoption risks.",
+            "assumptions": "TODO: describe conditions assumed to be true.",
+        },
     ),
     ArtifactSpec(
         name="decision",
@@ -234,6 +249,16 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         synonyms={
             "alternatives": "alternatives considered",
             "options considered": "alternatives considered",
+        },
+        # ``status`` and ``category`` are omitted — their starter body comes from
+        # the allowed metadata values (see schema._metadata_default), not this map.
+        starter_bodies={
+            "context": "TODO: describe the situation, constraints, and background.",
+            "decision": "TODO: describe the decision that has been made.",
+            "consequences": "TODO: describe the expected positive and negative consequences.",
+            "alternatives considered": (
+                "TODO: describe the options that were considered and why they were not chosen."
+            ),
         },
     ),
     ArtifactSpec(
@@ -298,6 +323,13 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         # never affects the Requirement spec's canonical "success metrics" section.
         synonyms={
             "success metrics": "success measures",
+        },
+        starter_bodies={
+            "outcomes": "TODO: describe the outcomes this roadmap is intended to achieve.",
+            "initiatives": "TODO: describe the major initiatives that support the outcomes.",
+            "success measures": "TODO: describe how progress or success will be measured.",
+            "assumptions": "TODO: describe conditions assumed to be true.",
+            "risks": "TODO: describe implementation, delivery, operational, or adoption risks.",
         },
     ),
     ArtifactSpec(
@@ -370,6 +402,19 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
             "expected output": "output",
             "output specification": "output",
             "input specification": "input",
+        },
+        starter_bodies={
+            "objective": "TODO: describe what this prompt is intended to achieve.",
+            "input": (
+                "TODO: describe the information, context, or source material the prompt expects."
+            ),
+            "instructions": (
+                "TODO: describe the steps, rules, or approach the model should follow."
+            ),
+            "output": "TODO: describe the expected response format or result.",
+            "constraints": "TODO: describe any boundaries or restrictions.",
+            "examples": "TODO: provide example inputs and outputs if useful.",
+            "evaluation": "TODO: describe how the output should be judged.",
         },
     ),
     ArtifactSpec(
@@ -452,6 +497,27 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
                 "What still needs to be decided?",
                 "What should be validated or explored further?",
             ),
+        },
+        starter_bodies={
+            "context": "TODO: describe the design context and why this design exists.",
+            "user need": (
+                "TODO: describe who this design is for and what they need to accomplish."
+            ),
+            "design": (
+                "TODO: describe the proposed experience, interaction, layout, flow, "
+                "or system behavior."
+            ),
+            "constraints": (
+                "TODO: describe technical, product, accessibility, platform, or "
+                "implementation constraints."
+            ),
+            "rationale": "TODO: explain why this design approach was chosen.",
+            "alternatives": "TODO: describe alternatives that were considered.",
+            "accessibility": "TODO: describe accessibility considerations.",
+            "style guidance": (
+                "TODO: describe visual, tone, layout, or interaction style guidance."
+            ),
+            "open questions": "TODO: list unresolved design questions.",
         },
     ),
 )
