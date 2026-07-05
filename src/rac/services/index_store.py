@@ -62,6 +62,11 @@ from rac.services.resolve import (
     _FIELD_BOOSTS,
     _GRAPH_WEIGHT,
     _RRF_K,
+    OUTCOME_DUPLICATE,
+    OUTCOME_NOT_FOUND,
+    OUTCOME_RESOLVED,
+    ResolutionResult,
+    ResolvedArtifact,
     SearchableArtifact,
     SearchResult,
     _bm25f_scored,
@@ -95,6 +100,14 @@ _SEG_RELATIONSHIPS = "relationships.seg"
 _SEG_LIVE = "live.seg"
 _SEG_SCOPE = "scope.seg"
 _SEG_PORTFOLIO = "portfolio.seg"
+# Point-resolution segments (ADR-101). ``aliasmap`` is the sorted casefolded
+# identifier -> docids map exact resolution binary-searches, so ``get_artifact``
+# and ``get_related`` resolve an id without reconstructing every identity row.
+# ``pathmap`` is the sorted path-string -> docid map ``get_related`` binary-
+# searches to resolve a neighbour path's identity on demand, so its
+# ``identity_by_path`` touches only the edges near the artifact, never O(N) rows.
+_SEG_ALIASMAP = "aliasmap.seg"
+_SEG_PATHMAP = "pathmap.seg"
 
 _ALL_SEGMENTS = (
     _SEG_HEADER,
@@ -107,6 +120,8 @@ _ALL_SEGMENTS = (
     _SEG_LIVE,
     _SEG_SCOPE,
     _SEG_PORTFOLIO,
+    _SEG_ALIASMAP,
+    _SEG_PATHMAP,
 )
 
 # The artifact type the live-decision topic query filters to (ADR-067), named
@@ -174,11 +189,23 @@ def _build_segments(
     # term's candidate docs and its distinct-docid df both come from the union of
     # the term's prefix-range rows, touching O(matches) not O(corpus) (ADR-101).
     postings_lists: list[list[int]] = [[] for _ in termdict]
+    # Casefolded identifier -> ascending docids, the exact identity set exact
+    # resolution matches (``resolve_in_index``: casefolded equality over an
+    # entry's canonical id and aliases). Each list stays ascending and
+    # duplicate-free by construction — docids are appended in order, and two
+    # aliases of one entry that casefold to the same key touch the same (last)
+    # docid, guarded here — so the persisted map reproduces the walk's outcomes.
+    alias_docids: dict[str, list[int]] = {}
     for docid, entry in enumerate(entries):
         fields = field_tokens[entry.path]
         lengths = [len(fields[name]) for name in FIELDS]
         for i, value in enumerate(lengths):
             length_sums[i] += value
+
+        for alias in entry.aliases:
+            docids = alias_docids.setdefault(alias.casefold(), [])
+            if not docids or docids[-1] != docid:
+                docids.append(docid)
 
         row = Writer()
         row.text(entry.id)
@@ -210,6 +237,25 @@ def _build_segments(
 
     termdict_rows = [_encode_text(term) for term in termdict]
     postings_rows = [_encode_u32_list(docids) for docids in postings_lists]
+
+    # Alias map: rows sorted by casefolded key so a query id's exact match is a
+    # binary search. Each row is ``key`` then its ascending docids.
+    aliasmap_rows: list[bytes] = []
+    for key in sorted(alias_docids):
+        writer = Writer()
+        writer.text(key)
+        writer.u32_list(alias_docids[key])
+        aliasmap_rows.append(writer.payload)
+
+    # Path map: rows sorted by path *string* so a neighbour path's docid is a
+    # binary search. Docids index in walk (Path-sorted) order, which is not the
+    # same as string order, so the rows are re-sorted by the string key here.
+    pathmap_rows: list[bytes] = []
+    for path, docid in sorted((entry.path, docid) for docid, entry in enumerate(entries)):
+        writer = Writer()
+        writer.text(path)
+        writer.u32(docid)
+        pathmap_rows.append(writer.payload)
 
     relationships = Writer()
     rels: list[Relationship] = list(derived.relationships)
@@ -261,6 +307,8 @@ def _build_segments(
         _SEG_LIVE: encode_segment(live.payload),
         _SEG_SCOPE: encode_segment(scope.payload),
         _SEG_PORTFOLIO: encode_segment(portfolio.payload),
+        _SEG_ALIASMAP: encode_segment(write_indexed(aliasmap_rows)),
+        _SEG_PATHMAP: encode_segment(write_indexed(pathmap_rows)),
     }
 
 
@@ -404,6 +452,8 @@ class MmapIndexReader:
             raise
         self._terms_cache: list[str] | None = None
         self._postings_seg: IndexedSegment | None = None
+        self._aliasmap_seg: IndexedSegment | None = None
+        self._pathmap_seg: IndexedSegment | None = None
 
     def _map(self, path: Path, name: str) -> None:
         fd = os.open(path, os.O_RDONLY)
@@ -602,6 +652,60 @@ class MmapIndexReader:
             result.update(self.postings(term_id))
         return result
 
+    # --- point resolution: alias/path maps binary-searched (ADR-101) ----------
+
+    def _aliasmap(self) -> IndexedSegment:
+        if self._aliasmap_seg is None:
+            self._aliasmap_seg = IndexedSegment(self._views[_SEG_ALIASMAP])
+        return self._aliasmap_seg
+
+    def _pathmap(self) -> IndexedSegment:
+        if self._pathmap_seg is None:
+            self._pathmap_seg = IndexedSegment(self._views[_SEG_PATHMAP])
+        return self._pathmap_seg
+
+    def alias_docids(self, wanted: str) -> list[int]:
+        """The ascending docids whose identity set holds ``wanted`` (casefolded).
+
+        ``wanted`` must already be ``strip().casefold()``d by the caller — the same
+        normalisation ``resolve_in_index`` applies to the query — so the binary
+        search over the casefolded-key rows finds the exact identity set a walk's
+        ``any(alias.casefold() == wanted ...)`` would. Empty when nothing matches.
+        """
+        segment = self._aliasmap()
+        lo, hi = 0, segment.count
+        while lo < hi:
+            mid = (lo + hi) // 2
+            reader = segment.row(mid)
+            key = reader.text()
+            if key < wanted:
+                lo = mid + 1
+            elif key > wanted:
+                hi = mid
+            else:
+                return reader.u32_list()
+        return []
+
+    def docid_for_path(self, path: str) -> int | None:
+        """The docid whose stored path equals ``path``, or ``None`` — binary search.
+
+        The path map is sorted by path string, so a neighbour path's identity row
+        is found in O(log N) without materialising the whole identity projection.
+        """
+        segment = self._pathmap()
+        lo, hi = 0, segment.count
+        while lo < hi:
+            mid = (lo + hi) // 2
+            reader = segment.row(mid)
+            key = reader.text()
+            if key < path:
+                lo = mid + 1
+            elif key > path:
+                hi = mid
+            else:
+                return reader.u32()
+        return None
+
     def relationships(self) -> list[Relationship]:
         reader = Reader(self._views[_SEG_RELATIONSHIPS])
         count = reader.u32()
@@ -641,7 +745,10 @@ class MmapIndexReader:
         return json.loads(Reader(self._views[_SEG_PORTFOLIO]).text())
 
     def close(self) -> None:
-        self._postings_seg = None  # drop the cached view reference before release
+        # Drop cached views that export a pointer into a mapping before release.
+        self._postings_seg = None
+        self._aliasmap_seg = None
+        self._pathmap_seg = None
         for view in self._views.values():
             view.release()
         self._views.clear()
@@ -707,6 +814,53 @@ class Fold:
 
     def identity_entries(self) -> list[IndexEntry]:
         return [self.base.identity_entry(docid) for docid in self.live_docids()]
+
+    def resolve(self, artifact_id: str) -> ResolutionResult:
+        """Exact resolution over the persisted alias map, byte-identical to a walk.
+
+        Reproduces :func:`resolve.resolve_in_index` exactly from the mapped alias
+        segment: ``artifact_id.strip().casefold()`` is looked up against the same
+        casefolded identity set (canonical id plus aliases), and the three outcomes
+        are the same — not-found when nothing matches, duplicate (with the matching
+        paths sorted, never resolved by order) when more than one distinct doc
+        matches, resolved otherwise. A binary search plus O(matches) row reads
+        replaces the O(N) identity-row reconstruction (ADR-101). Tombstoned docs are
+        folded out first, so a future non-empty delta stays correct through this
+        one path (empty here, so the base is the whole answer).
+        """
+        wanted = artifact_id.strip().casefold()
+        docids = self.base.alias_docids(wanted)
+        tombstones = self.delta.tombstones
+        if tombstones:
+            docids = [docid for docid in docids if docid not in tombstones]
+        if not docids:
+            return ResolutionResult(artifact_id=artifact_id, outcome=OUTCOME_NOT_FOUND)
+        if len(docids) > 1:
+            return ResolutionResult(
+                artifact_id=artifact_id,
+                outcome=OUTCOME_DUPLICATE,
+                duplicate_paths=sorted(self.base.entry_path(docid) for docid in docids),
+            )
+        entry = self.base.identity_entry(docids[0])
+        return ResolutionResult(
+            artifact_id=artifact_id,
+            outcome=OUTCOME_RESOLVED,
+            artifact=ResolvedArtifact.from_entry(entry),
+        )
+
+    def identity_for_path(self, path: str) -> tuple[str, str, str | None] | None:
+        """``(id, type, title)`` for ``path`` via the path map, or ``None``.
+
+        A binary search over the path->docid map plus one identity-row read, with
+        tombstoned docs folded out — the per-path primitive :class:`LazyIdentityByPath`
+        resolves ``get_related``'s edges through, so its ``identity_by_path`` never
+        materialises the whole corpus.
+        """
+        docid = self.base.docid_for_path(path)
+        if docid is None or docid in self.delta.tombstones:
+            return None
+        entry = self.base.identity_entry(docid)
+        return (entry.id, entry.type, entry.title)
 
     def index_entries(self) -> list[IndexEntry]:
         return [self.base.full_entry(docid) for docid in self.live_docids()]
@@ -850,6 +1004,44 @@ class Fold:
         )
 
 
+class LazyIdentityByPath:
+    """Path -> ``(id, type, title)`` resolved on demand from the store (ADR-101).
+
+    ``get_related``'s relationship helpers read identity only for the paths on the
+    artifact's incoming edges and within its bounded neighbourhood — never the whole
+    corpus — so this resolves each *requested* path through the fold's path map (a
+    binary search plus one identity-row read), memoising the result, rather than
+    reconstructing every identity row up front. It duck-types the ``dict`` those
+    helpers read: only ``.get`` (incoming edges and neighbourhood discovery) and
+    ``[]`` (neighbourhood node assembly) are used, and both surface exactly what a
+    full ``{path: (id, type, title)}`` dict would — a missing path is ``None`` from
+    ``.get`` and a ``KeyError`` from ``[]``, identical to a plain dict. The server
+    casts it to ``dict`` at the one call site (the helpers are not this bundle's to
+    re-signature); the values are byte-identical to the materialised map.
+    """
+
+    def __init__(self, fold: Fold) -> None:
+        self._fold = fold
+        self._memo: dict[str, tuple[str, str, str | None] | None] = {}
+
+    def _lookup(self, path: str) -> tuple[str, str, str | None] | None:
+        if path not in self._memo:
+            self._memo[path] = self._fold.identity_for_path(path)
+        return self._memo[path]
+
+    def get(
+        self, path: str, default: tuple[str, str, str | None] | None = None
+    ) -> tuple[str, str, str | None] | None:
+        value = self._lookup(path)
+        return default if value is None else value
+
+    def __getitem__(self, path: str) -> tuple[str, str, str | None]:
+        value = self._lookup(path)
+        if value is None:
+            raise KeyError(path)
+        return value
+
+
 # =============================================================================
 # ReadModelView — the CorpusReadModel the cache hands consumers, backed by a fold.
 # =============================================================================
@@ -913,6 +1105,26 @@ class ReadModelView:
         evidence a fresh whole-corpus walk would.
         """
         return self._fold.search(query, artifact_type=artifact_type)
+
+    def resolve(self, artifact_id: str) -> ResolutionResult:
+        """Point resolution over the persisted alias map — byte-identical to a walk.
+
+        The store fast path ``get_artifact``/``get_related`` take when the read-model
+        is served from the memory-mapped base (the delta is empty): a binary search
+        over the alias segment plus O(matches) row reads reproduces
+        ``resolve_in_index``'s resolved/duplicate/not-found outcomes and sorted
+        duplicate paths, never reconstructing the whole identity projection.
+        """
+        return self._fold.resolve(artifact_id)
+
+    def lazy_identity_by_path(self) -> LazyIdentityByPath:
+        """A lazy path -> ``(id, type, title)`` map for ``get_related`` (ADR-101).
+
+        Resolves each requested path through the store's path map on demand, so the
+        relationship helpers touch only the edges near the artifact — never the O(N)
+        materialised identity projection — while returning the same values.
+        """
+        return LazyIdentityByPath(self._fold)
 
     def find_decisions(self, topic: str) -> SearchResult:
         """Live-decision topic search served from the postings (ADR-067).

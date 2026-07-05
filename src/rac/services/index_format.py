@@ -33,8 +33,12 @@ SEGMENT_MAGIC = b"RACIDX01"
 # to 2 by the postings-served search bundle (ADR-101), which adds the term-major
 # postings segment: a store written before the bump lacks it and, even were the
 # file present, fails this version gate closed, so the fast path never reads a
-# half-old layout.
-SEGMENT_FORMAT_VERSION = 2
+# half-old layout. Bumped to 3 by the point-resolution bundle (ADR-101), which
+# adds the alias-map and path-map segments so ``get_artifact``/``get_related``
+# resolve an id in O(lookup) instead of reconstructing every identity row: a
+# store written before the bump lacks those files and fails this gate closed, so
+# the point-resolution fast path never reads a half-old layout.
+SEGMENT_FORMAT_VERSION = 3
 
 _U32 = struct.Struct("<I")
 _U64 = struct.Struct("<Q")
