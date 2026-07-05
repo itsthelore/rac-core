@@ -7,7 +7,7 @@ type: decision
 
 ## Status
 
-Proposed
+Accepted
 
 ## Category
 
