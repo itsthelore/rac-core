@@ -1,0 +1,62 @@
+{
+  "schema_version": "1",
+  "directory": "tests/fixtures/portfolio_summary/all_types",
+  "recursive": true,
+  "artifact_count": 6,
+  "artifacts": [
+    {
+      "id": "adr",
+      "type": "decision",
+      "title": "ADR-001 Choose DB",
+      "path": "tests/fixtures/portfolio_summary/all_types/adr.md",
+      "aliases": [
+        "adr"
+      ]
+    },
+    {
+      "id": "design",
+      "type": "design",
+      "title": "Search UI Design",
+      "path": "tests/fixtures/portfolio_summary/all_types/design.md",
+      "aliases": [
+        "design"
+      ]
+    },
+    {
+      "id": "prompt",
+      "type": "prompt",
+      "title": "Review Prompt",
+      "path": "tests/fixtures/portfolio_summary/all_types/prompt.md",
+      "aliases": [
+        "prompt"
+      ]
+    },
+    {
+      "id": "req",
+      "type": "requirement",
+      "title": "Feature",
+      "path": "tests/fixtures/portfolio_summary/all_types/req.md",
+      "aliases": [
+        "req"
+      ]
+    },
+    {
+      "id": "roadmap",
+      "type": "roadmap",
+      "title": "Q3 Roadmap",
+      "path": "tests/fixtures/portfolio_summary/all_types/roadmap.md",
+      "aliases": [
+        "roadmap"
+      ]
+    },
+    {
+      "id": "unknown",
+      "type": "unknown",
+      "title": "Meeting Notes",
+      "path": "tests/fixtures/portfolio_summary/all_types/unknown.md",
+      "aliases": [
+        "unknown"
+      ]
+    }
+  ]
+}

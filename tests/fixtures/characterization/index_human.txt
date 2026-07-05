@@ -1,0 +1,12 @@
+Repository Index
+================
+
+Directory:  tests/fixtures/portfolio_summary/all_types
+Artifacts:  6
+
+  adr      decision     ADR-001 Choose DB  tests/fixtures/portfolio_summary/all_types/adr.md
+  design   design       Search UI Design   tests/fixtures/portfolio_summary/all_types/design.md
+  prompt   prompt       Review Prompt      tests/fixtures/portfolio_summary/all_types/prompt.md
+  req      requirement  Feature            tests/fixtures/portfolio_summary/all_types/req.md
+  roadmap  roadmap      Q3 Roadmap         tests/fixtures/portfolio_summary/all_types/roadmap.md
+  unknown  unknown      Meeting Notes      tests/fixtures/portfolio_summary/all_types/unknown.md

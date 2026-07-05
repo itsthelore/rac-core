@@ -1,0 +1,13 @@
+{
+  "type": "requirement",
+  "missing_required": [],
+  "missing_recommended": [
+    "assumptions"
+  ],
+  "guidance": {
+    "assumptions": [
+      "What are you assuming to be true?",
+      "What would change the approach if it turned out false?"
+    ]
+  }
+}

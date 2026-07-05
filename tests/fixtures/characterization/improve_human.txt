@@ -1,0 +1,9 @@
+Artifact Type: Requirement
+
+Missing Required:
+  (none)
+
+Missing Recommended:
+  - Assumptions
+      • What are you assuming to be true?
+      • What would change the approach if it turned out false?

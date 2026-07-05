@@ -1,0 +1,81 @@
+{
+  "schema_version": "1",
+  "directory": "tests/fixtures/portfolio_summary/all_types",
+  "recursive": true,
+  "empty": false,
+  "artifacts": {
+    "total": 6,
+    "by_type": {
+      "requirement": 1,
+      "decision": 1,
+      "roadmap": 1,
+      "prompt": 1,
+      "design": 1,
+      "unknown": 1
+    },
+    "unknown_paths": [
+      "tests/fixtures/portfolio_summary/all_types/unknown.md"
+    ]
+  },
+  "validation": {
+    "valid": 5,
+    "invalid": 0
+  },
+  "completeness": {
+    "recommended_slots": 17,
+    "filled": 2,
+    "ratio": 0.1176
+  },
+  "relationships": {
+    "total": 0,
+    "valid": 0,
+    "broken": 0,
+    "orphaned": 5,
+    "coverage": 0.0
+  },
+  "attention": [
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/adr.md",
+      "identifier": "adr",
+      "severity": "warning",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Status, Category, Alternatives Considered"
+    },
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/design.md",
+      "identifier": "design",
+      "severity": "warning",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Rationale, Alternatives, Accessibility, Style Guidance, Open Questions"
+    },
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/prompt.md",
+      "identifier": "prompt",
+      "severity": "warning",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Constraints, Examples, Evaluation"
+    },
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/req.md",
+      "identifier": "req",
+      "severity": "warning",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Assumptions"
+    },
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/roadmap.md",
+      "identifier": "roadmap",
+      "severity": "warning",
+      "code": "missing-recommended-sections",
+      "message": "Missing recommended sections: Success Measures, Assumptions, Risks"
+    }
+  ],
+  "health": {
+    "score": 70
+  },
+  "validation_status": {
+    "artifacts_ok": true,
+    "relationships_ok": true,
+    "ok": true
+  }
+}

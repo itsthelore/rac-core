@@ -1,0 +1,54 @@
+Repository Summary
+==================
+
+Directory:  tests/fixtures/portfolio_summary/all_types
+Artifacts:  6
+
+By Type
+-------
+
+  Requirement    1
+  Decision       1
+  Roadmap        1
+  Prompt         1
+  Design         1
+  Unknown        1
+
+Validation
+----------
+
+  Valid:    5
+  Invalid:  0
+
+Completeness
+------------
+
+  12% (2 / 17 recommended slots filled)
+
+Relationships
+-------------
+
+  Total:    0
+  Valid:    0
+  Broken:   0
+  Orphaned: 5
+  Coverage: 0%
+
+Attention (5 items)
+----------
+
+  ! adr
+      Missing recommended sections: Status, Category, Alternatives Considered
+  ! design
+      Missing recommended sections: Rationale, Alternatives, Accessibility, Style Guidance, Open Questions
+  ! prompt
+      Missing recommended sections: Constraints, Examples, Evaluation
+  ! req
+      Missing recommended sections: Assumptions
+  ! roadmap
+      Missing recommended sections: Success Measures, Assumptions, Risks
+
+Health Score
+------------
+
+  70 / 100

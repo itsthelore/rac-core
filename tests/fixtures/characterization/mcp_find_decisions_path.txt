@@ -1,0 +1,1 @@
+{"schema_version": "1", "query": "tests/fixtures/resolve/v0-canonical-format.md", "in_repository": true, "decisions": []}

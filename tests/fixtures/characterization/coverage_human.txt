@@ -1,0 +1,12 @@
+Traceability coverage — tests/fixtures/portfolio_summary/all_types
+
+Unscheduled requirements (no roadmap schedules them): 1
+  req  tests/fixtures/portfolio_summary/all_types/req.md
+
+Unapplied decisions (no requirement or roadmap applies them): 1
+  adr  tests/fixtures/portfolio_summary/all_types/adr.md
+
+Unscoped roadmaps (reference no requirement): 1
+  roadmap  tests/fixtures/portfolio_summary/all_types/roadmap.md
+
+3 coverage gaps (1 unscheduled, 1 unapplied, 1 unscoped) — advisory, not a build failure.

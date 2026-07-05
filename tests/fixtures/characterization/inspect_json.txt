@@ -1,0 +1,13 @@
+{
+  "type": "requirement",
+  "confidence": 0.86,
+  "present_sections": [
+    "problem",
+    "requirements",
+    "success_metrics",
+    "risks"
+  ],
+  "missing_sections": [
+    "assumptions"
+  ]
+}

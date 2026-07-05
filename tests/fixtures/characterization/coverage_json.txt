@@ -1,0 +1,33 @@
+{
+  "schema_version": "1",
+  "directory": "tests/fixtures/portfolio_summary/all_types",
+  "gaps": [
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/req.md",
+      "id": "req",
+      "type": "requirement",
+      "gap": "unscheduled",
+      "missing": "no roadmap schedules this requirement"
+    },
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/adr.md",
+      "id": "adr",
+      "type": "decision",
+      "gap": "unapplied",
+      "missing": "no requirement or roadmap applies this decision"
+    },
+    {
+      "path": "tests/fixtures/portfolio_summary/all_types/roadmap.md",
+      "id": "roadmap",
+      "type": "roadmap",
+      "gap": "unscoped",
+      "missing": "this roadmap references no requirement"
+    }
+  ],
+  "summary": {
+    "unscheduled": 1,
+    "unapplied": 1,
+    "unscoped": 1,
+    "total": 3
+  }
+}

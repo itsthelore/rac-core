@@ -1,0 +1,11 @@
+Artifact Type: Requirement
+Confidence: 86%
+
+Present Sections:
+  ✓ Problem
+  ✓ Requirements
+  ✓ Success Metrics
+  ✓ Risks
+
+Missing Sections:
+  ✗ Assumptions

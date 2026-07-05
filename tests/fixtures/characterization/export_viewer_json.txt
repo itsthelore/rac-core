@@ -1,0 +1,66 @@
+{
+  "schema_version": "1",
+  "corpus": {
+    "name": "all_types",
+    "rac_version": "<VERSION>",
+    "artifact_count": 5
+  },
+  "artifacts": [
+    {
+      "id": "adr",
+      "aliases": [
+        "adr"
+      ],
+      "type": "decision",
+      "status": "unknown",
+      "title": "ADR-001 Choose DB",
+      "path": "tests/fixtures/portfolio_summary/all_types/adr.md",
+      "body_html": "<h1>ADR-001 Choose DB</h1>\n<h2>Context</h2>\n<p>Need a database.</p>\n<h2>Decision</h2>\n<p>Use PostgreSQL.</p>\n<h2>Consequences</h2>\n<p>Reliable, well-known.</p>\n"
+    },
+    {
+      "id": "design",
+      "aliases": [
+        "design"
+      ],
+      "type": "design",
+      "status": "unknown",
+      "title": "Search UI Design",
+      "path": "tests/fixtures/portfolio_summary/all_types/design.md",
+      "body_html": "<h1>Search UI Design</h1>\n<h2>Context</h2>\n<p>Users need a search bar.</p>\n<h2>User Need</h2>\n<p>Find items quickly.</p>\n<h2>Design</h2>\n<p>A top-aligned search input.</p>\n<h2>Constraints</h2>\n<p>Must be accessible.</p>\n"
+    },
+    {
+      "id": "prompt",
+      "aliases": [
+        "prompt"
+      ],
+      "type": "prompt",
+      "status": "unknown",
+      "title": "Review Prompt",
+      "path": "tests/fixtures/portfolio_summary/all_types/prompt.md",
+      "body_html": "<h1>Review Prompt</h1>\n<h2>Objective</h2>\n<p>Review requirements.</p>\n<h2>Input</h2>\n<p>A requirements file.</p>\n<h2>Instructions</h2>\n<p>Check for completeness.</p>\n<h2>Output</h2>\n<p>A list of issues.</p>\n"
+    },
+    {
+      "id": "req",
+      "aliases": [
+        "req"
+      ],
+      "type": "requirement",
+      "status": "unknown",
+      "title": "Feature",
+      "path": "tests/fixtures/portfolio_summary/all_types/req.md",
+      "body_html": "<h1>Feature</h1>\n<h2>Problem</h2>\n<p>A problem.</p>\n<h2>Requirements</h2>\n<p>[REQ-001] The system shall do the thing.</p>\n<h2>Success Metrics</h2>\n<ul>\n<li>Metric one.</li>\n</ul>\n<h2>Risks</h2>\n<ul>\n<li>Risk one.</li>\n</ul>\n"
+    },
+    {
+      "id": "roadmap",
+      "aliases": [
+        "roadmap"
+      ],
+      "type": "roadmap",
+      "status": "unknown",
+      "title": "Q3 Roadmap",
+      "path": "tests/fixtures/portfolio_summary/all_types/roadmap.md",
+      "body_html": "<h1>Q3 Roadmap</h1>\n<h2>Outcomes</h2>\n<p>Ship search.</p>\n<h2>Initiatives</h2>\n<ul>\n<li>Initiative 1</li>\n</ul>\n"
+    }
+  ],
+  "relationships": []
+}

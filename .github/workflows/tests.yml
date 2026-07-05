@@ -133,6 +133,10 @@ jobs:
             paths: "tests/test_dogfood.py"
           - name: golden
             paths: "tests/test_golden.py"
+          # Characterization pins (pre-rebuild): byte-level and exit-code
+          # captures of observable surfaces no other battery byte-pins.
+          - name: characterization
+            paths: "tests/test_characterization_cli_outputs.py tests/test_characterization_json_envelopes.py tests/test_characterization_exit_codes.py tests/test_characterization_mcp_payloads.py"
     steps:
       - uses: actions/checkout@v5
         with:
