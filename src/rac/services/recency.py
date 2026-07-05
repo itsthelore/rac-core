@@ -26,9 +26,9 @@ from pathlib import Path
 
 import yaml
 
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.markdown import parse
 from rac.services.agent_rules import artifact_status
-from rac.services.index import build_repository_index
 from rac.services.init import find_config_file
 
 # Field separator for combined ``git log --format`` records. The unit-separator
@@ -162,38 +162,58 @@ class RecencyReport:
         }
 
 
-def artifact_recency(
-    directory: str, recursive: bool = True, with_creation: bool = False
+def recency_from_corpus(
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    *,
+    with_creation: bool = False,
 ) -> RecencyReport:
-    """Recency for every recognised artifact under ``directory``.
+    """Recency for an already-walked corpus snapshot (the snapshot seam).
 
-    Derives each artifact's last-committed time from git (and its first-committed
-    time when ``with_creation`` — one extra git call per file, used only by the
-    OKF export). Outside a git repository, or for untracked files, the time is
-    ``None`` ("unknown") — no exception crosses the boundary. Unknown-type
-    documents are excluded; recency is about product-knowledge artifacts.
+    Same result as :func:`artifact_recency`; the snapshot lets one walk feed
+    several analyses (e.g. the ``rac review`` cadence nudge) instead of
+    re-walking the tree. Callers pass the raw walk — unknown-type documents are
+    excluded *here*, so the ``type != "unknown"`` filter lives in one place;
+    recency is about product-knowledge artifacts. Derives each artifact's
+    last-committed time from git (and its first-committed time when
+    ``with_creation`` — one extra git call per file, used only by the OKF
+    export). Outside a git repository, or for untracked files, the time is
+    ``None`` ("unknown") — no exception crosses the boundary.
     """
-    index = build_repository_index(directory, recursive=recursive)
-    entries = [e for e in index.artifacts if e.type != "unknown"]
+    recognised = [e for e in entries if e.artifact_type != "unknown"]
     repo_root = _repository_root(directory)
 
     artifacts: list[ArtifactRecency] = []
-    for entry in entries:
-        last = _last_committed(repo_root, entry.path) if repo_root is not None else None
+    for entry in recognised:
+        path = str(entry.path)
+        last = _last_committed(repo_root, path) if repo_root is not None else None
         first = (
-            _first_committed(repo_root, entry.path)
-            if with_creation and repo_root is not None
-            else None
+            _first_committed(repo_root, path) if with_creation and repo_root is not None else None
         )
         artifacts.append(
             ArtifactRecency(
-                path=entry.path,
-                artifact_type=entry.type,
+                path=path,
+                artifact_type=entry.artifact_type,
                 last_committed=last,
                 first_committed=first,
             )
         )
     return RecencyReport(directory=directory, recursive=recursive, artifacts=artifacts)
+
+
+def artifact_recency(
+    directory: str, recursive: bool = True, with_creation: bool = False
+) -> RecencyReport:
+    """Recency for every recognised artifact under ``directory``.
+
+    A thin wrapper: walk the corpus once, then defer to
+    :func:`recency_from_corpus`, which owns the ``type != "unknown"`` filter and
+    the per-artifact git derivation. Outside a git repository, or for untracked
+    files, the time is ``None`` ("unknown") — no exception crosses the boundary.
+    """
+    entries = list(walk_corpus(directory, recursive=recursive))
+    return recency_from_corpus(directory, entries, recursive=recursive, with_creation=with_creation)
 
 
 # --- Provenance (v0.23.0, WS5, ADR-045) --------------------------------------

@@ -35,7 +35,7 @@ from .portfolio import (
     PortfolioSummary,
     portfolio_from_corpus,
 )
-from .recency import last_committed_for_paths
+from .recency import recency_from_corpus
 
 # Stable priority levels and the unknown-artifact code (JSON contract, ADR-007).
 PRIORITY_INVALID_ARTIFACT = 1
@@ -210,7 +210,9 @@ def build_review(
     report = review_from_portfolio(directory, portfolio, recursive=recursive)
     advisories: list[ReviewIssue] = list(_drift_findings(directory, entries))
     if stale_after_days is not None:
-        finding = _cadence_finding(directory, entries, stale_after_days, now=now)
+        finding = _cadence_finding(
+            directory, entries, stale_after_days, recursive=recursive, now=now
+        )
         if finding is not None:
             advisories.append(finding)
     if advisories:
@@ -250,6 +252,7 @@ def _cadence_finding(
     entries: list[CorpusEntry],
     window_days: int,
     *,
+    recursive: bool = True,
     now: datetime | None = None,
 ) -> ReviewIssue | None:
     """The write-cadence nudge, or ``None`` when it should not fire.
@@ -259,16 +262,14 @@ def _cadence_finding(
     unknown recency is suppressed — the v0.13.1 empty-corpus hint covers the
     day-one case, and a nudge on missing data would be noise.
 
-    Recency is derived from the shared snapshot rather than a third walk: the
-    newest git last-committed time across the recognised (non-unknown) artifacts.
-    This is byte-identical to ``artifact_recency(directory).most_recent`` — same
-    file set (``type != "unknown"``, in snapshot order), same git primitive
-    (``last_committed_for_paths``), same ``max`` aggregation — but pays no extra
-    corpus walk (mirrors ``build_gate``'s single-walk composition).
+    Recency is derived from the shared snapshot rather than a third walk:
+    ``recency_from_corpus`` owns the ``type != "unknown"`` filter and the git
+    derivation, and ``most_recent`` is the newest last-committed time across the
+    recognised artifacts. Passing the pre-walked ``entries`` pays no extra corpus
+    walk (mirrors ``build_gate``'s single-walk composition); both git-absent and
+    not-a-repository degrade to unknown recency and suppress the nudge.
     """
-    paths = [str(e.path) for e in entries if e.artifact_type != "unknown"]
-    committed = [d for d in last_committed_for_paths(directory, paths).values() if d is not None]
-    most_recent = max(committed) if committed else None
+    most_recent = recency_from_corpus(directory, entries, recursive=recursive).most_recent
     if most_recent is None:
         return None
     moment = now or datetime.now(UTC)
