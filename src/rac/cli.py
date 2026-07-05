@@ -86,7 +86,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from rac import consent, usage
 from rac import output as outputs
@@ -149,7 +149,7 @@ from rac.services.migrate import migrate_metadata
 from rac.services.portfolio import build_portfolio_summary
 from rac.services.profiles import PROFILE_NAMES
 from rac.services.quickstart import DEFAULT_TYPE, CorpusNotEmpty, quickstart
-from rac.services.recency import artifact_recency
+from rac.services.recency import annotate_search_recency, artifact_recency
 from rac.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
@@ -186,6 +186,45 @@ EXIT_VALIDATION_FAILED = 1
 EXIT_USAGE = 2
 
 
+def _print_error(msg: str) -> None:
+    """Emit one ``rac:``-prefixed diagnostic to stderr.
+
+    The single error convention (ADR-007): every CLI diagnostic is
+    ``rac: {msg}`` on stderr. Centralising it keeps the prefix uniform across the
+    ~85 error sites, whether the caller then raises (usage error) or returns a
+    findings/operational exit code.
+    """
+    print(f"rac: {msg}", file=sys.stderr)
+
+
+def _fail(msg: str) -> NoReturn:
+    """Emit a ``rac:`` usage diagnostic and exit with EXIT_USAGE.
+
+    Collapses the ``print(f"rac: …", file=sys.stderr); raise SystemExit(2)`` usage
+    path shared by ~40 sites. ``from None`` suppresses exception chaining so an
+    error surfaced from inside an ``except`` block prints no "During handling of
+    the above exception" context — matching every inlined ``… from None`` call
+    site this replaces (and a no-op for the guard sites raised outside ``except``,
+    where ``__context__`` is already ``None``). Do not funnel findings/operational
+    ``return 1`` or telemetry ``return 2`` paths through here: those deliberately
+    return rather than raise (A.3, ADR-007) — use ``_print_error`` for them.
+    """
+    _print_error(msg)
+    raise SystemExit(EXIT_USAGE) from None
+
+
+def _require_dir(path: str) -> None:
+    """Guard that PATH is a directory, or fail with the uniform usage error.
+
+    The ``rac: not a directory: {path}`` message is byte-identical across the ~18
+    handlers that guard a corpus/target path (validate/review/gate/export/mcp/…).
+    The path *value* is taken, not the namespace, so ``--root`` and ``--dir``
+    callers share one guard despite different attribute names.
+    """
+    if not Path(path).is_dir():
+        _fail(f"not a directory: {path}")
+
+
 def _read(path: str) -> Product:
     """Parse a single named file, or print an error and exit with EXIT_USAGE.
 
@@ -194,12 +233,10 @@ def _read(path: str) -> Product:
     gracefully so one bad file never aborts the walk (WS4, REQ-005).
     """
     if not Path(path).is_file():
-        print(f"rac: file not found: {path}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(f"file not found: {path}")
     product = parse_file(path)
     if any(issue.code == "unreadable-artifact" for issue in product.parse_issues):
-        print(f"rac: cannot read {path}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(f"cannot read {path}")
     return product
 
 
@@ -221,8 +258,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             # --corpus resolves *one proposed document* against a corpus; a
             # directory target already validates every artifact in place, so the
             # flag is redundant and ambiguous there (ADR-067, v0.21.17).
-            print("rac: --corpus applies to stdin ('-') or a single file", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _fail("--corpus applies to stdin ('-') or a single file")
         result = validate_directory(args.file, recursive=not args.top_level)
         if args.sarif:
             print(outputs.render_validate_sarif(result))
@@ -235,8 +271,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     if args.sarif:
         # SARIF is a repository-scan artifact for CI code scanning (ADR-054);
         # there is no single-file SARIF surface.
-        print("rac: --sarif applies to directory validation", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("--sarif applies to directory validation")
 
     product = _read_validate_input(args.file)
 
@@ -248,8 +283,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     # reference finding fails the run.
     if corpus is not None:
         if not Path(corpus).is_dir():
-            print(f"rac: --corpus is not a directory: {corpus}", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _fail(f"--corpus is not a directory: {corpus}")
         source_path = "-" if args.file == "-" else str(Path(args.file))
         corpus_result = validate_stdin_against_corpus(product, corpus, source_path=source_path)
         if args.json:
@@ -279,9 +313,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     stats = collect_stats(args.directory)
     if args.json:
         print(outputs.render_stats_json(stats))
@@ -302,8 +334,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if path.is_dir():
         return _cmd_ingest_vault(args, path)
     if not path.is_file():
-        print(f"rac: path not found: {args.file}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail(f"path not found: {args.file}")
     # A bare Roam JSON graph export ingests directly (its canonical export is one
     # .json file, not a directory); non-Roam .json falls through to the error.
     if path.suffix.lower() == ".json":
@@ -313,29 +344,20 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         if roam_result is not None:
             return _emit_vault_result(args, roam_result)
     if args.from_tool:
-        print(
-            "rac: --from applies to a note-tool export directory, not a single file.",
-            file=sys.stderr,
-        )
-        raise SystemExit(EXIT_USAGE)
+        _fail("--from applies to a note-tool export directory, not a single file.")
 
     try:
         result = ingest(args.file)
     except UnsupportedDocument as exc:  # unhandled type / missing extra
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except ConversionError as exc:  # recognized file, failed to convert
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
 
     if args.output:
         out = Path(args.output)
         if out.exists() and not args.force:
-            print(
-                f"rac: {args.output} already exists; pass --force to overwrite",
-                file=sys.stderr,
-            )
-            raise SystemExit(EXIT_USAGE)
+            _fail(f"{args.output} already exists; pass --force to overwrite")
         out.write_text(result.markdown, encoding="utf-8")
         if args.json:
             print(outputs.render_ingest_json(result, str(out)))
@@ -364,19 +386,14 @@ def _cmd_ingest_vault(args: argparse.Namespace, root: Path) -> int:
     from rac.services.note_ingest import converter_by_name, converter_names, detect_converter
 
     if args.stdout:
-        print(
-            "rac: --stdout is not supported for a directory export; use -o <dir>.", file=sys.stderr
-        )
-        raise SystemExit(EXIT_USAGE)
+        _fail("--stdout is not supported for a directory export; use -o <dir>.")
 
     converter = converter_by_name(args.from_tool) if args.from_tool else detect_converter(root)
     if converter is None:
-        print(
-            f"rac: could not detect a note-tool export in {root}. "
-            f"Pass --from with one of: {', '.join(converter_names())}",
-            file=sys.stderr,
+        _fail(
+            f"could not detect a note-tool export in {root}. "
+            f"Pass --from with one of: {', '.join(converter_names())}"
         )
-        raise SystemExit(EXIT_USAGE)
 
     return _emit_vault_result(args, converter.convert_vault(root))
 
@@ -409,19 +426,13 @@ def _read_markdown_input(target: str, command: str) -> str:
         return sys.stdin.read()
     path = Path(target)
     if not path.is_file():
-        print(f"rac: file not found: {target}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail(f"file not found: {target}")
     if path.suffix.lower() not in (".md", ".markdown"):
-        print(
-            f"rac: {command} expects a Markdown file; convert it first with: rac ingest {target}",
-            file=sys.stderr,
-        )
-        raise SystemExit(EXIT_USAGE)
+        _fail(f"{command} expects a Markdown file; convert it first with: rac ingest {target}")
     try:
         return path.read_text(encoding="utf-8")
     except OSError as exc:
-        print(f"rac: cannot read {target}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(f"cannot read {target}: {exc}")
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
@@ -466,11 +477,9 @@ def cmd_schema(args: argparse.Namespace) -> int:
     names = available_schemas()
     if args.list:
         if args.template:
-            print("rac: --template cannot be used with --list", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _fail("--template cannot be used with --list")
         if args.schema:
-            print("rac: schema name cannot be used with --list", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _fail("schema name cannot be used with --list")
         if args.json:
             print(outputs.render_schema_list_json(names))
         else:
@@ -478,8 +487,7 @@ def cmd_schema(args: argparse.Namespace) -> int:
         return EXIT_OK
 
     if not args.schema:
-        print("rac: schema name required unless --list is passed", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("schema name required unless --list is passed")
 
     ref = schema_reference(args.schema)
     if ref is None:
@@ -497,8 +505,7 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 def cmd_relationships(args: argparse.Namespace) -> int:
     if args.sarif and not args.validate:
-        print("rac: relationships --sarif requires --validate", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("relationships --sarif requires --validate")
     path = Path(args.path)
     # --recursive is the default; --top-level disables it. If both are given,
     # --top-level wins (mirrors `rac inspect`).
@@ -506,16 +513,13 @@ def cmd_relationships(args: argparse.Namespace) -> int:
         is_dir = True
     elif path.is_file():
         if path.suffix.lower() not in (".md", ".markdown"):
-            print(
-                f"rac: relationships expects a Markdown file or directory; "
-                f"convert it first with: rac ingest {args.path}",
-                file=sys.stderr,
+            _fail(
+                f"relationships expects a Markdown file or directory; "
+                f"convert it first with: rac ingest {args.path}"
             )
-            raise SystemExit(EXIT_USAGE)
         is_dir = False
     else:
-        print(f"rac: path not found: {args.path}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail(f"path not found: {args.path}")
 
     if args.validate:
         if is_dir:
@@ -555,10 +559,7 @@ def cmd_rename(args: argparse.Namespace) -> int:
     ``--apply`` writes the edits and reports what changed. The engine owns the
     edit set (ADR-063); the CLI only renders and applies it.
     """
-    directory = Path(args.directory)
-    if not directory.is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
 
     plan = compute_rename(args.directory, args.old, args.new, recursive=not args.top_level)
 
@@ -591,12 +592,9 @@ def cmd_rename(args: argparse.Namespace) -> int:
 
 
 def cmd_review(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     if args.stale_after is not None and args.stale_after < 0:
-        print("rac: --stale-after must be a non-negative number of days", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("--stale-after must be a non-negative number of days")
     report = build_review(
         args.directory, recursive=not args.top_level, stale_after_days=args.stale_after
     )
@@ -618,9 +616,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     injection-style content heuristic. Exits non-zero only on a validation or
     relationship-integrity error; orphan/hub/injection warnings exit 0 (REQ-007).
     """
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     report = doctor.diagnose(
         args.directory,
         recursive=not args.top_level,
@@ -640,9 +636,7 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     from the relationship graph (rac-traceability-coverage-report, WS-F). Coverage
     is a completeness signal for human judgement, so it always exits 0 (REQ-005).
     """
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     report = coverage_service.analyze_coverage(args.directory)
     if args.json:
         print(coverage_service.render_coverage_json(report))
@@ -652,13 +646,11 @@ def cmd_coverage(args: argparse.Namespace) -> int:
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     try:
         report = build_gate(args.directory, recursive=not args.top_level)
     except MalformedRepositoryConfig as exc:  # unreadable/invalid .rac/config.yaml
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     if args.sarif:
         print(outputs.render_gate_sarif(report))
@@ -676,14 +668,11 @@ def cmd_watchkeeper(args: argparse.Namespace) -> int:
         # ADR-018: rac/ is the conventional knowledge root — compare it when it
         # exists; otherwise the current directory.
         args.directory = "rac" if Path("rac").is_dir() else "."
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     try:
         report = build_watchkeeper_report(args.directory, base=args.base, head=args.head)
     except (NotAGitRepository, RevisionNotFound) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     output_format = "json" if args.json else args.format
     if output_format == "json":
         print(outputs.render_watchkeeper_json(report))
@@ -709,9 +698,7 @@ def cmd_watchkeeper(args: argparse.Namespace) -> int:
 
 
 def cmd_portfolio(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     recursive = not args.top_level
     summary = build_portfolio_summary(args.directory, recursive=recursive)
     if args.json:
@@ -722,9 +709,7 @@ def cmd_portfolio(args: argparse.Namespace) -> int:
 
 
 def cmd_index(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     recursive = not args.top_level
     index = build_repository_index(args.directory, recursive=recursive)
     if args.json:
@@ -751,9 +736,7 @@ def _agent_rules_root(directory: str, out: str | None) -> Path:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
 
     # Agent-rules is a distinct mode (ADR-067): a distilled, drift-guarded
     # projection of live decisions into per-client managed blocks. It owns --out
@@ -762,18 +745,14 @@ def cmd_export(args: argparse.Namespace) -> int:
     if args.agent_rules:
         return _cmd_agent_rules(args)
     if args.check:
-        print("rac: --check requires --agent-rules", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("--check requires --agent-rules")
     if args.client:
-        print("rac: --client requires --agent-rules", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("--client requires --agent-rules")
 
     if args.json and (args.html or args.okf):
-        print("rac: --json cannot combine with --html or --okf", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("--json cannot combine with --html or --okf")
     if args.out is not None and not (args.html or args.okf):
-        print("rac: --out requires --html or --okf (--json writes to stdout)", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail("--out requires --html or --okf (--json writes to stdout)")
 
     # Documents projection (v0.25.0 WS1, ADR-073): an ingestion-ready JSONL
     # stream for external memory/RAG backends — Markdown bodies, not the viewer's
@@ -804,8 +783,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(content, encoding="utf-8")
         except OSError as exc:
-            print(f"rac: cannot write {out}: {exc}", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE) from None
+            _fail(f"cannot write {out}: {exc}")
         edges = len(export.relationships)
         print(f"wrote {out}/ — {export.artifact_count} artifact(s), {edges} relationship(s)")
         return EXIT_OK
@@ -819,14 +797,12 @@ def cmd_export(args: argparse.Namespace) -> int:
     try:
         html = outputs.render_export_html(export)
     except (PortalShellMissing, PortalSeamMissing) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     out = args.out if args.out is not None else "lore-export.html"
     try:
         Path(out).write_text(html, encoding="utf-8")
     except OSError as exc:
-        print(f"rac: cannot write {out}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(f"cannot write {out}: {exc}")
     edges = len(export.relationships)
     print(f"wrote {out} — {export.artifact_count} artifact(s), {edges} relationship(s)")
     return EXIT_OK
@@ -843,8 +819,7 @@ def _cmd_agent_rules(args: argparse.Namespace) -> int:
     bad = unknown_clients(args.client)
     if bad:
         valid = "claude, agents, cursor, copilot"
-        print(f"rac: unknown --client: {', '.join(bad)} (choose from {valid})", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+        _fail(f"unknown --client: {', '.join(bad)} (choose from {valid})")
 
     root = _agent_rules_root(args.directory, args.out)
     try:
@@ -853,8 +828,7 @@ def _cmd_agent_rules(args: argparse.Namespace) -> int:
         else:
             result = generate_agent_rules(args.directory, str(root), clients=args.client)
     except OSError as exc:
-        print(f"rac: cannot write under {root}: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(f"cannot write under {root}: {exc}")
 
     if args.json:
         print(outputs.render_agent_rules_json(result))
@@ -871,9 +845,7 @@ def cmd_explorer(args: argparse.Namespace) -> int:
         # ADR-018: rac/ is the conventional knowledge root — open it when it
         # exists; otherwise the current directory (v0.8.1).
         args.directory = "rac" if Path("rac").is_dir() else "."
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     # Imported lazily: launch decides whether the explorer extra is installed,
     # and the base CLI must not pay an import cost for the optional TUI.
     from rac.explorer.launch import ExplorerUnavailable, run_explorer
@@ -881,14 +853,11 @@ def cmd_explorer(args: argparse.Namespace) -> int:
     try:
         return run_explorer(args.directory, recursive=not args.top_level)
     except ExplorerUnavailable as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
 
 
 def cmd_mcp(args: argparse.Namespace) -> int:
-    if not Path(args.root).is_dir():
-        print(f"rac: not a directory: {args.root}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.root)
     # Imported lazily: the MCP SDK is only needed when serving, and the base
     # CLI must not pay its import cost for every other command. stdout belongs
     # to the MCP protocol, so any diagnostics here go to stderr.
@@ -907,11 +876,9 @@ def cmd_mcp(args: argparse.Namespace) -> int:
             cache_enabled=args.cache,
         )
     except MalformedAuditConfig as exc:  # bad `audit:` stanza (ADR-084)
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except AuditSinkUnavailable as exc:  # HTTP without a working audit sink (ADR-084)
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
 
 
 def cmd_mcp_stats(args: argparse.Namespace) -> int:
@@ -954,21 +921,19 @@ def cmd_new(args: argparse.Namespace) -> int:
     try:
         created = create_artifact(args.type, args.output_path)
     except TemplateNotFound as exc:  # unsupported type → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except (
         OutputPathExists,
         OutputDirectoryMissing,
         MissingRepositoryConfig,
     ) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except (
         TemplateResourceMissing,  # broken installation
         MalformedRepositoryConfig,  # unreadable .rac/config.yaml
         IdGenerationExhausted,  # broken entropy source
     ) as exc:  # operational errors
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     if args.json:
         print(outputs.render_new_json(created))
@@ -978,9 +943,7 @@ def cmd_new(args: argparse.Namespace) -> int:
 
 
 def cmd_resolve(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     result = resolve_artifact(args.directory, args.id, recursive=not args.top_level)
     if args.json:
         print(outputs.render_resolve_json(result))
@@ -988,22 +951,19 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         if result.outcome == OUTCOME_RESOLVED:
             print(outputs.render_resolve_human(result))
         elif result.outcome == OUTCOME_DUPLICATE:
-            print(
-                f"rac: duplicate artifact ID: {args.id}\n\nFound in:\n"
-                + "\n".join(f"- {p}" for p in result.duplicate_paths),
-                file=sys.stderr,
+            _print_error(
+                f"duplicate artifact ID: {args.id}\n\nFound in:\n"
+                + "\n".join(f"- {p}" for p in result.duplicate_paths)
             )
         else:
-            print(f"rac: artifact not found: {args.id}", file=sys.stderr)
+            _print_error(f"artifact not found: {args.id}")
     # Not-found and duplicate identity are both repository findings (exit 1);
     # they stay distinguishable by message and by the JSON error field.
     return EXIT_OK if result.outcome == OUTCOME_RESOLVED else EXIT_VALIDATION_FAILED
 
 
 def cmd_find(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     if args.decisions:
         # `--decisions` is the live decision query (ADR-067): it implies the
         # decision type filter *and* restricts to live (Accepted, non-retired)
@@ -1023,9 +983,8 @@ def cmd_find(args: argparse.Namespace) -> int:
         )
     # Freshness phase 1 (ADR-045): join git-derived staleness onto matches after
     # ranking, so the matched set and order are unchanged (REQ-005) and the fields
-    # degrade to null outside git (REQ-003).
-    from rac.services.recency import annotate_search_recency
-
+    # degrade to null outside git (REQ-003). Imported at module top (already loaded
+    # via artifact_recency): no import-cost reason for laziness, no monkeypatch seam.
     annotate_search_recency(result.matches, args.directory)
     if args.json:
         print(outputs.render_find_json(result, explain=args.explain))
@@ -1044,9 +1003,7 @@ def cmd_decisions_for(args: argparse.Namespace) -> int:
     outside-repository path is a valid empty result, not an error (a query always
     succeeds).
     """
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     result = decisions_for_path(
         args.directory,
         args.path,
@@ -1096,9 +1053,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 
 def cmd_migrate(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     try:
         report = migrate_metadata(
             args.directory,
@@ -1106,10 +1061,9 @@ def cmd_migrate(args: argparse.Namespace) -> int:
             recursive=not args.top_level,
         )
     except MissingRepositoryConfig as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except (MalformedRepositoryConfig, IdGenerationExhausted) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     if args.json:
         print(outputs.render_migrate_json(report))
@@ -1121,18 +1075,15 @@ def cmd_migrate(args: argparse.Namespace) -> int:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     try:
         result = init_repository(
             args.directory, key=args.key, ticketing=args.ticketing, profile=args.profile
         )
     except (InvalidRepositoryKey, InvalidTicketingProvider, InvalidProfile) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except (RepositoryKeyConflict, MalformedRepositoryConfig) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     if args.json:
         print(outputs.render_init_json(result))
@@ -1143,33 +1094,28 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 
 def cmd_quickstart(args: argparse.Namespace) -> int:
-    if not Path(args.directory).is_dir():
-        print(f"rac: not a directory: {args.directory}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.directory)
     try:
         result = quickstart(args.directory, key=args.key, artifact_type=args.type)
     except TemplateNotFound as exc:  # unsupported type → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except InvalidRepositoryKey as exc:  # bad key syntax → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except OutputDirectoryMissing as exc:  # parent missing → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except (
         CorpusNotEmpty,  # corpus already has artifacts → refused
         RepositoryKeyConflict,  # established key differs → refused
         OutputPathExists,  # starter path already taken → refused (never overwrite)
     ) as exc:
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     except (
         MalformedRepositoryConfig,  # unreadable .rac/config.yaml
         TemplateResourceMissing,  # broken installation
         IdGenerationExhausted,  # broken entropy source
     ) as exc:  # operational errors
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     if args.json:
         print(outputs.render_quickstart_json(result))
@@ -1207,26 +1153,24 @@ def cmd_telemetry(args: argparse.Namespace) -> int:
     enterprise = getattr(args, "enterprise", False)
     unlock = getattr(args, "unlock", False)
     # The enterprise flags are only meaningful with 'off' (ADR-086).
+    # Telemetry uniquely *returns* EXIT_USAGE rather than raising SystemExit for its
+    # usage errors (A.3 item 39, ADR-007): the convention is pinned, so route the
+    # prints through _print_error but keep the `return`, never _fail.
     if (enterprise or unlock) and args.action != "off":
-        print(
-            "rac: --enterprise/--unlock are only valid with 'rac telemetry off'",
-            file=sys.stderr,
-        )
+        _print_error("--enterprise/--unlock are only valid with 'rac telemetry off'")
         return EXIT_USAGE
     if unlock and not enterprise:
-        print(
-            "rac: --unlock requires --enterprise (use 'rac telemetry off --enterprise --unlock')",
-            file=sys.stderr,
+        _print_error(
+            "--unlock requires --enterprise (use 'rac telemetry off --enterprise --unlock')"
         )
         return EXIT_USAGE
 
     if args.action == "on":
         if consent.load_consent().enterprise_locked:
-            print(
-                "rac: cannot opt in while the enterprise telemetry lock is set; "
+            _print_error(
+                "cannot opt in while the enterprise telemetry lock is set; "
                 "remove it with 'rac telemetry off --enterprise --unlock' first "
-                "(ADR-086).",
-                file=sys.stderr,
+                "(ADR-086)."
             )
             return EXIT_USAGE
         record = consent.opt_in()
@@ -1284,8 +1228,7 @@ def cmd_telemetry(args: argparse.Namespace) -> int:
 def cmd_skill(args: argparse.Namespace) -> int:
     if args.action == "list":
         if args.name is not None:
-            print("rac: skill list takes no skill name", file=sys.stderr)
-            raise SystemExit(EXIT_USAGE)
+            _fail("skill list takes no skill name")
         specs = skill_specs()
         if args.json:
             print(outputs.render_skill_list_json(specs))
@@ -1293,19 +1236,16 @@ def cmd_skill(args: argparse.Namespace) -> int:
             print(outputs.render_skill_list_human(specs))
         return EXIT_OK
 
-    if not Path(args.dir).is_dir():
-        print(f"rac: not a directory: {args.dir}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.dir)
     try:
         installation = install_skills(args.dir, args.name)
     except SkillNotFound as exc:  # unknown skill name → usage error
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except SkillFileExists as exc:  # refused; every existing file is untouched
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     except SkillResourceMissing as exc:  # broken installation
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     if args.json:
         print(outputs.render_skill_install_json(installation))
@@ -1323,19 +1263,16 @@ def cmd_hook(args: argparse.Namespace) -> int:
             print(outputs.render_hook_list_human(specs))
         return EXIT_OK
 
-    if not Path(args.dir).is_dir():
-        print(f"rac: not a directory: {args.dir}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE)
+    _require_dir(args.dir)
     try:
         installation = install_hook(args.dir, args.style)
     except (HookNotFound, NotAGitWorkTree) as exc:  # usage errors → exit 2
-        print(f"rac: {exc}", file=sys.stderr)
-        raise SystemExit(EXIT_USAGE) from None
+        _fail(str(exc))
     except HookFileExists as exc:  # refused; existing hook untouched
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     except HookResourceMissing as exc:  # broken installation
-        print(f"rac: {exc}", file=sys.stderr)
+        _print_error(str(exc))
         return EXIT_VALIDATION_FAILED
     if args.json:
         print(outputs.render_hook_install_json(installation))
