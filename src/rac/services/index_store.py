@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from rac.core.models import SearchSection
+from rac.core.models import Issue, SearchSection
 from rac.services.derived_cache import DerivedIndex, ScopeRow
 from rac.services.index import IndexEntry
 from rac.services.index_format import (
@@ -949,3 +949,178 @@ def open_read_model(cache_dir: Path, corpus_hash: str, bundle_version: str) -> R
     except (IndexFormatError, OSError, ValueError):
         return None
     return ReadModelView(Fold(base))
+
+
+# =============================================================================
+# Per-file validation-result store — the incremental-validate substrate (ADR-103).
+# =============================================================================
+#
+# `rac validate DIR --cache` reuses per-file validation results across runs. A
+# file's `FileValidation` is a pure function of `(file bytes, resolved config)`
+# (core-validate §4), so its result — artifact type, status, and the ordered
+# `Issue` list — is cached keyed by content hash under a config fingerprint. The
+# store is one binary segment file per corpus root; it doubles as the freshness
+# manifest by carrying each file's `(size, mtime_ns, content_hash)` stat proxy in
+# the same row, so the CLI needs no second on-disk structure. It follows the same
+# ADR-101 discipline as the mmap store: fixed struct reads (no pickle), fail-closed
+# on corruption (an `IndexFormatError` is a miss → full recompute), atomic writes.
+
+VALIDATE_STORE_DIRNAME = "validate"
+VALIDATE_LAYOUT_VERSION = "v1"
+
+
+@dataclass(frozen=True)
+class ValidationRow:
+    """One file's cached validation result plus its freshness stat proxy (ADR-103).
+
+    ``content_hash`` is the parity-bearing key (the result is reused verbatim when
+    it is unchanged); ``size``/``mtime_ns`` are the cheap stat prefilter the
+    detection scan diffs on. ``artifact_type``/``status``/``issues`` are the
+    path-free validation outcome — no ``Issue`` message or line embeds the file
+    path, so a rename (same bytes) reuses the row unchanged and the current path is
+    re-attached at assembly time.
+    """
+
+    size: int
+    mtime_ns: int
+    content_hash: str
+    artifact_type: str
+    status: str
+    issues: tuple[Issue, ...]
+
+
+def validate_store_root(cache_dir: Path) -> Path:
+    return cache_dir / VALIDATE_STORE_DIRNAME / VALIDATE_LAYOUT_VERSION
+
+
+def _validate_store_path(cache_dir: Path, root_key: str) -> Path:
+    return validate_store_root(cache_dir) / f"{root_key}.vseg"
+
+
+def _encode_validation_store(config_hash: str, rows: dict[str, ValidationRow]) -> bytes:
+    writer = Writer()
+    writer.text(config_hash)
+    writer.u32(len(rows))
+    for rel, row in rows.items():
+        writer.text(rel)
+        writer.u64(row.size)
+        writer.u64(row.mtime_ns)
+        writer.text(row.content_hash)
+        writer.text(row.artifact_type)
+        writer.text(row.status)
+        writer.u32(len(row.issues))
+        for issue in row.issues:
+            writer.text(issue.severity)
+            writer.text(issue.code)
+            writer.text(issue.message)
+            # line is int | None: a presence flag then the value keeps the row a
+            # fixed struct read (no sentinel line number can collide with "absent").
+            if issue.line is None:
+                writer.u32(0)
+                writer.u32(0)
+            else:
+                writer.u32(1)
+                writer.u32(issue.line)
+    return encode_segment(writer.payload)
+
+
+def _decode_validation_store(
+    payload: memoryview, config_hash: str
+) -> dict[str, ValidationRow] | None:
+    reader = Reader(payload)
+    stored_config = reader.text()
+    if stored_config != config_hash:
+        # An ancestor `.rac/config.yaml` edit (or a different governing config
+        # resolved from another CWD) changes severity overrides / provider, so
+        # every cached result is stale — fail closed to a full recompute.
+        return None
+    count = reader.u32()
+    rows: dict[str, ValidationRow] = {}
+    for _ in range(count):
+        rel = reader.text()
+        size = reader.u64()
+        mtime_ns = reader.u64()
+        content_hash_value = reader.text()
+        artifact_type = reader.text()
+        status = reader.text()
+        issue_count = reader.u32()
+        issues: list[Issue] = []
+        for _ in range(issue_count):
+            severity = reader.text()
+            code = reader.text()
+            message = reader.text()
+            has_line = reader.u32()
+            line_value = reader.u32()
+            issues.append(
+                Issue(
+                    severity=severity,  # type: ignore[arg-type]
+                    code=code,
+                    message=message,
+                    line=line_value if has_line else None,
+                )
+            )
+        rows[rel] = ValidationRow(
+            size=size,
+            mtime_ns=mtime_ns,
+            content_hash=content_hash_value,
+            artifact_type=artifact_type,
+            status=status,
+            issues=tuple(issues),
+        )
+    return rows
+
+
+def open_validation_store(
+    cache_dir: Path, root_key: str, config_hash: str
+) -> dict[str, ValidationRow] | None:
+    """Load the per-file validation rows for a corpus root, or ``None`` on a miss.
+
+    A missing file, a corrupt or truncated segment, or a config-fingerprint
+    mismatch all return ``None`` — the incremental path then treats every file as
+    changed and recomputes, so the answer is fresh either way. Never raises to the
+    caller; enabling the cache can only change latency, not the result.
+    """
+    path = _validate_store_path(cache_dir, root_key)
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    try:
+        payload = segment_payload(memoryview(data))
+        return _decode_validation_store(payload, config_hash)
+    except (IndexFormatError, ValueError, UnicodeDecodeError):
+        return None
+
+
+def write_validation_store(
+    cache_dir: Path, root_key: str, config_hash: str, rows: dict[str, ValidationRow]
+) -> bool:
+    """Write the per-file validation rows atomically; return whether it landed.
+
+    Built in memory, written to a temp file, fsynced, then ``os.replace``d into the
+    root-keyed name in one step, so a concurrent reader never sees a half-written
+    store. Any OS error degrades to "not written": the freshly computed results are
+    already in hand, so the cache is a latency nicety, never a requirement (ADR-080).
+    """
+    root = validate_store_root(cache_dir)
+    payload = _encode_validation_store(config_hash, rows)
+    tmp = root / f".{root_key}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        _write_file(tmp, payload)
+        try:
+            os.replace(tmp, _validate_store_path(cache_dir, root_key))
+        except OSError:
+            _silent_unlink_path(tmp)
+            return False
+        return True
+    except OSError:
+        _silent_unlink_path(tmp)
+        return False
+
+
+def _silent_unlink_path(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        pass
