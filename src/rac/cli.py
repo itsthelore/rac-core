@@ -865,16 +865,20 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     from rac.mcp.server import run_server
     from rac.mcp.transport import AuditSinkUnavailable
 
+    # Only thread ``index_enabled`` when the flag is on, so the default call shape
+    # stays byte-for-byte as before (ADR-100 additive wiring).
+    run_kwargs: dict = {
+        "telemetry_enabled": args.telemetry,
+        "transport_name": args.transport,
+        "host": args.host,
+        "port": args.port,
+        "path": args.path,
+        "cache_enabled": args.cache,
+    }
+    if args.index:
+        run_kwargs["index_enabled"] = True
     try:
-        return run_server(
-            args.root,
-            telemetry_enabled=args.telemetry,
-            transport_name=args.transport,
-            host=args.host,
-            port=args.port,
-            path=args.path,
-            cache_enabled=args.cache,
-        )
+        return run_server(args.root, **run_kwargs)
     except MalformedAuditConfig as exc:  # bad `audit:` stanza (ADR-084)
         _fail(str(exc))
     except AuditSinkUnavailable as exc:  # HTTP without a working audit sink (ADR-084)
@@ -1919,6 +1923,20 @@ def build_parser() -> argparse.ArgumentParser:
             "Reuse content-addressed derived structures across calls for large "
             "corpora; disposable and byte-identical to the uncached path "
             "(off by default, ADR-099)."
+        ),
+    )
+    # Persistent corpus index (ADR-100/101): opt-in, off by default. A
+    # memory-mapped index built once, refreshed by changeset, and kept fresh by an
+    # inotify watcher (per-call stat-scan fallback where watches are unavailable).
+    # Query-bound warm reads; disposable and byte-identical to the fresh path.
+    # Takes precedence over --cache when both are given.
+    p_mcp.add_argument(
+        "--index",
+        action="store_true",
+        help=(
+            "Serve warm reads from a persistent, memory-mapped corpus index with "
+            "event-driven freshness; disposable and byte-identical to the fresh "
+            "path (off by default, ADR-100/101)."
         ),
     )
     p_mcp.set_defaults(func=cmd_mcp)

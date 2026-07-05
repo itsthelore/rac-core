@@ -43,8 +43,12 @@ stdout belongs to the MCP protocol; only stderr carries diagnostics.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import sys
+import threading
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -63,11 +67,18 @@ from rac.mcp.budget import (
     serialize,
 )
 from rac.mcp.telemetry import TelemetryRecorder
-from rac.services.agent_rules import artifact_status
-from rac.services.derived_cache import DerivedIndexCache
+from rac.services.agent_rules import artifact_status, is_live_decision
+from rac.services.corpus_watch import CorpusWatcher
+from rac.services.derived_cache import DerivedIndexCache, default_cache_dir
 from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
+from rac.services.persistent_index import PersistentIndex, open_index
 from rac.services.portfolio import build_portfolio_summary
-from rac.services.recency import annotate_search_recency, artifact_provenance
+from rac.services.recency import (
+    annotate_search_recency,
+    artifact_provenance,
+    load_freshness_threshold,
+    staleness,
+)
 from rac.services.relationships import (
     incoming_references,
     neighborhood,
@@ -113,6 +124,111 @@ def _request_principal(ctx: Context) -> str | None:
         return request.headers.get(PRINCIPAL_HEADER)
     except AttributeError:
         return None
+
+
+# --- Persistent-index serving mode (ADR-100/101) -----------------------------
+#
+# Opt-in, additive, and defaults-off: with no index provider every seam is
+# exactly the ADR-032/ADR-099 path (fresh walk, or the derived cache). With one,
+# the four corpus-bound seams (_index_entries / _search_artifacts /
+# _find_decisions topic mode / _get_related) serve from the memory-mapped index,
+# refreshed by changeset before each call. get_summary and find_decisions path
+# mode keep their existing fresh path, exactly as under --cache.
+
+DECISION_TYPE = "decision"
+
+
+def default_index_dir(root: str) -> Path:
+    """The on-disk index directory for ``root``, under the ADR-099 cache root.
+
+    A disposable, per-corpus location (ADR-100): sibling to the derived cache,
+    namespaced by a digest of the absolute root so distinct corpora never share
+    an index directory. Deleting it costs only a rebuild, never an answer.
+    """
+    key = hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()[:16]
+    return default_cache_dir().parent / "index" / key
+
+
+class IndexProvider:
+    """Holds the open :class:`PersistentIndex` and keeps it fresh per call.
+
+    Freshness policy (ADR-100 server mode): with a live inotify watcher, refresh
+    only when the watcher reports the corpus dirty; otherwise — no watcher, an
+    unavailable one, or a watcher whose reader thread has died — fall back to a
+    stat-scan refresh before every call, which restores ADR-032 semantics. The
+    refresh itself is byte-authoritative (stat hint, hash confirm), so events are
+    only ever a trigger. Every path is exception-safe: a refresh failure or a
+    dead watcher degrades to serving the current mapped state, never a crash.
+    """
+
+    def __init__(
+        self, index: PersistentIndex, root: str, watcher: CorpusWatcher | None = None
+    ) -> None:
+        self._index = index
+        self._root = root
+        self._watcher = watcher
+        self._lock = threading.Lock()
+
+    def current(self) -> PersistentIndex:
+        """Return the index, refreshed to the current corpus per the policy."""
+        with self._lock:
+            watcher = self._watcher
+            if watcher is not None and watcher.available and watcher.alive:
+                # Watcher mode: splice only when an event marked the corpus dirty.
+                if watcher.drain():
+                    self._refresh()
+            else:
+                # Fallback: no usable watcher — stat-scan refresh every call.
+                self._refresh()
+            return self._index
+
+    def _refresh(self) -> None:
+        try:
+            self._index.refresh(self._root)
+        except Exception as exc:  # pragma: no cover — defensive; refresh is pinned
+            # Never crash the call on a refresh error; serve the current mapped
+            # state and record the degradation on stderr (stdout is the protocol).
+            print(f"rac mcp: index refresh failed ({exc}); serving last state", file=sys.stderr)
+
+    def close(self) -> None:
+        if self._watcher is not None:
+            self._watcher.stop()
+        self._index.close()
+
+
+def _annotate_search_recency_from_index(
+    matches: list, directory: str, recency_by_path: dict[str, str | None]
+) -> None:
+    """Join recency onto search matches from the index column, not per-match git.
+
+    The index-served equivalent of :func:`annotate_search_recency` (ADR-101): the
+    stored last-committed column replaces one ``git log`` fork per match, and the
+    same :func:`staleness` join produces a byte-identical ``recency`` dict for the
+    same git state. The threshold and reference are resolved exactly as the git
+    path resolves them, so index-on output matches index-off.
+    """
+    if not matches:
+        return
+    threshold = load_freshness_threshold(directory)
+    reference = datetime.now(UTC)
+    for match in matches:
+        iso = recency_by_path.get(match.path)
+        last = datetime.fromisoformat(iso) if iso else None
+        match.recency = staleness(last, threshold_days=threshold, reference=reference).to_dict()
+
+
+def _is_live_decision_file(path: str) -> bool:
+    """True when the decision file at ``path`` parses live (Accepted, non-retired).
+
+    The index has already filtered to decisions by type; liveness reads parsed
+    ``## Status``, which the index does not store, so it is checked per matched
+    decision — a handful of parses bound by the query, not a full corpus walk.
+    Mirrors :func:`live_decision_paths`'s predicate exactly (one source of truth).
+    """
+    try:
+        return is_live_decision(parse(_read_content(path)))
+    except (OSError, UnicodeDecodeError):
+        return False
 
 
 # --- Verbatim tool descriptions (pinned by guide-tool-surface; ADR-030) ------
@@ -185,34 +301,52 @@ def _read_content(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-def _index_entries(root: str, cache: DerivedIndexCache | None) -> list[IndexEntry]:
-    """The repository index rows, from the derived-index cache or a fresh walk.
+def _index_entries(
+    root: str, cache: DerivedIndexCache | None, index: IndexProvider | None = None
+) -> list[IndexEntry]:
+    """The repository index rows, from the persistent index, the cache, or a walk.
 
-    With ``cache`` set (ADR-099) the rows come from the content-addressed cache —
-    byte-identical to the fresh build, only the walk/index is skipped under an
-    unchanged corpus key. With ``cache`` None the serving path is exactly as
-    before (ADR-032): a fresh read every call.
+    With ``index`` set (ADR-100) the rows come from the memory-mapped persistent
+    index, refreshed by changeset — byte-identical to the fresh build. With
+    ``cache`` set (ADR-099) they come from the content-addressed cache — likewise
+    byte-identical, only the walk/index is skipped under an unchanged corpus key.
+    With both None the serving path is exactly as before (ADR-032): a fresh read
+    every call.
     """
+    if index is not None:
+        return index.current().entries()
     if cache is not None:
         return cache.load_or_build(root).index_entries
     return build_repository_index(root, recursive=True).artifacts
 
 
 def _resolve(
-    root: str, artifact_id: str, cache: DerivedIndexCache | None = None
+    root: str,
+    artifact_id: str,
+    cache: DerivedIndexCache | None = None,
+    index: IndexProvider | None = None,
 ) -> ResolutionResult:
     """Resolve ``artifact_id`` against the repository index (ADR-032).
 
-    Uses the repository index and the resolver's in-index semantics so a single
-    walk serves both resolution and any follow-on shaping the tool needs.
+    With the persistent index (ADR-100) resolution is a lookup in the memoised
+    ``{alias -> doc_id}`` map, byte-identical to ``resolve_in_index`` but O(query)
+    instead of an O(N) alias scan per call. Without it, the resolver's in-index
+    semantics run over the fresh/cached entries, so a single walk serves both
+    resolution and any follow-on shaping the tool needs.
     """
-    return resolve_in_index(_index_entries(root, cache), artifact_id)
+    if index is not None:
+        return index.current().resolve(artifact_id)
+    return resolve_in_index(_index_entries(root, cache, index), artifact_id)
 
 
 def _get_artifact(
-    root: str, artifact_id: str, budget: int, cache: DerivedIndexCache | None = None
+    root: str,
+    artifact_id: str,
+    budget: int,
+    cache: DerivedIndexCache | None = None,
+    index: IndexProvider | None = None,
 ) -> str:
-    result = _resolve(root, artifact_id, cache)
+    result = _resolve(root, artifact_id, cache, index)
     if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
         return serialize(errors.from_resolution(result), budget)
     try:
@@ -247,7 +381,15 @@ def _search_artifacts(
     artifact_type: str | None,
     budget: int,
     cache: DerivedIndexCache | None = None,
+    index: IndexProvider | None = None,
 ) -> str:
+    if index is not None:
+        pindex = index.current()
+        result = pindex.search_entries(query, artifact_type=artifact_type)
+        # Recency from the stored column (ADR-101), not a git fork per match — the
+        # same staleness join, so the annotated result is byte-identical.
+        _annotate_search_recency_from_index(result.matches, root, pindex.recency())
+        return serialize(result.to_dict(), budget)
     if cache is not None:
         derived = cache.load_or_build(root)
         result = search_index(
@@ -271,6 +413,7 @@ def _find_decisions(
     path: str | None,
     budget: int,
     cache: DerivedIndexCache | None = None,
+    index: IndexProvider | None = None,
 ) -> str:
     """Live decisions binding a ``topic`` — or governing a code ``path``.
 
@@ -284,7 +427,15 @@ def _find_decisions(
     """
     if path:
         return serialize(decisions_for_path(root, path, recursive=True).to_dict(), budget)
-    if cache is not None:
+    if index is not None:
+        # Index-backed topic mode (ADR-100): the type-restricted search is
+        # query-bound over the persistent index, then the ADR-067 liveness filter
+        # is applied per matched decision (a handful of parses, not a corpus
+        # walk). Byte-identical to find_decisions: same matched set, same order,
+        # same live-only result.
+        result = index.current().search_entries(topic, artifact_type=DECISION_TYPE)
+        result.matches = [m for m in result.matches if _is_live_decision_file(m.path)]
+    elif cache is not None:
         derived = cache.load_or_build(root)
         result = find_decisions_in(
             derived.index_entries,
@@ -302,29 +453,57 @@ def _find_decisions(
 
 
 def _get_related(
-    root: str, artifact_id: str, budget: int, depth: int = 1, cache: DerivedIndexCache | None = None
+    root: str,
+    artifact_id: str,
+    budget: int,
+    depth: int = 1,
+    cache: DerivedIndexCache | None = None,
+    index: IndexProvider | None = None,
 ) -> str:
     # One corpus snapshot feeds resolution, outgoing, and incoming, so the whole
     # response reflects a single atomic view of the repository (ADR-032): there
     # is no window in which the relationship view drifts mid-call. With the
-    # derived-index cache (ADR-099) the index and relationship graph come from
-    # one content-addressed snapshot; without it, one fresh walk feeds both.
-    # Either way the two are from the same snapshot and the output is identical.
-    if cache is not None:
-        derived = cache.load_or_build(root)
-        index = derived.index_entries
-        relationships = derived.relationships
+    # persistent index (ADR-100) the entries and the full relationship list come
+    # from one refreshed snapshot; with the derived-index cache (ADR-099) from one
+    # content-addressed snapshot; without either, one fresh walk feeds both. Every
+    # way, the two are from the same snapshot and the output is identical.
+    if index is not None:
+        # ADR-100: resolution, the per-node outgoing/incoming edge lists, and the
+        # neighbourhood walk all read per-generation memoised structures, so a warm
+        # call touches only the requested node's edges plus the walk frontier —
+        # never the full entry or edge list — while staying byte-identical to the
+        # fresh path. depth==1 does no walk.
+        pindex = index.current()
+        result = pindex.resolve(artifact_id)
+        if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
+            return serialize(errors.from_resolution(result), budget)
+        artifact = result.artifact
+        outgoing = pindex.outgoing(artifact.path)
+        incoming_result = pindex.incoming(artifact.path)
+        hood = pindex.neighborhood(artifact.path, depth=depth) if depth > 1 else None
     else:
-        entries = list(walk_corpus(root, recursive=True))
-        index = index_from_corpus(root, entries, recursive=True).artifacts
-        relationships = relationships_from_corpus(entries)
-    result = resolve_in_index(index, artifact_id)
-    if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
-        return serialize(errors.from_resolution(result), budget)
-    artifact = result.artifact
-    identity_by_path = {entry.path: (entry.id, entry.type, entry.title) for entry in index}
-    outgoing = outgoing_references(relationships, artifact.path)
-    incoming_result = incoming_references(relationships, identity_by_path, artifact.path)
+        if cache is not None:
+            derived = cache.load_or_build(root)
+            entries_index = derived.index_entries
+            relationships = derived.relationships
+        else:
+            entries = list(walk_corpus(root, recursive=True))
+            entries_index = index_from_corpus(root, entries, recursive=True).artifacts
+            relationships = relationships_from_corpus(entries)
+        result = resolve_in_index(entries_index, artifact_id)
+        if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
+            return serialize(errors.from_resolution(result), budget)
+        artifact = result.artifact
+        identity_by_path = {
+            entry.path: (entry.id, entry.type, entry.title) for entry in entries_index
+        }
+        outgoing = outgoing_references(relationships, artifact.path)
+        incoming_result = incoming_references(relationships, identity_by_path, artifact.path)
+        hood = (
+            neighborhood(relationships, identity_by_path, artifact.path, depth=depth)
+            if depth > 1
+            else None
+        )
     incoming = [
         {
             "id": ref.id,
@@ -354,8 +533,7 @@ def _get_related(
     # field listing artifacts two-or-more hops out, each tagged with its hop
     # distance (ADR-007). depth=1 leaves the payload byte-identical to before.
     neighborhood_truncated = False
-    if depth > 1:
-        hood = neighborhood(relationships, identity_by_path, artifact.path, depth=depth)
+    if hood is not None:
         payload["neighborhood"] = [
             {"id": n.id, "type": n.type, "title": n.title, "path": n.path, "hops": n.hops}
             for n in hood.nodes
@@ -400,6 +578,7 @@ def build_server(
     recorder: TelemetryRecorder | None = None,
     audit_recorder: audit.AuditRecorder | None = None,
     cache: DerivedIndexCache | None = None,
+    index: IndexProvider | None = None,
 ) -> FastMCP:
     """Build the Guide MCP server bound to repository ``root``.
 
@@ -410,9 +589,14 @@ def build_server(
     call is exactly the bare tool body. ``cache`` enables the derived-index cache
     (ADR-099): with ``None`` — the default — every tool re-reads and rebuilds from
     disk (ADR-032); with a cache, the expensive derived structures are reused
-    under an unchanged corpus content hash, byte-identically. The returned
-    :class:`FastMCP` instance has the five pinned tools registered and is ready to
-    run over any transport — the CLI runs it over stdio.
+    under an unchanged corpus content hash, byte-identically. ``index`` enables
+    the persistent corpus index (ADR-100/101): with ``None`` — the default —
+    serving is unchanged; with a provider, the four corpus-bound seams serve from
+    the memory-mapped index (refreshed by changeset before each call) while
+    get_summary and find_decisions path mode keep the fresh path, all
+    byte-identical to the default. ``index`` takes precedence over ``cache``. The
+    returned :class:`FastMCP` instance has the five pinned tools registered and is
+    ready to run over any transport — the CLI runs it over stdio.
     """
     server: FastMCP = FastMCP(SERVER_NAME)
 
@@ -436,7 +620,7 @@ def build_server(
         return observed(
             "get_artifact",
             {"id": id},
-            lambda: _get_artifact(root, id, budget, cache),
+            lambda: _get_artifact(root, id, budget, cache, index),
             _request_principal(ctx),
         )
 
@@ -445,7 +629,7 @@ def build_server(
         return observed(
             "search_artifacts",
             {"query": query, "type": type},
-            lambda: _search_artifacts(root, query, type, budget, cache),
+            lambda: _search_artifacts(root, query, type, budget, cache, index),
             _request_principal(ctx),
         )
 
@@ -457,7 +641,7 @@ def build_server(
         return observed(
             "find_decisions",
             args,
-            lambda: _find_decisions(root, topic, path, budget, cache),
+            lambda: _find_decisions(root, topic, path, budget, cache, index),
             _request_principal(ctx),
         )
 
@@ -466,7 +650,7 @@ def build_server(
         return observed(
             "get_related",
             {"id": id, "depth": depth},
-            lambda: _get_related(root, id, budget, depth, cache),
+            lambda: _get_related(root, id, budget, depth, cache, index),
             _request_principal(ctx),
         )
 
@@ -531,6 +715,33 @@ def _maybe_start_sharing(root: str) -> None:
         )
 
 
+# Operational override: force the per-call stat-scan fallback even where inotify
+# is available (a test hook, and an escape valve on hosts where the watch set is
+# undesirable). The index still serves; only the freshness mechanism changes.
+INDEX_NO_WATCH_ENV = "RAC_INDEX_NO_WATCH"
+
+
+def _build_index_provider(root: str) -> IndexProvider:
+    """Open (or cold-build) the persistent index for ``root`` and wire freshness.
+
+    Startup follows ADR-100: load the index if present and valid, else cold-build
+    it; refresh once against the current corpus; then, unless disabled, start the
+    inotify watcher for event-driven freshness. If the watcher cannot start
+    (non-Linux, watch limit, or ``RAC_INDEX_NO_WATCH`` set) the provider degrades
+    to a stat-scan refresh before every call — correct, only slower.
+    """
+    index_dir = default_index_dir(root)
+    index_dir.parent.mkdir(parents=True, exist_ok=True)
+    pindex = open_index(root, str(index_dir))
+    pindex.refresh(root)  # splice any change between the build and now, once.
+    watcher: CorpusWatcher | None = None
+    if not os.environ.get(INDEX_NO_WATCH_ENV):
+        candidate = CorpusWatcher(root)
+        if candidate.start():
+            watcher = candidate
+    return IndexProvider(pindex, root, watcher=watcher)
+
+
 def run_server(
     root: str,
     budget: int = DEFAULT_BUDGET,
@@ -540,6 +751,7 @@ def run_server(
     port: int = transport.DEFAULT_PORT,
     path: str = transport.DEFAULT_PATH,
     cache_enabled: bool = False,
+    index_enabled: bool = False,
 ) -> int:
     """Run the Guide server over stdio (default) or streamable HTTP.
 
@@ -557,6 +769,12 @@ def run_server(
     derived structures are persisted content-addressed and reused under an
     unchanged corpus hash, byte-identically to the uncached path. Off by default —
     the serving path is exactly ADR-032's re-read-per-call otherwise.
+
+    ``index_enabled`` turns on the persistent corpus index (ADR-100/101): a
+    memory-mapped index is opened (or cold-built) once, refreshed by changeset,
+    and kept fresh by an inotify watcher (falling back to per-call stat-scan where
+    watches are unavailable). Off by default and byte-identical to the fresh path;
+    it takes precedence over ``cache_enabled`` when both are set.
 
     Emits a one-line notice to stderr when the repository root contains no
     recognized artifacts (v0.10.1 startup hardening), and another when
@@ -588,7 +806,21 @@ def run_server(
             file=sys.stderr,
         )
     cache: DerivedIndexCache | None = None
-    if cache_enabled:
+    index: IndexProvider | None = None
+    # The persistent index (ADR-100) supersedes the derived cache when both are
+    # requested — it is the finer-grained structure with the same parity contract.
+    if index_enabled:
+        index = _build_index_provider(root)
+        mode = "per-call stat-scan refresh"
+        if index._watcher is not None:  # noqa: SLF001 — startup notice only
+            mode = "event-driven (inotify) freshness"
+        print(
+            "rac mcp: persistent index on — memory-mapped, changeset-refreshed "
+            f"index under {default_index_dir(root)} with {mode} (disposable; "
+            "byte-identical to the fresh path, ADR-100/101).",
+            file=sys.stderr,
+        )
+    elif cache_enabled:
         cache = DerivedIndexCache()
         print(
             "rac mcp: derived-index cache on — reusing content-addressed derived "
@@ -596,24 +828,38 @@ def run_server(
             "uncached path, ADR-099).",
             file=sys.stderr,
         )
-    server = build_server(
-        root, budget=budget, recorder=recorder, audit_recorder=audit_recorder, cache=cache
-    )
-    if transport_name == transport.TRANSPORT_HTTP:
-        # Mandatory-audit-on entry condition (ADR-084): a shared endpoint
-        # without a working auditor refuses to start rather than serving reads
-        # no one can attribute. Checked before the port opens, and before the
-        # daily-sharing daemon starts, so a refused start is inert.
-        transport.ensure_audit_sink(audit_recorder)
-        print(
-            f"rac mcp: serving over HTTP at http://{host}:{port}{path} "
-            "(read-only, stateless per call; authentication belongs to the "
-            "deployment proxy, ADR-085).",
-            file=sys.stderr,
-        )
+    build_kwargs: dict = {
+        "budget": budget,
+        "recorder": recorder,
+        "audit_recorder": audit_recorder,
+        "cache": cache,
+    }
+    # Only thread the index kwarg when the mode is on, so the cache/default call
+    # shape is byte-for-byte what it always was (ADR-100 additive-wiring pin).
+    if index is not None:
+        build_kwargs["index"] = index
+    server = build_server(root, **build_kwargs)
+    try:
+        if transport_name == transport.TRANSPORT_HTTP:
+            # Mandatory-audit-on entry condition (ADR-084): a shared endpoint
+            # without a working auditor refuses to start rather than serving reads
+            # no one can attribute. Checked before the port opens, and before the
+            # daily-sharing daemon starts, so a refused start is inert.
+            transport.ensure_audit_sink(audit_recorder)
+            print(
+                f"rac mcp: serving over HTTP at http://{host}:{port}{path} "
+                "(read-only, stateless per call; authentication belongs to the "
+                "deployment proxy, ADR-085).",
+                file=sys.stderr,
+            )
+            _maybe_start_sharing(root)
+            transport.serve_http(server, host=host, port=port, path=path)
+            return 0
         _maybe_start_sharing(root)
-        transport.serve_http(server, host=host, port=port, path=path)
+        server.run(transport="stdio")
         return 0
-    _maybe_start_sharing(root)
-    server.run(transport="stdio")
-    return 0
+    finally:
+        # Release the watcher fd/thread on shutdown (ADR-100 disposability); a
+        # no-op when the index is off.
+        if index is not None:
+            index.close()
