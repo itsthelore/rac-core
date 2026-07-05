@@ -16,9 +16,7 @@ recognized exactly where its schema allows it.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
 
 from rac.core.artifacts import ArtifactSpec, spec_for
 from rac.core.classification import classify
@@ -34,151 +32,35 @@ from rac.core.markdown import parse_file
 from rac.core.models import Product
 from rac.core.relationship_types import REGISTRY, edge_spec
 
-# The cross-artifact "Related X" sections. These populate the ``relationships``
-# dict in ``rac inspect`` output. ``related designs`` is included so every peer
-# artifact type can be referenced.
-RELATED_SECTIONS: tuple[str, ...] = (
-    "related requirements",
-    "related decisions",
-    "related roadmaps",
-    "related prompts",
-    "related designs",
+# The relationship-section vocabulary and pure reference extraction now live in
+# :mod:`rac.services.references`. They are re-exported here so the module remains
+# the single import surface every relationship consumer has always used
+# (``rac.services.relationships.RELATIONSHIP_SECTIONS`` and friends resolve
+# unchanged, ADR-062).
+from rac.services.references import EXTERNAL_SECTIONS as EXTERNAL_SECTIONS
+from rac.services.references import RELATED_SECTIONS as RELATED_SECTIONS
+from rac.services.references import (
+    RELATIONSHIP_SECTIONS,
+    _snake,
+    extract_relationships_full,
+    unsupported_relationship_sections,
+)
+from rac.services.references import SCOPE_SECTIONS as SCOPE_SECTIONS
+from rac.services.references import extract_relationships as extract_relationships
+from rac.services.references import parse_references as parse_references
+from rac.services.references import (
+    present_relationship_sections as present_relationship_sections,
 )
 
-# External-reference relationship sections (ADR-087): recognized sections whose
-# target is an external identifier (a ticket), not a peer artifact. They are
-# extracted and graphed like the others but format-linted (against the per-repo
-# ticketing provider, ADR-088), never resolved. Kept separate from
-# RELATED_SECTIONS, which is exactly the per-artifact-type vocabulary (one
-# ``related <type>s`` per type).
-EXTERNAL_SECTIONS: tuple[str, ...] = ("related tickets", "verified by")
-
-# Filesystem-scoped relationship sections (decision-to-code-proximity, Initiative
-# 1): recognized sections whose targets are repository file paths/components a
-# decision governs, not peer artifacts. Extracted and graphed like the others, but
-# their literal path/directory entries are existence-checked against the working
-# tree (see :func:`_scope_validation_issues`) rather than resolved by identifier.
-# Kept separate from EXTERNAL_SECTIONS, which are format-linted, never existence-
-# checked.
-SCOPE_SECTIONS: tuple[str, ...] = ("applies to",)
-
-# The full relationship-section vocabulary and its canonical ordering: the per-type
-# ``related *`` sections, then ``supersedes``, then the external-reference sections,
-# then the filesystem-scoped sections. This module owns the ordering; ``stats`` and
-# the ``relationships`` command both render by-type output in this order.
-# ``supersedes`` is the one section that does *not* appear in the inspect
-# ``relationships`` dict: there it stays a top-level scalar for backwards
-# compatibility (ADR-007). Order is append-only (ADR-007).
-RELATIONSHIP_SECTIONS: tuple[str, ...] = (
-    RELATED_SECTIONS + ("supersedes",) + EXTERNAL_SECTIONS + SCOPE_SECTIONS
+# The filesystem-scope path helpers (``## Applies To`` entry classification, path
+# normalisation, repository-root discovery) live in
+# :mod:`rac.services.scope_paths`, a home shared with ``rac.services.scope`` so
+# neither reaches across a module boundary for the other's internals.
+from rac.services.scope_paths import (
+    classify_scope_entry,
+    normalized_scope_path,
+    repository_root,
 )
-
-# A *well-formed* leading Markdown list marker: ``-``, ``*``, ``+``, or ``N.``
-# followed by whitespace. Only these are stripped; any other leading text is
-# preserved verbatim, so references like "REQ-001 (blocked)" or a path beginning
-# with "../" survive intact (the whole line is the reference, per ADR-016).
-_LIST_MARKER_RE = re.compile(r"^(?:[-*+]|\d+\.)\s+")
-
-
-def _snake(section: str) -> str:
-    return section.replace(" ", "_")
-
-
-def parse_references(body: str) -> list[str]:
-    """Split a relationship section body into individual reference strings.
-
-    One reference per non-empty line. A well-formed leading list marker is
-    stripped; otherwise the line is preserved verbatim. No ID parsing and no
-    resolution — the line text *is* the reference.
-    """
-    references: list[str] = []
-    for line in body.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        references.append(_LIST_MARKER_RE.sub("", stripped, count=1).strip())
-    return references
-
-
-def _collect(
-    product: Product, spec: ArtifactSpec, allowed: tuple[str, ...]
-) -> dict[str, list[str]]:
-    """References for the relationship sections in ``spec.optional`` ∩ ``allowed``.
-
-    Returns ``{snake_section -> [references]}`` in ``spec.optional`` order (each
-    artifact's own schema order), including only sections present with at least
-    one parsed reference. The single core behind the two public extractors.
-    """
-    relationships: dict[str, list[str]] = {}
-    for section in spec.optional:
-        if section not in allowed:
-            continue
-        body = product.sections.get(section)
-        if not body:
-            continue
-        refs = parse_references(body)
-        if refs:
-            relationships[_snake(section)] = refs
-    return relationships
-
-
-def extract_relationships(product: Product, spec: ArtifactSpec) -> dict[str, list[str]]:
-    """Cross-artifact references for ``rac inspect``.
-
-    Excludes ``supersedes`` — that stays a top-level scalar in inspect output
-    (ADR-007). External-reference sections (``related tickets``) and filesystem-
-    scoped sections (``applies to``) are included. Order follows ``spec.optional``
-    (the artifact's own schema order).
-    """
-    return _collect(product, spec, RELATED_SECTIONS + EXTERNAL_SECTIONS + SCOPE_SECTIONS)
-
-
-def extract_relationships_full(product: Product, spec: ArtifactSpec) -> dict[str, list[str]]:
-    """Cross-artifact references for ``rac relationships`` — *including* Supersedes.
-
-    The repository-level relationship command treats Supersedes as a first-class
-    relationship (REQ-003), so it is reported here alongside the ``related_*``
-    sections. Order follows ``spec.optional``.
-    """
-    return _collect(product, spec, RELATIONSHIP_SECTIONS)
-
-
-def present_relationship_sections(product: Product, spec: ArtifactSpec) -> list[str]:
-    """Relationship sections ``product`` declares *and* populates.
-
-    Spec-driven and inclusive of ``supersedes`` (unlike
-    :func:`extract_relationships`). A section counts only when present with at
-    least one parsed reference (REQ-011). Returns the normalized section names in
-    ``spec.optional`` order, for ``rac stats`` declared-presence counts.
-    """
-    present: list[str] = []
-    for section in spec.optional:
-        if section not in RELATIONSHIP_SECTIONS:
-            continue
-        body = product.sections.get(section)
-        if body and parse_references(body):
-            present.append(section)
-    return present
-
-
-def unsupported_relationship_sections(product: Product, spec: ArtifactSpec) -> list[str]:
-    """Relationship sections ``product`` declares that its type does not support.
-
-    A ``## Related <Type>`` / ``## Supersedes`` section present with at least one
-    reference whose name is *not* in this type's ``spec.optional`` produces no edge
-    today and is silently dropped (ADR-049 edge-legality;
-    ``rac-cross-artifact-enforcement`` REQ-004). Returns the canonical section
-    names in :data:`RELATIONSHIP_SECTIONS` order so the finding is deterministic.
-    """
-    unsupported: list[str] = []
-    for section in RELATIONSHIP_SECTIONS:
-        if section in spec.optional:
-            continue
-        body = product.sections.get(section)
-        if body and parse_references(body):
-            unsupported.append(section)
-    return unsupported
-
 
 # --- Repository-level relationship inspection (v0.7.1) -----------------------
 #
@@ -256,7 +138,7 @@ def _resolution_labels(
     (one identity model); ambiguous and unknown references get no label —
     `--validate` is the place that reports them.
     """
-    index = _build_resolution_index(items)
+    index = build_resolution_index(items)
     info = {
         path: (artifact_identifier(product, spec, path), spec, product.title)
         for path, product, spec in items
@@ -507,7 +389,7 @@ def _build_identifier_index(
     return index
 
 
-def _build_resolution_index(
+def build_resolution_index(
     items: list[tuple[str, Product, ArtifactSpec | None]],
 ) -> _IdentIndex:
     """Reference-resolution index: canonical identifiers plus legacy aliases.
@@ -656,69 +538,9 @@ def _cycle_issues(
 # directory entry is existence-checked relative to the repository root. Declared,
 # never inferred (ADR-065/066); a pure function of the declared entry and the tree
 # (ADR-066). Glob patterns (matched at lookup, #275) and component-name labels
-# (no registry this cycle) are recorded without existence-checking.
-
-# Glob metacharacters that mark an entry as a declared *pattern* rather than a
-# literal path — stdlib ``fnmatch``/``glob`` semantics, pinned for the lookup.
-_GLOB_METACHARS: tuple[str, ...] = ("*", "?", "[")
-
-# Config anchor for repository-root discovery (ADR-018), mirroring
-# ``rac.services.init.find_config_file`` without importing the services layer so
-# this module stays core-only in its dependencies.
-_CONFIG_DIR = ".rac"
-_CONFIG_FILE = "config.yaml"
-
-
-def _classify_scope_entry(entry: str) -> str:
-    """Classify one ``## Applies To`` entry as ``glob``, ``path``, or ``component``.
-
-    Deterministic (slash-or-glob rule): an entry containing a glob metacharacter
-    (``*``/``?``/``[``) is a declared ``glob`` pattern; otherwise an entry
-    containing a path separator ``/`` is a literal ``path`` (a file or directory);
-    otherwise it is a ``component`` label. Only ``path`` entries are existence-
-    checked — an author writes ``src/`` (not bare ``src``) to mean the directory.
-    """
-    if any(ch in entry for ch in _GLOB_METACHARS):
-        return "glob"
-    if "/" in entry:
-        return "path"
-    return "component"
-
-
-def _normalized_scope_path(entry: str) -> str | None:
-    """A literal path entry as a POSIX repo-relative string, or None if invalid.
-
-    Strips a leading ``./`` and trailing ``/`` and collapses ``.`` segments.
-    Returns None when the entry is absolute or escapes the repository root (a
-    ``..`` segment) — such an entry cannot name an in-repository scope, so it is
-    treated as not-found rather than followed outside the tree (ADR-065).
-    """
-    text = entry.strip()
-    if not text or text.startswith("/"):
-        return None
-    parts: list[str] = []
-    for part in PurePosixPath(text).parts:
-        if part == ".":
-            continue
-        if part == "..":
-            return None
-        parts.append(part)
-    return "/".join(parts) if parts else None
-
-
-def _repository_root(directory: str) -> Path:
-    """The repository root anchoring ``## Applies To`` paths (ADR-018).
-
-    The nearest directory at or above ``directory`` that holds ``.rac/config.yaml``
-    (the same discovery ``rac.services.init`` uses for identity and overrides).
-    Falls back to the resolved ``directory`` when no config is found, so the check
-    is deterministic even in an un-initialized tree.
-    """
-    resolved = Path(directory).resolve()
-    for candidate in (resolved, *resolved.parents):
-        if (candidate / _CONFIG_DIR / _CONFIG_FILE).is_file():
-            return candidate
-    return resolved
+# (no registry this cycle) are recorded without existence-checking. The pure entry
+# helpers (``classify_scope_entry``/``normalized_scope_path``/``repository_root``)
+# live in :mod:`rac.services.scope_paths`, shared with ``rac.services.scope``.
 
 
 def _scope_validation_issues(
@@ -733,7 +555,7 @@ def _scope_validation_issues(
     existence-checking. Deterministic — items in sorted-path order, entries in
     declared order.
     """
-    root = _repository_root(directory)
+    root = repository_root(directory)
     issues: list[RelationshipIssue] = []
     for path, product, spec in items:
         if spec is None:
@@ -743,9 +565,9 @@ def _scope_validation_issues(
             if edge is None or not edge.filesystem_scoped:
                 continue
             for ref in refs:
-                if _classify_scope_entry(ref) != "path":
+                if classify_scope_entry(ref) != "path":
                     continue
-                normalized = _normalized_scope_path(ref)
+                normalized = normalized_scope_path(ref)
                 if normalized is not None and (root / normalized).exists():
                     continue
                 issues.append(
@@ -792,7 +614,7 @@ def _validate(
                 )
             )
 
-    resolution_index = _build_resolution_index(items)
+    resolution_index = build_resolution_index(items)
     by_path = {path: (product, spec) for path, product, spec in items}
 
     def _resolved(ref: str, source_path: str) -> str | None:
@@ -1025,7 +847,7 @@ def _summarize(items: list[tuple[str, Product, ArtifactSpec | None]]) -> Relatio
     if not items:
         return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
 
-    index = _build_resolution_index(items)
+    index = build_resolution_index(items)
     checked, ref_issues, resolved_targets = _resolve_references(items, index)
 
     broken = len(ref_issues)
@@ -1088,7 +910,7 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
     declaration order — matching ``_resolve_references``.
     """
     items = _entry_items(entries)
-    index = _build_resolution_index(items)
+    index = build_resolution_index(items)
     relationships: list[Relationship] = []
     for path, product, spec in items:
         if spec is None:
