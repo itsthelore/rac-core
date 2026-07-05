@@ -718,6 +718,34 @@ def _bm25f(
     avglen: dict[str, float],
 ) -> float:
     """A field-weighted BM25 score for one artifact over the query terms."""
+    return _bm25f_scored(
+        terms,
+        n,
+        df,
+        avglen,
+        tf_of=lambda term, name: _tf(term, fields.get(name, [])),
+        len_of=lambda name: len(fields.get(name, [])),
+    )
+
+
+def _bm25f_scored(
+    terms: Sequence[str],
+    n: int,
+    df: dict[str, int],
+    avglen: dict[str, float],
+    *,
+    tf_of: Callable[[str, str], int],
+    len_of: Callable[[str], int],
+) -> float:
+    """BM25F over supplied per-field tf and length lookups — the scoring seam (ADR-101).
+
+    The arithmetic and its summation order (outer over query terms, inner over
+    ``_FIELD_BOOSTS`` insertion order) are the single source of truth every scoring
+    path reuses. :func:`_bm25f` supplies token-list lookups; the persistent index
+    store supplies prefix-range/accumulator lookups. Because tf, df, n, and length
+    are integers, identical integers yield byte-identical floats however obtained,
+    so this factoring is behaviour-preserving for the token-list path.
+    """
     score = 0.0
     for term in terms:
         d = df.get(term, 0)
@@ -726,12 +754,12 @@ def _bm25f(
         idf = math.log(1 + (n - d + 0.5) / (d + 0.5))
         weighted_tf = 0.0
         for name, boost in _FIELD_BOOSTS.items():
-            tokens = fields.get(name, [])
-            tf = _tf(term, tokens)
+            tf = tf_of(term, name)
             if tf == 0:
                 continue
+            length = len_of(name)
             mean = avglen.get(name, 0.0)
-            denom = 1.0 - _BM25_B + _BM25_B * (len(tokens) / mean) if mean > 0 else 1.0
+            denom = 1.0 - _BM25_B + _BM25_B * (length / mean) if mean > 0 else 1.0
             weighted_tf += boost * (tf / denom)
         if weighted_tf > 0:
             score += idf * (weighted_tf / (_BM25_K1 + weighted_tf))
