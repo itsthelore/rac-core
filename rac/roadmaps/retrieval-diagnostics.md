@@ -129,3 +129,4 @@ behaviour.
 ## Related Tickets
 
 - itsthelore/rac-core#248
+- itsthelore/rac-core#314
