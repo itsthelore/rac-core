@@ -103,19 +103,26 @@ def validate(product: Product, *, ticketing_provider: str | None = None) -> list
     layer injects the repository's configured provider (ADR-088). Stays
     deterministic — a pure function of ``(product, ticketing_provider)``.
     """
-    issues = _validate_metadata(product)
-    issues += _validate_ticketing_references(product, ticketing_provider)
+    # Classify once and thread the result through every consumer. classify is a
+    # pure five-spec scoring pass; the metadata-conflict check, ticketing lint,
+    # and dispatch must all agree on one classification (a document on a
+    # score tie-break must not shift type between calls), so one call fixes it
+    # and also removes two redundant scoring passes per artifact.
     artifact_type = classify(product).type
-    if artifact_type == "decision":
-        return issues + _validate_decision(product)
+    spec = spec_for(artifact_type)  # None for an Unknown/legacy document
+    issues = _validate_metadata(product, spec)
+    issues += _validate_ticketing_references(product, spec, ticketing_provider)
+    # decision/prompt/design share the same structural spine — title, required
+    # sections, then constrained metadata last (ADR-060). roadmap does NOT: its
+    # horizon and advancement-link checks are appended *between* required sections
+    # and status metadata, so it keeps a bespoke arm to preserve emission order.
+    if artifact_type in ("decision", "prompt", "design"):
+        assert spec is not None  # every enumerated type has a spec
+        return issues + _validate_structural(product, spec)
     if artifact_type == "roadmap":
-        return issues + _validate_roadmap(product)
-    if artifact_type == "prompt":
-        return issues + _validate_prompt(product)
-    if artifact_type == "design":
-        return issues + _validate_design(product)
+        assert spec is not None  # the roadmap spec always exists
+        return issues + _validate_roadmap(product, spec)
     if artifact_type == "requirement":
-        spec = spec_for("requirement")
         assert spec is not None  # the requirement spec always exists
         return (
             issues
@@ -126,6 +133,24 @@ def validate(product: Product, *, ticketing_provider: str | None = None) -> list
     # Unknown/legacy fallback: requirement rules only, no constrained metadata or
     # per-type standards (an Unknown document is not linted as a requirement).
     return issues + _validate_requirement(product)
+
+
+def _validate_structural(product: Product, spec: ArtifactSpec) -> list[Issue]:
+    """The shared per-type structural spine (ADR-060): title, required sections,
+    constrained metadata — appended in that order.
+
+    decision/prompt/design are byte-for-byte this shape, so they route here
+    instead of each keeping an identical wrapper, and a new artifact type whose
+    validation is purely structural needs no bespoke arm. roadmap must NOT use
+    this helper: it appends horizon/advancement checks *before* status metadata,
+    so routing it here would move ``invalid-roadmap-status`` ahead of them and
+    break the frozen emission order.
+    """
+    return (
+        _validate_title(product)
+        + _validate_required_sections(product, spec)
+        + _validate_status_metadata(product, spec)
+    )
 
 
 def _validate_requirement_standards(product: Product) -> list[Issue]:
@@ -215,16 +240,17 @@ def _validate_status_metadata(product: Product, spec: ArtifactSpec) -> list[Issu
     return issues
 
 
-def _validate_metadata(product: Product) -> list[Issue]:
+def _validate_metadata(product: Product, spec: ArtifactSpec | None) -> list[Issue]:
     """Frontmatter envelope findings (ADR-025/026, v0.7.11).
 
     Parse and schema issues come from the parser; the identity conflict check
     (frontmatter ``id`` vs a differing legacy ``## ID`` / ``spec.id_field``
     declaration) is detected here because it needs the classified spec. RAC
-    never silently picks one identity (Initiative 7).
+    never silently picks one identity (Initiative 7). ``spec`` is the caller's
+    single classification result (``None`` for an Unknown document), so this
+    helper does not re-classify.
     """
     issues = list(product.metadata_issues) + list(product.parse_issues)
-    spec = spec_for(classify(product).type)
     conflict = identity_conflict(product, spec)
     if conflict is not None:
         frontmatter_id, legacy_id = conflict
@@ -240,7 +266,9 @@ def _validate_metadata(product: Product) -> list[Issue]:
     return issues
 
 
-def _validate_ticketing_references(product: Product, provider: str | None) -> list[Issue]:
+def _validate_ticketing_references(
+    product: Product, spec: ArtifactSpec | None, provider: str | None
+) -> list[Issue]:
     """Format-lint ``## Related Tickets`` against the configured provider (ADR-087).
 
     Each entry must be a well-formed key or URL for the repository's ticketing
@@ -248,14 +276,15 @@ def _validate_ticketing_references(product: Product, provider: str | None) -> li
     ticketing system; existence and state checks live in a satellite (ADR-090).
     No provider (``None`` or ``"none"``) means no lint: the edge still works, it
     is simply unvalidated. Only an artifact type that declares the section is
-    linted. Overridable per ADR-053 like any rule.
+    linted. Overridable per ADR-053 like any rule. ``spec`` is the caller's
+    single classification result (``None`` for an Unknown document), so this
+    helper does not re-classify.
     """
     if not provider or provider == "none":
         return []
     rule = TICKETING_PROVIDERS.get(provider)
     if rule is None:
         return []  # the config layer validates the name; be lenient here
-    spec = spec_for(classify(product).type)
     if spec is None or TICKETING_SECTION not in spec.optional:
         return []
     is_valid, label = rule
@@ -326,34 +355,20 @@ def _validate_required_sections(product: Product, spec: ArtifactSpec) -> list[Is
     return issues
 
 
-def _validate_decision(product: Product) -> list[Issue]:
-    """Validate a Decision artifact (REQ-001/002/006/007).
-
-    Missing metadata never fails (it is optional); only *invalid values* are
-    errors. Required sections (Context, Decision, Consequences) must be present.
-    """
-    spec = spec_for("decision")
-    assert spec is not None  # the decision spec always exists
-    issues = _validate_title(product)
-    issues += _validate_required_sections(product, spec)
-
-    # Constrained metadata (status, category): a present value must be in the
-    # allowed set. A missing section is fine — metadata is optional (REQ-007).
-    issues += _validate_status_metadata(product, spec)
-
-    return issues
-
-
-def _validate_roadmap(product: Product) -> list[Issue]:
+def _validate_roadmap(product: Product, spec: ArtifactSpec) -> list[Issue]:
     """Validate a Roadmap artifact (REQ-003).
 
     Required sections (Outcomes, Initiatives) must be present; missing recommended
     sections never fail. Status is an optional, validated lifecycle field
     (ADR-051: Planned/Superseded/Abandoned) — knowledge currency, never work or
     delivery state (ADR-017).
+
+    Not routed through :func:`_validate_structural`: the horizon and
+    advancement-link checks are appended *before* the constrained-metadata check,
+    so the emission order is title → required sections → horizon → advancement →
+    status metadata, which the shared spine (metadata last, no extras) cannot
+    reproduce.
     """
-    spec = spec_for("roadmap")
-    assert spec is not None  # the roadmap spec always exists
     issues = _validate_title(product)
     issues += _validate_required_sections(product, spec)
 
@@ -383,44 +398,6 @@ def _validate_roadmap(product: Product) -> list[Issue]:
                 "Roadmap links no ## Related Requirements or ## Related Decisions it advances.",
             )
         )
-
-    issues += _validate_status_metadata(product, spec)
-    return issues
-
-
-def _validate_prompt(product: Product) -> list[Issue]:
-    """Validate a Prompt artifact (REQ-006).
-
-    Required sections (Objective, Input, Instructions, Output) must be present;
-    missing recommended/optional sections never fail or warn. Status is an
-    optional, validated lifecycle field (ADR-051: Active/Deprecated); prompts are
-    never executed (REQ-011) — RAC treats them as knowledge.
-
-    Section presence is checked against the raw headings, consistent with the
-    Decision and Roadmap validators; the Prompt spec's synonyms are a
-    classification aid only, so validation still expects the canonical headings.
-    """
-    spec = spec_for("prompt")
-    assert spec is not None  # the prompt spec always exists
-    issues = _validate_title(product)
-    issues += _validate_required_sections(product, spec)
-
-    issues += _validate_status_metadata(product, spec)
-    return issues
-
-
-def _validate_design(product: Product) -> list[Issue]:
-    """Validate a Design artifact (v0.6.3).
-
-    Required sections (Context, User Need, Design, Constraints) must be present;
-    missing recommended/optional sections never fail or warn. Status is an
-    optional, validated lifecycle field (ADR-051); designs are knowledge
-    artifacts, not UI renderings or component systems.
-    """
-    spec = spec_for("design")
-    assert spec is not None  # the design spec always exists
-    issues = _validate_title(product)
-    issues += _validate_required_sections(product, spec)
 
     issues += _validate_status_metadata(product, spec)
     return issues
