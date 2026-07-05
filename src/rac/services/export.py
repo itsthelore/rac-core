@@ -46,7 +46,7 @@ from markdown_it import MarkdownIt
 
 import rac
 from rac.core.artifacts import ArtifactSpec, spec_for
-from rac.core.corpus import walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.frontmatter import split_frontmatter
 from rac.core.identity import artifact_identifier, artifact_identifiers
 from rac.core.models import Product
@@ -292,18 +292,59 @@ def _status(product: Product, spec: ArtifactSpec) -> str:
     return canonical_value(body, spec.metadata.get("status", ())) or STATUS_ABSENT
 
 
-def _render_body(path: str, md: MarkdownIt) -> str:
-    """Render the Markdown body after the frontmatter envelope to HTML."""
-    with open(path, encoding="utf-8") as fh:
-        text = fh.read()
-    return md.render(split_frontmatter(text).body)
-
-
 def _body_markdown(path: str) -> str:
-    """The artifact's Markdown body after the frontmatter envelope (no render)."""
+    """The artifact's Markdown body after the frontmatter envelope (no render).
+
+    The ``text``/``body_html`` contract is the artifact's *on-disk* bytes after
+    the frontmatter envelope — a raw re-read + :func:`split_frontmatter`, never
+    the parse's normalised body — so this deliberately reads the file itself
+    rather than reusing the walk's parsed product.
+    """
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     return split_frontmatter(text).body
+
+
+def _render_body(path: str, md: MarkdownIt) -> str:
+    """Render the Markdown body after the frontmatter envelope to HTML."""
+    return md.render(_body_markdown(path))
+
+
+@dataclass(frozen=True)
+class _WalkedEntry:
+    """One corpus entry from the shared export walk, paired with its type spec."""
+
+    entry: CorpusEntry
+    path: str
+    spec: ArtifactSpec | None  # None for Unknown-type files
+
+
+def _walk_entries(directory: str, recursive: bool) -> list[_WalkedEntry]:
+    """Walk and classify the corpus once — the pass every projection shares.
+
+    One :func:`walk_corpus` traversal (one parse per file), pairing each entry
+    with its resolved :class:`ArtifactSpec` (``None`` for Unknown). Callers
+    derive canonical identity and their node/document/artifact projection from
+    this; the viewer and documents projections read each classified file's raw
+    body separately, because ``text``/``body_html`` are the on-disk bytes after
+    the frontmatter envelope, not the parsed product body (see
+    :func:`_body_markdown`).
+    """
+    return [
+        _WalkedEntry(entry=entry, path=str(entry.path), spec=spec_for(entry.artifact_type))
+        for entry in walk_corpus(directory, recursive=recursive)
+    ]
+
+
+def _canonical_by_path(walked: list[_WalkedEntry]) -> dict[str, str]:
+    """Canonical identity for *every* entry — Unknown included — for edge resolution.
+
+    Built over the whole walk, not just the classified artifacts, so a reference
+    resolves here precisely when relationship validation resolves it; the viewer
+    and graph projections key their edges off this map. (The documents
+    projection has no edges, so it never builds this — it does strictly less.)
+    """
+    return {w.path: artifact_identifier(w.entry.product, w.spec, w.path) for w in walked}
 
 
 def build_corpus_export(directory: str, recursive: bool = True) -> CorpusExport:
@@ -314,30 +355,27 @@ def build_corpus_export(directory: str, recursive: bool = True) -> CorpusExport:
     reference resolves here precisely when ``--validate`` reports no issue
     for it.
     """
-    entries = list(walk_corpus(directory, recursive=recursive))
+    walked = _walk_entries(directory, recursive)
+    canonical_by_path = _canonical_by_path(walked)
     # The commonmark preset *enables* raw HTML (the spec includes it); the
     # Portal trust model requires it off, so sources arrive escaped.
     md = MarkdownIt("commonmark", {"html": False})
 
-    canonical_by_path: dict[str, str] = {}
     artifacts: list[ExportArtifact] = []
-    for entry in entries:
-        path = str(entry.path)
-        spec = spec_for(entry.artifact_type)  # None for Unknown
-        canonical = artifact_identifier(entry.product, spec, path)
-        canonical_by_path[path] = canonical
-        if spec is None:
+    for w in walked:
+        if w.spec is None:
             continue  # unknown files are not exported
-        meta = entry.product.metadata
+        canonical = canonical_by_path[w.path]
+        meta = w.entry.product.metadata
         artifacts.append(
             ExportArtifact(
                 id=canonical,
-                aliases=artifact_identifiers(entry.product, spec, path),
-                type=entry.artifact_type,
-                status=_status(entry.product, spec),
-                title=entry.product.title or canonical,
-                path=path,
-                body_html=_render_body(path, md),
+                aliases=artifact_identifiers(w.entry.product, w.spec, w.path),
+                type=w.entry.artifact_type,
+                status=_status(w.entry.product, w.spec),
+                title=w.entry.product.title or canonical,
+                path=w.path,
+                body_html=_render_body(w.path, md),
                 tags=meta.tags if meta else [],
             )
         )
@@ -347,7 +385,7 @@ def build_corpus_export(directory: str, recursive: bool = True) -> CorpusExport:
             from_=canonical_by_path[rel.source_path],
             to=(canonical_by_path[rel.resolved_path] if rel.resolved_path else rel.target),
         )
-        for rel in relationships_from_corpus(entries)
+        for rel in relationships_from_corpus([w.entry for w in walked])
     ]
     edges.sort(key=lambda edge: (edge.from_, edge.to))
 
@@ -366,24 +404,24 @@ def build_documents_export(directory: str, recursive: bool = True) -> DocumentsE
     invalid-but-recognizable artifacts project as classified — but emits the
     Markdown body and the verify-in-Lore metadata rather than the viewer's HTML.
     Artifacts arrive in sorted-path order, so the projection is deterministic.
+    This projection has no edges, so it resolves canonical identity only for the
+    classified artifacts it emits — strictly less than the viewer/graph walks.
     """
     documents: list[ExportDocument] = []
-    for entry in walk_corpus(directory, recursive=recursive):
-        path = str(entry.path)
-        spec = spec_for(entry.artifact_type)  # None for Unknown
-        if spec is None:
+    for w in _walk_entries(directory, recursive):
+        if w.spec is None:
             continue  # unknown files are not exported
-        canonical = artifact_identifier(entry.product, spec, path)
-        meta = entry.product.metadata
+        canonical = artifact_identifier(w.entry.product, w.spec, w.path)
+        meta = w.entry.product.metadata
         documents.append(
             ExportDocument(
                 id=canonical,
-                type=entry.artifact_type,
-                status=_status(entry.product, spec),
-                title=entry.product.title or canonical,
-                text=_body_markdown(path),
-                aliases=artifact_identifiers(entry.product, spec, path),
-                path=path,
+                type=w.entry.artifact_type,
+                status=_status(w.entry.product, w.spec),
+                title=w.entry.product.title or canonical,
+                text=_body_markdown(w.path),
+                aliases=artifact_identifiers(w.entry.product, w.spec, w.path),
+                path=w.path,
                 tags=meta.tags if meta else [],
             )
         )
@@ -399,30 +437,26 @@ def build_graph_export(directory: str, recursive: bool = True) -> GraphExport:
     unresolved references are kept with their literal target and ``resolved:
     False`` rather than dropped (REQ-004). Deterministic — no timestamps.
     """
-    entries = list(walk_corpus(directory, recursive=recursive))
+    walked = _walk_entries(directory, recursive)
     # The configured ticketing provider tags external edges (ADR-088); read once.
     provider = load_ticketing_provider(directory)
+    canonical_by_path = _canonical_by_path(walked)
 
-    canonical_by_path: dict[str, str] = {}
     nodes: list[GraphNode] = []
-    for entry in entries:
-        path = str(entry.path)
-        spec = spec_for(entry.artifact_type)  # None for Unknown
-        canonical = artifact_identifier(entry.product, spec, path)
-        canonical_by_path[path] = canonical
-        if spec is None:
+    for w in walked:
+        if w.spec is None:
             continue  # unknown files feed resolution but are not nodes
         nodes.append(
             GraphNode(
-                id=canonical,
-                type=entry.artifact_type,
-                status=_status(entry.product, spec),
-                title=entry.product.title or canonical,
+                id=canonical_by_path[w.path],
+                type=w.entry.artifact_type,
+                status=_status(w.entry.product, w.spec),
+                title=w.entry.product.title or canonical_by_path[w.path],
             )
         )
 
     edges: list[GraphEdge] = []
-    for rel in relationships_from_corpus(entries):
+    for rel in relationships_from_corpus([w.entry for w in walked]):
         kind = edge_spec(rel.relationship)
         external = kind.external if kind else False
         target = (
