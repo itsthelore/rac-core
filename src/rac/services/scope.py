@@ -31,12 +31,11 @@ from rac.core.artifacts import spec_for
 from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier
 from rac.services.agent_rules import artifact_status, is_live_decision
-from rac.services.relationships import (
-    SCOPE_SECTIONS,
-    _classify_scope_entry,
-    _normalized_scope_path,
-    _repository_root,
-    extract_relationships_full,
+from rac.services.references import SCOPE_SECTIONS, extract_relationships_full
+from rac.services.scope_paths import (
+    classify_scope_entry,
+    normalized_scope_path,
+    repository_root,
 )
 
 _DECISION_TYPE = "decision"
@@ -141,12 +140,12 @@ def _entry_covers(entry: str, query: str) -> bool:
     matches it segment-aware. Component-name entries never match a path (no
     registry this cycle). ``entry`` and ``query`` are POSIX repo-relative.
     """
-    kind = _classify_scope_entry(entry)
+    kind = classify_scope_entry(entry)
     if kind == "component":
         return False
     if kind == "glob":
         return _glob_to_regex(entry.strip()).match(query) is not None
-    normalized = _normalized_scope_path(entry)
+    normalized = normalized_scope_path(entry)
     if normalized is None:
         return False  # absolute/escaping declared entry cannot name an in-repo scope
     return query == normalized or query.startswith(normalized + "/")
@@ -215,7 +214,7 @@ def decisions_for_path(directory: str, path: str, recursive: bool = True) -> Sco
     byte-identical across runs and platforms (ADR-002). An ungoverned or
     outside-repository path yields an empty ``decisions`` list, never an error.
     """
-    root = _repository_root(directory)
+    root = repository_root(directory)
     query = _normalize_query(path, root)
     if query is None:
         return ScopeLookupResult(query=path.strip(), in_repository=False, decisions=[])
