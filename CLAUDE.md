@@ -100,4 +100,9 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWMZ3MR9DZ09** — ADR-099: Derived-Index Cache _(Technical)_
 - **RAC-KWV0HZ2SSGE2** — ADR-101: Org-Wide Documentation Site Amends Docs Hosting and Repository Topology _(Product)_
 - **RAC-KWV63BR8AW71** — ADR-102: Org-Site Brand Direction — Light, Restrained, Site Rhymes With Product UI _(Product)_
+- **RAC-KWS4Y9KCTD90** — ADR-100: Unified Derived Read-Model _(Architecture)_
+- **RAC-KWS7QCT10Q5A** — ADR-101: Persistent Mmap Index Store _(Architecture)_
+- **RAC-KWSDFYW7PCW6** — ADR-102: Event-Sourced Serving Freshness _(Technical)_
+- **RAC-KWSH9J2S7QB1** — ADR-103: Incremental Validation _(Architecture)_
+- **RAC-KWSJZJ30EN1J** — ADR-104: Parallel Cold Build of the Derived Index _(Architecture)_
 <!-- END RAC MANAGED BLOCK -->

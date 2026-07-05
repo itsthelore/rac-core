@@ -1,0 +1,95 @@
+---
+schema_version: 1
+id: RAC-KWSMFKEE9EQW
+type: roadmap
+---
+# Single-Node Scale Residuals
+
+## Status
+
+Planned
+
+Unscheduled — captures what the `rebuild-scale` exercise deliberately left
+on the table, each residual already named in an accepted decision record.
+This is the "needs a further decision or a further bundle" list, split from
+the delivered work so the delivered claims stay auditable.
+
+## Context
+
+The rebuild-scale roadmap landed five Movement-B bundles (ADR-100 through
+ADR-104): the unified derived read-model, the persistent memory-mapped
+index store, event-sourced serving freshness, incremental validation, and
+the parallel cold build. The operational serving paths became
+changeset-bound rather than corpus-bound, and each bundle recorded the
+walls it did not move. This item collects those residuals as future work
+so they are scheduled deliberately rather than rediscovered.
+
+## Outcomes
+
+- The cold full build approaches its ~2 minutes per million artifacts
+  budget (ADR-104 records the honest miss: ~15-19 minutes per million as
+  built, with parallel parse at 1.8x and a serial derive/write tail).
+- Search cost on a corpus with uncompacted changes matches the compacted
+  fast path, and the summary tool becomes change-bound rather than
+  corpus-bound on change.
+- The relationships subsystem gains the same incremental treatment
+  validation received.
+
+## Initiatives
+
+- Term-range-partitioned parallel merge for the cold build: workers emit
+  postings-run fragments and compact rows rather than parsed products,
+  removing both the pickling tax and the serial derive tail (the recovery
+  lever ADR-104 names).
+- Postings-served search over a non-empty delta window: fold delta
+  postings into candidate discovery so edited corpora keep the fast path
+  before compaction (the v1 scope note in the ADR-101 postings
+  subsection).
+- Change-bound summary derivation: incremental portfolio-summary inputs
+  so `get_summary` stops re-deriving over the whole corpus on change (the
+  stated O(N)-on-change residual in ADR-102's record).
+- Incremental relationships validation: build the declared-reference
+  index and transition-class recompute that ADR-103 records as
+  design-of-record for the relationships subsystem.
+- A public scope-matching seam so the read-model composer stops importing
+  the two private scope matchers (the coupling ADR-100's implementation
+  noted).
+- Broad-query streaming: revisit whether the full-ranked-order contract
+  can admit a bounded-heap evaluation without a byte break — a decision,
+  not an optimization, since the current contract makes it un-prunable.
+
+## Success Measures
+
+- The scalecorpus gate's cold-build budget passes at the top measured
+  corpus size, or the budget is revised by decision with the measured
+  ceiling recorded.
+- Warm search latency on a corpus with a non-empty delta window is within
+  2x of the compacted path at every measured size.
+- A 1,000-file changeset re-validates relationships in under 5 seconds,
+  corpus-size-independent, with byte-identical output.
+
+## Assumptions
+
+- The reference node remains the 4-core, 15 GiB single node; no sharding
+  and no external services remain hard scope lines.
+- The frozen examiner and the byte-parity law continue to gate every
+  change.
+
+## Risks
+
+- The parallel merge touches global derivations (inbound counts,
+  resolution, portfolio) whose byte-parity is the most fragile in the
+  system; ADR-104 deferred it for exactly that reason. It should ship as
+  its own bundle with parity tests per mutation class.
+
+## Related Decisions
+
+- RAC-KWS4Y9KCTD90
+- RAC-KWS7QCT10Q5A
+- RAC-KWSDFYW7PCW6
+- RAC-KWSH9J2S7QB1
+- RAC-KWSJZJ30EN1J
+
+## Related Roadmaps
+
+- rebuild-scale
