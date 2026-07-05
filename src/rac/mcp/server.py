@@ -15,10 +15,15 @@ and shapes their results for the wire. It re-implements no parsing, resolution,
 relationship extraction, or scoring, and imports no write-capable service. The
 isolation battery (``tests/test_mcp_isolation.py``) enforces both.
 
-Every tool call re-reads the repository from disk (ADR-032): there is no cache,
-no file watcher, and no session state. Identical repository bytes and identical
-input produce identical output, within the per-response character budget
-(ADR-033, see :mod:`rac.mcp.budget`).
+By default every tool call re-reads the repository from disk (ADR-032): no cache,
+no file watcher, no session state. With the opt-in ``--cache`` a server-lifetime
+:class:`~rac.services.freshness.FreshnessTracker` keeps the derived read-model
+fresh by event-sourced change detection instead of the per-call whole-corpus
+re-hash (ADR-102), so warm serving latency stops scaling with corpus size — and
+every response stays byte-identical to a fresh disk walk of the current corpus.
+Either way, identical repository bytes and identical input produce identical
+output, within the per-response character budget (ADR-033, see
+:mod:`rac.mcp.budget`).
 
 Failed lookups return structured error data, never protocol exceptions
 (ADR-034, :mod:`rac.mcp.errors`): an agent recovers from a JSON body.
@@ -70,6 +75,7 @@ from rac.services.derived_cache import (
     build_derived_index,
     governing_decisions,
 )
+from rac.services.freshness import FreshnessTracker
 from rac.services.index import IndexEntry, build_repository_index, index_from_corpus
 from rac.services.recency import annotate_search_recency, artifact_provenance
 from rac.services.relationships import (
@@ -188,49 +194,51 @@ def _read_content(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-def _read_model(root: str, cache: DerivedIndexCache | None) -> CorpusReadModel:
-    """The derived read-model for one call: cached under a key, or built fresh (ADR-100).
+def _read_model(root: str, reader: FreshnessTracker | None) -> CorpusReadModel:
+    """The derived read-model for one call: freshness-tracked, or built fresh (ADR-100).
 
-    One composer serves both cache modes. With ``cache`` set the bundle comes from
-    the content-addressed store as a lazily materialised view (ADR-099/ADR-101);
-    with ``cache`` None the read-model is built fresh every call (ADR-032, the
-    default), byte-identically. ``get_summary`` and ``find_decisions`` path mode
-    reach the same structures every other tool uses, instead of their own walks.
+    One composer serves both cache modes. With ``reader`` set the bundle is the
+    freshness tracker's current read-model — served from the memory-mapped base or
+    the re-derived delta snapshot, kept current by event-sourced detection
+    (ADR-101/ADR-102). With ``reader`` None the read-model is built fresh every
+    call (ADR-032, the default), byte-identically. ``get_summary`` and
+    ``find_decisions`` path mode reach the same structures every other tool uses,
+    instead of their own walks.
     """
-    if cache is not None:
-        return cache.load_or_build(root)
+    if reader is not None:
+        return reader.read_model()
     return build_derived_index(root)
 
 
-def _index_entries(root: str, cache: DerivedIndexCache | None) -> list[IndexEntry]:
-    """The identity rows resolution reads, from the index store or a fresh walk.
+def _index_entries(root: str, reader: FreshnessTracker | None) -> list[IndexEntry]:
+    """The identity rows resolution reads, from the tracked read-model or a fresh walk.
 
-    With ``cache`` set the rows come from the store's point-accessed identity
+    With ``reader`` set the rows come from the store's point-accessed identity
     projection (ADR-101) — id/type/title/path/aliases only, so resolution never
     maps the section or token pages — byte-identical to the fields the full walk
-    exposes, since resolution reads only aliases and path. With ``cache`` None the
+    exposes, since resolution reads only aliases and path. With ``reader`` None the
     serving path is exactly as before (ADR-032): a fresh index build every call.
     """
-    if cache is not None:
-        return cache.load_or_build(root).identity_entries
+    if reader is not None:
+        return reader.read_model().identity_entries
     return build_repository_index(root, recursive=True).artifacts
 
 
 def _resolve(
-    root: str, artifact_id: str, cache: DerivedIndexCache | None = None
+    root: str, artifact_id: str, reader: FreshnessTracker | None = None
 ) -> ResolutionResult:
     """Resolve ``artifact_id`` against the repository index (ADR-032).
 
     Uses the repository index and the resolver's in-index semantics so a single
     walk serves both resolution and any follow-on shaping the tool needs.
     """
-    return resolve_in_index(_index_entries(root, cache), artifact_id)
+    return resolve_in_index(_index_entries(root, reader), artifact_id)
 
 
 def _get_artifact(
-    root: str, artifact_id: str, budget: int, cache: DerivedIndexCache | None = None
+    root: str, artifact_id: str, budget: int, reader: FreshnessTracker | None = None
 ) -> str:
-    result = _resolve(root, artifact_id, cache)
+    result = _resolve(root, artifact_id, reader)
     if result.outcome != OUTCOME_RESOLVED or result.artifact is None:
         return serialize(errors.from_resolution(result), budget)
     try:
@@ -264,10 +272,10 @@ def _search_artifacts(
     query: str,
     artifact_type: str | None,
     budget: int,
-    cache: DerivedIndexCache | None = None,
+    reader: FreshnessTracker | None = None,
 ) -> str:
-    if cache is not None:
-        derived = cache.load_or_build(root)
+    if reader is not None:
+        derived = reader.read_model()
         result = search_index(
             derived.index_entries,
             query,
@@ -288,7 +296,7 @@ def _find_decisions(
     topic: str,
     path: str | None,
     budget: int,
-    cache: DerivedIndexCache | None = None,
+    reader: FreshnessTracker | None = None,
 ) -> str:
     """Live decisions binding a ``topic`` — or governing a code ``path``.
 
@@ -304,10 +312,10 @@ def _find_decisions(
         # Path mode builds through the same read-model as every other tool
         # (ADR-100), served from precomputed scope rows — byte-identical to
         # ``decisions_for_path`` in both cache modes.
-        derived = _read_model(root, cache)
+        derived = _read_model(root, reader)
         return serialize(governing_decisions(derived.scope_rows, root, path).to_dict(), budget)
-    if cache is not None:
-        derived = cache.load_or_build(root)
+    if reader is not None:
+        derived = reader.read_model()
         result = find_decisions_in(
             derived.index_entries,
             derived.live_decision_paths,
@@ -324,7 +332,7 @@ def _find_decisions(
 
 
 def _get_related(
-    root: str, artifact_id: str, budget: int, depth: int = 1, cache: DerivedIndexCache | None = None
+    root: str, artifact_id: str, budget: int, depth: int = 1, reader: FreshnessTracker | None = None
 ) -> str:
     # One corpus snapshot feeds resolution, outgoing, and incoming, so the whole
     # response reflects a single atomic view of the repository (ADR-032): there
@@ -332,8 +340,8 @@ def _get_related(
     # derived-index cache (ADR-099) the index and relationship graph come from
     # one content-addressed snapshot; without it, one fresh walk feeds both.
     # Either way the two are from the same snapshot and the output is identical.
-    if cache is not None:
-        derived = cache.load_or_build(root)
+    if reader is not None:
+        derived = reader.read_model()
         # get_related reads only identity (resolve + id/type/title/path map) and the
         # relationship graph — never sections or inbound counts — so the store's
         # point-accessed identity rows serve it without mapping the token/section
@@ -404,11 +412,11 @@ def _get_related(
     return serialize(payload, budget)
 
 
-def _get_summary(root: str, budget: int, cache: DerivedIndexCache | None = None) -> str:
+def _get_summary(root: str, budget: int, reader: FreshnessTracker | None = None) -> str:
     # The portfolio summary builds through the one read-model composer (ADR-100),
-    # cache-backed or fresh — byte-identical to ``build_portfolio_summary``. A
+    # tracker-backed or fresh — byte-identical to ``build_portfolio_summary``. A
     # shallow copy so the additive guidance key never mutates a cached bundle.
-    payload = dict(_read_model(root, cache).portfolio_summary)
+    payload = dict(_read_model(root, reader).portfolio_summary)
     # Additive empty-state pointer (v0.13.1, ADR-007): a cold agent session
     # against a fresh repository is told how the user begins authoring, rather
     # than just seeing zeros. ``empty`` is ``total_artifacts == 0`` on the dict.
@@ -437,12 +445,20 @@ def build_server(
     (ADR-084): with both ``None`` — the default — nothing is recorded and every
     call is exactly the bare tool body. ``cache`` enables the derived-index cache
     (ADR-099): with ``None`` — the default — every tool re-reads and rebuilds from
-    disk (ADR-032); with a cache, the expensive derived structures are reused
-    under an unchanged corpus content hash, byte-identically. The returned
+    disk (ADR-032); with a cache, a server-lifetime
+    :class:`~rac.services.freshness.FreshnessTracker` keeps the derived structures
+    current by event-sourced change detection instead of the per-call whole-corpus
+    re-hash (ADR-102), byte-identically to a fresh walk. The returned
     :class:`FastMCP` instance has the five pinned tools registered and is ready to
     run over any transport — the CLI runs it over stdio.
     """
     server: FastMCP = FastMCP(SERVER_NAME)
+
+    # The freshness tracker is the read-model source under the cache: server-lifetime
+    # state that supersedes ADR-032's per-call re-read for the opt-in cache path
+    # (ADR-102). Off by default — with ``cache`` None every closure below builds
+    # fresh from disk on each call, exactly ADR-032.
+    reader: FreshnessTracker | None = FreshnessTracker(cache, root) if cache is not None else None
 
     def observed(
         tool: str, args: dict, call: Callable[[], str], principal: str | None = None
@@ -464,7 +480,7 @@ def build_server(
         return observed(
             "get_artifact",
             {"id": id},
-            lambda: _get_artifact(root, id, budget, cache),
+            lambda: _get_artifact(root, id, budget, reader),
             _request_principal(ctx),
         )
 
@@ -473,7 +489,7 @@ def build_server(
         return observed(
             "search_artifacts",
             {"query": query, "type": type},
-            lambda: _search_artifacts(root, query, type, budget, cache),
+            lambda: _search_artifacts(root, query, type, budget, reader),
             _request_principal(ctx),
         )
 
@@ -485,7 +501,7 @@ def build_server(
         return observed(
             "find_decisions",
             args,
-            lambda: _find_decisions(root, topic, path, budget, cache),
+            lambda: _find_decisions(root, topic, path, budget, reader),
             _request_principal(ctx),
         )
 
@@ -494,14 +510,14 @@ def build_server(
         return observed(
             "get_related",
             {"id": id, "depth": depth},
-            lambda: _get_related(root, id, budget, depth, cache),
+            lambda: _get_related(root, id, budget, depth, reader),
             _request_principal(ctx),
         )
 
     @server.tool(name="get_summary", description=DESC_GET_SUMMARY)
     def get_summary(ctx: Context) -> str:
         return observed(
-            "get_summary", {}, lambda: _get_summary(root, budget, cache), _request_principal(ctx)
+            "get_summary", {}, lambda: _get_summary(root, budget, reader), _request_principal(ctx)
         )
 
     return server
