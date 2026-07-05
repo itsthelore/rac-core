@@ -63,16 +63,19 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from rac.core.classification import classify
 from rac.core.corpus import CorpusEntry, content_hash
 from rac.core.fs import find_markdown_files
-from rac.core.markdown import parse_file
 from rac.services.derived_cache import (
     SCHEMA_VERSION,
     CorpusReadModel,
     DerivedIndex,
     DerivedIndexCache,
     build_derived_index_from_entries,
+)
+from rac.services.parallel_build import (
+    BuildStats,
+    emit_build_timing,
+    parallel_parse_paths,
 )
 
 # Detection modes, worst-rung last — the fallback ladder made explicit so a
@@ -408,6 +411,12 @@ class FreshnessTracker:
         self._base_hash: str | None = None
         self._base_generation = 0
         self._delta_paths: set[str] = set()
+        # ADR-104 RSS finalization: after compaction the resident parsed snapshot
+        # (`_entries`) is shed and the mmap base becomes the whole answer. This flag
+        # records that shed state so the next change repopulates the snapshot by a
+        # re-parse on demand rather than assuming the (now empty) dict is complete.
+        self._snapshot_shed = False
+        self._last_parse_workers = 1
 
         self._watcher: INotifyWatcher | None = None
         self._mode = MODE_STAT
@@ -447,12 +456,37 @@ class FreshnessTracker:
         re-derives the read-model, byte-identically to a fresh walk. An unchanged
         corpus returns the cached read-model with no re-hash and no re-derive.
         """
+        cold = self._read_model is None
         changed = self._detect(verify=verify)
         if not changed and self._read_model is not None:
             return self._read_model
+        if not cold:
+            self._apply(changed)
+            self._rebuild_read_model()
+            self._maybe_compact()
+            assert self._read_model is not None
+            return self._read_model
+        # Cold start: the whole corpus is parsed from nothing. Time the three cold
+        # phases (parallel parse, derive, store write) and emit the RAC_TIMING
+        # scorecard line, mirroring the cache's cold-build line (ADR-104).
+        import time
+
+        parse_start = time.perf_counter()
         self._apply(changed)
+        derive_start = time.perf_counter()
         self._rebuild_read_model()
+        write_start = time.perf_counter()
         self._maybe_compact()
+        end = time.perf_counter()
+        emit_build_timing(
+            BuildStats(
+                files=len(self._manifest),
+                workers=self._last_parse_workers,
+                parse_ms=(derive_start - parse_start) * 1000.0,
+                derive_ms=(write_start - derive_start) * 1000.0,
+                write_ms=(end - write_start) * 1000.0,
+            )
+        )
         assert self._read_model is not None
         return self._read_model
 
@@ -491,17 +525,34 @@ class FreshnessTracker:
     # --- applying the changed set --------------------------------------------
 
     def _apply(self, changed: set[str]) -> None:
-        """Re-parse only the changed files; drop the removed; update the window."""
+        """Re-parse only the changed files; drop the removed; update the window.
+
+        Two regimes:
+
+        - **Snapshot resident** (the common case): re-parse just the changed,
+          still-present files and splice them into ``_entries``; drop the removed.
+          The cold start is this regime with ``changed`` equal to the whole corpus,
+          so the initial full parse is fanned across processes (ADR-104).
+        - **Snapshot shed** (the call after a compaction dropped ``_entries`` to
+          reclaim RSS): the dict is empty, so the changed set alone would leave the
+          unchanged files unrepresented. Repopulate the whole snapshot by re-parsing
+          the current tree — the on-demand re-parse the shed traded for the RSS win.
+          The re-parsed bytes already reflect ``changed``, so no separate splice is
+          needed.
+        """
         current = set(self._manifest)
-        for rel in changed:
-            if rel not in current:
-                self._entries.pop(rel, None)  # removed
-                continue
-            path = self._root / rel
-            product = parse_file(str(path))
-            self._entries[rel] = CorpusEntry(
-                path=path, product=product, classification=classify(product)
-            )
+        if self._snapshot_shed:
+            self._reparse_full()
+            self._snapshot_shed = False
+        else:
+            present = [rel for rel in changed if rel in current]
+            for rel in changed:
+                if rel not in current:
+                    self._entries.pop(rel, None)  # removed
+            parsed, workers = parallel_parse_paths([self._root / rel for rel in present])
+            self._last_parse_workers = workers
+            for entry in parsed:
+                self._entries[_relposix(self._root, entry.path)] = entry
         # Drop any snapshot entry no longer enumerated (defensive; removals above
         # already cover the common path).
         for rel in list(self._entries):
@@ -510,6 +561,21 @@ class FreshnessTracker:
         if changed:
             self._delta_paths |= changed
         self._hash = _corpus_hash_from_manifest(self._root, self._manifest)
+
+    def _reparse_full(self) -> None:
+        """Rebuild the full parsed snapshot from the current manifest (parallel).
+
+        Used on cold start (via ``_apply`` when ``_snapshot_shed`` was never set,
+        the manifest is empty and this is skipped — the changed set covers all) and,
+        crucially, after a shed: the mmap base holds derived rows but not parsed
+        Products, so the snapshot the fold re-derives from is rebuilt by re-parsing
+        the current tree. Byte-parity is preserved because the parse is of the exact
+        current bytes, in the same order the serial walk would yield.
+        """
+        rels = list(self._manifest)
+        parsed, workers = parallel_parse_paths([self._root / rel for rel in rels])
+        self._last_parse_workers = workers
+        self._entries = {_relposix(self._root, entry.path): entry for entry in parsed}
 
     def _ordered_entries(self) -> list[CorpusEntry]:
         """The snapshot in ``find_markdown_files`` order — the fresh-walk order."""
@@ -580,6 +646,13 @@ class FreshnessTracker:
         self._base_hash = self._hash
         self._base_generation += 1
         self._delta_paths.clear()
+        # ADR-104 RSS finalization: the base for this hash is now on disk and the
+        # served read-model is the mmap view, so the resident parsed Products are
+        # redundant — shed them and re-serve from the base. Unchanged reads then hold
+        # no whole-corpus snapshot; the next change re-parses on demand (`_apply`'s
+        # shed branch). This retires the resident-snapshot residual ADR-102 named.
+        self._entries = {}
+        self._snapshot_shed = True
 
     # --- lifecycle ------------------------------------------------------------
 

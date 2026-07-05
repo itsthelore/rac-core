@@ -427,8 +427,23 @@ class DerivedIndexCache:
             # writes a fresh store rather than skipping the unusable directory. The
             # answer is still fresh either way — this only restores the cache.
             remove_store(self.cache_dir, corpus_hash)
-        derived = build_derived_index(directory, recursive=recursive)
-        if self._write_marker(corpus_hash, self._write_store(corpus_hash, derived)):
+        # Cold miss: build the store from nothing with a parallel parse (ADR-104).
+        # Byte-identical to the serial build — the parse is fanned across processes
+        # but produces the same sorted-path snapshot the serial derive consumes — so
+        # the store written here equals a single-process build's, only faster to
+        # produce. The default no-cache CLI paths keep calling build_derived_index
+        # directly (single-process, one-shot); parallelism lives on this cached path
+        # where the up-front fork cost is amortised into a persisted store.
+        import time
+
+        from rac.services.parallel_build import build_derived_index_parallel, emit_build_timing
+
+        derived, stats = build_derived_index_parallel(directory, recursive=recursive)
+        write_start = time.perf_counter()
+        store_written = self._write_store(corpus_hash, derived)
+        stats.write_ms = (time.perf_counter() - write_start) * 1000.0
+        emit_build_timing(stats)
+        if self._write_marker(corpus_hash, store_written):
             view = open_read_model(self.cache_dir, corpus_hash, SCHEMA_VERSION)
             if view is not None:
                 return view
