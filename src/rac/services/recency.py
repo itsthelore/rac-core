@@ -411,9 +411,17 @@ def last_committed_for_paths(directory: str, paths: Iterable[str]) -> dict[str, 
     the staleness join layers a threshold on top of the same values.
     """
     repo_root = _repository_root(directory)
+    # De-duplicate before spawning git: a repeated path (search matches can carry
+    # the same artifact twice; the drift caller passes a set) must cost one
+    # ``git log`` process, not one per occurrence. ``dict.fromkeys`` preserves
+    # first-occurrence order, so the returned mapping is byte-identical to the
+    # per-path comprehension — a dict already collapses duplicate keys, and git
+    # state is fixed within the call, so the dropped repeats produced the same
+    # value (REQ-005).
+    unique_paths = list(dict.fromkeys(paths))
     if repo_root is None:
-        return {path: None for path in paths}
-    return {path: _last_committed(repo_root, path) for path in paths}
+        return {path: None for path in unique_paths}
+    return {path: _last_committed(repo_root, path) for path in unique_paths}
 
 
 def recency_for_paths(
