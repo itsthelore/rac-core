@@ -43,7 +43,6 @@ from rac.services.relationships import (
     ISSUE_RELATIONSHIP_CYCLE,
     RELATIONSHIP_SEVERITY,
     RelationshipIssue,
-    inbound_counts_from_corpus,
     relationships_from_corpus,
     validate_relationships,
 )
@@ -271,14 +270,21 @@ def _degree_findings(entries: list[CorpusEntry], hub_threshold: int) -> list[Doc
     a known artifact that is never a resolved target — so it cannot drift.
     """
     known_paths = {str(e.path) for e in entries if spec_for(e.artifact_type) is not None}
-    # Inbound is the shared canonical signal (also the search graph boost, ADR-078)
-    # so the orphan count cannot drift from it; outbound is doctor's own one pass.
-    counts = inbound_counts_from_corpus(entries)
-    inbound: dict[str, int] = {p: counts.get(p, 0) for p in known_paths}
+    # One relationship resolution feeds both degrees. Inbound was previously
+    # taken from ``inbound_counts_from_corpus`` (which builds the graph once
+    # internally) and then the graph was built a *second* time here for outbound;
+    # the same snapshot is now resolved once. Inbound is tallied here exactly as
+    # ``inbound_counts_from_corpus`` does — resolved edges counted by target — so
+    # the orphan signal stays byte-identical to that canonical primitive (and thus
+    # to the portfolio's, the parity pinned by test_doctor). Outbound is doctor's
+    # own one pass over the same edges.
+    inbound: dict[str, int] = {p: 0 for p in known_paths}
     outbound: dict[str, int] = {p: 0 for p in known_paths}
     for rel in relationships_from_corpus(entries):
         if rel.resolved_path is None:  # only resolved (unique, non-self) edges
             continue
+        if rel.resolved_path in inbound:
+            inbound[rel.resolved_path] += 1
         if rel.source_path in outbound:
             outbound[rel.source_path] += 1
 
