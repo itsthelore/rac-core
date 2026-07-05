@@ -48,7 +48,7 @@ class CorpusNotEmpty(RACError):
     an existing corpus is never scaffolded over.
     """
 
-    def __init__(self, directory: str, sample_path: str):
+    def __init__(self, directory: str, sample_path: str) -> None:
         self.directory = directory
         self.sample_path = sample_path
         super().__init__(
