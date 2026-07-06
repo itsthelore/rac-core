@@ -8,7 +8,7 @@ tags: [org, docs, branding, design]
 
 ## Status
 
-Proposed
+Accepted
 
 ## Category
 
