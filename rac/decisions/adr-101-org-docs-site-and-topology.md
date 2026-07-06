@@ -8,7 +8,7 @@ tags: [structure, org, docs, hosting]
 
 ## Status
 
-Proposed
+Accepted
 
 ## Category
 

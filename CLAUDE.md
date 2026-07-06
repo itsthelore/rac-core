@@ -98,4 +98,6 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWFVA38YT2C0** — ADR-097: Benchmark Family Contract _(Technical)_
 - **RAC-KWMW45KXHZJP** — ADR-098: Shared HTTP MCP Serving _(Architecture)_
 - **RAC-KWMZ3MR9DZ09** — ADR-099: Derived-Index Cache _(Technical)_
+- **RAC-KWV0HZ2SSGE2** — ADR-101: Org-Wide Documentation Site Amends Docs Hosting and Topology _(Product)_
+- **RAC-KWV63BR8AW71** — ADR-102: Org-Site Brand Direction — Light, Restrained, Site Rhymes With Product UI _(Product)_
 <!-- END RAC MANAGED BLOCK -->
