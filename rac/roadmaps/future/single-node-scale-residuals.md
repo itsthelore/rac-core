@@ -37,10 +37,15 @@ so they are scheduled deliberately rather than rediscovered.
 
 ## Initiatives
 
-- Term-range-partitioned parallel merge for the cold build: workers emit
-  postings-run fragments and compact rows rather than parsed products,
-  removing both the pickling tax and the serial derive tail (the recovery
-  lever ADR-104 names).
+- Term-range-partitioned parallel merge and STREAMING segment writes for
+  the cold build: workers emit postings-run fragments and compact rows
+  rather than parsed products, and segments flush incrementally instead of
+  materializing the whole derived model in memory first. The final 1M
+  measurement makes this the top residual: the build was OOM-killed at
+  15.9 GiB on the 15 GiB node — the store serves within budget at every
+  size it can be built, but at one million artifacts it cannot be built on
+  the reference node as shipped (the cold path also runs ~5.7x over the
+  120 s/1M budget where it completes).
 - Postings-served search over a non-empty delta window: fold delta
   postings into candidate discovery so edited corpora keep the fast path
   before compaction (the v1 scope note in the ADR-101 postings
@@ -54,6 +59,16 @@ so they are scheduled deliberately rather than rediscovered.
 - A public scope-matching seam so the read-model composer stops importing
   the two private scope matchers (the coupling ADR-100's implementation
   noted).
+- Changed-set detection below the stat floor for one-shot CLI runs: the
+  1M measurement shows recompute flat at 3.0 s for a 1,000-file changeset
+  but stat detection at 17.9 s — the O(files) slope ADR-103 records fails
+  the 5 s gate past a few hundred thousand files without a service mode
+  or a git/fsmonitor fast path; that fast path is the initiative.
+- Graph-read and per-match constants: get_related sits 2 ms over the
+  30 ms p50 budget at 100k (the Theta(edges) incoming-scan), and match
+  scoring costs ~1.6 ms per matching document against legacy's ~3 ms/match
+  resident-vector scan only at moderate sizes — batch row reconstruction
+  is the lever for both.
 - Broad-query streaming: revisit whether the full-ranked-order contract
   can admit a bounded-heap evaluation without a byte break — a decision,
   not an optimization, since the current contract makes it un-prunable.
