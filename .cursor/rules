@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: 94fca31da6f1e31641a3f2ab086ecdd00d58a945930de99d13c1f6475d411c2a) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 5846c984085517b483f6d6b2e0a9a6ebb479eec76baaca520d57209738e7a3ec) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -73,4 +73,6 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWFVA38YT2C0** — ADR-097: Benchmark Family Contract _(Technical)_
 - **RAC-KWMW45KXHZJP** — ADR-098: Shared HTTP MCP Serving _(Architecture)_
 - **RAC-KWMZ3MR9DZ09** — ADR-099: Derived-Index Cache _(Technical)_
+- **RAC-KWV0HZ2SSGE2** — ADR-101: Org-Wide Documentation Site Amends Docs Hosting and Repository Topology _(Product)_
+- **RAC-KWV63BR8AW71** — ADR-102: Org-Site Brand Direction — Light, Restrained, Site Rhymes With Product UI _(Product)_
 <!-- END RAC MANAGED BLOCK -->
