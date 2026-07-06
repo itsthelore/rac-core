@@ -32,8 +32,9 @@ Each bundle artifact also carries OKF's descriptive fields where RAC has them
 declare `tags: [...]`), and `created`/`updated` derived from git history — first
 and last commit. Timestamps are never stored in the source frontmatter; recency
 is git-derived (ADR-045), so the source stays date-free while the bundle is fully
-timestamped. RAC does not project a frontmatter `title` (it derives from the H1)
-or a `description`.
+timestamped. RAC does not project a frontmatter `title` or a `description`;
+both are OKF-optional, and a consumer without a `title` MAY derive one from the
+filename (OKF §4.1).
 
 ## Type mapping (normative)
 
