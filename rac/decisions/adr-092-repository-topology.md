@@ -16,6 +16,12 @@ Architecture
 
 ## Context
 
+> **Extended by ADR-101.** ADR-101 adds `itsthelore.github.io` to the target
+> topology below as the org's documentation-aggregation site — its own repo
+> per GitHub's root-Pages naming rule, not a family-pattern member. That ADR
+> governs the site's hosting and vendoring model; this ADR governs its place
+> in the topology and naming.
+
 ADR-064 and ADR-068 set the first repository topology for the `itsthelore`
 organisation: a `lore-*` / `rac-*` split (install-surface vs engine), per-action
 repos (`lore-watchkeeper`, `lore-gatekeeper`), a per-client repo rule
@@ -84,6 +90,7 @@ Distinct products keep their own brand and naming (`wayfinder-router`,
 | `rac-editors` | IDE clients | `vscode/` (VS Code/Cursor) (+ `jetbrains/`, …) |
 | `wayfinder-router` | separate product (ADR-069) | — |
 | `proofkeeper` | separate product (BYO-model QA agent) | — |
+| `itsthelore.github.io` | org presence + docs aggregation (ADR-101) | — |
 
 `rac-connectors` is the rename of the existing `lore-connectors`; `rac-ci` is the
 rename/absorption of `rac-actions` plus the standalone `lore-watchkeeper` /
@@ -204,6 +211,8 @@ Flip ADR-068 to Superseded in this change.
 - ADR-069: Wayfinder is a separate product; Proofkeeper is its sibling.
 - ADR-029, ADR-039: engine + server stay one package; CLI `rac` and server `lore`
   identities unchanged.
+- ADR-101: adds `itsthelore.github.io` to this table and governs its docs
+  hosting and vendoring model, including retiring `rac-core`'s project page.
 
 ## Related Decisions
 
@@ -216,6 +225,7 @@ Flip ADR-068 to Superseded in this change.
 - adr-063
 - adr-066
 - adr-069
+- adr-101
 
 ## Related Roadmaps
 

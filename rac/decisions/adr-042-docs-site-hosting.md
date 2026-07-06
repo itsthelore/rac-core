@@ -15,6 +15,15 @@ Product
 
 ## Context
 
+> **Amended by ADR-101.** This ADR's project-page hosting model — `rac-core`
+> publishing its own `docs/` to `itsthelore.github.io/rac-core/` via its own
+> `docs.yml` — is retired in favor of an org-wide umbrella site
+> (`itsthelore.github.io`) that vendors `docs/` from each product repo at
+> build time. ADR-101 governs where the two differ (the publishing repo and
+> mechanism); this ADR's authoritative-source and build-artifact discipline
+> (repository Markdown is canonical, the site is never a second source of
+> truth, the `rac/` corpus stays unpublished) carries forward unchanged.
+
 ADR-022 established three documentation layers — README as doorway,
 `docs/` as user documentation, `rac/` as the product-knowledge corpus —
 and committed to repository Markdown as the canonical documentation
@@ -120,6 +129,7 @@ by publishing them.
 - ADR-018
 - ADR-036
 - ADR-001
+- ADR-101
 
 ## Related Designs
 
