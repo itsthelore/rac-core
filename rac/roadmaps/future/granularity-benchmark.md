@@ -54,10 +54,22 @@ them by heading and search the chunks lexically.
 - Family-contract scoring — precision and recall at cut-offs, mean
   reciprocal rank, and full-list must-not-return violations — reported per
   arm per size as an evidence run, never a merge gate.
+- Validity isolation: a third arm running the member's own lexical ranker
+  over the per-artifact rendering, so the granularity comparison shares one
+  ranker, and a fourth canon arm that parses the verbatim superseded-status
+  lines — the strongest treatment the monolithic rendering supports.
+- Named selectivity: a deterministic coined term per decision chain, woven
+  into titles and prose, so half the query set stays discriminating at any
+  corpus size while the topical half keeps the saturation series visible.
+- Seed variance: the ladder runs at several seeds and reports mean, spread,
+  and whether each pairwise delta's sign holds across seeds.
 
 ## Success Measures
 
 - Two runs on an unchanged corpus produce byte-identical metrics blocks.
+- The granularity claim is stated from the shared-ranker pair, the typed
+  engine's value from the engine-versus-shared-ranker pair, and no delta is
+  claimed unless its sign is stable across seeds.
 - Every metric is reported in both directions honestly, including any the
   canon arm wins; the result table shows the per-size curve for each arm.
 
