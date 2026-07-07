@@ -146,9 +146,13 @@ jobs:
           # adds test_b5_scale_hardening.py — the parallel cold build's worker-count
           # determinism (byte-identical store + serving), parse-semantics parity,
           # post-compaction snapshot-shed RSS bound, worker-crash serial fallback,
-          # and the RAC_TIMING line shape.
+          # and the RAC_TIMING line shape. Bundle B6 (ADR-108) adds
+          # test_b6_parallel_merge.py — the fragment-merge fan-out's per-mutation-class
+          # byte-parity against the serial derive (resolution outcomes, duplicate
+          # identity, range/status, tag-only, scope/live, cross-chunk and uneven
+          # partitions), in-process and end-to-end across a real worker split.
           - name: characterization
-            paths: "tests/test_char_enforce.py tests/test_char_retrieve.py tests/test_char_graph.py tests/test_char_report.py tests/test_char_mcp.py tests/test_char_author.py tests/test_char_compare.py tests/test_char_ingest.py tests/test_char_ops.py tests/test_char_core.py tests/test_b1_read_model.py tests/test_b2_index_store.py tests/test_b3_freshness.py tests/test_b3b_postings_search.py tests/test_b4_incremental_validate.py tests/test_b5_scale_hardening.py tests/test_b5b_point_resolution.py"
+            paths: "tests/test_char_enforce.py tests/test_char_retrieve.py tests/test_char_graph.py tests/test_char_report.py tests/test_char_mcp.py tests/test_char_author.py tests/test_char_compare.py tests/test_char_ingest.py tests/test_char_ops.py tests/test_char_core.py tests/test_b1_read_model.py tests/test_b2_index_store.py tests/test_b3_freshness.py tests/test_b3b_postings_search.py tests/test_b4_incremental_validate.py tests/test_b5_scale_hardening.py tests/test_b5b_point_resolution.py tests/test_b6_parallel_merge.py"
           # Trust gates (v0.7.9): dogfood validates RAC's own rac/ corpus,
           # golden pins CLI stdout byte-for-byte against committed files.
           - name: dogfood
