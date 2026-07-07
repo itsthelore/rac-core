@@ -38,7 +38,10 @@ SEGMENT_MAGIC = b"RACIDX01"
 # resolve an id in O(lookup) instead of reconstructing every identity row: a
 # store written before the bump lacks those files and fails this gate closed, so
 # the point-resolution fast path never reads a half-old layout.
-SEGMENT_FORMAT_VERSION = 3
+# Bumped to 4 by the tags tier (ADR-109): entries.seg rows carry a raw-tags list
+# and tokens.seg/header gain a 6th field vector, so a v3 store fails this gate
+# closed and is rebuilt fresh rather than misread with the wrong field count.
+SEGMENT_FORMAT_VERSION = 4
 
 _U32 = struct.Struct("<I")
 _U64 = struct.Struct("<Q")

@@ -73,7 +73,9 @@ from rac.services.scope_paths import repository_root
 # JSON blob) but not the bundle shape, so the version stays "2"; the encoding is
 # versioned independently by the store's own segment-format and layout versions,
 # and an old JSON blob is simply never opened as a store (a miss).
-SCHEMA_VERSION = "2"
+# Bumped to "3" by the tags tier (ADR-109): the store's bundle version, so a
+# store built before the tags field fails the bundle-version gate and rebuilds.
+SCHEMA_VERSION = "3"
 
 _DECISION_TYPE = "decision"
 
