@@ -121,20 +121,32 @@ def index_from_corpus(
         from rac.services.relationships import inbound_counts_from_corpus
 
         inbound = inbound_counts_from_corpus(entries)
-    artifacts: list[IndexEntry] = []
-    for entry in entries:
-        path, product = entry.path, entry.product
-        spec = spec_for(entry.artifact_type)  # None for Unknown
-        artifacts.append(
-            IndexEntry(
-                id=artifact_identifier(product, spec, str(path)),
-                type=entry.artifact_type,
-                title=product.title,
-                path=str(path),
-                aliases=artifact_identifiers(product, spec, str(path)),
-                search_sections=product.search_sections,
-                inbound_count=inbound.get(str(path), 0),
-                tags=list(product.metadata.tags) if product.metadata else [],
-            )
-        )
+    artifacts = [
+        index_entry_from_corpus_entry(entry, inbound=inbound.get(str(entry.path), 0))
+        for entry in entries
+    ]
     return RepositoryIndex(directory=directory, recursive=recursive, artifacts=artifacts)
+
+
+def index_entry_from_corpus_entry(entry: CorpusEntry, *, inbound: int = 0) -> IndexEntry:
+    """One :class:`IndexEntry` for a corpus entry — the per-document index row.
+
+    The single builder both the serial :func:`index_from_corpus` and the parallel
+    merge (ADR-108) use, so a merged index row is byte-identical to a serially
+    built one by construction. ``inbound`` is the resolved-edge count, a cross-doc
+    signal filled by the caller (0 until the graph is resolved); every other field
+    is a pure function of this one entry.
+    """
+    path = str(entry.path)
+    product = entry.product
+    spec = spec_for(entry.artifact_type)  # None for Unknown
+    return IndexEntry(
+        id=artifact_identifier(product, spec, path),
+        type=entry.artifact_type,
+        title=product.title,
+        path=path,
+        aliases=artifact_identifiers(product, spec, path),
+        search_sections=product.search_sections,
+        inbound_count=inbound,
+        tags=list(product.metadata.tags) if product.metadata else [],
+    )
