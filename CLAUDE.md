@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: ffb0d12b8aaadcab7cc80995e6f52cb187038eca1e567d12ef49f606c7ff5b14) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: de97a0a6fdfca63fc7f2327e65f65ee83645d0313dbd3032db38ca0568a5813e) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -106,4 +106,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWV0HZ2SSGE2** — ADR-101: Org-Wide Documentation Site Amends Docs Hosting and Repository Topology _(Product)_
 - **RAC-KWV63BR8AW71** — ADR-102: Org-Site Brand Direction — Light, Restrained, Site Rhymes With Product UI _(Product)_
 - **RAC-KWY0SHYCVY2D** — ADR-108: Term-Range-Partitioned Parallel Merge for the Cold Build _(Architecture)_
+- **RAC-KWY7886GSEE5** — ADR-109: Tag Search Tier and Tag Facet _(Technical)_
 <!-- END RAC MANAGED BLOCK -->
