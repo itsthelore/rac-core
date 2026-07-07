@@ -377,21 +377,6 @@ _IdentIndex = dict[str, list[tuple[str, str]]]
 ResolutionIndex = _IdentIndex
 
 
-def _build_identifier_index(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
-) -> _IdentIndex:
-    """Canonical-identifier index over *all* files (Unknown included).
-
-    One entry per file — duplicate-identity detection runs over this index,
-    so only the canonical identifier can collide (ADR-026).
-    """
-    index: _IdentIndex = {}
-    for path, product, spec in items:
-        ident = artifact_identifier(product, spec, path)
-        index.setdefault(ident.casefold(), []).append((path, ident))
-    return index
-
-
 def build_resolution_index(
     items: list[tuple[str, Product, ArtifactSpec | None]],
 ) -> _IdentIndex:
@@ -421,11 +406,104 @@ def resolution_index_from_entries(entries: list[CorpusEntry]) -> ResolutionIndex
     return build_resolution_index(_entry_items(entries))
 
 
-def _resolve_references(
+# --- Compact validation rows (ADR-108) ---------------------------------------
+#
+# The repository validation gate and the relationship summary both read a small,
+# fixed projection of each document: its identity, whether it is retired, the
+# relationship sections it declares (and any its type does not support), and its
+# declared edges. ``ValidationRow`` is exactly that projection with the
+# ``Product`` dropped, so the gate and summary run over compact rows a worker can
+# ship (ADR-108) instead of parsed products. The serial paths build the rows from
+# their items and route through the same cores, so the merge and the serial build
+# validate and summarise the graph identically by construction.
+
+
+@dataclass(frozen=True)
+class ValidationRow:
+    """One document's compact projection for validation and summary (ADR-108).
+
+    ``spec_name`` is the artifact type's name, or ``None`` for an Unknown/untyped
+    document (the ``spec is None`` skip). ``canonical_id`` is the single identifier
+    duplicate detection collides on; ``identifiers`` is the full alias set the
+    resolution index is built from. ``retired`` is the type-aware retired-status
+    flag; ``unsupported_sections`` are the declared relationship sections the type
+    does not support (canonical ``RELATIONSHIP_SECTIONS`` names); ``edges`` are the
+    declared ``(snake_section, refs)`` rows in schema order, empty for Unknown.
+    """
+
+    path: str
+    spec_name: str | None
+    canonical_id: str
+    identifiers: tuple[str, ...]
+    retired: bool
+    unsupported_sections: tuple[str, ...]
+    edges: tuple[tuple[str, tuple[str, ...]], ...]
+
+
+def validation_row(path: str, product: Product, spec: ArtifactSpec | None) -> ValidationRow:
+    """The compact :class:`ValidationRow` projection of one ``(path, product, spec)``.
+
+    Pure and deterministic: every field is read straight from the product, so a
+    row built here in the parent and a row shipped from a worker over the same
+    document are identical. An Unknown document (``spec is None``) carries its
+    identifiers — so it still populates the resolution index and can collide — but
+    no edges and no unsupported sections (it declares no typed relationships).
+    """
+    identifiers = tuple(artifact_identifiers(product, spec, path))
+    canonical_id = artifact_identifier(product, spec, path)
+    if spec is None:
+        return ValidationRow(
+            path=path,
+            spec_name=None,
+            canonical_id=canonical_id,
+            identifiers=identifiers,
+            retired=False,
+            unsupported_sections=(),
+            edges=(),
+        )
+    edges = tuple(
+        (section, tuple(refs))
+        for section, refs in extract_relationships_full(product, spec).items()
+    )
+    return ValidationRow(
+        path=path,
+        spec_name=spec.name,
+        canonical_id=canonical_id,
+        identifiers=identifiers,
+        retired=_is_retired_artifact(product, spec),
+        unsupported_sections=tuple(unsupported_relationship_sections(product, spec)),
+        edges=edges,
+    )
+
+
+def _validation_rows_from_items(
     items: list[tuple[str, Product, ArtifactSpec | None]],
+) -> list[ValidationRow]:
+    """Build the compact validation rows for a materialised item list."""
+    return [validation_row(path, product, spec) for path, product, spec in items]
+
+
+def _resolve_row_from_validation(row: ValidationRow) -> ResolveRow:
+    """The :class:`ResolveRow` view of a validation row (shared resolve seam).
+
+    Byte-identical to :func:`resolve_row` over the same document: the identifiers
+    are the row's, and each edge's external flag is recomputed from its section
+    exactly as :func:`resolve_row` does, so referential resolution runs through the
+    one :func:`resolve_relationships` seam whichever row type it started from.
+    """
+    edges: list[tuple[str, bool, tuple[str, ...]]] = []
+    for section, refs in row.edges:
+        edge = edge_spec(section)
+        external = edge is not None and edge.external
+        edges.append((section, external, refs))
+    return ResolveRow(path=row.path, identifiers=row.identifiers, edges=tuple(edges))
+
+
+def _resolve_references(
+    rows: list[ValidationRow],
     index: _IdentIndex,
 ) -> tuple[int, list[RelationshipIssue], set[str]]:
-    """Resolve every explicit reference in ``items`` against ``index``.
+    """Resolve every explicit reference in ``rows`` against ``index``.
 
     Returns ``(checked, issues, resolved_target_paths)`` where
     ``resolved_target_paths`` is the set of paths that appear as a *resolved*
@@ -436,10 +514,10 @@ def _resolve_references(
     resolved_targets: set[str] = set()
     checked = 0
 
-    for path, product, spec in items:
-        if spec is None:
+    for row in rows:
+        if row.spec_name is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in row.edges:
             edge = edge_spec(section)
             if edge is not None and edge.external:
                 continue  # external refs (ADR-087) are format-linted, not resolved
@@ -450,20 +528,22 @@ def _resolve_references(
                     code = ISSUE_TARGET_NOT_FOUND
                 elif len(targets) > 1:
                     code = ISSUE_TARGET_AMBIGUOUS
-                elif targets == [path]:
+                elif targets == [row.path]:
                     code = ISSUE_SELF_REFERENCE
                 else:
                     resolved_targets.add(targets[0])
                     continue  # resolved uniquely to another artifact
                 issues.append(
-                    RelationshipIssue(code=code, source_path=path, relationship=section, target=ref)
+                    RelationshipIssue(
+                        code=code, source_path=row.path, relationship=section, target=ref
+                    )
                 )
 
     return checked, issues, resolved_targets
 
 
 def _acyclic_adjacency(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    rows: list[ValidationRow],
     resolution_index: _IdentIndex,
     kind: str,
 ) -> dict[str, list[str]]:
@@ -473,16 +553,16 @@ def _acyclic_adjacency(
     are owned by referential integrity), so the graph reflects real directed edges.
     """
     adjacency: dict[str, list[str]] = {}
-    for path, product, spec in items:
-        if spec is None:
+    for row in rows:
+        if row.spec_name is None:
             continue
         targets: set[str] = set()
-        for ref in extract_relationships_full(product, spec).get(kind, []):
+        for ref in dict(row.edges).get(kind, ()):
             resolved = [p for p, _ in resolution_index.get(ref.casefold(), [])]
-            if len(resolved) == 1 and resolved[0] != path:
+            if len(resolved) == 1 and resolved[0] != row.path:
                 targets.add(resolved[0])
         if targets:
-            adjacency[path] = sorted(targets)
+            adjacency[row.path] = sorted(targets)
     return adjacency
 
 
@@ -531,13 +611,13 @@ def _cyclic_components(adjacency: dict[str, list[str]]) -> list[list[str]]:
 
 
 def _cycle_issues(
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    rows: list[ValidationRow],
     resolution_index: _IdentIndex,
 ) -> list[RelationshipIssue]:
     """One ``relationship-cycle`` per cyclic component of each acyclic edge kind."""
     issues: list[RelationshipIssue] = []
     for kind in sorted(name for name, edge in REGISTRY.items() if edge.acyclic):
-        adjacency = _acyclic_adjacency(items, resolution_index, kind)
+        adjacency = _acyclic_adjacency(rows, resolution_index, kind)
         for component in _cyclic_components(adjacency):
             issues.append(
                 RelationshipIssue(code=ISSUE_RELATIONSHIP_CYCLE, relationship=kind, paths=component)
@@ -560,22 +640,22 @@ def _cycle_issues(
 
 def _scope_validation_issues(
     directory: str,
-    items: list[tuple[str, Product, ArtifactSpec | None]],
+    rows: list[ValidationRow],
 ) -> list[RelationshipIssue]:
     """One ``applies-to-target-not-found`` per missing literal path/dir entry.
 
     Checks only filesystem-scoped edges (``edge.filesystem_scoped``) and only
     their literal ``path`` entries: each is checked to exist relative to the
     repository root. Glob patterns and component labels are recorded without
-    existence-checking. Deterministic — items in sorted-path order, entries in
+    existence-checking. Deterministic — rows in sorted-path order, entries in
     declared order.
     """
     root = repository_root(directory)
     issues: list[RelationshipIssue] = []
-    for path, product, spec in items:
-        if spec is None:
+    for row in rows:
+        if row.spec_name is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in row.edges:
             edge = edge_spec(section)
             if edge is None or not edge.filesystem_scoped:
                 continue
@@ -588,12 +668,27 @@ def _scope_validation_issues(
                 issues.append(
                     RelationshipIssue(
                         code=ISSUE_SCOPE_TARGET_NOT_FOUND,
-                        source_path=path,
+                        source_path=row.path,
                         relationship=section,
                         target=ref,
                     )
                 )
     return issues
+
+
+def resolution_index_from_rows(rows: list[ValidationRow]) -> ResolutionIndex:
+    """The reference-resolution index over validation rows' identifiers (ADR-108).
+
+    Byte-identical to ``build_resolution_index`` over the same documents in the
+    same order — the rows' ``identifiers`` are the ``artifact_identifiers`` tuple.
+    Passing the result into :func:`summary_from_rows` and :func:`validation_from_rows`
+    lets the portfolio resolve over one shared index, as the derived build does.
+    """
+    index: _IdentIndex = {}
+    for row in rows:
+        for ident in row.identifiers:
+            index.setdefault(ident.casefold(), []).append((row.path, ident))
+    return index
 
 
 def _validate(
@@ -603,13 +698,39 @@ def _validate(
     *,
     resolution_index: ResolutionIndex | None = None,
 ) -> RelationshipValidation:
-    index = _build_identifier_index(items)
+    """Validate a materialised item list via the compact-row core (ADR-108)."""
+    return validation_from_rows(
+        directory,
+        _validation_rows_from_items(items),
+        recursive,
+        resolution_index=resolution_index,
+    )
 
+
+def validation_from_rows(
+    directory: str,
+    rows: list[ValidationRow],
+    recursive: bool = True,
+    *,
+    resolution_index: ResolutionIndex | None = None,
+) -> RelationshipValidation:
+    """The repository relationship-validation gate over compact rows (ADR-108).
+
+    The single core the serial :func:`_validate` and the parallel merge both run,
+    so both produce the same findings in the same order by construction. Every
+    check reads only the rows' compact projection — canonical identifier, retired
+    flag, declared edges, unsupported sections — plus the working tree for scope
+    existence, so no parsed ``Product`` is needed.
+    """
     issues: list[RelationshipIssue] = []
 
-    # Duplicate identifiers (repo-level), emitted first, sorted by identifier.
+    # Duplicate identifiers (repo-level), emitted first, sorted by identifier. One
+    # entry per document — only the canonical identifier can collide (ADR-026).
+    ident_index: _IdentIndex = {}
+    for row in rows:
+        ident_index.setdefault(row.canonical_id.casefold(), []).append((row.path, row.canonical_id))
     duplicates: list[tuple[str, list[str]]] = []
-    for entries in index.values():
+    for entries in ident_index.values():
         if len(entries) > 1:
             display = min(entries, key=lambda e: e[0])[1]  # first path's casing
             duplicates.append((display, sorted(p for p, _ in entries)))
@@ -620,20 +741,20 @@ def _validate(
 
     # Edge-legality (v0.14.0, ADR-049): report relationship sections an artifact's
     # type does not declare instead of silently dropping them. Deterministic —
-    # items in sorted-path order, sections in canonical RELATIONSHIP_SECTIONS order.
-    for path, product, spec in items:
-        if spec is None:
+    # rows in sorted-path order, sections in canonical RELATIONSHIP_SECTIONS order.
+    for row in rows:
+        if row.spec_name is None:
             continue
-        for section in unsupported_relationship_sections(product, spec):
+        for section in row.unsupported_sections:
             issues.append(
                 RelationshipIssue(
-                    code=ISSUE_EDGE_UNSUPPORTED, source_path=path, relationship=_snake(section)
+                    code=ISSUE_EDGE_UNSUPPORTED, source_path=row.path, relationship=_snake(section)
                 )
             )
 
     if resolution_index is None:
-        resolution_index = build_resolution_index(items)
-    by_path = {path: (product, spec) for path, product, spec in items}
+        resolution_index = resolution_index_from_rows(rows)
+    by_path = {row.path: row for row in rows}
 
     def _resolved(ref: str, source_path: str) -> str | None:
         """The unique non-self target path for ``ref``, or None.
@@ -649,25 +770,25 @@ def _validate(
     # Range (v0.16.0, ADR-055): a resolved target whose type is not in the edge's
     # declared range is an illegal edge — e.g. a ``## Related Decisions`` reference
     # that resolves to a requirement. Deterministic (sorted-path / spec.optional).
-    for path, product, spec in items:
-        if spec is None:
+    for row in rows:
+        if row.spec_name is None:
             continue
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in row.edges:
             edge = edge_spec(section)
             if edge is None or edge.external:
                 continue  # external edges (ADR-087) carry no artifact range
             for ref in refs:
-                target = _resolved(ref, path)
+                target = _resolved(ref, row.path)
                 if target is None:
                     continue
-                _, target_spec = by_path[target]
-                if target_spec is None:
+                target_spec_name = by_path[target].spec_name
+                if target_spec_name is None:
                     continue  # untyped document (ADR-010) — not a range violation
-                if target_spec.name not in edge.range:
+                if target_spec_name not in edge.range:
                     issues.append(
                         RelationshipIssue(
                             code=ISSUE_TARGET_TYPE_MISMATCH,
-                            source_path=path,
+                            source_path=row.path,
                             relationship=section,
                             target=ref,
                         )
@@ -676,24 +797,23 @@ def _validate(
     # Status-consistency (v0.14.1, generalised in v0.16.0/ADR-051): a live artifact
     # must not reference a retired target, except via an edge that permits it
     # (``supersedes``, ``forbids_target_status=False``). Reads the resolved
-    # target's status from the materialised items — no second walk.
-    for path, product, spec in items:
-        if spec is None or _is_retired_artifact(product, spec):
+    # target's retired flag from the rows — no second walk.
+    for row in rows:
+        if row.spec_name is None or row.retired:
             continue  # unknown file, or a retired source (historical chains exempt)
-        for section, refs in extract_relationships_full(product, spec).items():
+        for section, refs in row.edges:
             edge = edge_spec(section)
             if edge is None or edge.external or not edge.forbids_target_status:
                 continue  # supersedes/external edges never gate on target status
             for ref in refs:
-                target = _resolved(ref, path)
+                target = _resolved(ref, row.path)
                 if target is None:
                     continue
-                target_product, target_spec = by_path[target]
-                if _is_retired_artifact(target_product, target_spec):
+                if by_path[target].retired:
                     issues.append(
                         RelationshipIssue(
                             code=ISSUE_TARGET_SUPERSEDED,
-                            source_path=path,
+                            source_path=row.path,
                             relationship=section,
                             target=ref,
                         )
@@ -702,15 +822,15 @@ def _validate(
     # Acyclicity (v0.16.0, ADR-055): a cycle in a directional, acyclic edge kind
     # (today ``supersedes``) is illegal — an ordering/replacement edge must not
     # form a loop. Reported per strongly-connected component, deterministically.
-    issues.extend(_cycle_issues(items, resolution_index))
+    issues.extend(_cycle_issues(rows, resolution_index))
 
-    checked, ref_issues, _ = _resolve_references(items, resolution_index)
+    checked, ref_issues, _ = _resolve_references(rows, resolution_index)
     issues.extend(ref_issues)
 
     # Code-scope existence (decision-to-code-proximity, Initiative 1): filesystem-
     # scoped ``## Applies To`` literal paths are checked against the working tree.
     # Appended last, so existing finding order is unchanged (ADR-007).
-    issues.extend(_scope_validation_issues(directory, items))
+    issues.extend(_scope_validation_issues(directory, rows))
 
     return RelationshipValidation(
         directory=directory,
@@ -874,26 +994,37 @@ def _summarize(
     *,
     resolution_index: ResolutionIndex | None = None,
 ) -> RelationshipSummary:
-    if not items:
+    """Summarise a materialised item list via the compact-row core (ADR-108)."""
+    return summary_from_rows(
+        _validation_rows_from_items(items), resolution_index=resolution_index
+    )
+
+
+def summary_from_rows(
+    rows: list[ValidationRow], *, resolution_index: ResolutionIndex | None = None
+) -> RelationshipSummary:
+    """Aggregate relationship health over compact rows (ADR-108).
+
+    The single core the serial :func:`_summarize` and the parallel merge both run.
+    Byte-identical to the item-based summary: the same references resolve against
+    the same index, and coverage/orphan counts read the rows' spec/edge projection.
+    """
+    if not rows:
         return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
 
-    index = resolution_index if resolution_index is not None else build_resolution_index(items)
-    checked, ref_issues, resolved_targets = _resolve_references(items, index)
+    index = resolution_index if resolution_index is not None else resolution_index_from_rows(rows)
+    checked, ref_issues, resolved_targets = _resolve_references(rows, index)
 
     broken = len(ref_issues)
     valid = checked - broken
 
     # Orphan = known (spec is not None) artifact whose path never appears as a
     # resolved target of another artifact's reference.
-    all_known_paths = {path for path, _, spec in items if spec is not None}
+    all_known_paths = {row.path for row in rows if row.spec_name is not None}
     orphaned = len(all_known_paths - resolved_targets)
 
     # Coverage = fraction of known artifacts that declare >=1 outbound relationship.
-    artifacts_with_rels = sum(
-        1
-        for path, product, spec in items
-        if spec is not None and extract_relationships_full(product, spec)
-    )
+    artifacts_with_rels = sum(1 for row in rows if row.spec_name is not None and row.edges)
     coverage = artifacts_with_rels / len(all_known_paths) if all_known_paths else 1.0
 
     return RelationshipSummary(
@@ -1062,6 +1193,21 @@ def relationships_from_corpus(
     """
     rows = [resolve_row(path, product, spec) for path, product, spec in _entry_items(entries)]
     return resolve_relationships(rows, resolution_index=resolution_index)
+
+
+def relationships_from_rows(
+    rows: list[ValidationRow], *, resolution_index: ResolutionIndex | None = None
+) -> list[Relationship]:
+    """Resolve compact :class:`ValidationRow` items into :class:`Relationship` objects.
+
+    The parallel merge (ADR-108) holds validation rows, not corpus entries; this
+    routes them through the same :func:`resolve_relationships` seam the serial
+    :func:`relationships_from_corpus` uses, so the resolved graph is byte-identical
+    whichever row type it started from.
+    """
+    return resolve_relationships(
+        [_resolve_row_from_validation(row) for row in rows], resolution_index=resolution_index
+    )
 
 
 def inbound_counts_from_relationships(rels: list[Relationship]) -> dict[str, int]:

@@ -31,7 +31,7 @@ from rac.core.classification import missing_sections
 from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier
 from rac.core.overrides import apply_overrides
-from rac.core.validation import has_errors, validate
+from rac.core.validation import Issue, has_errors, validate
 from rac.services.init import load_overrides
 
 from .relationships import (
@@ -40,9 +40,11 @@ from .relationships import (
     ISSUE_TARGET_NOT_FOUND,
     RelationshipSummary,
     ResolutionIndex,
-    resolution_index_from_entries,
-    summary_from_corpus,
-    validation_from_corpus,
+    ValidationRow,
+    resolution_index_from_rows,
+    summary_from_rows,
+    validation_from_rows,
+    validation_row,
 )
 
 # Stable attention codes (part of the JSON contract, ADR-007).
@@ -176,6 +178,63 @@ def build_portfolio_summary(directory: str, recursive: bool = True) -> Portfolio
     return portfolio_from_corpus(directory, entries, recursive=recursive)
 
 
+@dataclass(frozen=True)
+class PortfolioRow:
+    """One document's compact projection for the portfolio summary (ADR-108).
+
+    Carries the per-document derivation outputs the summary reads — its type and
+    identity, the raw ``validate`` findings (overrides are applied at aggregation,
+    ADR-053), the recommended-slot count and the missing recommended sections —
+    plus the :class:`ValidationRow` the relationship summary and gate run over. The
+    ``Product`` is dropped, so a worker can ship the row (the fan-out) or the parent
+    can build it from an entry; the aggregation is byte-identical either way.
+    """
+
+    path: str
+    artifact_type: str
+    identifier: str
+    validation: ValidationRow
+    validate_issues: tuple[Issue, ...]
+    recommended_slots: int
+    missing_recommended: tuple[str, ...]
+
+
+def portfolio_row(entry: CorpusEntry) -> PortfolioRow:
+    """The compact :class:`PortfolioRow` projection of one corpus entry.
+
+    Pure and deterministic: every field is read straight from the parsed product,
+    so a row built here in the parent and a row shipped from a worker over the same
+    document are identical. Unknown documents carry no validation findings and no
+    recommended slots — they are counted in ``by_type`` but neither validated nor
+    completeness-scored, exactly as the item-based pass treats them.
+    """
+    path = str(entry.path)
+    product = entry.product
+    artifact_type = entry.artifact_type
+    spec = spec_for(artifact_type)
+    vrow = validation_row(path, product, spec)
+    if spec is None:
+        return PortfolioRow(
+            path=path,
+            artifact_type=artifact_type,
+            identifier=vrow.canonical_id,
+            validation=vrow,
+            validate_issues=(),
+            recommended_slots=0,
+            missing_recommended=(),
+        )
+    _, missing_rec = missing_sections(product, spec)
+    return PortfolioRow(
+        path=path,
+        artifact_type=artifact_type,
+        identifier=artifact_identifier(product, spec, path),
+        validation=vrow,
+        validate_issues=tuple(validate(product, artifact_type=artifact_type)),
+        recommended_slots=len(spec.recommended),
+        missing_recommended=tuple(missing_rec),
+    )
+
+
 def portfolio_from_corpus(
     directory: str,
     entries: list[CorpusEntry],
@@ -189,11 +248,34 @@ def portfolio_from_corpus(
     the relationship summary, so a portfolio costs one walk instead of two. A
     prebuilt ``resolution_index`` (from the derived build) is shared across the
     relationship summary and validation rather than each rebuilding it — the
-    portfolio dict is byte-identical either way; it is built once here if not
-    supplied.
+    portfolio dict is byte-identical either way. Delegates to the compact-row core
+    (ADR-108) so the serial build and the parallel merge aggregate identically.
     """
+    return portfolio_from_rows(
+        directory,
+        [portfolio_row(entry) for entry in entries],
+        recursive=recursive,
+        resolution_index=resolution_index,
+    )
+
+
+def portfolio_from_rows(
+    directory: str,
+    rows: list[PortfolioRow],
+    recursive: bool = True,
+    *,
+    resolution_index: ResolutionIndex | None = None,
+) -> PortfolioSummary:
+    """Compute the portfolio summary over compact rows (ADR-108).
+
+    The single core the serial :func:`portfolio_from_corpus` and the parallel merge
+    both run. Byte-identical to the item-based pass: the same per-document findings
+    aggregate, and the relationship summary and gate resolve over one shared index
+    (ADR-103), built here from the rows if not supplied.
+    """
+    validation_rows: list[ValidationRow] = [row.validation for row in rows]
     if resolution_index is None:
-        resolution_index = resolution_index_from_entries(entries)
+        resolution_index = resolution_index_from_rows(validation_rows)
 
     # Repository-wide severity overrides (ADR-053): review/portfolio/watchkeeper
     # honour the same .rac/config.yaml policy as `rac validate`.
@@ -214,30 +296,25 @@ def portfolio_from_corpus(
     # second identifier pass.
     path_to_identifier: dict[str, str] = {}
 
-    for entry in entries:
-        path, product = entry.path, entry.product
-        artifact_type = entry.artifact_type
-        by_type[artifact_type] = by_type.get(artifact_type, 0) + 1
+    for row in rows:
+        by_type[row.artifact_type] = by_type.get(row.artifact_type, 0) + 1
 
-        spec = spec_for(artifact_type)
-        if spec is None:
+        if row.validation.spec_name is None:
             # Unknown artifacts: not validated, not scored for completeness.
-            unknown_paths.append(str(path))
+            unknown_paths.append(row.path)
             continue
 
-        identifier = artifact_identifier(product, spec, str(path))
-        path_to_identifier[str(path)] = identifier
+        identifier = row.identifier
+        path_to_identifier[row.path] = identifier
 
         # Validation (overrides applied, ADR-053)
-        issues = apply_overrides(
-            validate(product, artifact_type=artifact_type), artifact_type, overrides
-        )
+        issues = apply_overrides(list(row.validate_issues), row.artifact_type, overrides)
         if has_errors(issues):
             invalid_count += 1
             error_codes = [i.code for i in issues if i.severity == "error"]
             attention.append(
                 AttentionItem(
-                    path=str(path),
+                    path=row.path,
                     identifier=identifier,
                     severity="error",
                     code=ATTENTION_INVALID,
@@ -250,16 +327,16 @@ def portfolio_from_corpus(
         # Completeness (recommended sections only — required failures are already
         # reported as validation errors above, counting them twice would double-
         # penalise in the health score).
-        slots = len(spec.recommended)
+        slots = row.recommended_slots
         recommended_slots += slots
-        _, missing_rec = missing_sections(product, spec)
+        missing_rec = list(row.missing_recommended)
         filled = slots - len(missing_rec)
         filled_slots += filled
         if missing_rec:
             names = ", ".join(s.title() for s in missing_rec)
             attention.append(
                 AttentionItem(
-                    path=str(path),
+                    path=row.path,
                     identifier=identifier,
                     severity="warning",
                     code=ATTENTION_MISSING_RECOMMENDED,
@@ -270,11 +347,11 @@ def portfolio_from_corpus(
     # --- relationship summary ------------------------------------------------
     # Reuses the snapshot (no second walk); per-reference issues become
     # attention items so broken references are surfaced, not just counted.
-    rel_summary = summary_from_corpus(entries, resolution_index=resolution_index)
+    rel_summary = summary_from_rows(validation_rows, resolution_index=resolution_index)
     # The full relationship-validation gate (additive, v0.16.0): same verdict as
     # `rac relationships --validate`, over the same snapshot (no extra walk).
-    relationships_ok = validation_from_corpus(
-        directory, entries, recursive=recursive, resolution_index=resolution_index
+    relationships_ok = validation_from_rows(
+        directory, validation_rows, recursive=recursive, resolution_index=resolution_index
     ).ok
     for issue in rel_summary.issues:
         source = issue.source_path or ""
