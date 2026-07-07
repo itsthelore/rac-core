@@ -955,6 +955,21 @@ def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
     return relationships
 
 
+def inbound_counts_from_relationships(rels: list[Relationship]) -> dict[str, int]:
+    """``{artifact path -> count of resolved edges that point at it}`` from resolved edges.
+
+    The counting half of :func:`inbound_counts_from_corpus`, split out so a caller
+    that has already resolved the graph (the derived-index build) computes inbound
+    degree without a second resolution pass. Same definition — resolved, unique,
+    non-self edges only; artifacts with no inbound edge are absent (count 0).
+    """
+    counts: dict[str, int] = {}
+    for rel in rels:
+        if rel.resolved_path is not None:
+            counts[rel.resolved_path] = counts.get(rel.resolved_path, 0) + 1
+    return counts
+
+
 def inbound_counts_from_corpus(entries: list[CorpusEntry]) -> dict[str, int]:
     """``{artifact path -> count of resolved edges that point at it}``.
 
@@ -963,11 +978,7 @@ def inbound_counts_from_corpus(entries: list[CorpusEntry]) -> dict[str, int]:
     boost both consume, so they cannot drift). Artifacts with no inbound edge are
     absent (count 0).
     """
-    counts: dict[str, int] = {}
-    for rel in relationships_from_corpus(entries):
-        if rel.resolved_path is not None:
-            counts[rel.resolved_path] = counts.get(rel.resolved_path, 0) + 1
-    return counts
+    return inbound_counts_from_relationships(relationships_from_corpus(entries))
 
 
 # --- 1-hop neighborhood (get_related) ----------------------------------------

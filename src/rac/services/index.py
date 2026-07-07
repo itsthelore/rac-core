@@ -95,7 +95,11 @@ def build_repository_index(directory: str, recursive: bool = True) -> Repository
 
 
 def index_from_corpus(
-    directory: str, entries: list[CorpusEntry], recursive: bool = True
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    *,
+    inbound: dict[str, int] | None = None,
 ) -> RepositoryIndex:
     """Inventory an already-walked corpus snapshot (v0.8.0).
 
@@ -104,11 +108,15 @@ def index_from_corpus(
 
     Each entry also carries its inbound resolved-edge count — the graph signal
     the relevance ranker fuses (ADR-078) — computed once from the same snapshot.
-    The import is deferred to keep the index → relationships dependency one-way.
+    A caller that has already resolved the graph may pass ``inbound`` to skip a
+    second resolution pass (the derived-index build does); otherwise it is
+    computed here. The import is deferred to keep the index → relationships
+    dependency one-way.
     """
-    from rac.services.relationships import inbound_counts_from_corpus
+    if inbound is None:
+        from rac.services.relationships import inbound_counts_from_corpus
 
-    inbound = inbound_counts_from_corpus(entries)
+        inbound = inbound_counts_from_corpus(entries)
     artifacts: list[IndexEntry] = []
     for entry in entries:
         path, product = entry.path, entry.product
