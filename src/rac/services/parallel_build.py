@@ -51,6 +51,7 @@ from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.fs import find_markdown_files
 from rac.core.markdown import parse_file
 from rac.services.derived_cache import DerivedIndex, build_derived_index_from_entries
+from rac.services.parallel_merge import DocFragment, fragment_from_entry, reproduce
 
 _TIMING_ENV = "RAC_TIMING"
 
@@ -181,6 +182,45 @@ def _parse_parallel(paths: list[Path], n_workers: int) -> list[CorpusEntry] | No
     return [entry for chunk in results for entry in chunk]
 
 
+def _worker_fragment(paths: list[Path]) -> list[DocFragment]:
+    """Parse a contiguous range and project each document to a compact fragment.
+
+    The merge-path worker (ADR-108): the same core parse as :func:`_worker_parse`
+    (:func:`parse_file` + :func:`classify`), then :func:`fragment_from_entry` runs
+    every per-document derivation and keeps only the compact projection the parent
+    merge reads. Only the fragments cross the process boundary — never a parsed
+    ``Product``. The fault hook is honoured identically, so the crash-resilience
+    path is exercised in a real spawned subprocess.
+    """
+    if os.environ.get(_FAULT_ENV):
+        raise RuntimeError("parallel-build worker fault (injected)")
+    fragments: list[DocFragment] = []
+    for path in paths:
+        product = parse_file(str(path))
+        entry = CorpusEntry(path=path, product=product, classification=classify(product))
+        fragments.append(fragment_from_entry(entry))
+    return fragments
+
+
+def _fragment_parallel(paths: list[Path], n_workers: int) -> list[DocFragment] | None:
+    """Fan the parse+fragment across ``n_workers`` spawned processes, or None on fault.
+
+    Contiguous chunks in sorted-path order, concatenated in list order, so the
+    fragment sequence is byte-for-byte what a serial parse+fragment yields —
+    worker-count-invariant. Any child fault (exception, crash, pickling failure)
+    collapses to None and the caller falls back to the serial floor; a partial
+    result is discarded whole, never merged.
+    """
+    chunks = _contiguous_chunks(paths, n_workers)
+    try:
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(len(chunks)) as pool:
+            results = pool.map(_worker_fragment, chunks)
+    except BaseException:
+        return None
+    return [fragment for chunk in results for fragment in chunk]
+
+
 def parallel_parse_paths(
     paths: list[Path], *, workers: int | None = None
 ) -> tuple[list[CorpusEntry], int]:
@@ -200,45 +240,45 @@ def parallel_parse_paths(
     return entries, n_workers
 
 
-def parallel_walk(
-    directory: str, *, recursive: bool = True, workers: int | None = None
-) -> tuple[list[CorpusEntry], int]:
-    """Parse a whole corpus, parallel when it pays; entries in sorted-path order.
-
-    The parallel analogue of ``list(walk_corpus(directory))``: byte-identical
-    output (same entries, same sorted order), only fanned across processes. When
-    the single-process path runs it delegates to :func:`walk_corpus` so the two
-    code paths share one definition of the serial walk.
-    """
-    paths = find_markdown_files(directory, recursive=recursive)
-    n_workers = _resolve_workers(workers, len(paths))
-    if n_workers <= 1:
-        return list(walk_corpus(directory, recursive=recursive)), 1
-    entries = _parse_parallel(paths, n_workers)
-    if entries is None:
-        return list(walk_corpus(directory, recursive=recursive)), 1
-    return entries, n_workers
-
-
 def build_derived_index_parallel(
     directory: str, *, recursive: bool = True, workers: int | None = None
 ) -> tuple[DerivedIndex, BuildStats]:
-    """Build the derived read-model with a parallel parse, then the serial derive.
+    """Build the derived read-model with a parallel parse *and* a parallel derive (ADR-108).
 
-    Byte-identical to :func:`rac.services.derived_cache.build_derived_index`: the
-    parse is fanned out but produces the same ordered snapshot, and the derive
-    phase (:func:`build_derived_index_from_entries`) is the same pure function of
-    that snapshot. Returns the derived index plus the per-phase timings the
-    ``RAC_TIMING`` scorecard reports; ``write_ms`` is filled by the caller that
-    serialises the store.
+    Byte-identical to :func:`rac.services.derived_cache.build_derived_index`: each
+    worker parses a contiguous path range and projects every document to a compact
+    :class:`~rac.services.parallel_merge.DocFragment`, and the parent reproduces the
+    read-model from the fragments in sorted-path order
+    (:func:`~rac.services.parallel_merge.reproduce`) — the same compact-row seams the
+    serial derive uses, so the store bytes are worker-count-invariant. The fan-out
+    is a latency lever, never a correctness dependency: below the file-count / core
+    threshold, or on any worker fault, the build falls back to the authoritative
+    serial :func:`walk_corpus` + :func:`build_derived_index_from_entries` floor, whose
+    partial results are never written. Returns the derived index plus the per-phase
+    timings the ``RAC_TIMING`` scorecard reports; ``write_ms`` is filled by the caller
+    that serialises the store.
     """
     t0 = time.perf_counter()
-    entries, used = parallel_walk(directory, recursive=recursive, workers=workers)
-    t1 = time.perf_counter()
-    derived = build_derived_index_from_entries(directory, entries, recursive=recursive)
+    paths = find_markdown_files(directory, recursive=recursive)
+    n_workers = _resolve_workers(workers, len(paths))
+    fragments = _fragment_parallel(paths, n_workers) if n_workers > 1 else None
+    if fragments is not None:
+        used = n_workers
+        t1 = time.perf_counter()
+        derived = reproduce(fragments, directory, recursive=recursive)
+        n_files = len(fragments)
+    else:
+        # Serial floor: the single-process path (small corpus, cpu_count() <= 2, or
+        # an explicit workers=1) and the worker-fault fallback share one
+        # authoritative serial derive over the whole ordered snapshot.
+        entries = list(walk_corpus(directory, recursive=recursive))
+        used = 1
+        t1 = time.perf_counter()
+        derived = build_derived_index_from_entries(directory, entries, recursive=recursive)
+        n_files = len(entries)
     t2 = time.perf_counter()
     return derived, BuildStats(
-        files=len(entries),
+        files=n_files,
         workers=used,
         parse_ms=(t1 - t0) * 1000.0,
         derive_ms=(t2 - t1) * 1000.0,
