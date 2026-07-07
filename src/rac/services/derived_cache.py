@@ -176,6 +176,36 @@ class CorpusReadModel(Protocol):
     def scope_rows(self) -> list[ScopeRow]: ...
 
 
+def scope_row_from_entry(entry: CorpusEntry) -> ScopeRow | None:
+    """The path-mode :class:`ScopeRow` for one entry, or None when it declares none.
+
+    The per-document projection shared by the serial :func:`_scope_rows_from_corpus`
+    and the parallel merge (ADR-108). Faithful to ``scope._governing``'s extraction:
+    only a live decision that declares ``## Applies To`` (``SCOPE_SECTIONS``) entries
+    yields a row; anything else returns None (a decision with no scope can never
+    cover a query, so omitting it changes no answer).
+    """
+    product = entry.product
+    if entry.artifact_type != _DECISION_TYPE or not is_live_decision(product):
+        return None
+    spec = spec_for(entry.artifact_type)
+    if spec is None:  # the decision spec is always registered; narrow for typing
+        return None
+    relationships = extract_relationships_full(product, spec)
+    declared: list[str] = []
+    for section in SCOPE_SECTIONS:
+        declared.extend(relationships.get(section.replace(" ", "_"), []))
+    if not declared:
+        return None
+    return ScopeRow(
+        id=artifact_identifier(product, spec, str(entry.path)),
+        title=product.title or "",
+        status=artifact_status(product),
+        path=str(entry.path),
+        scope_entries=tuple(declared),
+    )
+
+
 def _scope_rows_from_corpus(entries: list[CorpusEntry]) -> list[ScopeRow]:
     """Precompute the path-mode scope rows for every live decision that declares scope.
 
@@ -184,30 +214,7 @@ def _scope_rows_from_corpus(entries: list[CorpusEntry]) -> list[ScopeRow]:
     decision that declares no scope can never cover a query, so it is omitted —
     dropping it changes no answer, exactly as ``_governing`` would return ``None``.
     """
-    rows: list[ScopeRow] = []
-    for entry in entries:
-        product = entry.product
-        if entry.artifact_type != _DECISION_TYPE or not is_live_decision(product):
-            continue
-        spec = spec_for(entry.artifact_type)
-        if spec is None:  # the decision spec is always registered; narrow for typing
-            continue
-        relationships = extract_relationships_full(product, spec)
-        declared: list[str] = []
-        for section in SCOPE_SECTIONS:
-            declared.extend(relationships.get(section.replace(" ", "_"), []))
-        if not declared:
-            continue
-        rows.append(
-            ScopeRow(
-                id=artifact_identifier(product, spec, str(entry.path)),
-                title=product.title or "",
-                status=artifact_status(product),
-                path=str(entry.path),
-                scope_entries=tuple(declared),
-            )
-        )
-    return rows
+    return [row for entry in entries if (row := scope_row_from_entry(entry)) is not None]
 
 
 def governing_decisions(scope_rows: list[ScopeRow], directory: str, path: str) -> ScopeLookupResult:
