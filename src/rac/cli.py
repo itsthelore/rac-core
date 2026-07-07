@@ -151,6 +151,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from rac.services.note_ingest import VaultIngestResult
+    from rac.services.resolve import SearchResult
 
 EXIT_OK = 0
 EXIT_VALIDATION_FAILED = 1
@@ -1026,12 +1027,52 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     return EXIT_OK if result.outcome == OUTCOME_RESOLVED else EXIT_VALIDATION_FAILED
 
 
+def _find_from_store(args: argparse.Namespace) -> SearchResult:
+    """Serve `rac find --cache` from the persistent index store (ADR-110).
+
+    Reuses ``DerivedIndexCache.load_or_build``: a warm run against an unchanged
+    corpus serves from the memory-mapped store with no walk/parse/graph rebuild;
+    a cold run builds fresh and writes the store for the next invocation. The
+    result is byte-identical to the uncached walk — the store fast path and the
+    fresh build are branched exactly as ``mcp/server.py`` does (ADR-104 parity).
+    When the store cannot be written, ``load_or_build`` returns a fresh
+    ``DerivedIndex`` and the ``else`` branches handle it.
+    """
+    from rac.services.derived_cache import DerivedIndexCache
+    from rac.services.index_store import ReadModelView
+    from rac.services.resolve import find_decisions_in, search_index
+
+    view = DerivedIndexCache().load_or_build(args.directory, recursive=not args.top_level)
+    if args.decisions:
+        if isinstance(view, ReadModelView):
+            return view.find_decisions(args.query)
+        return find_decisions_in(
+            view.index_entries,
+            view.live_decision_paths,
+            args.query,
+            field_tokens_by_path=view.field_tokens_by_path,
+        )
+    if isinstance(view, ReadModelView):
+        return view.search(args.query, artifact_type=args.type, tags=args.tags)
+    return search_index(
+        view.index_entries,
+        args.query,
+        artifact_type=args.type,
+        tags=args.tags,
+        field_tokens_by_path=view.field_tokens_by_path,
+    )
+
+
 def cmd_find(args: argparse.Namespace) -> int:
     from rac.services.resolve import find_artifacts, find_decisions
 
     if not Path(args.directory).is_dir():
         _usage_error(f"not a directory: {args.directory}")
-    if args.decisions:
+    if args.cache:
+        # Opt-in store reuse (ADR-110): serve from the persistent index store
+        # instead of a fresh walk, byte-identical to the uncached path below.
+        result = _find_from_store(args)
+    elif args.decisions:
         # `--decisions` is the live decision query (ADR-067): it implies the
         # decision type filter *and* restricts to live (Accepted, non-retired)
         # decisions — the deterministic "what did we decide about X" retrieval.
@@ -2170,6 +2211,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Only match artifacts carrying this frontmatter tag (repeatable; all "
             "required). Narrows the query by tag (ADR-109)."
+        ),
+    )
+    p_find.add_argument(
+        "--cache",
+        action="store_true",
+        help=(
+            "Reuse the persistent index store across runs for large corpora, "
+            "skipping the walk and parse on an unchanged corpus; disposable and "
+            "byte-identical to the uncached run (off by default, RAC_CACHE_DIR / "
+            "$XDG_CACHE_HOME, ADR-110)."
         ),
     )
     p_find.add_argument(
