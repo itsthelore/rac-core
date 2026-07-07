@@ -26,9 +26,11 @@ so they are scheduled deliberately rather than rediscovered.
 
 ## Outcomes
 
-- The cold full build approaches its ~2 minutes per million artifacts
-  budget (ADR-107 records the honest miss: ~15-19 minutes per million as
-  built, with parallel parse at 1.8x and a serial derive/write tail).
+- The cold full build reaches its revised ~432 s/1M-at-4-cores budget
+  (120 s/1M was set against a larger node; ADR-107 records the current
+  cost — ~18.8 min/1M as built, parallel parse at 1.8x with a serial
+  derive/write tail — and the term-range merge is the initiative to close
+  the gap).
 - Search cost on a corpus with uncompacted changes matches the compacted
   fast path, and the summary tool becomes change-bound rather than
   corpus-bound on change.
@@ -37,15 +39,17 @@ so they are scheduled deliberately rather than rediscovered.
 
 ## Initiatives
 
-- Term-range-partitioned parallel merge and STREAMING segment writes for
-  the cold build: workers emit postings-run fragments and compact rows
-  rather than parsed products, and segments flush incrementally instead of
-  materializing the whole derived model in memory first. The final 1M
-  measurement makes this the top residual: the build was OOM-killed at
-  15.9 GiB on the 15 GiB node — the store serves within budget at every
-  size it can be built, but at one million artifacts it cannot be built on
-  the reference node as shipped (the cold path also runs ~5.7x over the
-  120 s/1M budget where it completes).
+- Term-range-partitioned parallel merge for the cold build: workers emit
+  postings-run fragments and compact rows rather than parsed products, so
+  parse *and* derive fan out and only compact rows cross the process
+  boundary. This is the remaining half of the top residual. Streaming
+  segment writes have since landed — the store now encodes, flushes, and
+  frees one segment at a time, removing the whole-store co-residence that
+  OOM-killed the materialise-all build at 15.9 GiB on the 15 GiB node, so a
+  1M corpus fits under the node ceiling. The merge is what closes the
+  throughput gap: the cold path still runs over the revised
+  ~432 s/1M-at-4-cores budget (ADR-107's ~18.8 min/1M current cost) until
+  it lands.
 - Postings-served search over a non-empty delta window: fold delta
   postings into candidate discovery so edited corpora keep the fast path
   before compaction (the v1 scope note in the ADR-104 postings
@@ -75,9 +79,9 @@ so they are scheduled deliberately rather than rediscovered.
 
 ## Success Measures
 
-- The scalecorpus gate's cold-build budget passes at the top measured
-  corpus size, or the budget is revised by decision with the measured
-  ceiling recorded.
+- The scalecorpus gate's cold-build budget (revised to ~432 s/1M at 4
+  cores by ADR-107, with the measured ceiling recorded) passes at the top
+  measured corpus size, and the 1M build fits under the 15 GiB node ceiling.
 - Warm search latency on a corpus with a non-empty delta window is within
   2x of the compacted path at every measured size.
 - A 1,000-file changeset re-validates relationships in under 5 seconds,
