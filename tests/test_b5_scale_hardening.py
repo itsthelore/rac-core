@@ -244,6 +244,71 @@ def test_post_compaction_sheds_resident_snapshot_and_stays_correct(tmp_path):
 
 
 # =============================================================================
+# (c2) Streaming segment write — the whole encoded store is never co-resident.
+# =============================================================================
+
+
+def test_streaming_write_never_holds_the_whole_encoded_store(tmp_path):
+    """The store write streams: it encodes, flushes, and frees one segment at a
+    time instead of materialising every segment at once. Proven by running the
+    same segment generator two ways over one built ``DerivedIndex`` — retaining
+    every segment in a dict (the pre-streaming shape) versus the streaming
+    ``write_store`` that keeps none — and comparing ``tracemalloc`` peaks. The
+    streaming peak is strictly lower because it never holds the encoded store.
+    The saving is partial, not a whole store's worth: the per-doc row-lists are
+    built in one pass before the first yield, a floor only the deferred
+    intra-segment ``write_indexed`` streaming would cross (ADR-107). The
+    byte-parity of the streamed store is pinned elsewhere."""
+    import tracemalloc
+
+    from rac.services.index_store import _iter_segment_files
+
+    root = _build_corpus(tmp_path / "corpus", 4_000)
+    corpus_hash = _corpus_hash(str(root))
+    # Build the model outside every traced window so the comparison isolates the
+    # segment-encoding/retention allocations, not the parse/derive.
+    derived, _ = build_derived_index_parallel(str(root), workers=1)
+
+    # _iter_segment_files is a lazy generator over the twelve segments, not a dict.
+    import inspect
+
+    assert inspect.isgeneratorfunction(_iter_segment_files)
+
+    # Materialise-all: hold every encoded segment at once (the shape before this
+    # bundle). The generator still frees its own sources as it goes, so this
+    # isolates exactly the retained-segments cost.
+    gc.collect()
+    tracemalloc.start()
+    all_segments = dict(_iter_segment_files(corpus_hash, _BUNDLE_VERSION, derived))
+    _, materialise_peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    store_bytes = sum(len(payload) for payload in all_segments.values())
+    assert len(all_segments) == 12
+    del all_segments
+    gc.collect()
+
+    # Streaming write: each segment is written to the temp dir and freed before
+    # the next; the encoded store is never co-resident.
+    tracemalloc.start()
+    assert write_store(tmp_path / "cache", corpus_hash, _BUNDLE_VERSION, derived)
+    _, streaming_peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    # Retaining every segment is pure additional memory over the streaming write,
+    # so the streaming peak is strictly lower: it never holds the encoded store.
+    assert streaming_peak < materialise_peak, (
+        f"streaming peak {streaming_peak} should be below materialise-all {materialise_peak}"
+    )
+    # The saving is bounded below by a conservative fraction of the store the
+    # streaming write no longer retains — robust to allocator noise, but loud if
+    # the write ever regressed to holding every segment at once.
+    assert materialise_peak - streaming_peak > store_bytes * 0.1, (
+        f"expected the streamed write to drop the retained encoded store: "
+        f"materialise {materialise_peak}, streaming {streaming_peak}, store {store_bytes}"
+    )
+
+
+# =============================================================================
 # (d) Worker-crash resilience — a fault degrades to the serial path, no corruption.
 # =============================================================================
 
