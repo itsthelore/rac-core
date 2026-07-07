@@ -932,26 +932,84 @@ class Relationship:
     issue: str | None
 
 
-def relationships_from_corpus(
-    entries: list[CorpusEntry], *, resolution_index: ResolutionIndex | None = None
-) -> list[Relationship]:
-    """Every declared reference in a corpus snapshot as :class:`Relationship`.
+# --- Compact resolve seam (ADR-108) ------------------------------------------
+#
+# The parallel merge ships compact per-document rows across the process boundary,
+# not parsed ``Product`` objects. ``ResolveRow`` is exactly what the resolve loop
+# reads about one document — its resolution identifiers and its declared edges,
+# with the ``Product`` dropped. Both the serial ``relationships_from_corpus`` and
+# the merge feed the same :func:`resolve_relationships` over these rows, so the
+# two paths resolve the graph identically by construction rather than by
+# coincidence — the parity the merge rests on is structural.
 
-    Ordering is deterministic: source artifacts in snapshot (sorted path)
-    order, sections in each artifact's own schema order, references in
-    declaration order — matching ``_resolve_references``. A prebuilt
-    ``resolution_index`` (from :func:`resolution_index_from_entries`) is used when
-    supplied, so a shared build resolves over one index; the output is identical.
+
+@dataclass(frozen=True)
+class ResolveRow:
+    """One document's compact projection for relationship resolution (ADR-108).
+
+    ``identifiers`` are the document's canonical identifier plus its legacy
+    aliases — the same tuple :func:`build_resolution_index` reads via
+    ``artifact_identifiers`` — carried for *every* document (Unknown included) so
+    the resolution index and its duplicate collisions are reproduced exactly.
+    ``edges`` are the declared relationship sections as ``(section, external,
+    refs)`` rows, in the artifact's own schema order; Unknown documents carry no
+    edges. This is the whole input the resolve loop needs, with the ``Product``
+    dropped.
     """
-    items = _entry_items(entries)
-    index = resolution_index if resolution_index is not None else build_resolution_index(items)
+
+    path: str
+    identifiers: tuple[str, ...]
+    edges: tuple[tuple[str, bool, tuple[str, ...]], ...]
+
+
+def resolve_row(path: str, product: Product, spec: ArtifactSpec | None) -> ResolveRow:
+    """The compact :class:`ResolveRow` projection of one ``(path, product, spec)``.
+
+    Pure and deterministic: the identifiers and declared edges are read straight
+    from the product, so a row built here in the parent from a parsed entry and a
+    row shipped from a worker over the same document are identical.
+    """
+    identifiers = tuple(artifact_identifiers(product, spec, path))
+    if spec is None:
+        return ResolveRow(path=path, identifiers=identifiers, edges=())
+    edges: list[tuple[str, bool, tuple[str, ...]]] = []
+    for section, refs in extract_relationships_full(product, spec).items():
+        edge = edge_spec(section)
+        external = edge is not None and edge.external
+        edges.append((section, external, tuple(refs)))
+    return ResolveRow(path=path, identifiers=identifiers, edges=tuple(edges))
+
+
+def _index_from_resolve_rows(rows: list[ResolveRow]) -> _IdentIndex:
+    """The reference-resolution index over ``rows`` (Unknown documents included).
+
+    Byte-identical to ``build_resolution_index`` run over the same documents in
+    the same order: each row contributes its identifiers, in order, as
+    ``(path, ident)`` under the casefolded key.
+    """
+    index: _IdentIndex = {}
+    for row in rows:
+        for ident in row.identifiers:
+            index.setdefault(ident.casefold(), []).append((row.path, ident))
+    return index
+
+
+def resolve_relationships(
+    rows: list[ResolveRow], *, resolution_index: ResolutionIndex | None = None
+) -> list[Relationship]:
+    """Resolve compact :class:`ResolveRow` items into :class:`Relationship` objects.
+
+    The single resolve loop shared by the serial corpus path and the parallel
+    merge (ADR-108). Ordering is deterministic: rows in snapshot (sorted path)
+    order, sections in each row's schema order, references in declaration order.
+    A prebuilt ``resolution_index`` is used when supplied; otherwise it is built
+    from the rows' identifiers (:func:`_index_from_resolve_rows`), which equals
+    ``build_resolution_index`` over the same documents.
+    """
+    index = resolution_index if resolution_index is not None else _index_from_resolve_rows(rows)
     relationships: list[Relationship] = []
-    for path, product, spec in items:
-        if spec is None:
-            continue
-        for section, refs in extract_relationships_full(product, spec).items():
-            edge = edge_spec(section)
-            external = edge is not None and edge.external
+    for row in rows:
+        for section, external, refs in row.edges:
             for ref in refs:
                 resolved: str | None = None
                 issue: str | None = None
@@ -960,7 +1018,7 @@ def relationships_from_corpus(
                     # artifact by design — an edge for the graph, never "broken".
                     relationships.append(
                         Relationship(
-                            source_path=path,
+                            source_path=row.path,
                             relationship=section,
                             target=ref,
                             resolved_path=None,
@@ -973,13 +1031,13 @@ def relationships_from_corpus(
                     issue = ISSUE_TARGET_NOT_FOUND
                 elif len(targets) > 1:
                     issue = ISSUE_TARGET_AMBIGUOUS
-                elif targets == [path]:
+                elif targets == [row.path]:
                     issue = ISSUE_SELF_REFERENCE
                 else:
                     resolved = targets[0]
                 relationships.append(
                     Relationship(
-                        source_path=path,
+                        source_path=row.path,
                         relationship=section,
                         target=ref,
                         resolved_path=resolved,
@@ -987,6 +1045,23 @@ def relationships_from_corpus(
                     )
                 )
     return relationships
+
+
+def relationships_from_corpus(
+    entries: list[CorpusEntry], *, resolution_index: ResolutionIndex | None = None
+) -> list[Relationship]:
+    """Every declared reference in a corpus snapshot as :class:`Relationship`.
+
+    Ordering is deterministic: source artifacts in snapshot (sorted path)
+    order, sections in each artifact's own schema order, references in
+    declaration order — matching ``_resolve_references``. A prebuilt
+    ``resolution_index`` (from :func:`resolution_index_from_entries`) is used when
+    supplied, so a shared build resolves over one index; the output is identical.
+    Resolution runs through the shared :func:`resolve_relationships` seam so the
+    serial path and the parallel merge (ADR-108) cannot drift.
+    """
+    rows = [resolve_row(path, product, spec) for path, product, spec in _entry_items(entries)]
+    return resolve_relationships(rows, resolution_index=resolution_index)
 
 
 def inbound_counts_from_relationships(rels: list[Relationship]) -> dict[str, int]:
