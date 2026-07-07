@@ -520,7 +520,7 @@ def build_server(
     ) -> str:
         # ``tags`` only rides the audit args when supplied, so a plain query's
         # recorded shape is byte-identical to before (additive, ADR-007/ADR-109).
-        args = {"query": query, "type": type}
+        args: dict[str, str | list[str] | None] = {"query": query, "type": type}
         if tags:
             args["tags"] = tags
         return observed(
