@@ -44,7 +44,11 @@ from rac.services.agent_rules import artifact_status, is_live_decision
 from rac.services.index import IndexEntry, index_from_corpus
 from rac.services.portfolio import portfolio_from_corpus
 from rac.services.references import SCOPE_SECTIONS, extract_relationships_full
-from rac.services.relationships import Relationship, relationships_from_corpus
+from rac.services.relationships import (
+    Relationship,
+    inbound_counts_from_relationships,
+    relationships_from_corpus,
+)
 from rac.services.resolve import field_tokens_for_entries, live_decision_paths
 
 # Byte-parity requires the identical scope matcher, and this bundle (ADR-103)
@@ -247,10 +251,12 @@ def build_derived_index_from_entries(
     ``walk_corpus`` would yield. Every derived structure is a pure function of the
     snapshot, so identical entries in identical order give identical bytes.
     """
-    index = index_from_corpus(directory, entries, recursive=recursive)
+    rels = relationships_from_corpus(entries)
+    inbound = inbound_counts_from_relationships(rels)
+    index = index_from_corpus(directory, entries, recursive=recursive, inbound=inbound)
     return DerivedIndex(
         index_entries=index.artifacts,
-        relationships=relationships_from_corpus(entries),
+        relationships=rels,
         field_tokens_by_path=field_tokens_for_entries(index.artifacts),
         live_decision_paths=live_decision_paths(entries),
         portfolio_summary=portfolio_from_corpus(directory, entries, recursive=recursive).to_dict(),
