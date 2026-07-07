@@ -48,6 +48,7 @@ from rac.services.relationships import (
     Relationship,
     inbound_counts_from_relationships,
     relationships_from_corpus,
+    resolution_index_from_entries,
 )
 from rac.services.resolve import field_tokens_for_entries, live_decision_paths
 
@@ -253,7 +254,12 @@ def build_derived_index_from_entries(
     ``walk_corpus`` would yield. Every derived structure is a pure function of the
     snapshot, so identical entries in identical order give identical bytes.
     """
-    rels = relationships_from_corpus(entries)
+    # Resolve the reference graph once and share the index across every consumer
+    # that would otherwise rebuild it (relationships, the portfolio's summary, and
+    # its relationship validation) — byte-identical, since the index is a pure
+    # function of the snapshot. The cold build resolved it three times before.
+    resolution_index = resolution_index_from_entries(entries)
+    rels = relationships_from_corpus(entries, resolution_index=resolution_index)
     inbound = inbound_counts_from_relationships(rels)
     index = index_from_corpus(directory, entries, recursive=recursive, inbound=inbound)
     return DerivedIndex(
@@ -261,7 +267,9 @@ def build_derived_index_from_entries(
         relationships=rels,
         field_tokens_by_path=field_tokens_for_entries(index.artifacts),
         live_decision_paths=live_decision_paths(entries),
-        portfolio_summary=portfolio_from_corpus(directory, entries, recursive=recursive).to_dict(),
+        portfolio_summary=portfolio_from_corpus(
+            directory, entries, recursive=recursive, resolution_index=resolution_index
+        ).to_dict(),
         scope_rows=_scope_rows_from_corpus(entries),
     )
 

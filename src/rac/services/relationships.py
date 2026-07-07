@@ -372,6 +372,9 @@ def _entry_items(
 
 # Identifier index: {casefold(ident) -> [(path, display_ident), ...]}
 _IdentIndex = dict[str, list[tuple[str, str]]]
+# Public alias for the reference-resolution index, so a caller can build it once
+# and share it across the consumers that would otherwise each rebuild it.
+ResolutionIndex = _IdentIndex
 
 
 def _build_identifier_index(
@@ -404,6 +407,18 @@ def build_resolution_index(
         for ident in artifact_identifiers(product, spec, path):
             index.setdefault(ident.casefold(), []).append((path, ident))
     return index
+
+
+def resolution_index_from_entries(entries: list[CorpusEntry]) -> ResolutionIndex:
+    """The reference-resolution index for a snapshot, to build once and share.
+
+    A pure, deterministic function of the snapshot's items. Passing the result
+    into ``relationships_from_corpus``, ``summary_from_corpus``, and
+    ``validation_from_corpus`` lets a derived build resolve over one index rather
+    than each consumer rebuilding an identical one — byte-identical output, since
+    the index is the same object every consumer would otherwise construct.
+    """
+    return build_resolution_index(_entry_items(entries))
 
 
 def _resolve_references(
@@ -585,6 +600,8 @@ def _validate(
     directory: str,
     items: list[tuple[str, Product, ArtifactSpec | None]],
     recursive: bool,
+    *,
+    resolution_index: ResolutionIndex | None = None,
 ) -> RelationshipValidation:
     index = _build_identifier_index(items)
 
@@ -614,7 +631,8 @@ def _validate(
                 )
             )
 
-    resolution_index = build_resolution_index(items)
+    if resolution_index is None:
+        resolution_index = build_resolution_index(items)
     by_path = {path: (product, spec) for path, product, spec in items}
 
     def _resolved(ref: str, source_path: str) -> str | None:
@@ -720,14 +738,19 @@ def validate_relationships(
 
 
 def validation_from_corpus(
-    directory: str, entries: list[CorpusEntry], recursive: bool = True
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    *,
+    resolution_index: ResolutionIndex | None = None,
 ) -> RelationshipValidation:
     """Validate relationships in an already-walked corpus snapshot (v0.8.0).
 
     Same result as :func:`validate_relationships`; the snapshot lets one walk
-    feed several analyses (repository model, future incremental refresh).
+    feed several analyses (repository model, future incremental refresh). A
+    prebuilt ``resolution_index`` is used when supplied (byte-identical output).
     """
-    return _validate(directory, _entry_items(entries), recursive)
+    return _validate(directory, _entry_items(entries), recursive, resolution_index=resolution_index)
 
 
 def validate_relationships_file(path: str) -> RelationshipValidation:
@@ -834,20 +857,27 @@ def summarize_relationships(directory: str, recursive: bool = True) -> Relations
     return _summarize(_corpus_items(directory, recursive))
 
 
-def summary_from_corpus(entries: list[CorpusEntry]) -> RelationshipSummary:
+def summary_from_corpus(
+    entries: list[CorpusEntry], *, resolution_index: ResolutionIndex | None = None
+) -> RelationshipSummary:
     """Aggregate relationship health for an already-walked snapshot (v0.8.0).
 
     Same result as :func:`summarize_relationships`; the snapshot lets one walk
-    feed several analyses (repository model, future incremental refresh).
+    feed several analyses (repository model, future incremental refresh). A
+    prebuilt ``resolution_index`` is used when supplied (byte-identical output).
     """
-    return _summarize(_entry_items(entries))
+    return _summarize(_entry_items(entries), resolution_index=resolution_index)
 
 
-def _summarize(items: list[tuple[str, Product, ArtifactSpec | None]]) -> RelationshipSummary:
+def _summarize(
+    items: list[tuple[str, Product, ArtifactSpec | None]],
+    *,
+    resolution_index: ResolutionIndex | None = None,
+) -> RelationshipSummary:
     if not items:
         return RelationshipSummary(total=0, valid=0, broken=0, orphaned=0, coverage=1.0)
 
-    index = build_resolution_index(items)
+    index = resolution_index if resolution_index is not None else build_resolution_index(items)
     checked, ref_issues, resolved_targets = _resolve_references(items, index)
 
     broken = len(ref_issues)
@@ -902,15 +932,19 @@ class Relationship:
     issue: str | None
 
 
-def relationships_from_corpus(entries: list[CorpusEntry]) -> list[Relationship]:
+def relationships_from_corpus(
+    entries: list[CorpusEntry], *, resolution_index: ResolutionIndex | None = None
+) -> list[Relationship]:
     """Every declared reference in a corpus snapshot as :class:`Relationship`.
 
     Ordering is deterministic: source artifacts in snapshot (sorted path)
     order, sections in each artifact's own schema order, references in
-    declaration order — matching ``_resolve_references``.
+    declaration order — matching ``_resolve_references``. A prebuilt
+    ``resolution_index`` (from :func:`resolution_index_from_entries`) is used when
+    supplied, so a shared build resolves over one index; the output is identical.
     """
     items = _entry_items(entries)
-    index = build_resolution_index(items)
+    index = resolution_index if resolution_index is not None else build_resolution_index(items)
     relationships: list[Relationship] = []
     for path, product, spec in items:
         if spec is None:

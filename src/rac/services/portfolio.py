@@ -39,6 +39,8 @@ from .relationships import (
     ISSUE_TARGET_AMBIGUOUS,
     ISSUE_TARGET_NOT_FOUND,
     RelationshipSummary,
+    ResolutionIndex,
+    resolution_index_from_entries,
     summary_from_corpus,
     validation_from_corpus,
 )
@@ -175,13 +177,23 @@ def build_portfolio_summary(directory: str, recursive: bool = True) -> Portfolio
 
 
 def portfolio_from_corpus(
-    directory: str, entries: list[CorpusEntry], recursive: bool = True
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    *,
+    resolution_index: ResolutionIndex | None = None,
 ) -> PortfolioSummary:
     """Summarize an already-walked corpus snapshot (v0.8.0).
 
     Same result as :func:`build_portfolio_summary`. The snapshot also feeds
-    the relationship summary, so a portfolio costs one walk instead of two.
+    the relationship summary, so a portfolio costs one walk instead of two. A
+    prebuilt ``resolution_index`` (from the derived build) is shared across the
+    relationship summary and validation rather than each rebuilding it — the
+    portfolio dict is byte-identical either way; it is built once here if not
+    supplied.
     """
+    if resolution_index is None:
+        resolution_index = resolution_index_from_entries(entries)
 
     # Repository-wide severity overrides (ADR-053): review/portfolio/watchkeeper
     # honour the same .rac/config.yaml policy as `rac validate`.
@@ -258,10 +270,12 @@ def portfolio_from_corpus(
     # --- relationship summary ------------------------------------------------
     # Reuses the snapshot (no second walk); per-reference issues become
     # attention items so broken references are surfaced, not just counted.
-    rel_summary = summary_from_corpus(entries)
+    rel_summary = summary_from_corpus(entries, resolution_index=resolution_index)
     # The full relationship-validation gate (additive, v0.16.0): same verdict as
     # `rac relationships --validate`, over the same snapshot (no extra walk).
-    relationships_ok = validation_from_corpus(directory, entries, recursive=recursive).ok
+    relationships_ok = validation_from_corpus(
+        directory, entries, recursive=recursive, resolution_index=resolution_index
+    ).ok
     for issue in rel_summary.issues:
         source = issue.source_path or ""
         label = (issue.relationship or "").replace("_", " ").title()
