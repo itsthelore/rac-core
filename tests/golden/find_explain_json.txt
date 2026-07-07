@@ -36,7 +36,7 @@
         "terms": [
           "markdown"
         ],
-        "tier": 4,
+        "tier": 5,
         "score": 0.024326,
         "components": {
           "bm25": 0.105266,

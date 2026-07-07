@@ -223,8 +223,8 @@ def test_extended_bundle_round_trips_losslessly(tmp_path):
 
 
 def test_schema_version_was_bumped_by_adr_100():
-    # ADR-103 extended the cached bundle, so the schema version moved off "1".
-    assert derived_cache.SCHEMA_VERSION == "2"
+    # ADR-103 moved it off "1"; ADR-109 (the tags field) bumped it to "3".
+    assert derived_cache.SCHEMA_VERSION == "3"
 
 
 def test_old_version_cache_file_is_a_miss_never_rehydrated(tmp_path):
@@ -233,7 +233,7 @@ def test_old_version_cache_file_is_a_miss_never_rehydrated(tmp_path):
     cache_file = next((tmp_path / "cache").glob("*.json"))
 
     obj = json.loads(cache_file.read_text(encoding="utf-8"))
-    assert obj["schema_version"] == "2"
+    assert obj["schema_version"] == "3"
 
     # The version gate rejects an old-shape file outright — from_json_obj raises,
     # which the reader treats as a miss (never a rehydration into the new shape).
@@ -247,4 +247,4 @@ def test_old_version_cache_file_is_a_miss_never_rehydrated(tmp_path):
     cache_file.write_text(json.dumps(stale), encoding="utf-8")
     rebuilt = cache.load_or_build(CORPUS)
     assert rebuilt == fresh == build_derived_index(CORPUS)
-    assert json.loads(cache_file.read_text(encoding="utf-8"))["schema_version"] == "2"
+    assert json.loads(cache_file.read_text(encoding="utf-8"))["schema_version"] == "3"

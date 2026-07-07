@@ -589,3 +589,117 @@ def test_ranking_is_byte_stable_across_runs(tmp_path):
     a = find_artifacts(str(tmp_path), "alpha").to_dict()
     b = find_artifacts(str(tmp_path), "alpha").to_dict()
     assert json.dumps(a) == json.dumps(b)
+
+
+# --- Tag search tier + facet (ADR-109) ---------------------------------------
+
+_TAGGED_A = """---
+schema_version: 1
+id: RAC-01JY4M8X2QA1
+type: decision
+tags: [security, data-model]
+---
+# Alpha Decision
+
+## Context
+
+shared body text
+
+## Decision
+
+d
+
+## Consequences
+
+e
+"""
+
+_TAGGED_B = """---
+schema_version: 1
+id: RAC-01JY4M8X2QB2
+type: decision
+tags: [performance]
+---
+# Beta Decision
+
+## Context
+
+shared body text
+
+## Decision
+
+d
+
+## Consequences
+
+e
+"""
+
+
+@pytest.fixture
+def tagged_repo(tmp_path):
+    (tmp_path / "a.md").write_text(_TAGGED_A, encoding="utf-8")
+    (tmp_path / "b.md").write_text(_TAGGED_B, encoding="utf-8")
+    return tmp_path
+
+
+def test_tag_term_matches_via_tags_tier(tagged_repo):
+    # A query term present only in a tag retrieves the artifact through the tags
+    # tier at rank 2, and the tags are surfaced additively on the result.
+    result = find_artifacts(str(tagged_repo), "security")
+    assert result.match_count == 1
+    match = result.matches[0]
+    assert match.id == "RAC-01JY4M8X2QA1"
+    assert match.evidence["field"] == "tags"
+    assert match.evidence["tier"] == 2
+    assert match.to_dict()["tags"] == ["security", "data-model"]
+
+
+def test_multiword_tag_tokenizes_like_other_fields(tagged_repo):
+    # `data-model` tokenizes to data/model (ADR-037), so `model` hits via tags.
+    assert find_artifacts(str(tagged_repo), "model").match_count == 1
+
+
+def test_term_absent_from_tags_does_not_match(tagged_repo):
+    assert find_artifacts(str(tagged_repo), "nonesuch").match_count == 0
+
+
+def test_tag_match_is_metadata_no_snippet(tagged_repo):
+    # A tags hit carries no section/snippet — a metadata tier like id/title/path.
+    match = find_artifacts(str(tagged_repo), "security").matches[0]
+    assert match.section is None
+    assert match.snippet is None
+
+
+def test_untagged_result_omits_tags_key(repo):
+    # An untagged artifact's search result is byte-identical to the pre-tags shape.
+    match = find_artifacts(str(repo), "canonical source").matches[0]
+    assert "tags" not in match.to_dict()
+
+
+def test_tag_facet_narrows_matched_set(tagged_repo):
+    # Both artifacts share the body term; the facet narrows to the tag carrier.
+    assert find_artifacts(str(tagged_repo), "shared").match_count == 2
+    assert find_artifacts(str(tagged_repo), "shared", tags=["security"]).match_count == 1
+    assert find_artifacts(str(tagged_repo), "shared", tags=["performance"]).match_count == 1
+
+
+def test_tag_facet_is_and_across_tags(tagged_repo):
+    both = find_artifacts(str(tagged_repo), "shared", tags=["security", "data-model"])
+    assert both.match_count == 1
+    disjoint = find_artifacts(str(tagged_repo), "shared", tags=["security", "performance"])
+    assert disjoint.match_count == 0
+
+
+def test_tag_facet_is_casefolded_exact_whole_tag(tagged_repo):
+    # Case-insensitive whole-tag match: `SECURITY` hits, but the token `model`
+    # (a tier token of `data-model`, not a whole tag) does not filter through.
+    assert find_artifacts(str(tagged_repo), "shared", tags=["SECURITY"]).match_count == 1
+    assert find_artifacts(str(tagged_repo), "shared", tags=["model"]).match_count == 0
+
+
+def test_cli_tag_flag_narrows_find(tagged_repo, capsys):
+    rc = main(["find", "shared", str(tagged_repo), "--tag", "security", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert [m["id"] for m in out["matches"]] == ["RAC-01JY4M8X2QA1"]

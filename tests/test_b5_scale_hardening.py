@@ -47,7 +47,7 @@ from rac.services.freshness import FreshnessTracker
 from rac.services.index_store import open_read_model, store_dir, write_store
 from rac.services.parallel_build import build_derived_index_parallel
 
-_BUNDLE_VERSION = "2"
+_BUNDLE_VERSION = "3"
 
 
 def _decision(i: int, *, title: str | None = None, body: str = "alpha beta gamma") -> str:

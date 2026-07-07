@@ -356,4 +356,4 @@ def test_cache_file_named_by_corpus_hash_carries_schema_version(tmp_path):
     expected = cache_dir / f"{corpus_content_hash(CORPUS)}.json"
     assert expected.exists()
     obj = json.loads(expected.read_text(encoding="utf-8"))
-    assert obj["schema_version"] == derived_cache.SCHEMA_VERSION == "2"
+    assert obj["schema_version"] == derived_cache.SCHEMA_VERSION == "3"

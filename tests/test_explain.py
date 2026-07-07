@@ -88,21 +88,22 @@ def test_path_tier_evidence(tmp_path):
     assert _tier_evidence(_evidence_for(_corpus(tmp_path), "catalog")) == {
         "field": "path",
         "terms": ["catalog"],
-        "tier": 2,
+        # tier 3: the tags tier (ADR-109) sits at rank 2, shifting path down one.
+        "tier": 3,
     }
 
 
 def test_heading_tier_evidence(tmp_path):
     # "eviction" appears only in the "Eviction Heuristics" section heading.
     ev = _evidence_for(_corpus(tmp_path), "eviction")
-    assert ev["field"] == "heading" and ev["tier"] == 3
+    assert ev["field"] == "heading" and ev["tier"] == 4
     assert ev["terms"] == ["eviction"]
 
 
 def test_body_tier_evidence(tmp_path):
     # "mitochondria" appears only in the Context body line.
     ev = _evidence_for(_corpus(tmp_path), "mitochondria")
-    assert ev["field"] == "body" and ev["tier"] == 4
+    assert ev["field"] == "body" and ev["tier"] == 5
     assert ev["terms"] == ["mitochondria"]
 
 

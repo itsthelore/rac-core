@@ -84,9 +84,11 @@ def _decision(
     body: str = "alpha beta gamma",
     scope: str | None = None,
     related: tuple[str, ...] = (),
+    tags: tuple[str, ...] = (),
 ) -> str:
+    tags_line = f"tags: [{', '.join(tags)}]\n" if tags else ""
     text = (
-        f"---\nschema_version: 1\nid: {ident}\ntype: decision\n---\n"
+        f"---\nschema_version: 1\nid: {ident}\ntype: decision\n{tags_line}---\n"
         f"# {title}\n\n## Status\n\n{status}\n\n## Category\n\nArchitecture\n\n"
         f"## Context\n\n{body}\n\n## Decision\n\nD.\n\n## Consequences\n\nE.\n"
     )
@@ -228,6 +230,39 @@ def test_view_equals_fresh_build_not_self_round_trip(tmp_path):
     root = _corpus(tmp_path / "corpus")
     cache = DerivedIndexCache(tmp_path / "cache")
     assert cache.load_or_build(str(root)) == build_derived_index(str(root))
+
+
+def test_tags_survive_store_round_trip_and_facet_matches_fresh(tmp_path):
+    # ADR-109: the store persists the tags field and the raw tags, so an
+    # index-served tag tier hit and `--tag` facet are byte-identical to a fresh
+    # walk. The store view must equal a fresh build with tagged artifacts.
+    root = tmp_path / "corpus"
+    root.mkdir(parents=True)
+    (root / "a.md").write_text(
+        _decision(_D1, "Alpha", body="shared body", tags=("security", "data-model")),
+        encoding="utf-8",
+    )
+    (root / "b.md").write_text(
+        _decision(_D2, "Beta", body="shared body", tags=("performance",)), encoding="utf-8"
+    )
+    cache = DerivedIndexCache(tmp_path / "cache")
+    assert cache.load_or_build(str(root)) == build_derived_index(str(root))
+
+    fold, _entries, _ftbp = _fold_for(tmp_path, root)
+    # Tag-tier term served from the postings equals the fresh walk.
+    assert [m.id for m in fold.search("security").matches] == [
+        m.id for m in search_index(build_repository_index(str(root)).artifacts, "security").matches
+    ]
+    # `--tag` facet served from the store equals the fresh walk (AND, casefold).
+    store_ids = [m.to_dict() for m in fold.search("shared", tags=["SECURITY"]).matches]
+    fresh_ids = [
+        m.to_dict()
+        for m in search_index(
+            build_repository_index(str(root)).artifacts, "shared", tags=["SECURITY"]
+        ).matches
+    ]
+    assert store_ids == fresh_ids
+    assert len(store_ids) == 1
 
 
 # =============================================================================
