@@ -77,6 +77,10 @@ class Artifact:
     # (ADR-078); carried so a repository-model search ranks like every other
     # surface. Not part of any JSON contract.
     inbound_count: int = 0
+    # Frontmatter tags (ADR-109): carried so a repository-model search matches
+    # the tags tier and the `--tag` facet like every other surface. Not part of
+    # any JSON contract.
+    tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -241,6 +245,7 @@ def repository_from_corpus(
             missing_recommended=missing_by_path.get(entry.path, ()),
             search_sections=tuple(entry.search_sections),
             inbound_count=entry.inbound_count,
+            tags=tuple(entry.tags),
         )
         for entry in index.artifacts
     ]
