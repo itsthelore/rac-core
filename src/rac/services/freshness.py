@@ -1,14 +1,14 @@
-"""Event-sourced serving freshness for the long-lived MCP server (ADR-102).
+"""Event-sourced serving freshness for the long-lived MCP server (ADR-105).
 
 ADR-032 kept every ``rac mcp`` tool call re-reading the whole repository, and
-ADR-099/ADR-101 kept that posture on the opt-in cache path: the corpus content
+ADR-099/ADR-104 kept that posture on the opt-in cache path: the corpus content
 hash — an Ω(bytes) read of *every* file — is recomputed on every call, so warm
 serving latency scales with corpus size even when nothing changed. This module
 replaces that per-call full re-hash with a **server-lifetime freshness tracker**
 that answers "did the corpus change since the last call, and if so which files?"
 without reading the bytes of unchanged files.
 
-**The fallback ladder** (v2 §2.1, ADR-102). Change detection degrades cleanly,
+**The fallback ladder** (v2 §2.1, ADR-105). Change detection degrades cleanly,
 and *correctness never depends on the fast rung*:
 
 1. **inotify** (Linux, ctypes, stdlib only) — a watch set over every directory
@@ -42,12 +42,12 @@ or the stat reflects the completed write); a write racing *concurrently* with a
 call is unordered against it precisely as it is against a fresh walk. The tracker
 is no weaker than ADR-032's re-read for completed writes.
 
-**The delta window and compaction.** The on-disk memory-mapped base (ADR-101) is
+**The delta window and compaction.** The on-disk memory-mapped base (ADR-104) is
 written for a corpus hash; while the corpus drifts within a bounded window of
 changed files, reads are served from the re-derived snapshot (the delta) without
 rewriting the base. When the window crosses the compaction threshold a fresh base
 is written for the current hash (atomic ``os.replace`` under the store writer) and
-the window resets — the LSM-style base+delta+compaction shape ADR-101 built the
+the window resets — the LSM-style base+delta+compaction shape ADR-104 built the
 fold seam for.
 
 Stdlib only (``ctypes``/``os``/``struct``); no watchdog, no mcp file-watch dep.
@@ -114,7 +114,7 @@ def stat_scan(
 
     The stat-manifest rung (v2 §2.2) factored out so both the long-lived
     :class:`FreshnessTracker` and the one-shot CLI incremental-validate path
-    (ADR-103) share one differ — the manifest-scan machinery is identical, so it
+    (ADR-106) share one differ — the manifest-scan machinery is identical, so it
     is defined once here rather than copied. Pure over ``(filesystem, root,
     prev_manifest)`` with no tracker state, so a caller can drive it with any
     persisted manifest.
@@ -369,12 +369,12 @@ def _walk_dirs(root: Path) -> Iterator[Path]:
 
 
 # =============================================================================
-# FreshnessTracker — the server-lifetime state ADR-102 records.
+# FreshnessTracker — the server-lifetime state ADR-105 records.
 # =============================================================================
 
 
 class FreshnessTracker:
-    """Server-lifetime freshness for one repository root under the cache (ADR-102).
+    """Server-lifetime freshness for one repository root under the cache (ADR-105).
 
     Replaces the per-call ``corpus_content_hash`` re-hash with the fallback
     ladder. It owns:
@@ -411,7 +411,7 @@ class FreshnessTracker:
         self._base_hash: str | None = None
         self._base_generation = 0
         self._delta_paths: set[str] = set()
-        # ADR-104 RSS finalization: after compaction the resident parsed snapshot
+        # ADR-107 RSS finalization: after compaction the resident parsed snapshot
         # (`_entries`) is shed and the mmap base becomes the whole answer. This flag
         # records that shed state so the next change repopulates the snapshot by a
         # re-parse on demand rather than assuming the (now empty) dict is complete.
@@ -468,7 +468,7 @@ class FreshnessTracker:
             return self._read_model
         # Cold start: the whole corpus is parsed from nothing. Time the three cold
         # phases (parallel parse, derive, store write) and emit the RAC_TIMING
-        # scorecard line, mirroring the cache's cold-build line (ADR-104).
+        # scorecard line, mirroring the cache's cold-build line (ADR-107).
         import time
 
         parse_start = time.perf_counter()
@@ -532,7 +532,7 @@ class FreshnessTracker:
         - **Snapshot resident** (the common case): re-parse just the changed,
           still-present files and splice them into ``_entries``; drop the removed.
           The cold start is this regime with ``changed`` equal to the whole corpus,
-          so the initial full parse is fanned across processes (ADR-104).
+          so the initial full parse is fanned across processes (ADR-107).
         - **Snapshot shed** (the call after a compaction dropped ``_entries`` to
           reclaim RSS): the dict is empty, so the changed set alone would leave the
           unchanged files unrepresented. Repopulate the whole snapshot by re-parsing
@@ -589,7 +589,7 @@ class FreshnessTracker:
         assert self._hash is not None
         # A store already on disk for this exact hash (cold, compacted, or a revert
         # to a prior state) serves from the memory-mapped base — point access, no
-        # resident derived structures (ADR-101). Otherwise re-derive over the
+        # resident derived structures (ADR-104). Otherwise re-derive over the
         # snapshot: byte-identical to a fresh walk, re-parsing only changed files.
         if self._hash == self._base_hash and not self._delta_paths:
             view = self._open_base(self._hash)
@@ -617,7 +617,7 @@ class FreshnessTracker:
     def _maybe_compact(self) -> None:
         """Rewrite the on-disk base for the current hash when the window is large.
 
-        The atomic swap is the store writer's ``os.replace`` (ADR-101); on success
+        The atomic swap is the store writer's ``os.replace`` (ADR-104); on success
         the base hash advances, the generation bumps, and the delta window resets,
         so subsequent unchanged reads serve from the mapped base again.
         """
@@ -646,11 +646,11 @@ class FreshnessTracker:
         self._base_hash = self._hash
         self._base_generation += 1
         self._delta_paths.clear()
-        # ADR-104 RSS finalization: the base for this hash is now on disk and the
+        # ADR-107 RSS finalization: the base for this hash is now on disk and the
         # served read-model is the mmap view, so the resident parsed Products are
         # redundant — shed them and re-serve from the base. Unchanged reads then hold
         # no whole-corpus snapshot; the next change re-parses on demand (`_apply`'s
-        # shed branch). This retires the resident-snapshot residual ADR-102 named.
+        # shed branch). This retires the resident-snapshot residual ADR-105 named.
         self._entries = {}
         self._snapshot_shed = True
 

@@ -3,11 +3,11 @@ schema_version: 1
 id: RAC-KWS7QCT10Q5A
 type: decision
 ---
-# ADR-101: Persistent Memory-Mapped Index Store
+# ADR-104: Persistent Memory-Mapped Index Store
 
 ## Context
 
-ADR-099 gave the derived read-model a content-addressed cache, and ADR-100
+ADR-099 gave the derived read-model a content-addressed cache, and ADR-103
 unified every serving-path structure behind one composer. Both kept ADR-099's
 on-disk representation: a single `{corpus_hash}.json` document, `json.dumps`d on a
 miss and rehydrated whole on every hit. That representation has a measured cost
@@ -27,7 +27,7 @@ rather than from a JSON blob co-resident in the heap. The same lens requires thi
 substrate to be *mutable* in a later bundle (an in-memory delta overlay folded
 over the immutable base) so an event-sourced freshness model can absorb an
 O(changed) update without re-deriving the corpus; that freshness decision is
-recorded separately (ADR-102). This decision records the substrate itself and the
+recorded separately (ADR-105). This decision records the substrate itself and the
 constraints it must satisfy, so mutation can be added later over a format that was
 built to fold.
 
@@ -46,7 +46,7 @@ range), per-document forward token vectors, integer global accumulators (per-fie
 Σ token count and the live-document count, from which `avglen` is one division per
 query — never a stored float), the identity and alias rows, the resolved
 relationship edges, the per-live-decision scope rows and the portfolio summary
-ADR-100 added, and the searchable section text. A positional docid indexes the
+ADR-103 added, and the searchable section text. A positional docid indexes the
 segments compactly, but document identity and the search tie-break are the
 artifact's real path string, exactly as a fresh walk uses it (ADR-078) — never the
 positional id. This store **replaces ADR-099's serialized-blob representation**:
@@ -57,9 +57,9 @@ combined with a small in-memory delta overlay under `live = (base − tombstones
 delta`. In this bundle the delta is always empty — the base is the whole answer —
 but the read API is the fold, not the reader, and the seams (tombstones, added
 rows, integer stat adjustments, term deltas) are declared, so the freshness
-decision (ADR-102) can populate the delta without touching a single consumer. The
+decision (ADR-105) can populate the delta without touching a single consumer. The
 consuming decision that this bundle does not make — how the delta is kept fresh —
-is deferred to ADR-102 by construction.
+is deferred to ADR-105 by construction.
 
 This **extends ADR-099 and supersedes only its serialized-blob mechanism**;
 ADR-099's non-negotiables carry forward unchanged and are the store's acceptance
@@ -111,7 +111,7 @@ removed — this bundle's own attributable win — while every served byte stays
 identical to the fresh path.
 
 The format is built to fold before it needs to. Carrying the empty-delta base
-through the fold API now means the freshness decision (ADR-102) adds mutation as a
+through the fold API now means the freshness decision (ADR-105) adds mutation as a
 delta overlay without reopening any consumer — the ordering objection that a later
 bundle cannot make mutable a format that was never built to fold is resolved here.
 
@@ -123,7 +123,7 @@ battery. Stores for superseded corpus states are not garbage-collected in this
 bundle; they are disposable and bounded by the cache directory, and a later bundle
 may prune them. Of the two structures the format anticipated, one is now built and
 one stays deferred. Term-major postings — term id → the docids holding it in any
-field — are added by the postings-served-search bundle once the flat line (ADR-102)
+field — are added by the postings-served-search bundle once the flat line (ADR-105)
 made a store-fed search path worth its keep; the earlier persistence bundle rightly
 did not build them, because its serving path re-hashed the whole corpus per call and
 so gained nothing from selective postings. Per-file validation blobs remain deferred
@@ -214,10 +214,10 @@ sufficient for its prefix-range mechanism and its byte-parity reconstruction.
   memory-mapped segment store while preserving every one of its pins unchanged —
   content addressing, byte-parity to the fresh path, disposability, and the opt-in,
   off-by-default posture.
-- ADR-100: the unified read-model bundle (portfolio summary and per-decision scope
+- ADR-103: the unified read-model bundle (portfolio summary and per-decision scope
   rows) is what the store persists; its shape and schema version are unchanged, so
   the store is a new encoding of the same bundle, not a new bundle.
-- ADR-102: the base + delta fold seam this decision builds is the substrate the
+- ADR-105: the base + delta fold seam this decision builds is the substrate the
   freshness decision populates; how the delta is kept fresh is deferred there, not
   decided here.
 - ADR-032: not superseded. Freshness is unchanged — the corpus content hash is

@@ -1,4 +1,4 @@
-"""Movement-B bundle B3 — event-sourced serving freshness (ADR-102).
+"""Movement-B bundle B3 — event-sourced serving freshness (ADR-105).
 
 B3 replaces the per-call whole-corpus ``corpus_content_hash`` re-hash with a
 server-lifetime :class:`~rac.services.freshness.FreshnessTracker` on the opt-in

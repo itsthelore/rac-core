@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KWSH9J2S7QB1
 type: decision
 ---
-# ADR-103: Incremental Directory Validation
+# ADR-106: Incremental Directory Validation
 
 ## Context
 
@@ -59,7 +59,7 @@ verbatim. It is opt-in (`--cache`, off by default), and its output —
 the exit code — is **byte-identical** to the uncached `validate_directory` run for
 the same corpus and config.
 
-**Detection reuses the stat-manifest rung (ADR-102).** The changed / added /
+**Detection reuses the stat-manifest rung (ADR-105).** The changed / added /
 removed set is found by `services.freshness.stat_scan` — the exact
 `find_markdown_files` walk scope, `stat` each file for `(size, mtime_ns)`, and
 content-confirm (read + hash) only the files whose stat proxy changed or that are
@@ -106,7 +106,7 @@ The refindex / T1–T8 design is recorded here as the design of record for that
 future bundle (per v2 §3.2); when it lands it will reuse this bundle's per-file
 layer unchanged and add its own cross-file layer.
 
-**Persistence follows the ADR-101 store discipline.** The per-file results are
+**Persistence follows the ADR-104 store discipline.** The per-file results are
 written as one length-prefixed binary segment per corpus root under the cache
 directory (`validate/v1/{root-key}.vseg`), carrying each file's `(size, mtime_ns,
 content_hash)` stat proxy in the same row so the store doubles as the freshness
@@ -122,12 +122,12 @@ a full recompute, so enabling the cache can only change latency, never the answe
 (ADR-080). Invalidation is content-addressed per file; there is deliberately no
 corpus-level key and no O(bytes) whole-corpus re-hash — that is the point.
 
-**Accepted staleness (S5), unchanged from ADR-102.** The stat rung diffs on
+**Accepted staleness (S5), unchanged from ADR-105.** The stat rung diffs on
 `(size, mtime_ns)`, so the single missable case is an in-place rewrite that
 preserves **both** size and mtime_ns (a backdated same-length rewrite, a byte
 restore). Add / remove / rename are never at risk — enumeration detects them from
 the path set. `--verify` forces a full content re-hash and catches even S5. This is
-the same accepted trade ADR-102 records at its S5; it is named and pinned by a
+the same accepted trade ADR-105 records at its S5; it is named and pinned by a
 test, not silent staleness.
 
 **The scorecard split is stderr-only and opt-in.** When incremental mode runs it
@@ -137,8 +137,8 @@ written to **stderr**: `rac-timing: detect_ms=X recompute_ms=Y files_changed=N`.
 It is absent by default and never touches stdout, so no frozen output byte changes.
 
 This decision builds on ADR-099 (the opt-in `--cache` derived-index cache),
-ADR-101 (the binary-segment store discipline reused for the results store), and
-ADR-102 (the stat-manifest freshness rung reused as the detection differ). It does
+ADR-104 (the binary-segment store discipline reused for the results store), and
+ADR-105 (the stat-manifest freshness rung reused as the detection differ). It does
 not supersede or revise any of them; the default path is untouched.
 
 ## Consequences
@@ -217,12 +217,12 @@ unchanged key. Rejected for the incremental gate: `corpus_content_hash` is an
 incremental work exists to remove, and any single change invalidates the entire
 result set rather than one file. Content addressing per file is what makes the
 recompute changeset-bound; the corpus-level key is retained only where a whole-
-corpus derived structure genuinely needs it (the mmap store, ADR-101).
+corpus derived structure genuinely needs it (the mmap store, ADR-104).
 
 ### Trust file mtime as the invalidation signal
 
 Reuse a file's result whenever its mtime is unchanged. Rejected for the same reason
-ADR-032 and ADR-102 reject it: mtime alone is an unreliable invalidation signal
+ADR-032 and ADR-105 reject it: mtime alone is an unreliable invalidation signal
 (save-in-place, same-second rewrites). `(size, mtime_ns)` is only a cheap prefilter
 that selects which files to content-confirm; content hashing remains the truth, and
 the one case the prefilter alone can miss (S5) is named, pinned, and caught by

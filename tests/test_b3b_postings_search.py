@@ -1,4 +1,4 @@
-"""Movement-B bundle B3b — postings-served search (ADR-101).
+"""Movement-B bundle B3b — postings-served search (ADR-104).
 
 B3b puts SEARCH on the postings path: when the cached read-model is served from
 the memory-mapped base (the delta is empty), ``search_artifacts`` and the topic

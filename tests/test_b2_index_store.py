@@ -1,4 +1,4 @@
-"""Movement-B bundle B2 — persistent memory-mapped index store (ADR-101).
+"""Movement-B bundle B2 — persistent memory-mapped index store (ADR-104).
 
 B2 replaces ADR-099's serialised-blob cache representation with a directory of
 memory-mapped binary segment files, read by point access, plus the base+delta

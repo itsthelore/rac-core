@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KWSJZJ30EN1J
 type: decision
 ---
-# Parallel Cold Build of the Derived Index
+# ADR-107: Parallel Cold Build of the Derived Index
 
 ## Context
 
@@ -23,13 +23,13 @@ partitioned.
 Parsing is the dominant cost and is embarrassingly parallel: `parse_file` is a
 pure function of a file's bytes and the ambient byte cap, and the corpus walk
 yields files in a fixed sorted order. The constraints are hard: byte-parity with
-a serial build is non-negotiable (ADR-002, ADR-100); workers must reproduce the
+a serial build is non-negotiable (ADR-002, ADR-103); workers must reproduce the
 exact pinned parse semantics (`errors="replace"` lossy decode, BOM-defeats-
 frontmatter, the two oversize messages, the unreadable sentinel — core-data
 §1.3) by calling the *same* `parse_file`, never a reimplementation; and
 correctness may never depend on the parallel rung (ADR-080).
 
-A second, related residual: ADR-102's `FreshnessTracker` keeps the whole parsed
+A second, related residual: ADR-105's `FreshnessTracker` keeps the whole parsed
 snapshot (`_entries`, the resident `Product` graph for every file) live for the
 server's lifetime so it can re-derive incrementally, even after a compaction has
 written a fresh mmap base that already holds every derived row. The performance
@@ -74,13 +74,13 @@ the current hash and the tracker begins serving from the mmap view, the resident
 parsed `Product` snapshot is dropped and a shed flag is set. Unchanged reads then
 hold no whole-corpus snapshot; the next change repopulates the snapshot on demand
 by re-parsing the current tree (parallel when large) before re-deriving. This
-retires the resident-snapshot residual ADR-102 named, trading one re-parse per
+retires the resident-snapshot residual ADR-105 named, trading one re-parse per
 compaction cycle for a bounded serving working set.
 
 **Timing visibility.** When `RAC_TIMING` is set, the cold-build path writes one
 `rac-timing: build_parse_ms=X build_derive_ms=Y build_write_ms=Z workers=N
 files=M` line to stderr (env-gated, default absent, stdout untouched), mirroring
-the incremental-validate scorecard line (ADR-103).
+the incremental-validate scorecard line (ADR-106).
 
 ## Consequences
 
@@ -129,7 +129,7 @@ Architecture
 
 ## Alternatives Considered
 
-**Ship the parsed snapshot resident forever (ADR-102 as-is).** Rejected for the
+**Ship the parsed snapshot resident forever (ADR-105 as-is).** Rejected for the
 serving path: it holds the whole `Product` graph for the process lifetime, the
 named working-set residual, when the mmap base already carries every derived row.
 
@@ -149,7 +149,7 @@ module-level worker is the portable, state-clean choice the constraint demands.
 
 ## Related Decisions
 
-- ADR-100
-- ADR-101
-- ADR-102
 - ADR-103
+- ADR-104
+- ADR-105
+- ADR-106

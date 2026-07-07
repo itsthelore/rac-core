@@ -19,7 +19,7 @@ By default every tool call re-reads the repository from disk (ADR-032): no cache
 no file watcher, no session state. With the opt-in ``--cache`` a server-lifetime
 :class:`~rac.services.freshness.FreshnessTracker` keeps the derived read-model
 fresh by event-sourced change detection instead of the per-call whole-corpus
-re-hash (ADR-102), so warm serving latency stops scaling with corpus size — and
+re-hash (ADR-105), so warm serving latency stops scaling with corpus size — and
 every response stays byte-identical to a fresh disk walk of the current corpus.
 Either way, identical repository bytes and identical input produce identical
 output, within the per-response character budget (ADR-033, see
@@ -197,12 +197,12 @@ def _read_content(path: str) -> str:
 
 
 def _read_model(root: str, reader: FreshnessTracker | None) -> CorpusReadModel:
-    """The derived read-model for one call: freshness-tracked, or built fresh (ADR-100).
+    """The derived read-model for one call: freshness-tracked, or built fresh (ADR-103).
 
     One composer serves both cache modes. With ``reader`` set the bundle is the
     freshness tracker's current read-model — served from the memory-mapped base or
     the re-derived delta snapshot, kept current by event-sourced detection
-    (ADR-101/ADR-102). With ``reader`` None the read-model is built fresh every
+    (ADR-104/ADR-105). With ``reader`` None the read-model is built fresh every
     call (ADR-032, the default), byte-identically. ``get_summary`` and
     ``find_decisions`` path mode reach the same structures every other tool uses,
     instead of their own walks.
@@ -217,7 +217,7 @@ def _resolve(
 ) -> ResolutionResult:
     """Resolve ``artifact_id`` against the repository index (ADR-032).
 
-    Store fast path (ADR-101): when the read-model is served from the memory-mapped
+    Store fast path (ADR-104): when the read-model is served from the memory-mapped
     base (a delta-empty :class:`ReadModelView`), resolution is a point lookup over
     the persisted alias map — a binary search plus O(matches) row reads — instead of
     reconstructing every identity row to scan it. A non-empty delta serves the
@@ -277,7 +277,7 @@ def _search_artifacts(
         if isinstance(derived, ReadModelView):
             # Served from the memory-mapped base (the delta is empty): the postings
             # fast path touches only the query terms' prefix ranges and the matched
-            # docs' rows, byte-identical to a full-corpus walk (ADR-101).
+            # docs' rows, byte-identical to a full-corpus walk (ADR-104).
             result = derived.search(query, artifact_type=artifact_type)
         else:
             # A non-empty delta serves from the re-derived in-memory snapshot; its
@@ -316,7 +316,7 @@ def _find_decisions(
     """
     if path:
         # Path mode builds through the same read-model as every other tool
-        # (ADR-100), served from precomputed scope rows — byte-identical to
+        # (ADR-103), served from precomputed scope rows — byte-identical to
         # ``decisions_for_path`` in both cache modes.
         derived = _read_model(root, reader)
         return serialize(governing_decisions(derived.scope_rows, root, path).to_dict(), budget)
@@ -355,7 +355,7 @@ def _get_related(
     if reader is not None:
         derived = reader.read_model()
         if isinstance(derived, ReadModelView):
-            # Store fast path (ADR-101): resolution is a point lookup over the alias
+            # Store fast path (ADR-104): resolution is a point lookup over the alias
             # map, and ``identity_by_path`` is a lazy path->identity map that resolves
             # only the edges near the artifact (incoming sources, discovered
             # neighbours) through the path map — never the O(N) identity projection.
@@ -440,7 +440,7 @@ def _get_related(
 
 
 def _get_summary(root: str, budget: int, reader: FreshnessTracker | None = None) -> str:
-    # The portfolio summary builds through the one read-model composer (ADR-100),
+    # The portfolio summary builds through the one read-model composer (ADR-103),
     # tracker-backed or fresh — byte-identical to ``build_portfolio_summary``. A
     # shallow copy so the additive guidance key never mutates a cached bundle.
     payload = dict(_read_model(root, reader).portfolio_summary)
@@ -475,7 +475,7 @@ def build_server(
     disk (ADR-032); with a cache, a server-lifetime
     :class:`~rac.services.freshness.FreshnessTracker` keeps the derived structures
     current by event-sourced change detection instead of the per-call whole-corpus
-    re-hash (ADR-102), byte-identically to a fresh walk. The returned
+    re-hash (ADR-105), byte-identically to a fresh walk. The returned
     :class:`FastMCP` instance has the five pinned tools registered and is ready to
     run over any transport — the CLI runs it over stdio.
     """
@@ -483,7 +483,7 @@ def build_server(
 
     # The freshness tracker is the read-model source under the cache: server-lifetime
     # state that supersedes ADR-032's per-call re-read for the opt-in cache path
-    # (ADR-102). Off by default — with ``cache`` None every closure below builds
+    # (ADR-105). Off by default — with ``cache`` None every closure below builds
     # fresh from disk on each call, exactly ADR-032.
     reader: FreshnessTracker | None = FreshnessTracker(cache, root) if cache is not None else None
 

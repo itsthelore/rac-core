@@ -238,7 +238,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
             # directory target already validates every artifact in place, so the
             # flag is redundant and ambiguous there (ADR-067, v0.21.17).
             _usage_error("--corpus applies to stdin ('-') or a single file")
-        # --cache reuses per-file results across runs (ADR-103), byte-identical
+        # --cache reuses per-file results across runs (ADR-106), byte-identical
         # to the uncached path; off by default keeps today's path untouched.
         result = (
             validate_directory_incremental(args.file, recursive=not args.top_level)
@@ -1461,7 +1461,7 @@ def build_parser() -> argparse.ArgumentParser:
             "generated Claude Code pre-edit hook."
         ),
     )
-    # Incremental directory validation (ADR-103): opt-in, off by default. Reuses
+    # Incremental directory validation (ADR-106): opt-in, off by default. Reuses
     # per-file validation results keyed by content-hash × config fingerprint, so a
     # re-validate after a small changeset recomputes only the changed files —
     # byte-identical to the uncached run. Disposable cache under
@@ -1472,7 +1472,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Reuse per-file validation results across runs for large corpora, "
             "recomputing only changed files; disposable and byte-identical to the "
-            "uncached run (directory validation only, off by default, ADR-103)."
+            "uncached run (directory validation only, off by default, ADR-106)."
         ),
     )
     p_validate.set_defaults(func=cmd_validate)

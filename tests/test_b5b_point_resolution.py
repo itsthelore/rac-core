@@ -1,4 +1,4 @@
-"""Movement-B bundle B5.2 — point resolution (ADR-101).
+"""Movement-B bundle B5.2 — point resolution (ADR-104).
 
 B5.2 puts exact ID RESOLUTION on the point path: when the cached read-model is
 served from the memory-mapped base (the delta is empty), ``get_artifact`` and

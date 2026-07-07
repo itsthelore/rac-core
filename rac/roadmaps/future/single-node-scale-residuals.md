@@ -16,8 +16,8 @@ the delivered work so the delivered claims stay auditable.
 
 ## Context
 
-The rebuild-scale roadmap landed five Movement-B bundles (ADR-100 through
-ADR-104): the unified derived read-model, the persistent memory-mapped
+The rebuild-scale roadmap landed five Movement-B bundles (ADR-103 through
+ADR-107): the unified derived read-model, the persistent memory-mapped
 index store, event-sourced serving freshness, incremental validation, and
 the parallel cold build. The operational serving paths became
 changeset-bound rather than corpus-bound, and each bundle recorded the
@@ -27,7 +27,7 @@ so they are scheduled deliberately rather than rediscovered.
 ## Outcomes
 
 - The cold full build approaches its ~2 minutes per million artifacts
-  budget (ADR-104 records the honest miss: ~15-19 minutes per million as
+  budget (ADR-107 records the honest miss: ~15-19 minutes per million as
   built, with parallel parse at 1.8x and a serial derive/write tail).
 - Search cost on a corpus with uncompacted changes matches the compacted
   fast path, and the summary tool becomes change-bound rather than
@@ -48,20 +48,20 @@ so they are scheduled deliberately rather than rediscovered.
   120 s/1M budget where it completes).
 - Postings-served search over a non-empty delta window: fold delta
   postings into candidate discovery so edited corpora keep the fast path
-  before compaction (the v1 scope note in the ADR-101 postings
+  before compaction (the v1 scope note in the ADR-104 postings
   subsection).
 - Change-bound summary derivation: incremental portfolio-summary inputs
   so `get_summary` stops re-deriving over the whole corpus on change (the
-  stated O(N)-on-change residual in ADR-102's record).
+  stated O(N)-on-change residual in ADR-105's record).
 - Incremental relationships validation: build the declared-reference
-  index and transition-class recompute that ADR-103 records as
+  index and transition-class recompute that ADR-106 records as
   design-of-record for the relationships subsystem.
 - A public scope-matching seam so the read-model composer stops importing
-  the two private scope matchers (the coupling ADR-100's implementation
+  the two private scope matchers (the coupling ADR-103's implementation
   noted).
 - Changed-set detection below the stat floor for one-shot CLI runs: the
   1M measurement shows recompute flat at 3.0 s for a 1,000-file changeset
-  but stat detection at 17.9 s — the O(files) slope ADR-103 records fails
+  but stat detection at 17.9 s — the O(files) slope ADR-106 records fails
   the 5 s gate past a few hundred thousand files without a service mode
   or a git/fsmonitor fast path; that fast path is the initiative.
 - Graph-read and per-match constants: get_related sits 2 ms over the
@@ -94,7 +94,7 @@ so they are scheduled deliberately rather than rediscovered.
 
 - The parallel merge touches global derivations (inbound counts,
   resolution, portfolio) whose byte-parity is the most fragile in the
-  system; ADR-104 deferred it for exactly that reason. It should ship as
+  system; ADR-107 deferred it for exactly that reason. It should ship as
   its own bundle with parity tests per mutation class.
 
 ## Related Decisions

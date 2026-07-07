@@ -1,4 +1,4 @@
-"""Movement-B bundle B5 — scale hardening: parallel cold build + RSS (ADR-104).
+"""Movement-B bundle B5 — scale hardening: parallel cold build + RSS (ADR-107).
 
 B5 fans the cold-build parse across processes and sheds the serving tracker's
 resident parsed snapshot after compaction. These tests pin what that must
@@ -7,7 +7,7 @@ guarantee:
 (a) **Worker-count determinism** — the same corpus built with ``workers=1`` and
     ``workers=4`` produces byte-identical store segment files (hashed) and
     byte-identical served responses. Merge order is fixed by sorted path, so the
-    worker count is invisible to every output byte (the ADR-104 determinism rule).
+    worker count is invisible to every output byte (the ADR-107 determinism rule).
     The ``workers=4`` build is asserted to have actually run parallel, so the
     equality is not vacuously the serial path twice.
 (b) **Parse-semantics parity** — a corpus containing a non-UTF8 file, a BOM file,

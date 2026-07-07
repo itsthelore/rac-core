@@ -737,7 +737,7 @@ def _bm25f_scored(
     tf_of: Callable[[str, str], int],
     len_of: Callable[[str], int],
 ) -> float:
-    """BM25F over supplied per-field tf and length lookups — the scoring seam (ADR-101).
+    """BM25F over supplied per-field tf and length lookups — the scoring seam (ADR-104).
 
     The arithmetic and its summation order (outer over query terms, inner over
     ``_FIELD_BOOSTS`` insertion order) are the single source of truth every scoring
