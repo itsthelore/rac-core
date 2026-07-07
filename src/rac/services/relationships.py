@@ -995,9 +995,7 @@ def _summarize(
     resolution_index: ResolutionIndex | None = None,
 ) -> RelationshipSummary:
     """Summarise a materialised item list via the compact-row core (ADR-108)."""
-    return summary_from_rows(
-        _validation_rows_from_items(items), resolution_index=resolution_index
-    )
+    return summary_from_rows(_validation_rows_from_items(items), resolution_index=resolution_index)
 
 
 def summary_from_rows(
