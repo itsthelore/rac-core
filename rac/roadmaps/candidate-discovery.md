@@ -41,10 +41,15 @@ as scheduled work rather than latent gaps.
   and add a `--tag` / `tags` facet with AND semantics to `rac find` and the
   `search_artifacts` tool. Ships behind a persisted-store format bump with the
   byte-parity gate re-proven (ADR-109).
-- (Deferred, tracked elsewhere) Making the postings-served fast path the
-  reachable default for one-shot CLI queries, and folding delta-window postings
-  into discovery so edited corpora keep the fast path — recorded in the
-  single-node-scale residuals, not this item.
+- One-shot CLI store reuse: an opt-in `rac find --cache` that serves the query
+  from the persistent index store (ADR-104) via `load_or_build` instead of a
+  fresh walk, so a benchmark or agent issuing many one-shot queries against a
+  stable corpus skips the parse and graph rebuild on every warm invocation.
+  Byte-identical to the uncached walk (ADR-110).
+- (Deferred, tracked elsewhere) Folding delta-window postings into discovery so
+  edited corpora keep the fast path before compaction, and lowering the one-shot
+  freshness cost below the O(n) byte-hash floor (a stat/fsmonitor fast path) —
+  recorded in the single-node-scale residuals, not this item.
 
 ## Success Measures
 
@@ -55,6 +60,9 @@ as scheduled work rather than latent gaps.
 - Tag tokens do not leak into other tiers (a tag-only term surfaces no
   heading/body snippet), and untagged corpora are byte-identical to the
   pre-tags output.
+- `rac find --cache` returns byte-identical output to `rac find` for search,
+  the `--decisions` query, `--type`, `--tag`, and `--explain`, cold and warm;
+  the warm run serves from the store without re-parsing.
 
 ## Assumptions
 
