@@ -293,7 +293,7 @@ def validate_corpus(
 
 
 # =============================================================================
-# Incremental directory validation — `rac validate DIR --cache` (ADR-103).
+# Incremental directory validation — `rac validate DIR --cache` (ADR-106).
 # =============================================================================
 #
 # Directory validation is a pure per-file computation: every ``FileValidation``
@@ -304,7 +304,7 @@ def validate_corpus(
 # here — so a changeset-bound re-validate needs only a per-file result cache, no
 # corpus-global index. The refindex / transition-class (T1–T8) machinery the
 # performance lens describes (v2 §3.2) belongs to that other subsystem's future
-# incremental bundle; ADR-103 records the design, this bundle does not build it,
+# incremental bundle; ADR-106 records the design, this bundle does not build it,
 # because it has no consumer on the validate path.
 #
 # Opt-in and byte-identical: with the cache off (the default) the untouched
@@ -377,7 +377,7 @@ def validate_directory_incremental(
     cache_dir: Path | None = None,
     verify: bool = False,
 ) -> DirectoryValidation:
-    """Validate a directory, reusing per-file results across runs (ADR-103).
+    """Validate a directory, reusing per-file results across runs (ADR-106).
 
     Byte-identical to :func:`validate_directory` for the same corpus and config,
     but changeset-bound: a stat-manifest scan (the freshness rung reused from

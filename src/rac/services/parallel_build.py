@@ -1,4 +1,4 @@
-"""Parallel cold build of the derived read-model (ADR-104).
+"""Parallel cold build of the derived read-model (ADR-107).
 
 The cold build's cost is dominated by parsing — a fresh whole-corpus walk spends
 roughly three-quarters of its wall time in :func:`rac.core.markdown.parse_file`
@@ -14,7 +14,7 @@ ranges back in list order, so the parsed snapshot is byte-for-byte the same
 sequence :func:`rac.core.corpus.walk_corpus` yields — regardless of how many
 workers ran. The whole derive/serialise pipeline downstream is a pure function of
 that ordered snapshot, so the store bytes and every served response are identical
-across worker counts (the ADR-104 worker-invariance rule). A test hashes the
+across worker counts (the ADR-107 worker-invariance rule). A test hashes the
 segment files of a ``workers=1`` and a ``workers=4`` build and asserts equality.
 
 **Workers call the one true parse path.** ``_worker_parse`` imports and calls the
@@ -249,7 +249,7 @@ def emit_build_timing(stats: BuildStats) -> None:
     """Write the cold-build scorecard line to stderr when ``RAC_TIMING`` is set.
 
     Env-gated and stderr-only (stdout is a frozen contract); absent by default.
-    Mirrors the incremental-validate ``rac-timing:`` line shape (ADR-103).
+    Mirrors the incremental-validate ``rac-timing:`` line shape (ADR-106).
     """
     if _TIMING_ENV not in os.environ:
         return

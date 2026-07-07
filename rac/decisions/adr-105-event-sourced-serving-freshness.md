@@ -3,12 +3,12 @@ schema_version: 1
 id: RAC-KWSDFYW7PCW6
 type: decision
 ---
-# ADR-102: Event-Sourced Serving Freshness
+# ADR-105: Event-Sourced Serving Freshness
 
 ## Context
 
 ADR-099 gave the derived read-model a content-addressed cache keyed on
-`corpus_content_hash`, and ADR-101 replaced its serialized-blob representation
+`corpus_content_hash`, and ADR-104 replaced its serialized-blob representation
 with a memory-mapped base + delta fold — but both kept ADR-032's freshness
 posture on the serving path: the key is recomputed on **every** tool call, and
 `corpus_content_hash` is an Ω(bytes) read of every artifact in the corpus. So
@@ -24,7 +24,7 @@ remove / rename from the path set, staleness-free under pure content addressing)
 and an Ω(bytes) **content-read** cost (needed only for in-place edits). Only an
 event source or an explicit trust assertion collapses the content-read term to
 O(changed) and yields a flat warm line; a per-call proxy (stat, dir-mtime) at
-best reduces the slope. ADR-101 built the base + delta fold seam precisely so
+best reduces the slope. ADR-104 built the base + delta fold seam precisely so
 this decision could populate the delta from an event-sourced changed set without
 re-deriving the corpus, and left the freshness decision — how the delta is kept
 current — explicitly to this ADR.
@@ -76,7 +76,7 @@ When the corpus is unchanged the tracker returns the cached read-model with no
 re-derive; when it changed, only the changed files are re-parsed and the whole
 read-model is re-derived over the snapshot through the `build_derived_index`
 from-entries seam, so the result is byte-identical to a fresh walk. The
-memory-mapped base (ADR-101) is written for a corpus hash and, while the corpus
+memory-mapped base (ADR-104) is written for a corpus hash and, while the corpus
 drifts within a bounded window of changed files (the **delta**), reads are served
 from the re-derived snapshot without rewriting the base; when the window crosses
 the compaction threshold (v2 §1.2: delta docs > max(10k, 1% of base)) a fresh
@@ -122,7 +122,7 @@ the active rung. The full re-hash floor is always available and always correct.
 
 This **supersedes ADR-099's per-call full re-hash key recomputation** and
 **revises ADR-032's absolute per-call re-read for the opt-in cache mode**; it does
-not touch the default path. ADR-099's and ADR-101's non-negotiables carry
+not touch the default path. ADR-099's and ADR-104's non-negotiables carry
 forward: content-addressed integrity on the corpus hash, byte-parity to a fresh
 build as the coherency guarantee, disposability (a corrupt or unwritable store
 degrades to a fresh build, never a wrong answer), fail-closed schema and
@@ -219,10 +219,10 @@ while giving the same completed-writes-are-visible guarantee.
 - ADR-099: supersedes its per-call full re-hash key recomputation. Content
   addressing, byte-parity to the fresh path, and disposability are preserved; only
   the re-hash-every-call mechanism is replaced.
-- ADR-101: this decision populates the base + delta fold seam ADR-101 built and
+- ADR-104: this decision populates the base + delta fold seam ADR-104 built and
   deferred here. The memory-mapped base is the compaction target; the delta window
   is the changed set the tracker maintains.
-- ADR-100: the read-model the tracker keeps fresh is the unified `DerivedIndex`;
+- ADR-103: the read-model the tracker keeps fresh is the unified `DerivedIndex`;
   its shape and schema version are unchanged, so freshness changes the supply, not
   the bundle.
 - ADR-080: the store and its delta stay disposable and never authoritative; a

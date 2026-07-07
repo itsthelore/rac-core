@@ -1,4 +1,4 @@
-"""Movement-B bundle B4 — incremental directory validation (ADR-103).
+"""Movement-B bundle B4 — incremental directory validation (ADR-106).
 
 B4 makes ``rac validate DIR --cache`` changeset-bound: a stat-manifest scan
 detects the changed / added / removed set, and only changed files are re-parsed
@@ -382,7 +382,7 @@ def test_timing_line_is_stderr_only_and_opt_in(tmp_path, capsys, monkeypatch):
 
 def test_store_segment_is_not_a_pickle(tmp_path):
     # The no-code-bearing-format proof: the store opens with the segment magic,
-    # never a pickle/JSON opcode (ADR-101 discipline carried to the results store).
+    # never a pickle/JSON opcode (ADR-104 discipline carried to the results store).
     corpus = _corpus(tmp_path, {"a.md": _decision(_D1, "A")})
     cache = tmp_path / "cache"
     validate_directory_incremental(str(corpus), cache_dir=cache)

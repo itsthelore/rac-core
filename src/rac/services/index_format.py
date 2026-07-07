@@ -1,4 +1,4 @@
-"""Binary segment codec for the persistent index store (ADR-101).
+"""Binary segment codec for the persistent index store (ADR-104).
 
 The persistent store is a directory of length-prefixed binary *segment* files.
 This module is the low-level format only: it knows how to encode Python scalars,
@@ -30,10 +30,10 @@ SEGMENT_MAGIC = b"RACIDX01"
 # The binary layout version. A bump makes every older segment file fail the gate
 # on open (a miss, rebuilt fresh), so a format change can never rehydrate a stale
 # shape — the same pinned-schema discipline the JSON cache used (ADR-007). Bumped
-# to 2 by the postings-served search bundle (ADR-101), which adds the term-major
+# to 2 by the postings-served search bundle (ADR-104), which adds the term-major
 # postings segment: a store written before the bump lacks it and, even were the
 # file present, fails this version gate closed, so the fast path never reads a
-# half-old layout. Bumped to 3 by the point-resolution bundle (ADR-101), which
+# half-old layout. Bumped to 3 by the point-resolution bundle (ADR-104), which
 # adds the alias-map and path-map segments so ``get_artifact``/``get_related``
 # resolve an id in O(lookup) instead of reconstructing every identity row: a
 # store written before the bump lacks those files and fails this gate closed, so

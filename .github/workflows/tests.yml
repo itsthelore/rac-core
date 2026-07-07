@@ -129,20 +129,20 @@ jobs:
             paths: "tests/test_watchkeeper.py tests/test_validate_action.py tests/test_pr_gate_action.py tests/test_gate.py tests/test_no_egress.py"
           # Characterization battery (roadmap rebuild-scale, Phase 0.5): pins
           # observable behavior that was unpinned before the examiner froze.
-          # Movement-B bundle B1 (ADR-100) adds test_b1_read_model.py here — it
+          # Movement-B bundle B1 (ADR-103) adds test_b1_read_model.py here — it
           # pins the unified read-model's byte-parity and cache invariants. Bundle
-          # B2 (ADR-101) adds test_b2_index_store.py — the persistent mmap store's
+          # B2 (ADR-104) adds test_b2_index_store.py — the persistent mmap store's
           # parity-vs-fresh-build, prefix-range, corruption, and RSS pins. Bundle
-          # B3 (ADR-102) adds test_b3_freshness.py — the event-sourced serving
+          # B3 (ADR-105) adds test_b3_freshness.py — the event-sourced serving
           # tracker's mutation-class parity, delta/compaction, degraded-mode, and
-          # accepted-staleness pins. Bundle B3b (ADR-101) adds
+          # accepted-staleness pins. Bundle B3b (ADR-104) adds
           # test_b3b_postings_search.py — the postings-served search's parity
           # (store vs walk and across the delta window), work-boundedness, and
-          # broad-term match_count pins. Bundle B4 (ADR-103) adds
+          # broad-term match_count pins. Bundle B4 (ADR-106) adds
           # test_b4_incremental_validate.py — incremental `rac validate DIR
           # --cache`: per-file (content-hash x config-fingerprint) result reuse,
           # byte-parity across mutation classes, ancestor-config invalidation,
-          # S5 accepted staleness, and corrupt-store recompute. Bundle B5 (ADR-104)
+          # S5 accepted staleness, and corrupt-store recompute. Bundle B5 (ADR-107)
           # adds test_b5_scale_hardening.py — the parallel cold build's worker-count
           # determinism (byte-identical store + serving), parse-semantics parity,
           # post-compaction snapshot-shed RSS bound, worker-crash serial fallback,

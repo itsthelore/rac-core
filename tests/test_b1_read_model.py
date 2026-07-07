@@ -1,4 +1,4 @@
-"""Movement-B bundle B1 — unified derived read-model (ADR-100).
+"""Movement-B bundle B1 — unified derived read-model (ADR-103).
 
 B1 wires the two MCP tools that bypassed the ADR-099 derived-index cache —
 ``get_summary`` (a fresh ``build_portfolio_summary`` walk) and ``find_decisions``
@@ -223,7 +223,7 @@ def test_extended_bundle_round_trips_losslessly(tmp_path):
 
 
 def test_schema_version_was_bumped_by_adr_100():
-    # ADR-100 extended the cached bundle, so the schema version moved off "1".
+    # ADR-103 extended the cached bundle, so the schema version moved off "1".
     assert derived_cache.SCHEMA_VERSION == "2"
 
 

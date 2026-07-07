@@ -47,7 +47,7 @@ from rac.services.references import SCOPE_SECTIONS, extract_relationships_full
 from rac.services.relationships import Relationship, relationships_from_corpus
 from rac.services.resolve import field_tokens_for_entries, live_decision_paths
 
-# Byte-parity requires the identical scope matcher, and this bundle (ADR-100)
+# Byte-parity requires the identical scope matcher, and this bundle (ADR-103)
 # does not open `services/scope.py`, so the two path-mode matchers are reused as
 # imports rather than duplicated — duplicating the segment-aware glob compiler
 # would be a parity liability. A future public seam on `scope` would remove the
@@ -64,7 +64,7 @@ from rac.services.scope_paths import repository_root
 # The bundle schema version — the *shape* of the derived structures. It gates
 # both the small marker file and the store header (a mismatch on either is a
 # miss, rebuilt fresh), so a shape change can never rehydrate a stale bundle
-# (ADR-007). Bumped to "2" by ADR-100 (portfolio summary + scope rows). ADR-101
+# (ADR-007). Bumped to "2" by ADR-103 (portfolio summary + scope rows). ADR-104
 # changes the on-disk *encoding* (a memory-mapped segment directory, no longer a
 # JSON blob) but not the bundle shape, so the version stays "2"; the encoding is
 # versioned independently by the store's own segment-format and layout versions,
@@ -79,7 +79,7 @@ CACHE_DIR_ENV = "RAC_CACHE_DIR"
 
 @dataclass(frozen=True)
 class ScopeRow:
-    """One live decision's declared ``## Applies To`` scope, precomputed (ADR-100).
+    """One live decision's declared ``## Applies To`` scope, precomputed (ADR-103).
 
     The path mode of ``find_decisions`` matches a queried code path against every
     live decision's declared scope entries. Carrying the identity plus the ordered
@@ -101,7 +101,7 @@ class ScopeRow:
 
 @dataclass(frozen=True)
 class DerivedIndex:
-    """The expensive derived structures for one corpus snapshot (ADR-099/ADR-100).
+    """The expensive derived structures for one corpus snapshot (ADR-099/ADR-103).
 
     Each field is a pure function of the corpus bytes, so the whole bundle is
     content-addressable and losslessly serialisable:
@@ -112,10 +112,10 @@ class DerivedIndex:
     - ``field_tokens_by_path`` — the tokenised BM25 field vectors, keyed by path.
     - ``live_decision_paths`` — the Accepted, non-retired decision paths, so the
       ``find_decisions`` liveness filter needs no parsed products.
-    - ``portfolio_summary`` — the ``get_summary`` portfolio dict (ADR-100),
+    - ``portfolio_summary`` — the ``get_summary`` portfolio dict (ADR-103),
       computed once through ``portfolio_from_corpus`` over the same snapshot, so
       the heaviest tool builds through this one composer instead of re-walking.
-    - ``scope_rows`` — the per-live-decision ``## Applies To`` rows (ADR-100) the
+    - ``scope_rows`` — the per-live-decision ``## Applies To`` rows (ADR-103) the
       path mode of ``find_decisions`` matches against, so it needs no fresh walk.
     """
 
@@ -145,7 +145,7 @@ class DerivedIndex:
 
 
 class CorpusReadModel(Protocol):
-    """The read-model surface every serving-path consumer reads (ADR-099/ADR-101).
+    """The read-model surface every serving-path consumer reads (ADR-099/ADR-104).
 
     Both the fresh :class:`DerivedIndex` and the persistent store's lazily
     materialised view satisfy it, so ``mcp/server.py`` consumes either without a
@@ -209,7 +209,7 @@ def governing_decisions(scope_rows: list[ScopeRow], directory: str, path: str) -
     Byte-identical to :func:`rac.services.scope.decisions_for_path` for the same
     corpus and path — the same repository-root discovery, query normalisation,
     segment-aware coverage test, and ``(id.casefold(), path)`` ordering — but over
-    the read-model's precomputed rows (ADR-100), so no fresh walk is needed. The
+    the read-model's precomputed rows (ADR-103), so no fresh walk is needed. The
     server always builds the rows recursively, matching the tool's ``recursive``.
     """
     root = repository_root(directory)
@@ -240,7 +240,7 @@ def build_derived_index_from_entries(
     """Build the derived structures from an already-walked corpus snapshot.
 
     The from-parts seam :func:`build_derived_index` composes, factored out so an
-    event-sourced serving tracker (ADR-102) that re-parses only the *changed*
+    event-sourced serving tracker (ADR-105) that re-parses only the *changed*
     files can re-derive the whole read-model over its incrementally-maintained
     snapshot without a fresh walk — byte-identically to :func:`build_derived_index`
     for the same corpus state, because ``entries`` is the same sorted-path snapshot
@@ -263,7 +263,7 @@ def build_derived_index(directory: str, *, recursive: bool = True) -> DerivedInd
 
     One walk feeds every structure, exactly as the uncached consumers build them
     individually, so a cache-populated call and a fresh call are byte-identical.
-    The portfolio summary and scope rows (ADR-100) ride the same walk, so the two
+    The portfolio summary and scope rows (ADR-103) ride the same walk, so the two
     formerly cache-bypassing tools build through this one composer too.
     """
     entries = list(walk_corpus(directory, recursive=recursive))
@@ -347,7 +347,7 @@ def to_json_obj(derived: DerivedIndex) -> dict:
         "relationships": [_relationship_to_obj(r) for r in derived.relationships],
         "field_tokens_by_path": derived.field_tokens_by_path,
         "live_decision_paths": list(derived.live_decision_paths),
-        # ADR-100: the portfolio dict is already the JSON get_summary serves, so it
+        # ADR-103: the portfolio dict is already the JSON get_summary serves, so it
         # embeds directly; the scope rows are plain strings.
         "portfolio_summary": derived.portfolio_summary,
         "scope_rows": [_scope_row_to_obj(r) for r in derived.scope_rows],
@@ -388,11 +388,11 @@ def default_cache_dir() -> Path:
 
 
 class DerivedIndexCache:
-    """Disposable, content-addressed persistence of the derived structures (ADR-099/ADR-101).
+    """Disposable, content-addressed persistence of the derived structures (ADR-099/ADR-104).
 
     :meth:`load_or_build` is the whole surface: it hashes the corpus and, under an
     unchanged key, returns a read-model *view* backed by the memory-mapped index
-    store (ADR-101) instead of rehydrating a JSON blob — point access, no per-call
+    store (ADR-104) instead of rehydrating a JSON blob — point access, no per-call
     peak-allocation spike. Otherwise it rebuilds through :func:`build_derived_index`,
     writes the store, and returns a view over it. Every failure mode degrades to a
     fresh build — an unwritable directory, a corrupt or truncated segment, a schema
@@ -402,7 +402,7 @@ class DerivedIndexCache:
     On disk the cache dir holds a small ``{hash}.json`` marker (the fail-closed
     schema gate) beside a ``store/`` subdirectory of the mapped segment files. A
     marker present implies its store is present (the store is written first). An
-    old ADR-099/ADR-100 JSON blob under the same ``{hash}.json`` name has no store
+    old ADR-099/ADR-103 JSON blob under the same ``{hash}.json`` name has no store
     beside it, so it opens as a miss and is rebuilt — old JSON files are ignored.
     """
 
@@ -427,7 +427,7 @@ class DerivedIndexCache:
             # writes a fresh store rather than skipping the unusable directory. The
             # answer is still fresh either way — this only restores the cache.
             remove_store(self.cache_dir, corpus_hash)
-        # Cold miss: build the store from nothing with a parallel parse (ADR-104).
+        # Cold miss: build the store from nothing with a parallel parse (ADR-107).
         # Byte-identical to the serial build — the parse is fanned across processes
         # but produces the same sorted-path snapshot the serial derive consumes — so
         # the store written here equals a single-process build's, only faster to

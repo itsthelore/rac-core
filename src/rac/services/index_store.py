@@ -1,4 +1,4 @@
-"""Persistent memory-mapped index store + base/delta fold (ADR-101).
+"""Persistent memory-mapped index store + base/delta fold (ADR-104).
 
 This is the on-disk substrate that replaces ADR-099's serialised-blob cache
 representation: instead of one ``{hash}.json`` document rehydrated whole on every
@@ -18,7 +18,7 @@ this bundle the delta is always :data:`EMPTY_DELTA`: the base is the whole answe
 The seam exists so a later bundle can add mutation (tombstones, added rows, stat
 adjustments) without touching a single consumer — the read API is already the
 fold, not the reader. The freshness decision that populates the delta is recorded
-separately (ADR-102).
+separately (ADR-105).
 
 **Doc identity is the path string.** A positional docid indexes the segments
 compactly, but it is never the identity or the tie-break: each row carries its
@@ -100,7 +100,7 @@ _SEG_RELATIONSHIPS = "relationships.seg"
 _SEG_LIVE = "live.seg"
 _SEG_SCOPE = "scope.seg"
 _SEG_PORTFOLIO = "portfolio.seg"
-# Point-resolution segments (ADR-101). ``aliasmap`` is the sorted casefolded
+# Point-resolution segments (ADR-104). ``aliasmap`` is the sorted casefolded
 # identifier -> docids map exact resolution binary-searches, so ``get_artifact``
 # and ``get_related`` resolve an id without reconstructing every identity row.
 # ``pathmap`` is the sorted path-string -> docid map ``get_related`` binary-
@@ -187,7 +187,7 @@ def _build_segments(
     # order, so every list is sorted ascending by construction — deterministic,
     # no post-sort. This is the segment the postings-served search reads: a query
     # term's candidate docs and its distinct-docid df both come from the union of
-    # the term's prefix-range rows, touching O(matches) not O(corpus) (ADR-101).
+    # the term's prefix-range rows, touching O(matches) not O(corpus) (ADR-104).
     postings_lists: list[list[int]] = [[] for _ in termdict]
     # Casefolded identifier -> ascending docids, the exact identity set exact
     # resolution matches (``resolve_in_index``: casefolded equality over an
@@ -624,7 +624,7 @@ class MmapIndexReader:
         hi = self._bisect_left(successor)
         return (lo, hi)
 
-    # --- term-major postings: term id -> docids holding it (ADR-101) ----------
+    # --- term-major postings: term id -> docids holding it (ADR-104) ----------
 
     def _postings(self) -> IndexedSegment:
         # One IndexedSegment reused across a call: a prefix range walks many
@@ -652,7 +652,7 @@ class MmapIndexReader:
             result.update(self.postings(term_id))
         return result
 
-    # --- point resolution: alias/path maps binary-searched (ADR-101) ----------
+    # --- point resolution: alias/path maps binary-searched (ADR-104) ----------
 
     def _aliasmap(self) -> IndexedSegment:
         if self._aliasmap_seg is None:
@@ -769,7 +769,7 @@ class MmapIndexReader:
 
 @dataclass(frozen=True)
 class Delta:
-    """The mutable overlay a later bundle folds over the base — EMPTY here (ADR-101).
+    """The mutable overlay a later bundle folds over the base — EMPTY here (ADR-104).
 
     The seams are declared now so mutation can be added without touching any
     consumer, which already reads through :class:`Fold`:
@@ -779,7 +779,7 @@ class Delta:
     - ``added_paths`` — the identity of docs the delta adds, so the fold's key-set
       stays exactly the live corpus set (the cache-key-set == entry-set invariant).
     - stat adjustments, added rows, and term deltas belong here too; they stay
-      unpopulated until the freshness decision (ADR-102) that owns them.
+      unpopulated until the freshness decision (ADR-105) that owns them.
     """
 
     tombstones: frozenset[int] = frozenset()
@@ -824,7 +824,7 @@ class Fold:
         are the same — not-found when nothing matches, duplicate (with the matching
         paths sorted, never resolved by order) when more than one distinct doc
         matches, resolved otherwise. A binary search plus O(matches) row reads
-        replaces the O(N) identity-row reconstruction (ADR-101). Tombstoned docs are
+        replaces the O(N) identity-row reconstruction (ADR-104). Tombstoned docs are
         folded out first, so a future non-empty delta stays correct through this
         one path (empty here, so the base is the whole answer).
         """
@@ -895,7 +895,7 @@ class Fold:
 
     def portfolio_summary(self) -> dict:
         # The portfolio summary is an aggregate; folding a non-empty delta into it
-        # needs the stat-adjustment seam (ADR-102). With the empty delta the base
+        # needs the stat-adjustment seam (ADR-105). With the empty delta the base
         # summary is exact.
         return self.base.portfolio_summary()
 
@@ -966,7 +966,7 @@ class Fold:
             len_of=lambda name: self.base.field_length(docid, name),
         )
 
-    # --- postings-served search (ADR-101; ADR-078 scoring unchanged) -----------
+    # --- postings-served search (ADR-104; ADR-078 scoring unchanged) -----------
 
     def search(self, query: str, artifact_type: str | None = None) -> SearchResult:
         """`rac find` search served from the postings, byte-identical to a walk.
@@ -1005,7 +1005,7 @@ class Fold:
 
 
 class LazyIdentityByPath:
-    """Path -> ``(id, type, title)`` resolved on demand from the store (ADR-101).
+    """Path -> ``(id, type, title)`` resolved on demand from the store (ADR-104).
 
     ``get_related``'s relationship helpers read identity only for the paths on the
     artifact's incoming edges and within its bounded neighbourhood — never the whole
@@ -1118,7 +1118,7 @@ class ReadModelView:
         return self._fold.resolve(artifact_id)
 
     def lazy_identity_by_path(self) -> LazyIdentityByPath:
-        """A lazy path -> ``(id, type, title)`` map for ``get_related`` (ADR-101).
+        """A lazy path -> ``(id, type, title)`` map for ``get_related`` (ADR-104).
 
         Resolves each requested path through the store's path map on demand, so the
         relationship helpers touch only the edges near the artifact — never the O(N)
@@ -1187,7 +1187,7 @@ def open_read_model(cache_dir: Path, corpus_hash: str, bundle_version: str) -> R
 
 
 # =============================================================================
-# Per-file validation-result store — the incremental-validate substrate (ADR-103).
+# Per-file validation-result store — the incremental-validate substrate (ADR-106).
 # =============================================================================
 #
 # `rac validate DIR --cache` reuses per-file validation results across runs. A
@@ -1197,7 +1197,7 @@ def open_read_model(cache_dir: Path, corpus_hash: str, bundle_version: str) -> R
 # store is one binary segment file per corpus root; it doubles as the freshness
 # manifest by carrying each file's `(size, mtime_ns, content_hash)` stat proxy in
 # the same row, so the CLI needs no second on-disk structure. It follows the same
-# ADR-101 discipline as the mmap store: fixed struct reads (no pickle), fail-closed
+# ADR-104 discipline as the mmap store: fixed struct reads (no pickle), fail-closed
 # on corruption (an `IndexFormatError` is a miss → full recompute), atomic writes.
 
 VALIDATE_STORE_DIRNAME = "validate"
@@ -1206,7 +1206,7 @@ VALIDATE_LAYOUT_VERSION = "v1"
 
 @dataclass(frozen=True)
 class ValidationRow:
-    """One file's cached validation result plus its freshness stat proxy (ADR-103).
+    """One file's cached validation result plus its freshness stat proxy (ADR-106).
 
     ``content_hash`` is the parity-bearing key (the result is reused verbatim when
     it is unchanged); ``size``/``mtime_ns`` are the cheap stat prefilter the
