@@ -157,14 +157,17 @@ def store_dir(cache_dir: Path, corpus_hash: str) -> Path:
     return store_root(cache_dir) / corpus_hash
 
 
-def _build_segments(
+def _iter_segment_files(
     corpus_hash: str, bundle_version: str, derived: DerivedIndex
-) -> dict[str, bytes]:
-    """Encode a :class:`~rac.services.derived_cache.DerivedIndex` to segment bytes.
+) -> Iterator[tuple[str, bytes]]:
+    """Encode a :class:`~rac.services.derived_cache.DerivedIndex` to segment files.
 
-    Docids are assigned in ``index_entries`` order — the corpus walk's sorted-path
-    order — and every structure keyed to a doc uses that order, so materialisation
-    reproduces the fresh bundle exactly.
+    Yields ``(filename, encoded-bytes)`` one segment at a time, releasing each
+    segment's source rows before encoding the next, so the whole encoded store is
+    never co-resident (ADR-107 streaming cold-build write). Docids are assigned in
+    ``index_entries`` order — the corpus walk's sorted-path order — and every
+    structure keyed to a doc uses that order, so the streamed store reproduces the
+    fresh bundle byte-for-byte; the yield order does not affect any byte.
     """
     entries: list[IndexEntry] = list(derived.index_entries)
     field_tokens = derived.field_tokens_by_path
@@ -235,8 +238,32 @@ def _build_segments(
         for tid in doc_term_ids:
             postings_lists[tid].append(docid)
 
-    termdict_rows = [_encode_text(term) for term in termdict]
+    # Scalar header inputs, captured before the structures they summarise are
+    # released; the header segment is emitted last.
+    n_entries = len(entries)
+    n_terms = len(termdict)
+    del term_id
+
+    # Per-doc indexed segments. Each is encoded, yielded, and its source rows
+    # released before the next, so the whole encoded store is never co-resident.
+    # The yield order does not affect any byte — each file is whole and
+    # independent — and is chosen to free the largest encoded rows first.
+    yield _SEG_ENTRIES, encode_segment(write_indexed(entry_rows))
+    del entry_rows
+    yield _SEG_SECTIONS, encode_segment(write_indexed(section_rows))
+    del section_rows
+    yield _SEG_TOKENS, encode_segment(write_indexed(token_rows))
+    del token_rows
+
     postings_rows = [_encode_u32_list(docids) for docids in postings_lists]
+    del postings_lists
+    yield _SEG_POSTINGS, encode_segment(write_indexed(postings_rows))
+    del postings_rows
+
+    termdict_rows = [_encode_text(term) for term in termdict]
+    del termdict
+    yield _SEG_TERMDICT, encode_segment(write_indexed(termdict_rows))
+    del termdict_rows
 
     # Alias map: rows sorted by casefolded key so a query id's exact match is a
     # binary search. Each row is ``key`` then its ascending docids.
@@ -246,6 +273,9 @@ def _build_segments(
         writer.text(key)
         writer.u32_list(alias_docids[key])
         aliasmap_rows.append(writer.payload)
+    del alias_docids
+    yield _SEG_ALIASMAP, encode_segment(write_indexed(aliasmap_rows))
+    del aliasmap_rows
 
     # Path map: rows sorted by path *string* so a neighbour path's docid is a
     # binary search. Docids index in walk (Path-sorted) order, which is not the
@@ -256,6 +286,9 @@ def _build_segments(
         writer.text(path)
         writer.u32(docid)
         pathmap_rows.append(writer.payload)
+    del entries
+    yield _SEG_PATHMAP, encode_segment(write_indexed(pathmap_rows))
+    del pathmap_rows
 
     relationships = Writer()
     rels: list[Relationship] = list(derived.relationships)
@@ -266,9 +299,11 @@ def _build_segments(
         relationships.text(rel.target)
         relationships.opt_text(rel.resolved_path)
         relationships.opt_text(rel.issue)
+    yield _SEG_RELATIONSHIPS, encode_segment(relationships.payload)
 
     live = Writer()
     live.text_list(list(derived.live_decision_paths))
+    yield _SEG_LIVE, encode_segment(live.payload)
 
     scope = Writer()
     scope_rows = list(derived.scope_rows)
@@ -279,6 +314,7 @@ def _build_segments(
         scope.text(scope_row.status)
         scope.text(scope_row.path)
         scope.text_list(list(scope_row.scope_entries))
+    yield _SEG_SCOPE, encode_segment(scope.payload)
 
     portfolio = Writer()
     # The portfolio summary is itself a JSON wire payload (get_summary serves it
@@ -286,30 +322,17 @@ def _build_segments(
     # data, decoded with ``json.loads`` on demand, never code (no pickle). This is
     # the one place JSON survives; every structural segment is binary.
     portfolio.text(json.dumps(derived.portfolio_summary, ensure_ascii=False))
+    yield _SEG_PORTFOLIO, encode_segment(portfolio.payload)
 
     header = Writer()
     header.text(corpus_hash)
     header.text(bundle_version)
     header.text(scoring_fingerprint())
-    header.u32(len(entries))
+    header.u32(n_entries)
     for value in length_sums:
         header.u32(value)
-    header.u32(len(termdict))
-
-    return {
-        _SEG_HEADER: encode_segment(header.payload),
-        _SEG_ENTRIES: encode_segment(write_indexed(entry_rows)),
-        _SEG_SECTIONS: encode_segment(write_indexed(section_rows)),
-        _SEG_TOKENS: encode_segment(write_indexed(token_rows)),
-        _SEG_TERMDICT: encode_segment(write_indexed(termdict_rows)),
-        _SEG_POSTINGS: encode_segment(write_indexed(postings_rows)),
-        _SEG_RELATIONSHIPS: encode_segment(relationships.payload),
-        _SEG_LIVE: encode_segment(live.payload),
-        _SEG_SCOPE: encode_segment(scope.payload),
-        _SEG_PORTFOLIO: encode_segment(portfolio.payload),
-        _SEG_ALIASMAP: encode_segment(write_indexed(aliasmap_rows)),
-        _SEG_PATHMAP: encode_segment(write_indexed(pathmap_rows)),
-    }
+    header.u32(n_terms)
+    yield _SEG_HEADER, encode_segment(header.payload)
 
 
 def _encode_text(value: str) -> bytes:
@@ -348,11 +371,10 @@ def write_store(
         if _store_is_openable(final, corpus_hash, bundle_version):
             return True
         _remove_tree(final)
-    segments = _build_segments(corpus_hash, bundle_version, derived)
     tmp = root / f".{corpus_hash}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
     try:
         tmp.mkdir(parents=True, exist_ok=True)
-        for name, payload in segments.items():
+        for name, payload in _iter_segment_files(corpus_hash, bundle_version, derived):
             _write_file(tmp / name, payload)
         _fsync_dir(tmp)
         try:
