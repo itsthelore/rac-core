@@ -50,6 +50,10 @@ class IndexEntry:
     # additive): the deterministic graph signal the relevance ranker fuses
     # (ADR-078). Not serialized — the index JSON contract is unchanged.
     inbound_count: int = 0
+    # Frontmatter tags (ADR-109, additive): the tags search tier and the `--tag`
+    # facet read from here. Not serialized in the manifest to_dict — the index
+    # JSON contract stays identity-only, same as search_sections/inbound_count.
+    tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -130,6 +134,7 @@ def index_from_corpus(
                 aliases=artifact_identifiers(product, spec, str(path)),
                 search_sections=product.search_sections,
                 inbound_count=inbound.get(str(path), 0),
+                tags=list(product.metadata.tags) if product.metadata else [],
             )
         )
     return RepositoryIndex(directory=directory, recursive=recursive, artifacts=artifacts)
