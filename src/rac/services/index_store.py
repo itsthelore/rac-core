@@ -70,6 +70,7 @@ from rac.services.resolve import (
     SearchableArtifact,
     SearchResult,
     _bm25f_scored,
+    _entry_has_tags,
     _Match,
     _match_entry,
     _rank_and_build,
@@ -82,7 +83,9 @@ from rac.services.resolve import (
 # order; the fold feeds them back to the shared scorer in the same order, so the
 # float summation order — the parity-critical one — is preserved.
 FIELDS: tuple[str, ...] = tuple(_FIELD_BOOSTS)
-assert FIELDS == ("id", "title", "path", "heading", "body"), "field order is a parity contract"
+assert FIELDS == ("id", "title", "path", "heading", "body", "tags"), (
+    "field order is a parity contract"
+)
 
 # On-disk layout root and version. A layout bump lands in a new subdirectory, so
 # stores from an older layout are simply never found (a miss) — never rehydrated.
@@ -216,6 +219,10 @@ def _iter_segment_files(
         row.opt_text(entry.title)
         row.text(entry.path)
         row.text_list(list(entry.aliases))
+        # Raw tags in the identity block (ADR-109) so the `--tag` facet matches
+        # whole tags reconstructed from the store; placed after aliases and before
+        # inbound so entry_path (which stops at path) is untouched.
+        row.text_list(list(entry.tags))
         row.u32(entry.inbound_count)
         for value in lengths:
             row.u32(value)
@@ -543,7 +550,10 @@ class MmapIndexReader:
         title = reader.opt_text()
         path = reader.text()
         aliases = reader.text_list()
-        return IndexEntry(id=entry_id, type=entry_type, title=title, path=path, aliases=aliases)
+        tags = reader.text_list()
+        return IndexEntry(
+            id=entry_id, type=entry_type, title=title, path=path, aliases=aliases, tags=tags
+        )
 
     def full_entry(self, docid: int) -> IndexEntry:
         """The full index row: identity plus searchable sections and inbound count."""
@@ -553,6 +563,7 @@ class MmapIndexReader:
         title = reader.opt_text()
         path = reader.text()
         aliases = reader.text_list()
+        tags = reader.text_list()
         inbound = reader.u32()
         sections = self._read_sections(docid)
         return IndexEntry(
@@ -563,6 +574,7 @@ class MmapIndexReader:
             aliases=aliases,
             search_sections=sections,
             inbound_count=inbound,
+            tags=tags,
         )
 
     def _read_sections(self, docid: int) -> list[SearchSection]:
@@ -585,7 +597,8 @@ class MmapIndexReader:
         reader.text()
         reader.opt_text()
         reader.text()
-        reader.text_list()
+        reader.text_list()  # aliases
+        reader.text_list()  # tags
         reader.u32()  # inbound
         lengths = [reader.u32() for _ in FIELDS]
         return lengths[FIELDS.index(field_name)]
@@ -990,7 +1003,13 @@ class Fold:
 
     # --- postings-served search (ADR-104; ADR-078 scoring unchanged) -----------
 
-    def search(self, query: str, artifact_type: str | None = None) -> SearchResult:
+    def search(
+        self,
+        query: str,
+        artifact_type: str | None = None,
+        *,
+        tags: Sequence[str] | None = None,
+    ) -> SearchResult:
         """`rac find` search served from the postings, byte-identical to a walk.
 
         Reproduces :func:`resolve.search_index` without materialising the whole
@@ -1000,16 +1019,21 @@ class Fold:
         header, ``df`` from the prefix ranges — carry the non-matching corpus's
         contribution without touching its rows. Matching, snippet selection, and
         the fused BM25F+RRF ranking all run through the shared scoring code on
-        inputs value-identical to the fresh walk, so the emitted bytes match.
+        inputs value-identical to the fresh walk, so the emitted bytes match. The
+        ``tags`` facet narrows the candidates to those carrying every tag, exactly
+        as the fresh path does (ADR-109).
         """
         terms = tokenize(query)
         if not terms:
             return SearchResult(query=query, artifact_type=artifact_type, matches=[])
+        tag_filter = frozenset(t.casefold() for t in tags) if tags else frozenset()
         matched: list[tuple[SearchableArtifact, _Match]] = []
         field_tokens_by_path: dict[str, dict[str, list[str]]] = {}
         for docid in sorted(self.candidate_docids(terms)):
             entry = self.base.full_entry(docid)
             if artifact_type is not None and entry.type != artifact_type:
+                continue
+            if tag_filter and not _entry_has_tags(entry, tag_filter):
                 continue
             entry_tokens = _tokenize_entry(entry)
             match = _match_entry(entry_tokens, terms)
@@ -1117,16 +1141,23 @@ class ReadModelView:
             for row in self._fold.scope_rows_raw()
         ]
 
-    def search(self, query: str, artifact_type: str | None = None) -> SearchResult:
+    def search(
+        self,
+        query: str,
+        artifact_type: str | None = None,
+        *,
+        tags: Sequence[str] | None = None,
+    ) -> SearchResult:
         """Postings-served `rac find` search — byte-identical to ``search_index``.
 
         The store fast path a search-shaped tool takes when the read-model is
         served from the memory-mapped base (the delta is empty): it touches only
         the query terms' prefix ranges and the matched docs' rows, never the whole
         corpus, while producing the same ordered matches, ``match_count``, and
-        evidence a fresh whole-corpus walk would.
+        evidence a fresh whole-corpus walk would. ``tags`` narrows to artifacts
+        carrying every requested tag (ADR-109).
         """
-        return self._fold.search(query, artifact_type=artifact_type)
+        return self._fold.search(query, artifact_type=artifact_type, tags=tags)
 
     def resolve(self, artifact_id: str) -> ResolutionResult:
         """Point resolution over the persisted alias map — byte-identical to a walk.
