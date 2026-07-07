@@ -64,21 +64,27 @@ class SearchableArtifact(Protocol):
     def search_sections(self) -> Sequence[SearchSection]: ...
     @property
     def inbound_count(self) -> int: ...
+    @property
+    def tags(self) -> Sequence[str]: ...
 
 
-# Match-field priority for search ordering (lower ranks first); the ladder
-# pinned by ADR-037/ADR-038: id, then title, then path, then heading, then body.
+# Match-field priority for search ordering (lower ranks first); the ladder pinned
+# by ADR-037/ADR-038 and extended by ADR-109 with a tags tier between title and
+# path: id, title, tags, path, heading, body. A curated tag outranks an
+# incidental path token but not the artifact's own title.
 _RANK_ID = 0
 _RANK_TITLE = 1
-_RANK_PATH = 2
-_RANK_HEADING = 3
-_RANK_BODY = 4
+_RANK_TAGS = 2
+_RANK_PATH = 3
+_RANK_HEADING = 4
+_RANK_BODY = 5
 
 # Tier number -> field name, the projection ADR-037's ladder exposes as match
 # evidence (WS2 explainable retrieval): the winning rank named, no new compute.
 _RANK_NAMES: dict[int, str] = {
     _RANK_ID: "id",
     _RANK_TITLE: "title",
+    _RANK_TAGS: "tags",
     _RANK_PATH: "path",
     _RANK_HEADING: "heading",
     _RANK_BODY: "body",
@@ -143,6 +149,12 @@ class ResolvedArtifact:
     # for search until a surface enriches it, and absent from ``to_dict`` then, so
     # the pre-freshness shape is byte-identical (ADR-007).
     recency: dict | None = None
+    # Frontmatter tags (ADR-109, additive): surfaced on a *search* hit so a caller
+    # sees why it matched and what else the artifact carries. Emitted from
+    # ``to_dict`` only when non-empty, so an untagged hit is byte-identical to the
+    # pre-tags shape (ADR-007); the identity-only ``rac index`` manifest is
+    # unchanged.
+    tags: list[str] = field(default_factory=list)
 
     def to_dict(self, *, include_evidence: bool = True) -> dict:
         payload: dict[str, Any] = {
@@ -159,6 +171,8 @@ class ResolvedArtifact:
             payload["evidence"] = self.evidence
         if self.recency is not None:
             payload["recency"] = self.recency
+        if self.tags:
+            payload["tags"] = self.tags
         return payload
 
     @classmethod
@@ -178,6 +192,7 @@ class ResolvedArtifact:
             section=section,
             snippet=snippet,
             evidence=evidence,
+            tags=list(getattr(entry, "tags", ())),
         )
 
 
@@ -403,6 +418,11 @@ def _tokenize_entry(entry: SearchableArtifact) -> _EntryTokens:
     fields = {
         "id": _id_tokens(entry),
         "title": tokenize(entry.title or ""),
+        # Tags tokenise by the same ADR-037 rule as every field: a multi-word tag
+        # like ``data-model`` yields ``data``/``model``, so a query term matches a
+        # tag uniformly (ADR-109). The facet (``_entry_has_tags``) matches the raw
+        # whole tag instead — a deliberately different mechanism.
+        "tags": [token for tag in getattr(entry, "tags", ()) for token in tokenize(tag)],
         "path": tokenize(entry.path),
         "heading": heading_tokens,
         "body": body_tokens,
@@ -475,6 +495,7 @@ def _match_body(
 _TIERS: tuple[tuple[int, _TierMatcher], ...] = (
     (_RANK_ID, _match_field("id")),
     (_RANK_TITLE, _match_field("title")),
+    (_RANK_TAGS, _match_field("tags")),
     (_RANK_PATH, _match_field("path")),
     (_RANK_HEADING, _match_headings),
     (_RANK_BODY, _match_body),
@@ -531,16 +552,19 @@ def find_artifacts(
     query: str,
     artifact_type: str | None = None,
     recursive: bool = True,
+    *,
+    tags: Sequence[str] | None = None,
 ) -> SearchResult:
-    """Search artifacts under ``directory`` by id, title, path, heading, or body.
+    """Search artifacts under ``directory`` by id, title, tags, path, heading, or body.
 
     Deterministic and explainable (no ranking heuristics): token-boundary
-    matching (ADR-037), the five-tier ladder with body text (ADR-038), results
-    ordered by match-field priority then sorted path. An empty result is a
-    valid outcome, not an error.
+    matching (ADR-037), the tiered ladder with a tags tier and body text
+    (ADR-038/ADR-109), results ordered by match-field priority then sorted path.
+    ``tags`` narrows the matched set to artifacts carrying every requested tag
+    (the ``--tag`` facet). An empty result is a valid outcome, not an error.
     """
     entries = build_repository_index(directory, recursive=recursive).artifacts
-    return search_index(entries, query, artifact_type=artifact_type)
+    return search_index(entries, query, artifact_type=artifact_type, tags=tags)
 
 
 # --- Live decision query (v0.21.16, ADR-067) ---------------------------------
@@ -640,13 +664,19 @@ _GRAPH_WEIGHT = 0.5
 _BM25_K1 = 1.2  # term-frequency saturation.
 _BM25_B = 0.75  # field-length normalisation strength.
 # Field boosts mirror the old tier order (id/title heaviest, body lightest),
-# turning the hard tier cutoff into a graded BM25F contribution.
+# turning the hard tier cutoff into a graded BM25F contribution. ``tags`` is
+# appended LAST, not at its tier position (rank 2), so the original five fields
+# keep their exact float-summation order — the parity-critical one the store
+# depends on (ADR-109); an untagged artifact adds a ``+0.0`` tags term, leaving
+# its score byte-identical. The boost value (2.5, above path, below title), not
+# the dict position, is the BM25F ranking lever.
 _FIELD_BOOSTS: dict[str, float] = {
     "id": 4.0,
     "title": 3.0,
     "path": 2.0,
     "heading": 1.5,
     "body": 1.0,
+    "tags": 2.5,
 }
 
 
@@ -784,12 +814,23 @@ def _competition_ranks(scores: dict[str, float]) -> dict[str, int]:
     return ranks
 
 
+def _entry_has_tags(entry: SearchableArtifact, wanted: frozenset[str]) -> bool:
+    """Whether ``entry`` carries every tag in ``wanted`` (the ``--tag`` facet).
+
+    Exact whole-tag match, casefolded (tags are case-insensitive labels, ADR-109):
+    ``--tag data-model`` matches only that tag, never the token ``model``. AND
+    across the requested set — a narrowing filter, like the query's term AND.
+    """
+    return wanted <= {tag.casefold() for tag in getattr(entry, "tags", ())}
+
+
 def search_index(
     entries: Sequence[SearchableArtifact],
     query: str,
     artifact_type: str | None = None,
     *,
     field_tokens_by_path: dict[str, dict[str, list[str]]] | None = None,
+    tags: Sequence[str] | None = None,
 ) -> SearchResult:
     """Search already-discovered entries with `rac find` semantics (v0.8.1).
 
@@ -807,6 +848,10 @@ def search_index(
     to computing it fresh — only the per-call re-tokenisation is skipped.
     """
     terms = tokenize(query)
+    # The tag facet is a pre-scoring constraint applied alongside the type filter,
+    # so surviving results rank among themselves while corpus-wide BM25 stats stay
+    # corpus-global (IDF unchanged, ADR-109). Empty/None means no facet.
+    tag_filter = frozenset(t.casefold() for t in tags) if tags else frozenset()
     matched: list[tuple[SearchableArtifact, _Match]] = []
     # Field vectors of the entries the matcher tokenised this call, reused below
     # for the corpus statistics so each entry is tokenised at most once.
@@ -814,6 +859,8 @@ def search_index(
     if terms:  # an all-punctuation query tokenizes to nothing: no matches.
         for entry in entries:
             if artifact_type is not None and entry.type != artifact_type:
+                continue
+            if tag_filter and not _entry_has_tags(entry, tag_filter):
                 continue
             entry_tokens = _tokenize_entry(entry)
             matched_field_tokens[entry.path] = entry_tokens.fields
