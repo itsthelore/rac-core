@@ -1047,6 +1047,7 @@ def cmd_find(args: argparse.Namespace) -> int:
             args.query,
             artifact_type=args.type,
             recursive=not args.top_level,
+            tags=args.tags,
         )
     # Freshness phase 1 (ADR-045): join git-derived staleness onto matches after
     # ranking, so the matched set and order are unchanged (REQ-005) and the fields
@@ -2159,6 +2160,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Only live decisions (Accepted, non-retired) — the 'what did we "
             "decide about X / is X ruled out' query (ADR-067)."
+        ),
+    )
+    p_find.add_argument(
+        "--tag",
+        action="append",
+        dest="tags",
+        metavar="TAG",
+        help=(
+            "Only match artifacts carrying this frontmatter tag (repeatable; all "
+            "required). Narrows the query by tag (ADR-109)."
         ),
     )
     p_find.add_argument(

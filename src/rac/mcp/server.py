@@ -146,9 +146,10 @@ DESC_SEARCH_ARTIFACTS = (
     "decisions (ADRs), designs, roadmaps, and prompts — by keyword. Call this "
     "before designing or implementing anything that an existing requirement or "
     "prior decision might cover, and whenever the user mentions a feature area, "
-    "so recorded decisions are respected instead of rediscovered. Returns "
-    "matching artifact IDs, types, titles, and paths; use get_artifact to read "
-    "a match."
+    "so recorded decisions are respected instead of rediscovered. Optionally "
+    "pass `tags` to narrow the query to artifacts carrying every given "
+    "frontmatter tag. Returns matching artifact IDs, types, titles, and paths "
+    "(plus their tags when tagged); use get_artifact to read a match."
 )
 
 DESC_GET_RELATED = (
@@ -271,6 +272,7 @@ def _search_artifacts(
     artifact_type: str | None,
     budget: int,
     reader: FreshnessTracker | None = None,
+    tags: list[str] | None = None,
 ) -> str:
     if reader is not None:
         derived = reader.read_model()
@@ -278,7 +280,7 @@ def _search_artifacts(
             # Served from the memory-mapped base (the delta is empty): the postings
             # fast path touches only the query terms' prefix ranges and the matched
             # docs' rows, byte-identical to a full-corpus walk (ADR-104).
-            result = derived.search(query, artifact_type=artifact_type)
+            result = derived.search(query, artifact_type=artifact_type, tags=tags)
         else:
             # A non-empty delta serves from the re-derived in-memory snapshot; its
             # search is the whole-corpus scan, correct and already resident.
@@ -287,10 +289,11 @@ def _search_artifacts(
                 query,
                 artifact_type=artifact_type,
                 field_tokens_by_path=derived.field_tokens_by_path,
+                tags=tags,
             )
     else:
         entries = build_repository_index(root, recursive=True).artifacts
-        result = search_index(entries, query, artifact_type=artifact_type)
+        result = search_index(entries, query, artifact_type=artifact_type, tags=tags)
     # Freshness phase 1 (ADR-045): join git-derived staleness after ranking, so
     # search order is unchanged and the fields degrade to null outside git.
     annotate_search_recency(result.matches, root)
@@ -512,11 +515,18 @@ def build_server(
         )
 
     @server.tool(name="search_artifacts", description=DESC_SEARCH_ARTIFACTS)
-    def search_artifacts(query: str, ctx: Context, type: str | None = None) -> str:
+    def search_artifacts(
+        query: str, ctx: Context, type: str | None = None, tags: list[str] | None = None
+    ) -> str:
+        # ``tags`` only rides the audit args when supplied, so a plain query's
+        # recorded shape is byte-identical to before (additive, ADR-007/ADR-109).
+        args = {"query": query, "type": type}
+        if tags:
+            args["tags"] = tags
         return observed(
             "search_artifacts",
-            {"query": query, "type": type},
-            lambda: _search_artifacts(root, query, type, budget, reader),
+            args,
+            lambda: _search_artifacts(root, query, type, budget, reader, tags),
             _request_principal(ctx),
         )
 
