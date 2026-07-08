@@ -69,9 +69,11 @@ def test_sbom_root_version_is_the_latest_release():
     # The root component attests to the latest released version (the newest
     # CHANGELOG.md heading), never a setuptools-scm dev build that matches no
     # published artifact — an SBOM for an uninstallable version attests nothing.
+    # The heading is SemVer `## vX.Y.Z` (ADR-111); the SBOM records its PEP 440
+    # normalised spelling without the `v` (the form PyPI publishes).
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    heading = re.search(r"^## (\d{4}\.\d{2}\.\d+)\b", changelog, re.MULTILINE)
-    assert heading, "no release heading (## YYYY.MM.N) in CHANGELOG.md"
+    heading = re.search(r"^## v(\d+\.\d+\.\d+)\b", changelog, re.MULTILINE)
+    assert heading, "no release heading (## vX.Y.Z) in CHANGELOG.md"
     root = _sbom()["metadata"]["component"]
     assert root["version"] == heading.group(1)
     assert ".dev" not in root["version"]

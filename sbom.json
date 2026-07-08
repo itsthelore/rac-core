@@ -6,9 +6,9 @@
     "component": {
       "type": "library",
       "name": "rac-core",
-      "version": "2026.06.5",
-      "bom-ref": "rac-core@2026.06.5",
-      "purl": "pkg:pypi/rac-core@2026.06.5"
+      "version": "0.22.0",
+      "bom-ref": "rac-core@0.22.0",
+      "purl": "pkg:pypi/rac-core@0.22.0"
     }
   },
   "components": [

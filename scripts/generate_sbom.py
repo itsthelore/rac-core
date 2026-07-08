@@ -19,7 +19,8 @@ The root component's version is the latest release heading in ``CHANGELOG.md``,
 not the installed package metadata: a working checkout carries a setuptools-scm
 ``.devN`` version that matches no published artifact, and an SBOM attesting to a
 version nobody can install defeats its purpose. The committed document therefore
-always describes the most recent release.
+always describes the most recent release, in its PEP 440 normalised spelling
+(``0.22.0``, dropping the ``v`` the tag carries — the form PyPI publishes).
 
 Usage::
 
@@ -44,8 +45,10 @@ CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 PACKAGE_NAME = "rac-core"
 
-# The latest release heading in CHANGELOG.md: `## YYYY.MM.N — …` (ADR-076).
-_RELEASE_HEADING_RE = re.compile(r"^## (\d{4}\.\d{2}\.\d+)\b", re.MULTILINE)
+# The latest release heading in CHANGELOG.md: `## vX.Y.Z — …` (ADR-111, which
+# reverted the CalVer of ADR-076). The capture drops the ``v`` so the recovered
+# version is the PEP 440 normalised spelling PyPI publishes (``0.22.0``).
+_RELEASE_HEADING_RE = re.compile(r"^## v(\d+\.\d+\.\d+)\b", re.MULTILINE)
 
 # A PEP 508 requirement string starts with the distribution name; strip any
 # version specifier, extras, or environment marker to recover the bare name.
@@ -85,7 +88,7 @@ def _released_version() -> str:
     """
     match = _RELEASE_HEADING_RE.search(CHANGELOG.read_text(encoding="utf-8"))
     if not match:
-        raise SystemExit("no release heading (## YYYY.MM.N) found in CHANGELOG.md")
+        raise SystemExit("no release heading (## vX.Y.Z) found in CHANGELOG.md")
     return match.group(1)
 
 
