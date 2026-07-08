@@ -40,8 +40,16 @@ content issues.
 
 - **Input:** `rac validate <path>` — a Markdown file, a directory, or `-` for stdin.
 - **Options:** `--json` · `--top-level` · `--recursive` (directory mode) ·
+  `--cache` (incremental directory validation) ·
   `--corpus DIR` (stdin / single-file mode — see below)
 - **Exit codes:** `0` no errors · `1` validation errors · `2` path not found / unreadable
+
+**`--cache` makes directory validation incremental (ADR-106).** Off by default,
+`--cache` reuses a per-file result cache keyed on each file's content hash × the
+active config fingerprint, so re-validating a large corpus after a small change
+does work proportional to what changed rather than to corpus size. It is
+disposable and byte-identical to the uncached run: a changed config invalidates
+the affected results, and a corrupt or missing cache recomputes from scratch.
 
 ```bash
 rac validate login-flow.md
@@ -1296,25 +1304,50 @@ rac resolve adr-015 rac/ --json
 
 ## find
 
-Search artifacts by ID, title, filename, path, heading, or body — deterministic,
-case-insensitive token-boundary matching (ADR-037); a multi-term query requires
-every term to match somewhere. Results are ordered by a **deterministic relevance
-score** (ADR-078): a field-weighted BM25 lexical score and a bounded
-inbound-reference graph boost, fused with Reciprocal Rank Fusion, with sorted
-path as the tiebreak. No embeddings or semantic scoring — identical bytes and
-query yield a byte-identical order. An empty result is a valid outcome, not an
-error.
+Search artifacts by ID, title, **tags**, filename, path, heading, or body —
+deterministic, case-insensitive token-boundary matching (ADR-037); a multi-term
+query requires every term to match somewhere. Results are ordered by a
+**deterministic relevance score** (ADR-078): a field-weighted BM25 lexical score
+and a bounded inbound-reference graph boost, fused with Reciprocal Rank Fusion,
+with sorted path as the tiebreak. No embeddings or semantic scoring — identical
+bytes and query yield a byte-identical order. An empty result is a valid outcome,
+not an error.
 
 - **Input:** `rac find <query> [directory]` — directory defaults to the
   current directory.
-- **Options:** `--type TYPE` (only match one artifact type) · `--json` ·
-  `--explain` · `--top-level` · `--recursive`
+- **Options:** `--type TYPE` (only match one artifact type) · `--tag TAG`
+  (repeatable; only artifacts carrying every given tag) · `--cache` (serve from
+  the persistent index store) · `--json` · `--explain` · `--top-level` ·
+  `--recursive`
 - **Exit codes:** `0` search completed (matches or none) · `2` not a directory
+
+**Tags are searchable (ADR-109).** A query term matches an artifact's frontmatter
+`tags` as a metadata tier between title and path — tokenised by the same rule as
+every field, so a term like `model` matches a `data-model` tag. Two mechanisms,
+one need each: the **tier** matches tokenised tags (so a query finds things
+*about* a topic), while the **`--tag` facet** matches whole tags exactly (so
+`--tag data-model` narrows to that label and never the token `model`). `--tag` is
+repeatable with AND semantics — `--tag security --tag api` returns only artifacts
+carrying both — and is case-insensitive. A tagged hit surfaces its `tags`
+additively (present only when non-empty). The `search_artifacts` MCP tool takes
+the same `tags` argument.
+
+**`--cache` serves from the persistent index store (ADR-110).** Off by default,
+`--cache` answers the query from the memory-mapped derived index (ADR-104)
+instead of a fresh walk — a warm run against an unchanged corpus skips the parse
+and graph rebuild; a cold run builds fresh and writes the store for next time.
+The output is byte-identical to the uncached `rac find` for every mode. The store
+is disposable and content-addressed (any byte change rebuilds it), lives under
+`RAC_CACHE_DIR` / `$XDG_CACHE_HOME`, and is safe to delete — it costs only
+latency. A single one-shot is net-neutral (the cold build and content hash have
+their own cost); the win is many warm queries against a stable corpus.
 
 `--explain` adds, per match, the matched field/terms/tier plus the relevance
 score and its components (`bm25`, `lexical_rank`, `graph_rank`, `inbound`), so a
 caller can see why one result outranks another. It is additive: the default
-output (without `--explain`) is unchanged, and `schema_version` stays `1`.
+output (without `--explain`) is unchanged, and `schema_version` stays `1`. (The
+tags tier renumbered the `tier` integer for path/heading/body by one; the field
+name and result order are unchanged.)
 
 Each match also carries a **`recency`** object — git-derived freshness so you
 can see which result has decayed without opening it (ADR-045). `last_committed`

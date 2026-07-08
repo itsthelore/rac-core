@@ -6,7 +6,17 @@ details, release history over commit history.
 
 ## Unreleased
 
-The **decision-to-code-proximity** programme: recorded decisions now know which
+_Nothing yet._
+
+## 2026.07.1 — the "scale" release
+
+Two headline movements on top of a large accumulated release. **Search by tags**:
+the frontmatter `tags` you already write become a first-class search signal — a
+query term matches them, and a `--tag` facet narrows by them. And **single-node
+scale**: retrieval stops growing with corpus size — a persistent memory-mapped
+index, postings-served search, incremental recompute, and a parallel cold build,
+every piece opt-in and byte-identical to the uncached path. Alongside them, the
+**decision-to-code-proximity** programme: recorded decisions now know which
 code they govern, and you can ask which decisions govern a path — declared and
 validated, never inferred; deterministic and offline. Plus the completed
 **lore-at-team-scale** programme: `rac mcp` can now serve the whole team over one
@@ -19,6 +29,41 @@ as candidate relationships.
 
 ### Added
 
+- **Tags are part of search.** The frontmatter `tags` you already write were
+  validated but invisible to retrieval — now a query term matches an artifact's
+  tags (a metadata tier between title and path, tokenised by the same rule as
+  every field, so `model` finds a `data-model` tag), and a repeatable `--tag`
+  facet on `rac find` plus a `tags` argument on the `search_artifacts` MCP tool
+  narrow results to artifacts carrying *every* requested tag (whole-tag,
+  case-insensitive, AND semantics). The tier matches tokenised tags; the facet
+  matches whole tags — one mechanism for "find things about X," one for "only
+  things labelled X." Deterministic and lexical throughout, never an embedding
+  (ADR-037/038/109). A tagged search hit now carries its `tags` additively
+  (emitted only when non-empty, so an untagged hit is byte-identical to before).
+- **Retrieval stops scaling with corpus size.** For large corpora the engine no
+  longer re-derives its expensive structures from disk on every read. The derived
+  index — the repository index, the resolved relationship graph, and the search
+  token vectors — is now a persistent, **memory-mapped segment store**, so the
+  working-set memory stays bounded (the index lives on disk, never fully
+  resident); search is served from **term-major postings**; the shared server
+  tracks freshness **incrementally** instead of re-hashing the whole corpus on
+  each call; and the **cold build parallelises** the whole parse-and-derive across
+  cores. Every piece is opt-in and disposable — keyed on a corpus content hash,
+  byte-identical to the uncached path, and safe to delete (it costs only latency)
+  — so enabling it can never change an answer, only its speed
+  (ADR-103/104/105/107/108). The measured before/after scale curve lives in the
+  `rac-benchmarks` harness, not here.
+- **`rac find --cache`.** An opt-in flag that serves a one-shot query from the
+  persistent index store instead of a fresh walk, so a benchmark or an agent
+  issuing many queries against a stable corpus skips the parse and graph rebuild
+  on every warm invocation. Byte-identical to the uncached `rac find` for every
+  mode — search, `--decisions`, `--type`, `--tag`, `--explain` — cold and warm;
+  off by default (ADR-110).
+- **`rac validate --cache`.** Opt-in incremental validation: a per-file result
+  cache keyed on each file's content hash × the active config fingerprint, so
+  re-validating after a small change is proportional to what changed rather than
+  to corpus size. Disposable and byte-identical to the uncached run; a changed
+  config or a corrupt cache recomputes from scratch (ADR-106). Off by default.
 - **Decisions can declare the code they govern.** A decision may list the paths
   or components it applies to in an optional `## Applies To` section. Literal
   path and directory entries are existence-checked by
@@ -140,6 +185,22 @@ as candidate relationships.
   supported, neither is deprecated). Selectivity is by scoping, never by lossy
   compression (ADR-066); the selective-by-default guarantee is now asserted in the
   test suite.
+
+### Changed
+
+- **Search `evidence.tier` integers shifted by one.** Adding the tags tier at
+  rank 2 renumbers the lower tiers in the `--explain` / `search_artifacts` tier
+  field: path `2 → 3`, heading `3 → 4`, body `4 → 5`. The *ranking order* of
+  results is unchanged (it is BM25F-driven, not tier-driven — ADR-078); only the
+  numeric tier label moved, and the matched field name (`path`/`heading`/`body`)
+  is unchanged (ADR-109). A consumer that reads the field name is unaffected; one
+  that pinned the integer should re-read it.
+- **The persisted index store format changed (a rebuild, never an answer
+  change).** The tags field and the memory-mapped segment layout bump the store's
+  format and bundle versions; an index built by an older `rac` fails the version
+  gate closed and is transparently rebuilt on next use. The store is a disposable
+  derived structure, so this costs a one-time rebuild, never a different result
+  (ADR-104/109).
 
 ## 2026.06.5 — the "rename" release
 
