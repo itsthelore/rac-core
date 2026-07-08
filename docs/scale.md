@@ -1,0 +1,94 @@
+# Scale & performance
+
+Lore is designed so a growing corpus stays fast on a single node. The engine's
+original posture (ADR-032) re-derived its expensive structures — the repository
+index, the resolved relationship graph, and the search token vectors — from disk
+on **every** read. That is the right default at hundreds of artifacts, but its
+per-call cost grows with corpus size. The work described here supersedes those
+speed-pinning decisions with recorded ones, so retrieval stays scale-invariant at
+enterprise size on one node.
+
+Every mechanism below shares three guarantees, so turning it on can never change
+an answer — only its speed:
+
+- **Byte-identical.** Cached and uncached paths produce the same bytes. This is a
+  hard test gate (a store built from the cache equals a fresh build, and a
+  parallel build equals a single-process one, segment-for-segment).
+- **Content-addressed.** Every cache is keyed on a hash of the corpus (or of a
+  file × the active config). Any byte change to any artifact changes the key and
+  forces a rebuild — there is no time- or event-based staleness.
+- **Disposable.** The files in git are the truth; the index is a rebuildable
+  derived structure. Deleting it — or hitting a corrupt or format-outdated one —
+  costs only latency, never correctness. No daemon, no lockfile, no database
+  (ADR-080).
+
+Nothing here uses AI or approximation: retrieval stays deterministic and lexical
+(ADR-037/038/066).
+
+## 1. A persistent, memory-mapped index
+
+The derived index is a persistent **memory-mapped segment store** (ADR-104), not
+an in-memory blob rebuilt per call. Segments — the term dictionary, term-major
+postings, the document store, the relationship graph — are mapped from disk and
+paged in on demand, so the working-set memory stays **bounded** regardless of
+corpus size: the index lives on disk and is never fully resident. Search is
+served directly from the term-major postings (ADR-038), and point lookups resolve
+through mapped identity segments without materialising the whole corpus.
+
+## 2. Opt-in caching on the paths that matter
+
+Reuse of that store is **opt-in**, off by default, on the three surfaces where
+repeated reads against a stable corpus dominate:
+
+| Command | Flag | What it reuses |
+| --- | --- | --- |
+| `rac mcp` | `--cache` | The whole derived read-model for a long-lived server (ADR-099/104). |
+| `rac find` | `--cache` | The persistent store for one-shot queries, instead of a fresh walk (ADR-110). |
+| `rac validate` | `--cache` | A per-file result cache, so re-validation is incremental (ADR-106). |
+
+For the long-lived `rac mcp --cache` server, freshness is tracked
+**incrementally** by an event-sourced watcher (ADR-105) rather than re-hashing the
+whole corpus on every call, so a warm endpoint answers without re-reading files
+that did not change. A one-shot `rac find --cache` has no long-lived process to
+hold that watcher, so it still pays a corpus content-hash to detect change before
+reusing anything — it skips the expensive parse and derive, not the hash — which
+is why a single query is net-neutral and the win is *many* warm queries.
+
+`rac validate --cache` keys each file's result on its content hash × the active
+config fingerprint, so validating a large corpus after a small edit does work
+proportional to what changed. A changed config invalidates exactly the affected
+results; a corrupt cache recomputes from scratch.
+
+## 3. A parallel cold build
+
+Building the index from nothing (the cold-miss path) fans out across CPU cores
+(ADR-107/108). Workers each parse a contiguous range of the sorted file list and
+emit compact per-document *derived fragments*; the parent reproduces the
+read-model from them in sorted-path order. Only compact rows cross the process
+boundary — never parsed documents — so both the parse **and** the derive
+parallelise while the result stays worker-count-invariant: a build with four
+workers writes the same store, segment-for-segment, as a single-process build.
+The parallel path is a latency lever, never a correctness dependency — below a
+file-count / core threshold, or on any worker fault, the build falls back to the
+authoritative single-process path and discards partial results whole.
+
+## 4. The numbers
+
+Concrete latency and throughput figures — the before/after scale curve across a
+1k → millions-of-artifacts corpus on a fixed reference node — live in the
+[`rac-benchmarks`](https://github.com/itsthelore/rac-benchmarks) harness, which
+consumes `rac` strictly as an external CLI so the numbers survive engine
+rebuilds. The design target is a **flat** warm-retrieval curve as the corpus
+grows and a cold build that scales linearly and parallel; the harness reports
+each number as measured or extrapolated, never faked, with the reference node
+stated alongside it. Distribution and sharding are explicitly out of scope — the
+levers here are single-node.
+
+## Related decisions
+
+- [ADR-104](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-104-persistent-mmap-index-store.md) — persistent memory-mapped index store
+- [ADR-105](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-105-event-sourced-serving-freshness.md) — event-sourced serving freshness
+- [ADR-106](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-106-incremental-validation.md) — incremental directory validation
+- [ADR-107](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-107-parallel-cold-build.md) — parallel cold build
+- [ADR-108](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-108-term-range-partitioned-parallel-merge.md) — term-range-partitioned parallel merge
+- [ADR-110](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-110-one-shot-find-store-reuse.md) — one-shot `rac find` store reuse
