@@ -15,6 +15,12 @@ name = "requirements-as-code"
 # Must be strictly greater than the final real requirements-as-code release so an
 # unpinned `pip install requirements-as-code` resolves to this redirect. `==<old>`
 # pins still resolve to the real historical releases. Confirm/bump before publish.
+#
+# Intentionally CalVer, even though rac-core reverted to SemVer (ADR-111): no
+# SemVer number can outrank the last real CalVer release (`1.0.0 < 2026.6.4` in
+# PEP 440), so a SemVer version here would NOT resolve as default without yanking
+# the historical releases. `2026.6.99` outranks them and needs no yank. Do not
+# "fix" this to SemVer without also yanking 2026.6.x on this project.
 version = "2026.6.99"
 description = "Renamed to rac-core. Transitional redirect — install rac-core instead."
 readme = "README.md"
@@ -22,10 +28,13 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "Tom Ballard", email = "tom@armytage.co" }]
 keywords = ["requirements-as-code", "rac", "rac-core", "moved", "renamed"]
-# The whole point: pulling this in pulls in the renamed package. Pin the floor to
-# the first rac-core release so the redirect can never resolve to nothing
-# (tighten to the exact first rac-core version once it is published).
-dependencies = ["rac-core>=2026.6"]
+# The whole point: pulling this in pulls in the renamed package. The floor is the
+# first SemVer rac-core release (ADR-111 reverted CalVer): it must NOT be a CalVer
+# floor like `>=2026.6`, because `0.22.0 < 2026.6` in PEP 440 — such a floor would
+# reject every SemVer rac-core and, once the CalVer dists are yanked, resolve to
+# nothing. `>=0.22.0` follows the SemVer line forever and never lands on a yanked
+# CalVer build.
+dependencies = ["rac-core>=0.22.0"]
 
 [project.urls]
 Homepage = "https://github.com/itsthelore/rac-core"
