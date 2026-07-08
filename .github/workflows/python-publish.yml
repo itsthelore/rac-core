@@ -22,9 +22,10 @@ jobs:
     uses: ./.github/workflows/tests.yml
 
   verify-release:
-    # Fail-closed CalVer gate (REQ-Release-Versioning REQ-007, ADR-076): the
-    # release tag must be a well-formed YYYY.MM.N identifier and have a matching
-    # CHANGELOG.md entry, or nothing is built or published.
+    # Fail-closed SemVer gate (REQ-Release-Versioning REQ-007, ADR-111): the
+    # release tag must be a well-formed vX.Y.Z identifier (a CalVer YYYY.MM.N tag
+    # is rejected) and have a matching CHANGELOG.md entry, or nothing is built or
+    # published.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
