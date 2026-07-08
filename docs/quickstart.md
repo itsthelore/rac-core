@@ -27,7 +27,7 @@ rac --version
 ### No Python? Use the container image
 
 Every release also publishes an official container image to GHCR, versioned
-in lockstep with the PyPI package — the image tag is the same CalVer version:
+in lockstep with the PyPI package — the image tag is the same SemVer version:
 
 ```bash
 docker run --rm -v "$PWD:/work" ghcr.io/itsthelore/rac:latest validate rac/
