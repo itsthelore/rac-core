@@ -42,6 +42,7 @@ nav:
   - Shared Server: shared-server.md
   - CLI Reference: cli.md
   - Context Cost: context-cost.md
+  - Scale & Performance: scale.md
   - Watchkeeper: watchkeeper.md
   - Artifacts: artifacts.md
   - Relationships: relationships.md

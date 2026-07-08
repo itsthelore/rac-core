@@ -6,7 +6,17 @@ details, release history over commit history.
 
 ## Unreleased
 
-The **decision-to-code-proximity** programme: recorded decisions now know which
+_Nothing yet._
+
+## v0.22.0 — the "scale" release
+
+Two headline movements on top of a large accumulated release. **Search by tags**:
+the frontmatter `tags` you already write become a first-class search signal — a
+query term matches them, and a `--tag` facet narrows by them. And **single-node
+scale**: retrieval stops growing with corpus size — a persistent memory-mapped
+index, postings-served search, incremental recompute, and a parallel cold build,
+every piece opt-in and byte-identical to the uncached path. Alongside them, the
+**decision-to-code-proximity** programme: recorded decisions now know which
 code they govern, and you can ask which decisions govern a path — declared and
 validated, never inferred; deterministic and offline. Plus the completed
 **lore-at-team-scale** programme: `rac mcp` can now serve the whole team over one
@@ -19,6 +29,41 @@ as candidate relationships.
 
 ### Added
 
+- **Tags are part of search.** The frontmatter `tags` you already write were
+  validated but invisible to retrieval — now a query term matches an artifact's
+  tags (a metadata tier between title and path, tokenised by the same rule as
+  every field, so `model` finds a `data-model` tag), and a repeatable `--tag`
+  facet on `rac find` plus a `tags` argument on the `search_artifacts` MCP tool
+  narrow results to artifacts carrying *every* requested tag (whole-tag,
+  case-insensitive, AND semantics). The tier matches tokenised tags; the facet
+  matches whole tags — one mechanism for "find things about X," one for "only
+  things labelled X." Deterministic and lexical throughout, never an embedding
+  (ADR-037/038/109). A tagged search hit now carries its `tags` additively
+  (emitted only when non-empty, so an untagged hit is byte-identical to before).
+- **Retrieval stops scaling with corpus size.** For large corpora the engine no
+  longer re-derives its expensive structures from disk on every read. The derived
+  index — the repository index, the resolved relationship graph, and the search
+  token vectors — is now a persistent, **memory-mapped segment store**, so the
+  working-set memory stays bounded (the index lives on disk, never fully
+  resident); search is served from **term-major postings**; the shared server
+  tracks freshness **incrementally** instead of re-hashing the whole corpus on
+  each call; and the **cold build parallelises** the whole parse-and-derive across
+  cores. Every piece is opt-in and disposable — keyed on a corpus content hash,
+  byte-identical to the uncached path, and safe to delete (it costs only latency)
+  — so enabling it can never change an answer, only its speed
+  (ADR-103/104/105/107/108). The measured before/after scale curve lives in the
+  `rac-benchmarks` harness, not here.
+- **`rac find --cache`.** An opt-in flag that serves a one-shot query from the
+  persistent index store instead of a fresh walk, so a benchmark or an agent
+  issuing many queries against a stable corpus skips the parse and graph rebuild
+  on every warm invocation. Byte-identical to the uncached `rac find` for every
+  mode — search, `--decisions`, `--type`, `--tag`, `--explain` — cold and warm;
+  off by default (ADR-110).
+- **`rac validate --cache`.** Opt-in incremental validation: a per-file result
+  cache keyed on each file's content hash × the active config fingerprint, so
+  re-validating after a small change is proportional to what changed rather than
+  to corpus size. Disposable and byte-identical to the uncached run; a changed
+  config or a corrupt cache recomputes from scratch (ADR-106). Off by default.
 - **Decisions can declare the code they govern.** A decision may list the paths
   or components it applies to in an optional `## Applies To` section. Literal
   path and directory entries are existence-checked by
@@ -141,7 +186,31 @@ as candidate relationships.
   compression (ADR-066); the selective-by-default guarantee is now asserted in the
   test suite.
 
-## 2026.06.5 — the "rename" release
+### Changed
+
+- **Versioning reverted from CalVer back to SemVer (`vX.Y.Z`).** RAC's brief
+  CalVer detour (`YYYY.MM.N`) is reverted (ADR-111 supersedes ADR-076): the
+  release number communicates release intent again, and the release line
+  re-aligns with the `v0.22.x` roadmap series. The three CalVer releases are
+  remapped to SemVer — `v0.23.0` (Hardening) → `v0.20.0`, `2026.06.4` →
+  `v0.21.0`, `2026.06.5` → `v0.21.1` — this release is `v0.22.0`, and the CalVer
+  PyPI releases are yanked so the SemVer line resolves as "latest". Compatibility
+  still lives on `schema_version` (ADR-007), not the release number.
+- **Search `evidence.tier` integers shifted by one.** Adding the tags tier at
+  rank 2 renumbers the lower tiers in the `--explain` / `search_artifacts` tier
+  field: path `2 → 3`, heading `3 → 4`, body `4 → 5`. The *ranking order* of
+  results is unchanged (it is BM25F-driven, not tier-driven — ADR-078); only the
+  numeric tier label moved, and the matched field name (`path`/`heading`/`body`)
+  is unchanged (ADR-109). A consumer that reads the field name is unaffected; one
+  that pinned the integer should re-read it.
+- **The persisted index store format changed (a rebuild, never an answer
+  change).** The tags field and the memory-mapped segment layout bump the store's
+  format and bundle versions; an index built by an older `rac` fails the version
+  gate closed and is transparently rebuilt on next use. The store is a disposable
+  derived structure, so this costs a one-time rebuild, never a different result
+  (ADR-104/109).
+
+## v0.21.1 — the "rename" release
 
 The release that renames the package to match the project. The PyPI distribution
 is now **`rac-core`** (was `requirements-as-code`); the import package `rac` and
@@ -192,15 +261,13 @@ deterministic, content-free defaults.
   through the two-gate capture write model (ADR-077).
 
 
-## 2026.06.4 — the "unlock" release
+## v0.21.0 — the "unlock" release
 
-The first release under **CalVer** (`YYYY.MM.N`, ADR-076): RAC's version now says
-*when* a build was cut, not a SemVer compatibility claim it never kept.
-Compatibility lives on `schema_version` (ADR-007); the roadmap `vX.Y.Z` numbers
-continue as internal planning scope-fences. This is a one-way cutover — every
-prior `vX.Y.Z` tag is retained, and `2026.06.4` supersedes `v0.19.0` as the
-latest release. It also ships the user-facing work accumulated across the
-v0.23–v0.26 scope-fences:
+The release that shipped the user-facing work accumulated across the v0.23–v0.26
+scope-fences. It also moved the version string to **CalVer** (`YYYY.MM.N`,
+ADR-076) — a scheme later **reverted to SemVer** in v0.22.0 (ADR-111), which is
+why this release now carries a `vX.Y.Z` number; compatibility stays on
+`schema_version` (ADR-007) throughout. Its user-facing work:
 
 - **A reimagined Explorer (TUI).** Three themes — `lantern` (dark default),
   `parchment` (warm light), and `high-contrast` — switchable in `/settings` and
@@ -227,8 +294,8 @@ v0.23–v0.26 scope-fences:
   gated, deterministic grounding benchmark (`rac eval --check`).
 
 - **Release tooling.** A fail-closed publish gate (`python -m rac.release`)
-  rejects any tag that is not a well-formed `YYYY.MM.N` identifier or that lacks a
-  changelog entry, so a malformed or undocumented release can never reach PyPI.
+  rejects a malformed or undocumented release before it can reach PyPI. (This
+  release's gate checked the CalVer form; v0.22.0 reverted it to check `vX.Y.Z`.)
 
 ### Changed
 
@@ -338,7 +405,7 @@ v0.23–v0.26 scope-fences:
   names are unchanged (PyPI `requirements-as-code`, CLI `rac`, server identity
   `lore`). See `rac/decisions/adr-071-apache-2-relicense-and-dco.md`.
 
-## v0.23.0 — Hardening
+## v0.20.0 — Hardening
 
 The release that turns the grounding claim from "trust us" into something proven
 and legible. Everything a user feels:
