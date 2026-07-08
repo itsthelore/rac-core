@@ -85,7 +85,7 @@ consume the image rather than re-solving installation.
 
 ## Related Decisions
 
-- ADR-076
+- ADR-111
 - ADR-086
 - ADR-092
 
