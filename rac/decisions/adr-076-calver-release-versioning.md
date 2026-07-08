@@ -121,7 +121,12 @@ Rejected; the requirement was revised to the month-granular `YYYY.MM.N`.
 
 ## Status
 
-Accepted
+Superseded
+
+Superseded by ADR-111, which reverts RAC to SemVer (`vX.Y.Z`). The CalVer scheme
+this ADR adopted did not fit how the maintainer wants to communicate releases;
+the three CalVer releases are remapped to SemVer and the CalVer PyPI releases are
+yanked. See ADR-111 for the reversal and the remap.
 
 ## Category
 

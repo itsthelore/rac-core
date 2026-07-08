@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: 3d79e93ec7ce3f503bab797a7d7204d82b9bf4f8877d825ec7e89c6c79251b5c) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 181a8250d554295d30c2d1acde55e7660a72a02c82bcd735b23394983df84ae5) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -82,7 +82,6 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KVJY1KJEWZ87** — ADR-073: Backend Connectors Are Export-Contract Consumers, Not Per-Provider Repos _(Architecture)_
 - **RAC-KVK19NPWFYC9** — ADR-074: The Graph Export Surfaces Typed Relationship Edges _(Technical)_
 - **RAC-KVNM01QPBPXB** — ADR-075: The Pre-Merge Check Tier Is a Required Merge Gate on `main` _(Process)_
-- **RAC-KVPTVX3YZ87K** — ADR-076: Adopt CalVer (`YYYY.MM.N`) for RAC Releases _(Process)_
 - **RAC-KVSQ2A0BB9XF** — ADR-079: Note-Tool Exports Are Ingested by Normalisation, Not markitdown _(Architecture)_
 - **RAC-KVTS86ZGVJV7** — ADR-077: The Two-Gate Capture Write Model _(Architecture)_
 - **RAC-KW2YW6XK593X** — ADR-084: Read-Access Audit Recorder _(Product)_
@@ -108,4 +107,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWY0SHYCVY2D** — ADR-108: Term-Range-Partitioned Parallel Merge for the Cold Build _(Architecture)_
 - **RAC-KWY7886GSEE5** — ADR-109: Tag Search Tier and Tag Facet _(Technical)_
 - **RAC-KWYEHJXR0M3G** — ADR-110: One-Shot `rac find --cache` Reuses the Persistent Store _(Technical)_
+- **RAC-KX04DH293JG8** — ADR-111: Revert to SemVer Release Versioning _(Process)_
 <!-- END RAC MANAGED BLOCK -->

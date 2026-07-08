@@ -114,7 +114,7 @@ artifact re-imports the coupling that decision removed.
 ## Related Decisions
 
 - adr-093
-- adr-076
+- adr-111
 - adr-061
 - adr-026
 - adr-047
