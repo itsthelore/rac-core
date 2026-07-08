@@ -13,9 +13,15 @@ unpinned dependency floor — it never needs republishing when `rac-core` update
 2. **Confirm the version** in `pyproject.toml` is strictly greater than the last
    real `requirements-as-code` release (currently `2026.06.4`), so an unpinned
    `pip install requirements-as-code` resolves here. `2026.6.99` satisfies this
-   and signals "final". Optionally tighten `dependencies` to
-   `rac-core>=<first rac-core version>`.
-3. **Publish** via the workflow below.
+   and signals "final". It stays CalVer on purpose even though `rac-core` reverted
+   to SemVer (ADR-111): no SemVer number can outrank a `2026.x` CalVer release in
+   PEP 440, so a SemVer version here would not resolve as default without yanking
+   the historical releases — which this redirect deliberately avoids.
+3. **Confirm the dependency floor** is the SemVer line: `dependencies =
+   ["rac-core>=0.22.0"]`. A CalVer floor (`>=2026.6`) would reject every SemVer
+   `rac-core` (`0.22.0 < 2026.6`) and, once the CalVer `rac-core` dists are yanked,
+   resolve to nothing — a redirect that cannot install.
+4. **Publish** via the workflow below.
 
 ## Publish — Trusted Publishing via `publish-shim.yml` (no token)
 
