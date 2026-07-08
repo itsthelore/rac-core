@@ -135,29 +135,30 @@ def test_pre_commit_hook_allows_commit_when_no_markdown_staged(repo):
 
 def test_release_main_ok_prints_wellformed_and_returns_0(tmp_path, capsys):
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text("## 2026.06.1 — first cut\n", encoding="utf-8")
-    assert release_main(["2026.06.1", str(changelog)]) == 0
+    changelog.write_text("## v0.22.0 — first cut\n", encoding="utf-8")
+    assert release_main(["v0.22.0", str(changelog)]) == 0
     captured = capsys.readouterr()
-    assert captured.out == "✓ release 2026.06.1 is well-formed and has a changelog entry\n"
+    assert captured.out == "✓ release v0.22.0 is well-formed and has a changelog entry\n"
     assert captured.err == ""
 
 
 def test_release_main_rejects_bad_version_returns_1(tmp_path, capsys):
+    # The reverted CalVer form is now rejected (ADR-111).
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text("## 2026.06.1 — first cut\n", encoding="utf-8")
-    assert release_main(["v0.20.0", str(changelog)]) == 1
+    changelog.write_text("## v0.22.0 — first cut\n", encoding="utf-8")
+    assert release_main(["2026.06.1", str(changelog)]) == 1
     err = capsys.readouterr().err
-    assert err.startswith("✗ release v0.20.0 rejected:\n")
-    assert "is not a canonical CalVer release identifier" in err
+    assert err.startswith("✗ release 2026.06.1 rejected:\n")
+    assert "is not a canonical SemVer release identifier" in err
 
 
 def test_release_main_rejects_missing_changelog_entry_returns_1(tmp_path, capsys):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text("nothing relevant here\n", encoding="utf-8")
-    assert release_main(["2026.06.1", str(changelog)]) == 1
+    assert release_main(["v0.22.0", str(changelog)]) == 1
     err = capsys.readouterr().err
-    assert "✗ release 2026.06.1 rejected:" in err
-    assert "no '## 2026.06.1' entry found in CHANGELOG.md (REQ-005)" in err
+    assert "✗ release v0.22.0 rejected:" in err
+    assert "no '## v0.22.0' entry found in CHANGELOG.md (REQ-005)" in err
 
 
 def test_release_main_no_args_is_usage_error_returns_2(capsys):
