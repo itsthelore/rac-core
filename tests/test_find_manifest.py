@@ -207,6 +207,25 @@ def test_corrupt_manifest_self_heals_through_full_confirm(tmp_path):
     assert open_freshness_manifest(cache_dir, key), "the corrupt manifest must be rewritten"
 
 
+def test_manifest_present_store_deleted_rebuilds_and_rewrites(tmp_path):
+    # The manifest and the store are independently disposable: a valid manifest
+    # over a missing store recomposes the key by stat, misses the marker/store,
+    # rebuilds, and rewrites the store — never a wrong answer.
+    import shutil
+
+    from rac.services.derived_cache import DerivedIndexCache, build_derived_index
+    from rac.services.index_store import store_root
+
+    root, cache_dir = _cache_corpus(tmp_path)
+    cache = DerivedIndexCache(cache_dir)
+    cache.load_or_build(str(root))
+    shutil.rmtree(store_root(cache_dir))
+    for marker in cache_dir.glob("*.json"):
+        marker.unlink()
+    assert cache.load_or_build(str(root)) == build_derived_index(str(root))
+    assert store_root(cache_dir).exists(), "the rebuild must rewrite the store"
+
+
 def test_default_cache_dir_survives_a_homeless_environment(monkeypatch):
     from rac.services.derived_cache import default_cache_dir
 

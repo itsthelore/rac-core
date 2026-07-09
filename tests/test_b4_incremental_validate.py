@@ -313,6 +313,25 @@ def test_size_and_mtime_preserving_rewrite_is_the_accepted_stat_miss(tmp_path, c
     assert verified.to_dict() == fresh.to_dict()
 
 
+def test_cli_verify_flag_reaches_the_full_hash_floor(tmp_path, capsys, monkeypatch):
+    # The same S5 scenario through the CLI: the default (cached) run serves the
+    # stale result; `rac validate --verify` forces the content-confirm-all scan
+    # and reports the rewrite (ADR-112 flag wiring).
+    corpus = _corpus(tmp_path, {"a.md": _decision(_D1, "A", status="Accepted")})
+    monkeypatch.setenv("RAC_CACHE_DIR", str(tmp_path / "cache"))
+    path = corpus / "a.md"
+    before = path.stat()
+
+    assert main(["validate", str(corpus)]) == 0
+    path.write_text(_decision(_D1, "A", status="Rejected"), encoding="utf-8")
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+
+    assert main(["validate", str(corpus)]) == 0, "the default stat scan accepts the S5 miss"
+    assert main(["validate", str(corpus), "--verify"]) == 1, "--verify must catch the rewrite"
+    assert main(["validate", str(corpus)]) == 1, "verify must repair the manifest for later runs"
+    capsys.readouterr()
+
+
 # --- (e) corrupt store → full recompute, never a wrong answer -----------------
 
 

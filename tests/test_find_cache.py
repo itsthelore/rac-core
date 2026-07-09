@@ -97,6 +97,45 @@ def test_cache_falls_back_to_fresh_when_store_unwritable(corpus, monkeypatch):
     assert walk == cached
 
 
+def test_s5_rewrite_serves_stale_until_verify(corpus):
+    # The accepted S5 miss (ADR-105/ADR-112) through the CLI: a size- and
+    # mtime-preserving rewrite is invisible to the warm default run; --verify
+    # is the full-hash floor that observes it and repairs the manifest.
+    import os
+
+    _run(["find", "shared", str(corpus), "--json"])  # cold: store + manifest written
+    target = corpus / "a.md"
+    st = target.stat()
+    old = target.read_text(encoding="utf-8")
+    new = old.replace("shared alpha", "shared aleph")  # same byte length
+    assert len(new.encode()) == st.st_size and new != old
+    target.write_text(new, encoding="utf-8")
+    os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+
+    _, stale = _run(["find", "aleph", str(corpus), "--json"])
+    assert '"match_count": 0' in stale, "the S5 rewrite is the accepted stat miss"
+    _, verified = _run(["find", "aleph", str(corpus), "--json", "--verify"])
+    assert '"match_count": 1' in verified, "--verify must observe the rewrite"
+    _, after = _run(["find", "aleph", str(corpus), "--json"])
+    assert '"match_count": 1' in after, "verify must repair the manifest for later runs"
+
+
+def test_default_find_survives_a_homeless_environment(corpus, monkeypatch):
+    # Default-on must never fail a query because no cache location resolves
+    # (ADR-112 degrade-never-fail): no HOME, no XDG_CACHE_HOME, no RAC_CACHE_DIR.
+    from pathlib import Path
+
+    def _no_home() -> Path:
+        raise RuntimeError("no usable home directory")
+
+    monkeypatch.delenv("RAC_CACHE_DIR", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.setattr(Path, "home", staticmethod(_no_home))
+    rc, out = _run(["find", "shared", str(corpus), "--json"])
+    assert rc == 0 and '"match_count": 2' in out
+
+
 def test_top_level_composes_with_cache(corpus):
     # The default cache honours --top-level (its own content-hash / store /
     # manifest key); still identical to the walk.
