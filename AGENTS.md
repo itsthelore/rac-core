@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: 181a8250d554295d30c2d1acde55e7660a72a02c82bcd735b23394983df84ae5) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: cd72659c13336cefafdf6eb7016cd29552662e381de5bc57728a4f72016fb852) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -81,6 +81,6 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KWV63BR8AW71** — ADR-102: Org-Site Brand Direction — Light, Restrained, Site Rhymes With Product UI _(Product)_
 - **RAC-KWY0SHYCVY2D** — ADR-108: Term-Range-Partitioned Parallel Merge for the Cold Build _(Architecture)_
 - **RAC-KWY7886GSEE5** — ADR-109: Tag Search Tier and Tag Facet _(Technical)_
-- **RAC-KWYEHJXR0M3G** — ADR-110: One-Shot `rac find --cache` Reuses the Persistent Store _(Technical)_
 - **RAC-KX04DH293JG8** — ADR-111: Revert to SemVer Release Versioning _(Process)_
+- **RAC-KX2WTHEMDEY0** — ADR-112: Cache On by Default, Stat-Proxy Freshness as the Floor _(Technical)_
 <!-- END RAC MANAGED BLOCK -->

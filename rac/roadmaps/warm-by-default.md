@@ -108,11 +108,11 @@ stat-rung part of it to scheduled work and flips the posture, per ADR-112.
 
 ## Related Decisions
 
+- ADR-112
 - ADR-099
 - ADR-104
 - ADR-105
 - ADR-106
-- ADR-110
 
 ## Related Roadmaps
 

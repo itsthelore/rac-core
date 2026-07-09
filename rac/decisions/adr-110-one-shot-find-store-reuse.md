@@ -79,7 +79,14 @@ the uncached walk.
 
 ## Status
 
-Accepted
+Superseded
+
+Superseded by ADR-112, which makes the cache the default across `find`,
+`validate`, and `mcp` and replaces the per-call full re-hash with a persisted
+stat-proxy manifest — adopting both alternatives this record rejected. The
+store-reuse mechanics this record introduced (one-shot `load_or_build`,
+cross-process content-addressed reuse, byte-parity, the recency join) carry
+forward unchanged.
 
 ## Category
 
