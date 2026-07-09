@@ -54,9 +54,10 @@ Three moving parts, and not one of them is a database:
 
 ## 3. The container
 
-Run the HTTP transport against a read-only checkout. The `--cache` flag enables
-the disposable [derived-index cache](mcp.md#derived-index-cache-large-corpora)
-so per-call latency stays flat as the corpus grows.
+Run the HTTP transport against a read-only checkout. The disposable
+[derived-index cache](mcp.md#derived-index-cache) is on by default (ADR-112),
+so per-call latency stays flat as the corpus grows; `--cache` remains accepted
+as an explicit affirmation.
 
 ```dockerfile
 FROM python:3.12-slim
@@ -65,7 +66,7 @@ RUN pip install --no-cache-dir rac-core
 WORKDIR /corpus
 EXPOSE 8000
 CMD ["rac", "mcp", "--root", "/corpus", \
-     "--transport", "http", "--host", "0.0.0.0", "--port", "8000", "--cache"]
+     "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 HTTP serving is **mandatory audit-on**: the server refuses to start without a

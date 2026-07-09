@@ -420,25 +420,27 @@ Keeping the fronted checkout current with `main` — a merge webhook or a period
 container, authenticating proxy, keep-current step, and observability — is on the
 [Shared Server](shared-server.md) page.
 
-### Derived-index cache (large corpora)
+### Derived-index cache
 
-By default every tool call rebuilds the derived structures — the repository
-index, the relationship graph, and the search token vectors — from disk. On a
-large corpus that re-indexing and re-tokenising costs real latency. Add
-`--cache` to reuse those structures across calls
-([ADR-099](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-099-derived-index-cache.md)):
+By default the server reuses the derived structures — the repository index, the
+relationship graph, and the search token vectors — across calls, kept fresh by
+an event-sourced watcher
+([ADR-099](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-099-derived-index-cache.md),
+default-on per ADR-112):
 
 ```bash
-rac mcp --root /path/to/your/repo --transport http --cache
+rac mcp --root /path/to/your/repo --transport http
 ```
 
 The cache is **content-addressed and disposable**. It is keyed on a hash of the
 corpus bytes, so any change to any artifact — an edit, add, remove, or rename —
-changes the key and forces a rebuild; the key is recomputed every call, so no
-call ever serves stale state. Output with `--cache` is **byte-identical** to the
-uncached path. The cache lives at `$XDG_CACHE_HOME/rac/derived` (override with
-`RAC_CACHE_DIR`); deleting it costs only latency, never correctness — the files
-in git remain the single source of truth. It is off by default.
+changes the key and forces a rebuild; freshness is confirmed before every call,
+so no call ever serves stale state. Output with the cache is **byte-identical**
+to the uncached path. The cache lives at `$XDG_CACHE_HOME/rac/derived`
+(override with `RAC_CACHE_DIR`); deleting it costs only latency, never
+correctness — the files in git remain the single source of truth. Pass
+`--no-cache` (or set `RAC_NO_CACHE=1`) to restore the zero-state posture where
+every tool call re-reads the repository from disk.
 
 ## 10. Troubleshooting
 

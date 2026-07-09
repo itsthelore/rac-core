@@ -35,29 +35,35 @@ corpus size: the index lives on disk and is never fully resident. Search is
 served directly from the term-major postings (ADR-038), and point lookups resolve
 through mapped identity segments without materialising the whole corpus.
 
-## 2. Opt-in caching on the paths that matter
+## 2. Caching on by default on the paths that matter
 
-Reuse of that store is **opt-in**, off by default, on the three surfaces where
-repeated reads against a stable corpus dominate:
+Reuse of that store is **the default** (ADR-112) on the three surfaces where
+repeated reads against a stable corpus dominate — `--no-cache` disables it per
+invocation, `RAC_NO_CACHE=1` per environment:
 
-| Command | Flag | What it reuses |
+| Command | Default reuse | What it reuses |
 | --- | --- | --- |
-| `rac mcp` | `--cache` | The whole derived read-model for a long-lived server (ADR-099/104). |
-| `rac find` | `--cache` | The persistent store for one-shot queries, instead of a fresh walk (ADR-110). |
-| `rac validate` | `--cache` | A per-file result cache, so re-validation is incremental (ADR-106). |
+| `rac mcp` | on | The whole derived read-model for a long-lived server (ADR-099/104). |
+| `rac find` | on | The persistent store for one-shot queries, instead of a fresh walk (ADR-110/112). |
+| `rac validate` | on | A per-file result cache, so re-validation is incremental (ADR-106). |
 
-For the long-lived `rac mcp --cache` server, freshness is tracked
-**incrementally** by an event-sourced watcher (ADR-105) rather than re-hashing the
-whole corpus on every call, so a warm endpoint answers without re-reading files
-that did not change. A one-shot `rac find --cache` has no long-lived process to
-hold that watcher, so it still pays a corpus content-hash to detect change before
-reusing anything — it skips the expensive parse and derive, not the hash — which
-is why a single query is net-neutral and the win is *many* warm queries.
+For the long-lived `rac mcp` server, freshness is tracked **incrementally** by
+an event-sourced watcher (ADR-105) rather than re-hashing the whole corpus on
+every call, so a warm endpoint answers without re-reading files that did not
+change. A one-shot `rac find` has no long-lived process to hold that watcher,
+so it verifies freshness through a **persisted stat manifest** (ADR-112): every
+enumerated file is stat'ed and only stat-changed files are re-read, so an
+unchanged corpus is confirmed at O(files) stat cost with zero artifact-byte
+reads. The one rewrite shape stats cannot see — a size- and mtime-preserving
+in-place rewrite (ADR-105's S5) — is caught by `--verify`, which forces the
+full byte re-hash floor. The first-ever query against a corpus pays the cold
+build; every later warm query rides the store.
 
-`rac validate --cache` keys each file's result on its content hash × the active
-config fingerprint, so validating a large corpus after a small edit does work
+`rac validate` keys each file's result on its content hash × the active config
+fingerprint, so validating a large corpus after a small edit does work
 proportional to what changed. A changed config invalidates exactly the affected
-results; a corrupt cache recomputes from scratch.
+results; a corrupt cache recomputes from scratch; `--verify` applies the same
+full-hash freshness floor.
 
 ## 3. A parallel cold build
 
