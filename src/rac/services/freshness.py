@@ -109,15 +109,16 @@ def stat_scan(
     prev_manifest: dict[str, FileState],
     *,
     content_confirm_all: bool,
+    recursive: bool = True,
 ) -> tuple[dict[str, FileState], set[str]]:
     """Diff the corpus against ``prev_manifest`` by stat, content-confirming changes.
 
-    The stat-manifest rung (v2 §2.2) factored out so both the long-lived
-    :class:`FreshnessTracker` and the one-shot CLI incremental-validate path
-    (ADR-106) share one differ — the manifest-scan machinery is identical, so it
-    is defined once here rather than copied. Pure over ``(filesystem, root,
-    prev_manifest)`` with no tracker state, so a caller can drive it with any
-    persisted manifest.
+    The stat-manifest rung (v2 §2.2) factored out so the long-lived
+    :class:`FreshnessTracker`, the one-shot CLI incremental-validate path
+    (ADR-106), and the one-shot find manifest (ADR-112) share one differ — the
+    manifest-scan machinery is identical, so it is defined once here rather
+    than copied. Pure over ``(filesystem, root, prev_manifest)`` with no
+    tracker state, so a caller can drive it with any persisted manifest.
 
     Enumerates the walk's files (``find_markdown_files`` — the exact walk scope),
     stats each for ``(size, mtime_ns)``, and reuses the previous manifest's hash
@@ -131,7 +132,7 @@ def stat_scan(
     """
     changed: set[str] = set()
     new_manifest: dict[str, FileState] = {}
-    for path in find_markdown_files(root_str):
+    for path in find_markdown_files(root_str, recursive=recursive):
         rel = _relposix(root, path)
         try:
             st = path.stat()
@@ -158,18 +159,22 @@ def stat_scan(
     return new_manifest, changed
 
 
-def _corpus_hash_from_manifest(root: Path, manifest: dict[str, FileState]) -> str:
+def corpus_hash_from_manifest(
+    root: Path, manifest: dict[str, FileState], *, recursive: bool = True
+) -> str:
     """Reproduce :func:`corpus_content_hash` from the manifest's cached hashes.
 
     Iterates the *same* sorted ``find_markdown_files`` order and folds the same
     ``rel\\0hash\\0`` bytes, but reuses each file's already-known content hash
     instead of re-reading it — so the key is byte-identical to a full re-hash for
     every non-S5 state, at O(files) enumeration cost with no O(bytes) reads.
+    Public because the one-shot find path (ADR-112) recomposes its
+    content-addressed store key through the same fold.
     """
     import hashlib
 
     hasher = hashlib.sha256()
-    for path in find_markdown_files(str(root)):
+    for path in find_markdown_files(str(root), recursive=recursive):
         rel = _relposix(root, path)
         state = manifest.get(rel)
         digest = state.content_hash if state is not None else content_hash(path)
@@ -560,7 +565,7 @@ class FreshnessTracker:
                 self._entries.pop(rel, None)
         if changed:
             self._delta_paths |= changed
-        self._hash = _corpus_hash_from_manifest(self._root, self._manifest)
+        self._hash = corpus_hash_from_manifest(self._root, self._manifest)
 
     def _reparse_full(self) -> None:
         """Rebuild the full parsed snapshot from the current manifest (parallel).
