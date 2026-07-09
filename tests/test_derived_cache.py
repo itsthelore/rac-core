@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 
+import pytest
 from conftest import fixture_path
 
 from rac import cli
@@ -248,10 +249,28 @@ def test_warm_cache_skips_retokenization(tmp_path, monkeypatch):
 # --- CLI wiring (REQ-001) ----------------------------------------------------
 
 
-def test_cache_flag_defaults_off_and_parses():
+def test_cache_flag_defaults_on_with_no_cache_escape():
+    # ADR-112: default-on across all three surfaces, --no-cache restores the
+    # walk, --cache stays parseable as an explicit affirmation, and --verify
+    # (the full-hash floor) exists on find/validate but not mcp.
     parser = cli.build_parser()
-    assert parser.parse_args(["mcp", "--root", CORPUS]).cache is False
-    assert parser.parse_args(["mcp", "--root", CORPUS, "--cache"]).cache is True
+    for argv in (["mcp", "--root", CORPUS], ["find", "q", CORPUS], ["validate", CORPUS]):
+        assert parser.parse_args(argv).cache is True, f"{argv[0]} must default cache-on"
+        assert parser.parse_args(argv + ["--cache"]).cache is True
+        assert parser.parse_args(argv + ["--no-cache"]).cache is False
+    assert parser.parse_args(["find", "q", CORPUS, "--verify"]).verify is True
+    assert parser.parse_args(["validate", CORPUS, "--verify"]).verify is True
+    with pytest.raises(SystemExit):
+        parser.parse_args(["mcp", "--root", CORPUS, "--verify"])
+
+
+def test_rac_no_cache_env_disables_the_default(monkeypatch):
+    parser = cli.build_parser()
+    args = parser.parse_args(["find", "q", CORPUS])
+    monkeypatch.delenv("RAC_NO_CACHE", raising=False)
+    assert cli._cache_enabled(args) is True
+    monkeypatch.setenv("RAC_NO_CACHE", "1")
+    assert cli._cache_enabled(args) is False
 
 
 def test_run_server_cache_enabled_builds_a_cache(monkeypatch):
@@ -270,5 +289,8 @@ def test_run_server_cache_enabled_builds_a_cache(monkeypatch):
     monkeypatch.setattr(mcp_server, "build_server", _fake_build)
     monkeypatch.setattr(mcp_server, "_maybe_start_sharing", lambda *a, **k: None)
     monkeypatch.setattr(mcp_server, "_check_corpus", lambda *a, **k: None)
-    assert mcp_server.run_server(CORPUS, cache_enabled=True) == 0
+    assert mcp_server.run_server(CORPUS) == 0, "cache_enabled must default on (ADR-112)"
     assert isinstance(captured["cache"], DerivedIndexCache)
+    captured.clear()
+    assert mcp_server.run_server(CORPUS, cache_enabled=False) == 0
+    assert captured["cache"] is None, "cache_enabled=False must build no cache"

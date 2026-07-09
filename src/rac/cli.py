@@ -173,6 +173,16 @@ def _usage_error(message: str) -> NoReturn:
     raise SystemExit(EXIT_USAGE)
 
 
+def _cache_enabled(args: argparse.Namespace) -> bool:
+    """Whether the persistent cache is active for this invocation (ADR-112).
+
+    On by default; ``--no-cache`` disables it per invocation and a non-empty
+    ``RAC_NO_CACHE`` disables it environment-wide — the escape for callers that
+    cannot pass flags (CI containers, hooks, third-party harnesses).
+    """
+    return args.cache and not os.environ.get("RAC_NO_CACHE")
+
+
 def _emit(
     args: argparse.Namespace,
     *,
@@ -239,11 +249,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
             # directory target already validates every artifact in place, so the
             # flag is redundant and ambiguous there (ADR-067, v0.21.17).
             _usage_error("--corpus applies to stdin ('-') or a single file")
-        # --cache reuses per-file results across runs (ADR-106), byte-identical
-        # to the uncached path; off by default keeps today's path untouched.
+        # The cache reuses per-file results across runs (ADR-106), byte-identical
+        # to the uncached path; on by default per ADR-112, with --no-cache /
+        # RAC_NO_CACHE restoring the full revalidation and --verify forcing the
+        # full-hash freshness floor.
         result = (
-            validate_directory_incremental(args.file, recursive=not args.top_level)
-            if getattr(args, "cache", False)
+            validate_directory_incremental(
+                args.file,
+                recursive=not args.top_level,
+                verify=getattr(args, "verify", False),
+            )
+            if _cache_enabled(args)
             else validate_directory(args.file, recursive=not args.top_level)
         )
         _emit(
@@ -933,7 +949,7 @@ def cmd_mcp(args: argparse.Namespace) -> int:
             host=args.host,
             port=args.port,
             path=args.path,
-            cache_enabled=args.cache,
+            cache_enabled=_cache_enabled(args),
         )
     except MalformedAuditConfig as exc:  # bad `audit:` stanza (ADR-084)
         _usage_error(str(exc))
@@ -1028,21 +1044,25 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 
 def _find_from_store(args: argparse.Namespace) -> SearchResult:
-    """Serve `rac find --cache` from the persistent index store (ADR-110).
+    """Serve `rac find` from the persistent index store (ADR-112, default-on).
 
     Reuses ``DerivedIndexCache.load_or_build``: a warm run against an unchanged
-    corpus serves from the memory-mapped store with no walk/parse/graph rebuild;
-    a cold run builds fresh and writes the store for the next invocation. The
-    result is byte-identical to the uncached walk — the store fast path and the
-    fresh build are branched exactly as ``mcp/server.py`` does (ADR-104 parity).
-    When the store cannot be written, ``load_or_build`` returns a fresh
-    ``DerivedIndex`` and the ``else`` branches handle it.
+    corpus serves from the memory-mapped store with no walk/parse/graph rebuild
+    — freshness confirmed by the persisted stat manifest, or the full-hash
+    floor under ``--verify`` — and a cold run builds fresh and writes the store
+    for the next invocation. The result is byte-identical to the uncached walk
+    — the store fast path and the fresh build are branched exactly as
+    ``mcp/server.py`` does (ADR-104 parity). When the store cannot be written,
+    ``load_or_build`` returns a fresh ``DerivedIndex`` and the ``else``
+    branches handle it.
     """
     from rac.services.derived_cache import DerivedIndexCache
     from rac.services.index_store import ReadModelView
     from rac.services.resolve import find_decisions_in, search_index
 
-    view = DerivedIndexCache().load_or_build(args.directory, recursive=not args.top_level)
+    view = DerivedIndexCache().load_or_build(
+        args.directory, recursive=not args.top_level, verify=args.verify
+    )
     if args.decisions:
         if isinstance(view, ReadModelView):
             return view.find_decisions(args.query)
@@ -1068,9 +1088,10 @@ def cmd_find(args: argparse.Namespace) -> int:
 
     if not Path(args.directory).is_dir():
         _usage_error(f"not a directory: {args.directory}")
-    if args.cache:
-        # Opt-in store reuse (ADR-110): serve from the persistent index store
-        # instead of a fresh walk, byte-identical to the uncached path below.
+    if _cache_enabled(args):
+        # Default store reuse (ADR-112): serve from the persistent index store
+        # instead of a fresh walk, byte-identical to the uncached path below;
+        # --no-cache / RAC_NO_CACHE select the walk.
         result = _find_from_store(args)
     elif args.decisions:
         # `--decisions` is the live decision query (ADR-067): it implies the
@@ -1503,7 +1524,7 @@ def build_parser() -> argparse.ArgumentParser:
             "generated Claude Code pre-edit hook."
         ),
     )
-    # Incremental directory validation (ADR-106): opt-in, off by default. Reuses
+    # Incremental directory validation (ADR-106, default-on per ADR-112). Reuses
     # per-file validation results keyed by content-hash × config fingerprint, so a
     # re-validate after a small changeset recomputes only the changed files —
     # byte-identical to the uncached run. Disposable cache under
@@ -1511,10 +1532,33 @@ def build_parser() -> argparse.ArgumentParser:
     p_validate.add_argument(
         "--cache",
         action="store_true",
+        default=True,
         help=(
-            "Reuse per-file validation results across runs for large corpora, "
-            "recomputing only changed files; disposable and byte-identical to the "
-            "uncached run (directory validation only, off by default, ADR-106)."
+            "Reuse per-file validation results across runs, recomputing only "
+            "changed files; disposable and byte-identical to the uncached run "
+            "(directory validation only; the default, kept as an explicit "
+            "affirmation, ADR-112)."
+        ),
+    )
+    p_validate.add_argument(
+        "--no-cache",
+        action="store_false",
+        dest="cache",
+        help=(
+            "Disable the validation-result cache: revalidate every file from "
+            "disk for this invocation (the pre-ADR-112 default; RAC_NO_CACHE=1 "
+            "disables it environment-wide)."
+        ),
+    )
+    p_validate.add_argument(
+        "--verify",
+        action="store_true",
+        help=(
+            "Re-read every file's bytes when checking cache freshness (the "
+            "full-hash floor): catches the size- and mtime-preserving rewrites "
+            "the default stat scan accepts (S5, ADR-105/ADR-112). The uncached "
+            "path always reads every file, so this matters only with the cache "
+            "enabled."
         ),
     )
     p_validate.set_defaults(func=cmd_validate)
@@ -1999,17 +2043,28 @@ def build_parser() -> argparse.ArgumentParser:
         default="/mcp",
         help="HTTP path to serve for --transport http (default: /mcp).",
     )
-    # Derived-index cache (ADR-099): opt-in, off by default. Reuses the expensive
+    # Derived-index cache (ADR-099, default-on per ADR-112). Reuses the expensive
     # derived structures under an unchanged corpus content hash, byte-identically
     # to the uncached path; location is $XDG_CACHE_HOME/rac/derived (RAC_CACHE_DIR
     # overrides). Deleting the cache costs only latency.
     p_mcp.add_argument(
         "--cache",
         action="store_true",
+        default=True,
         help=(
-            "Reuse content-addressed derived structures across calls for large "
-            "corpora; disposable and byte-identical to the uncached path "
-            "(off by default, ADR-099)."
+            "Reuse content-addressed derived structures across calls; disposable "
+            "and byte-identical to the uncached path (the default, kept as an "
+            "explicit affirmation, ADR-112)."
+        ),
+    )
+    p_mcp.add_argument(
+        "--no-cache",
+        action="store_false",
+        dest="cache",
+        help=(
+            "Disable the derived-structure cache: re-read and rebuild from disk "
+            "on every call (the pre-ADR-112 default; RAC_NO_CACHE=1 disables it "
+            "environment-wide)."
         ),
     )
     p_mcp.set_defaults(func=cmd_mcp)
@@ -2213,14 +2268,40 @@ def build_parser() -> argparse.ArgumentParser:
             "required). Narrows the query by tag (ADR-109)."
         ),
     )
+    # Persistent store reuse (ADR-112): on by default. Freshness is verified by
+    # the persisted stat manifest (only stat-changed files are re-read); the
+    # store lives under $XDG_CACHE_HOME/rac/derived (RAC_CACHE_DIR overrides)
+    # and is disposable — deleting it costs only latency.
     p_find.add_argument(
         "--cache",
         action="store_true",
+        default=True,
         help=(
-            "Reuse the persistent index store across runs for large corpora, "
-            "skipping the walk and parse on an unchanged corpus; disposable and "
-            "byte-identical to the uncached run (off by default, RAC_CACHE_DIR / "
-            "$XDG_CACHE_HOME, ADR-110)."
+            "Serve from the persistent index store, skipping the walk and parse "
+            "on an unchanged corpus; disposable and byte-identical to the "
+            "uncached run (the default; kept as an explicit affirmation, "
+            "ADR-112)."
+        ),
+    )
+    p_find.add_argument(
+        "--no-cache",
+        action="store_false",
+        dest="cache",
+        help=(
+            "Disable the persistent cache: walk, parse, and rebuild from disk "
+            "for this invocation (the pre-ADR-112 default; RAC_NO_CACHE=1 "
+            "disables it environment-wide)."
+        ),
+    )
+    p_find.add_argument(
+        "--verify",
+        action="store_true",
+        help=(
+            "Re-read every file's bytes when checking cache freshness (the "
+            "full-hash floor): catches the size- and mtime-preserving rewrites "
+            "the default stat scan accepts (S5, ADR-105/ADR-112). The uncached "
+            "walk always reads every file, so this matters only with the cache "
+            "enabled."
         ),
     )
     p_find.add_argument(
