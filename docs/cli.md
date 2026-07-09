@@ -40,16 +40,21 @@ content issues.
 
 - **Input:** `rac validate <path>` — a Markdown file, a directory, or `-` for stdin.
 - **Options:** `--json` · `--top-level` · `--recursive` (directory mode) ·
-  `--cache` (incremental directory validation) ·
+  `--no-cache` / `--verify` (directory-validation cache controls) ·
   `--corpus DIR` (stdin / single-file mode — see below)
 - **Exit codes:** `0` no errors · `1` validation errors · `2` path not found / unreadable
 
-**`--cache` makes directory validation incremental (ADR-106).** Off by default,
-`--cache` reuses a per-file result cache keyed on each file's content hash × the
-active config fingerprint, so re-validating a large corpus after a small change
-does work proportional to what changed rather than to corpus size. It is
+**Directory validation is incremental by default (ADR-106, default-on per
+ADR-112).** A per-file result cache keyed on each file's content hash × the
+active config fingerprint means re-validating a large corpus after a small
+change does work proportional to what changed rather than to corpus size. It is
 disposable and byte-identical to the uncached run: a changed config invalidates
 the affected results, and a corrupt or missing cache recomputes from scratch.
+`--no-cache` revalidates every file from disk for one invocation (setting
+`RAC_NO_CACHE=1` does the same environment-wide), and `--verify` forces the
+freshness check to re-read every file's bytes — the full-hash floor that
+catches the one rewrite shape the default stat scan accepts (a size- and
+mtime-preserving in-place rewrite, ADR-105's S5).
 
 ```bash
 rac validate login-flow.md
@@ -1316,9 +1321,9 @@ not an error.
 - **Input:** `rac find <query> [directory]` — directory defaults to the
   current directory.
 - **Options:** `--type TYPE` (only match one artifact type) · `--tag TAG`
-  (repeatable; only artifacts carrying every given tag) · `--cache` (serve from
-  the persistent index store) · `--json` · `--explain` · `--top-level` ·
-  `--recursive`
+  (repeatable; only artifacts carrying every given tag) · `--no-cache` /
+  `--verify` (persistent-store controls) · `--json` · `--explain` ·
+  `--top-level` · `--recursive`
 - **Exit codes:** `0` search completed (matches or none) · `2` not a directory
 
 **Tags are searchable (ADR-109).** A query term matches an artifact's frontmatter
@@ -1332,15 +1337,21 @@ carrying both — and is case-insensitive. A tagged hit surfaces its `tags`
 additively (present only when non-empty). The `search_artifacts` MCP tool takes
 the same `tags` argument.
 
-**`--cache` serves from the persistent index store (ADR-110).** Off by default,
-`--cache` answers the query from the memory-mapped derived index (ADR-104)
-instead of a fresh walk — a warm run against an unchanged corpus skips the parse
-and graph rebuild; a cold run builds fresh and writes the store for next time.
-The output is byte-identical to the uncached `rac find` for every mode. The store
-is disposable and content-addressed (any byte change rebuilds it), lives under
+**`rac find` serves from the persistent index store by default (ADR-112, née
+ADR-110's opt-in).** The query is answered from the memory-mapped derived index
+(ADR-104) instead of a fresh walk — a warm run against an unchanged corpus
+skips the parse and graph rebuild, with freshness confirmed by a persisted stat
+manifest (every file is stat'ed; only stat-changed files are re-read); a cold
+run builds fresh and writes the store for next time. The output is
+byte-identical to the uncached `rac find` for every mode. The store is
+disposable and content-addressed (any byte change rebuilds it), lives under
 `RAC_CACHE_DIR` / `$XDG_CACHE_HOME`, and is safe to delete — it costs only
-latency. A single one-shot is net-neutral (the cold build and content hash have
-their own cost); the win is many warm queries against a stable corpus.
+latency. `--no-cache` restores the plain walk for one invocation
+(`RAC_NO_CACHE=1` restores it environment-wide — the right lever for a genuine
+one-off query, which skips the cold build), and `--verify` re-reads every
+file's bytes when checking freshness — the full-hash floor that catches the one
+rewrite shape the stat scan accepts (a size- and mtime-preserving in-place
+rewrite, ADR-105's S5).
 
 `--explain` adds, per match, the matched field/terms/tier plus the relevance
 score and its components (`bm25`, `lexical_rank`, `graph_rank`, `inbound`), so a

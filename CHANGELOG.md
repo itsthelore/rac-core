@@ -6,7 +6,18 @@ details, release history over commit history.
 
 ## Unreleased
 
-_Nothing yet._
+**The cache is on by default** (ADR-112, supersedes ADR-110). `rac find`,
+`rac validate`, and `rac mcp` now reuse the persistent derived-index and
+per-file result caches without a flag — repeated queries against an unchanged
+corpus are bound by query selectivity, not corpus size, and stay byte-identical
+to the uncached walk. Freshness is verified by a stat scan by default (one-shot
+`rac find` runs gain a persisted stat manifest, so a warm run reads zero
+artifact bytes); the new `--verify` flag on `find`/`validate` forces the full
+byte re-hash floor, which catches the one rewrite shape stats cannot see (a
+size- and mtime-preserving in-place rewrite). Escapes: `--no-cache` per
+invocation, `RAC_NO_CACHE=1` per environment. Environments with no resolvable
+home degrade to a temp-dir cache — a missing cache location never fails a
+query.
 
 ## v0.22.0 — the "scale" release
 
