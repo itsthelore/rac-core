@@ -15,12 +15,13 @@ and shapes their results for the wire. It re-implements no parsing, resolution,
 relationship extraction, or scoring, and imports no write-capable service. The
 isolation battery (``tests/test_mcp_isolation.py``) enforces both.
 
-By default every tool call re-reads the repository from disk (ADR-032): no cache,
-no file watcher, no session state. With the opt-in ``--cache`` a server-lifetime
+By default (ADR-112) a server-lifetime
 :class:`~rac.services.freshness.FreshnessTracker` keeps the derived read-model
 fresh by event-sourced change detection instead of the per-call whole-corpus
 re-hash (ADR-105), so warm serving latency stops scaling with corpus size — and
 every response stays byte-identical to a fresh disk walk of the current corpus.
+With ``--no-cache`` (or ``RAC_NO_CACHE``) every tool call re-reads the
+repository from disk (ADR-032): no cache, no file watcher, no session state.
 Either way, identical repository bytes and identical input produce identical
 output, within the per-response character budget (ADR-033, see
 :mod:`rac.mcp.budget`).
@@ -485,9 +486,10 @@ def build_server(
     server: FastMCP = FastMCP(SERVER_NAME)
 
     # The freshness tracker is the read-model source under the cache: server-lifetime
-    # state that supersedes ADR-032's per-call re-read for the opt-in cache path
-    # (ADR-105). Off by default — with ``cache`` None every closure below builds
-    # fresh from disk on each call, exactly ADR-032.
+    # state that supersedes ADR-032's per-call re-read for the cache path
+    # (ADR-105; the default per ADR-112). With ``cache`` None (--no-cache /
+    # RAC_NO_CACHE) every closure below builds fresh from disk on each call,
+    # exactly ADR-032.
     reader: FreshnessTracker | None = FreshnessTracker(cache, root) if cache is not None else None
 
     def observed(
@@ -620,7 +622,7 @@ def run_server(
     host: str = transport.DEFAULT_HOST,
     port: int = transport.DEFAULT_PORT,
     path: str = transport.DEFAULT_PATH,
-    cache_enabled: bool = False,
+    cache_enabled: bool = True,
 ) -> int:
     """Run the Guide server over stdio (default) or streamable HTTP.
 
@@ -634,10 +636,11 @@ def run_server(
     mandatory-audit-on: it refuses to start without a working audit sink
     (ADR-084), asserted before the endpoint opens.
 
-    ``cache_enabled`` turns on the derived-index cache (ADR-099): the expensive
+    ``cache_enabled`` selects the derived-index cache (ADR-099): the expensive
     derived structures are persisted content-addressed and reused under an
-    unchanged corpus hash, byte-identically to the uncached path. Off by default —
-    the serving path is exactly ADR-032's re-read-per-call otherwise.
+    unchanged corpus hash, byte-identically to the uncached path. On by default
+    (ADR-112) — the CLI's ``--no-cache`` / ``RAC_NO_CACHE`` pass ``False``,
+    restoring ADR-032's re-read-per-call posture.
 
     Emits a one-line notice to stderr when the repository root contains no
     recognized artifacts (v0.10.1 startup hardening), and another when
@@ -672,9 +675,10 @@ def run_server(
     if cache_enabled:
         cache = DerivedIndexCache()
         print(
-            "rac mcp: derived-index cache on — reusing content-addressed derived "
-            f"structures under {cache.cache_dir} (disposable; byte-identical to the "
-            "uncached path, ADR-099).",
+            "rac mcp: derived-index cache on (the default) — reusing "
+            f"content-addressed derived structures under {cache.cache_dir} "
+            "(disposable; byte-identical to the uncached path, ADR-112; "
+            "--no-cache or RAC_NO_CACHE=1 disables).",
             file=sys.stderr,
         )
     server = build_server(
