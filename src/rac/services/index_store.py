@@ -1412,3 +1412,110 @@ def _silent_unlink_path(path: Path) -> None:
         path.unlink()
     except OSError:
         pass
+
+
+# =============================================================================
+# Per-root freshness-manifest store — the one-shot stat substrate (ADR-112).
+# =============================================================================
+#
+# The one-shot `rac find` cache path verifies freshness with the shared
+# stat-manifest scan (freshness.stat_scan) instead of a full byte re-hash, but a
+# one-shot process holds no manifest across invocations, so the manifest — each
+# file's `(size, mtime_ns, content_hash)` stat proxy — persists here, one binary
+# segment file per corpus root and recursion mode. It follows the same discipline
+# as the `.vseg` store: fixed struct reads (no pickle), fail-closed on corruption
+# (any decode failure is a miss → content-confirm-all scan, which rewrites it),
+# atomic writes. The manifest is a pure latency structure: it can never change an
+# answer, only how many bytes freshness detection reads (ADR-080).
+
+MANIFEST_DIRNAME = "manifest"
+MANIFEST_LAYOUT_VERSION = "v1"
+_MANIFEST_FORMAT_VERSION = 1
+
+
+def manifest_store_root(cache_dir: Path) -> Path:
+    return cache_dir / MANIFEST_DIRNAME / MANIFEST_LAYOUT_VERSION
+
+
+def manifest_root_key(directory: str, *, recursive: bool = True) -> str:
+    """A stable key for one corpus root in one recursion mode.
+
+    The recursion mode folds into the key because `rac find` and
+    `rac find --top-level` walk different file sets from the same root: a shared
+    manifest would thrash between them and could vouch for files the narrower
+    walk never enumerates.
+    """
+    import hashlib
+
+    mode = "recursive" if recursive else "top-level"
+    seed = f"{Path(directory).resolve()}\0{mode}"
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()
+
+
+def _manifest_store_path(cache_dir: Path, root_key: str) -> Path:
+    return manifest_store_root(cache_dir) / f"{root_key}.fseg"
+
+
+def open_freshness_manifest(cache_dir: Path, root_key: str) -> dict | None:
+    """Load the persisted stat manifest for a corpus root, or ``None`` on a miss.
+
+    A missing file, a corrupt or truncated segment, or a format-version mismatch
+    all return ``None`` — the caller then runs the content-confirm-all scan, so
+    the answer is fresh either way and the rewrite self-heals the store. Never
+    raises to the caller.
+    """
+    from rac.services.freshness import FileState
+
+    path = _manifest_store_path(cache_dir, root_key)
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    try:
+        reader = Reader(segment_payload(memoryview(data)))
+        if reader.u32() != _MANIFEST_FORMAT_VERSION:
+            return None
+        count = reader.u32()
+        manifest: dict[str, FileState] = {}
+        for _ in range(count):
+            rel = reader.text()
+            size = reader.u64()
+            mtime_ns = reader.u64()
+            digest = reader.text()
+            manifest[rel] = FileState(content_hash=digest, size=size, mtime_ns=mtime_ns)
+        return manifest
+    except (IndexFormatError, ValueError, UnicodeDecodeError):
+        return None
+
+
+def write_freshness_manifest(cache_dir: Path, root_key: str, manifest: dict) -> bool:
+    """Write the stat manifest atomically; return whether it landed.
+
+    Built in memory, written to a temp file, then ``os.replace``d into the
+    root-keyed name in one step. Any OS error degrades to "not written": the
+    scan already produced the fresh manifest in memory, so persistence is a
+    latency nicety, never a requirement.
+    """
+    root = manifest_store_root(cache_dir)
+    writer = Writer()
+    writer.u32(_MANIFEST_FORMAT_VERSION)
+    writer.u32(len(manifest))
+    for rel, state in manifest.items():
+        writer.text(rel)
+        writer.u64(state.size)
+        writer.u64(state.mtime_ns)
+        writer.text(state.content_hash)
+    payload = encode_segment(writer.payload)
+    tmp = root / f".{root_key}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        _write_file(tmp, payload)
+        try:
+            os.replace(tmp, _manifest_store_path(cache_dir, root_key))
+        except OSError:
+            _silent_unlink_path(tmp)
+            return False
+        return True
+    except OSError:
+        _silent_unlink_path(tmp)
+        return False
