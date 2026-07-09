@@ -67,7 +67,10 @@ so they are scheduled deliberately rather than rediscovered.
   1M measurement shows recompute flat at 3.0 s for a 1,000-file changeset
   but stat detection at 17.9 s — the O(files) slope ADR-106 records fails
   the 5 s gate past a few hundred thousand files without a service mode
-  or a git/fsmonitor fast path; that fast path is the initiative.
+  or a git/fsmonitor fast path; that fast path is the initiative. (The
+  stat rung itself now ships as the one-shot default via the persisted
+  manifest of the `warm-by-default` roadmap; what remains here is only
+  the sub-stat fast path.)
 - Graph-read and per-match constants: get_related sits 2 ms over the
   30 ms p50 budget at 100k (the Theta(edges) incoming-scan), and match
   scoring costs ~1.6 ms per matching document against legacy's ~3 ms/match
@@ -112,3 +115,4 @@ so they are scheduled deliberately rather than rediscovered.
 ## Related Roadmaps
 
 - rebuild-scale
+- warm-by-default

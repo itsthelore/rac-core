@@ -41,14 +41,16 @@ as scheduled work rather than latent gaps.
   and add a `--tag` / `tags` facet with AND semantics to `rac find` and the
   `search_artifacts` tool. Ships behind a persisted-store format bump with the
   byte-parity gate re-proven (ADR-109).
-- One-shot CLI store reuse: an opt-in `rac find --cache` that serves the query
-  from the persistent index store (ADR-104) via `load_or_build` instead of a
-  fresh walk, so a benchmark or agent issuing many one-shot queries against a
+- One-shot CLI store reuse: `rac find --cache` serves the query from the
+  persistent index store (ADR-104) via `load_or_build` instead of a fresh
+  walk, so a benchmark or agent issuing many one-shot queries against a
   stable corpus skips the parse and graph rebuild on every warm invocation.
-  Byte-identical to the uncached walk (ADR-110).
+  Byte-identical to the uncached walk. Shipped opt-in under ADR-110; the
+  `warm-by-default` roadmap has since flipped it to the default, with a
+  persisted stat manifest replacing the per-call byte-hash freshness check.
 - (Deferred, tracked elsewhere) Folding delta-window postings into discovery so
   edited corpora keep the fast path before compaction, and lowering the one-shot
-  freshness cost below the O(n) byte-hash floor (a stat/fsmonitor fast path) —
+  freshness cost below the O(files) stat floor (a git/fsmonitor fast path) —
   recorded in the single-node-scale residuals, not this item.
 
 ## Success Measures
@@ -85,3 +87,4 @@ as scheduled work rather than latent gaps.
 ## Related Roadmaps
 
 - single-node-scale-residuals
+- warm-by-default
