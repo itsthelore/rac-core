@@ -15,6 +15,10 @@ The cache is a pure optimisation behind the corpus-snapshot seam:
   and forces a rebuild. There is no time- or event-based invalidation.
 - **Fresh per call** (ADR-032): the key is recomputed every call, so no call can
   observe stale state; derived structures are reused only under an unchanged key.
+  Since ADR-112 the key is recomposed through the persisted stat manifest — every
+  file is stat'ed, only stat-changed files are re-read — byte-identical to the
+  full re-hash for every state except the named S5 accepted miss, which the
+  ``verify`` floor (the content-confirm-all scan) always catches.
 - **Disposable, never authoritative** (ADR-080): the files in git are the truth;
   this is a rebuildable index. Deleting the cache directory — or a corrupt or
   unreadable cache file — costs only latency, never correctness: the reader falls
@@ -37,7 +41,7 @@ from pathlib import Path
 from typing import Protocol
 
 from rac.core.artifacts import spec_for
-from rac.core.corpus import CorpusEntry, corpus_content_hash, walk_corpus
+from rac.core.corpus import CorpusEntry, walk_corpus
 from rac.core.identity import artifact_identifier
 from rac.core.models import SearchSection
 from rac.services.agent_rules import artifact_status, is_live_decision
@@ -402,11 +406,20 @@ def default_cache_dir() -> Path:
     """The derived-cache directory: ``RAC_CACHE_DIR`` > ``$XDG_CACHE_HOME/rac/derived``.
 
     A cache location, not a state location — deleting it is always safe (ADR-080).
+    With the cache on by default (ADR-112) this must resolve *somewhere* even in a
+    homeless environment (no ``HOME``, no overrides — bare containers): it falls
+    back to the system temp directory rather than raising, and if that location is
+    unwritable too the store/manifest write failures degrade to fresh builds.
     """
     override = os.environ.get(CACHE_DIR_ENV)
     if override:
         return Path(override)
-    base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    base = os.environ.get("XDG_CACHE_HOME")
+    if not base:
+        try:
+            base = str(Path.home() / ".cache")
+        except RuntimeError:
+            base = str(Path(tempfile.gettempdir()) / "rac-cache")
     return Path(base) / "rac" / CACHE_DIRNAME
 
 
@@ -435,12 +448,39 @@ class DerivedIndexCache:
     def _marker_path(self, corpus_hash: str) -> Path:
         return self.cache_dir / f"{corpus_hash}.json"
 
-    def load_or_build(self, directory: str, *, recursive: bool = True) -> CorpusReadModel:
+    def load_or_build(
+        self, directory: str, *, recursive: bool = True, verify: bool = False
+    ) -> CorpusReadModel:
         # Freshness (REQ-006): the key is recomputed every call, so any corpus
         # change since the previous call is observed before anything is reused.
-        from rac.services.index_store import open_read_model, remove_store
+        # The key is recomposed from the persisted stat manifest (ADR-112): every
+        # enumerated file is stat'ed, and only stat-changed or new files are
+        # re-read — byte-identical to the full re-hash for every non-S5 state.
+        # No manifest (first run, corrupt segment) or ``verify`` forces the
+        # content-confirm-all scan, the legacy full-hash floor; the rewrite below
+        # self-heals the manifest either way.
+        from rac.services.freshness import corpus_hash_from_manifest, stat_scan
+        from rac.services.index_store import (
+            manifest_root_key,
+            open_freshness_manifest,
+            open_read_model,
+            remove_store,
+            write_freshness_manifest,
+        )
 
-        corpus_hash = corpus_content_hash(directory, recursive=recursive)
+        root_key = manifest_root_key(directory, recursive=recursive)
+        prev = None if verify else open_freshness_manifest(self.cache_dir, root_key)
+        manifest, _changed = stat_scan(
+            Path(directory),
+            directory,
+            prev or {},
+            content_confirm_all=verify or prev is None,
+            recursive=recursive,
+        )
+        corpus_hash = corpus_hash_from_manifest(Path(directory), manifest, recursive=recursive)
+        # Best-effort persistence: the manifest is a latency structure only, so a
+        # failed write is ignored — the next run simply pays the full-confirm scan.
+        write_freshness_manifest(self.cache_dir, root_key, manifest)
         if self._marker_valid(corpus_hash):
             view = open_read_model(self.cache_dir, corpus_hash, SCHEMA_VERSION)
             if view is not None:
