@@ -39,12 +39,17 @@ retrieve_grounding(directory_or_read_model, task,
                    scope=None, top_k=5, budget=10_000, live_only=True)
 ```
 
-MCP tool (sixth pinned tool):
+MCP tool (sixth pinned tool). Optional arguments use empty-string/zero
+sentinels rather than nullable types — the `find_decisions` `topic: str = ""`
+precedent — because a nullable parameter costs an `anyOf` in the generated
+schema, and the standing surface is token-budgeted (ADR-030):
 
 ```text
-retrieve_grounding(task: str, scope: str | None = None, top_k: int = 5,
-                   budget: int | None = None, live_only: bool = True)
+retrieve_grounding(task: str, scope: str = "", top_k: int = 5,
+                   budget: int = 0, live_only: bool = True)
 ```
+
+`scope=""` means no scope channel; `budget=0` means the server budget.
 
 CLI:
 
@@ -76,10 +81,15 @@ Both faces call the one core function in-process (ADR-031). For the same
    Scope-bound artifacts rank ahead of keyword-only hits; within each
    stratum the fused order applies, with the existing byte-stable
    tie-break.
-4. **Cap.** Cut to `top_k`, then apply the character budget: whole-item
-   truncation from the tail, then content-tail truncation of the last
-   item's excerpt if needed — the ADR-033 mechanism with its
-   `truncated`/`omitted` markers.
+4. **Cap.** Cut to `top_k`, then shape excerpts and enforce the character
+   budget. Each item's `excerpt` is the head of the artifact's stored bytes
+   capped at an even share of the budget (`budget // min(top_k, items)`), so
+   k items carry comparable slices — symmetric with a top-k chunk retriever —
+   instead of the first artifact consuming the response. The serialized
+   payload is then guaranteed by the ADR-033 mechanism: excerpt-first
+   truncation (trim the last kept item's excerpt tail), dropping whole items
+   from the tail only when an emptied excerpt still does not fit, with the
+   `truncated`/`omitted` markers (`omitted` counts dropped whole items).
 5. **Assemble** the response with per-item provenance (below).
 
 No model, network, clock, or randomness anywhere in the pass.
@@ -103,18 +113,19 @@ No model, network, clock, or randomness anywhere in the pass.
       "provenance": {
         "channels": ["scope", "keyword"],
         "matching_entry": "src/auth/**",
-        "superseded": ["RAC-… (via supersedes)"],
+        "superseded": ["RAC-…"],
         "evidence": {"field": "title", "terms": ["token"], "tier": 1,
                      "score": 0.0,
                      "components": {"bm25": 0.0, "lexical_rank": 1,
                                      "graph_rank": 2, "inbound": 3}}
       }
     }
-  ],
-  "omitted": 0,
-  "truncated": false
+  ]
 }
 ```
+
+The ADR-033 markers (`truncated`, `omitted`, `hint`) are appended only when
+truncation occurred — absent, not false, on a complete response.
 
 - `channels` names every discovery route that surfaced the item:
   `"keyword"`, `"scope"`, `"supersedes"` (arrived as the live successor of
@@ -125,9 +136,8 @@ No model, network, clock, or randomness anywhere in the pass.
   only when the supersedes channel fired.
 - `evidence` is the existing explain-hit object (field, terms, tier, score,
   components), present for keyword-channel items.
-- `excerpt` is the budget-shaped slice of the artifact body; `omitted` and
-  `truncated` are the ADR-033 markers, absent-or-zero on complete
-  responses.
+- `excerpt` is the head of the artifact's stored bytes, capped at the
+  budget's per-item share (the Cap stage above).
 
 Governing recall is scoreable from `items[].id` plus
 `provenance.channels`/`matching_entry` alone; `evidence` explains ranking.
@@ -139,18 +149,21 @@ Governing recall is scoreable from `items[].id` plus
   validation reads). Decisions keep their existing stricter predicate
   (`Accepted` and not retired) so `find_decisions` behaviour is unchanged.
 - Faces: `rac find --live` (flag, default off) and
-  `search_artifacts(live_only: bool = False)`. A pre-scoring constraint
-  applied alongside the type and tag filters, so corpus-wide BM25
-  statistics stay corpus-global (the ADR-109 facet pattern). Responses
-  without the argument are byte-identical to today (ADR-007).
+  `search_artifacts(live_only: bool = False)`. A pre-scoring constraint:
+  the filter drops retired artifacts from the matched set before ranking —
+  only matched files are re-read, never the whole corpus — so survivors
+  rank among themselves while corpus-wide BM25 statistics stay
+  corpus-global (the ADR-109 facet posture). Responses without the
+  argument are byte-identical to today (ADR-007).
 
 ### Per-call `budget` on `get_artifact`
 
-- `get_artifact(id, budget: int | None = None)`: when given, the effective
-  budget is `min(server_budget, budget)` — a per-call value lowers, never
-  raises, the server-wide ADR-033 budget. Enforcement, truncation strategy,
-  and markers are the existing mechanism unchanged. Unit: characters of
-  serialized JSON.
+- `get_artifact(id, budget: int = 0)` (`0` — the default — means the
+  server budget, the same sentinel encoding as the compound tool): when
+  given, the effective budget is `min(server_budget, budget)` — a per-call
+  value lowers, never raises, the server-wide ADR-033 budget. Enforcement,
+  truncation strategy, and markers are the existing mechanism unchanged.
+  Unit: characters of serialized JSON.
 - The compound op's `budget` argument has the same unit and the same
   lower-only clamp on the MCP face; the CLI face has no server budget, so
   `--budget` applies directly with the same default.
@@ -177,7 +190,11 @@ Governing recall is scoreable from `items[].id` plus
   byte-identical responses (ADR-007).
 - The sixth tool's standing description must keep the pinned surface inside
   the standing token budget's hard cap (ADR-030); the description is a
-  verbatim-pinned product string.
+  verbatim-pinned product string. The budget and cap constants are derived
+  from a per-tool ceiling (200 budgeted / 250 capped per tool, the
+  calibration of the original five-tool values), so they scale with
+  deliberate surface growth — six pinned tools cap at 1500 — never with
+  description bloat.
 - Work-bounding caps (edge and traversal limits) apply before the budget,
   as elsewhere in the serving layer.
 

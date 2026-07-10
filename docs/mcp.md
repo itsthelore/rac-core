@@ -144,7 +144,7 @@ and cite the decision ID in its response.
 If you are pointing at your own repository, substitute a topic you know
 a decision covers.
 
-## 5. The four tools
+## 5. The six tools
 
 | Tool | When the agent calls it |
 |---|---|
@@ -152,6 +152,8 @@ a decision covers.
 | `search_artifacts` | Before designing or implementing anything that a recorded decision might cover |
 | `get_artifact` | When an artifact ID appears, or before changing anything a decision covers |
 | `get_related` | After retrieving an artifact — finds what else the change could affect |
+| `find_decisions` | "What did we decide about X" — or, with `path`, the decisions governing a code path (ADR-067) |
+| `retrieve_grounding` | One-call task grounding: ranked, budget-capped artifacts with provenance (ADR-113) |
 
 `get_related` takes an optional `depth` (default `1`, capped at `5`): the default
 returns immediate neighbours only, while `depth>1` additionally returns a
@@ -169,6 +171,18 @@ exceeds the freshness threshold (default 180 days, set per repository under
 its date, never a correctness verdict, and never changes which artifacts match or
 their order; outside git the fields degrade to `null`. The join respects the
 response budget — matches truncate whole, exactly as before.
+
+`retrieve_grounding` (ADR-113) composes the primitives into one deterministic
+pass: keyword discovery, scope binding (`scope` — a file or directory path pulls
+in the decisions governing it, ranked first), supersedes resolution to live
+successors, a `top_k` cut, and per-item excerpt shaping under the response
+budget (`budget`, characters; a per-call value can only lower the server's,
+`0` means the server budget). Each item carries provenance — discovery
+channels, the matching declared scope entry, the retired ids a successor
+replaced, and match evidence. `search_artifacts` also takes an additive
+`live_only` flag (drop retired artifacts of every type), and `get_artifact` an
+additive per-call `budget`. The identical operation is the `rac retrieve` CLI
+command — one shared core, byte-identical JSON (ADR-031).
 
 The tool descriptions contain the trigger language; well-tuned agents call them
 without being told to.
@@ -399,7 +413,7 @@ rac mcp --root /path/to/your/repo --transport http --host 127.0.0.1 --port 8000 
   (defaults `127.0.0.1`, `8000`, `/mcp`). It binds to loopback by default;
   exposing it to a network is a deliberate deployment choice.
 
-The HTTP transport is **serving-layer only**: the five tools are unchanged, the
+The HTTP transport is **serving-layer only**: the six tools are unchanged, the
 server re-reads the repository per call (no cache, no session state), and an
 HTTP response is **payload-identical to stdio** for the same corpus bytes.
 

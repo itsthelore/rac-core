@@ -1321,9 +1321,10 @@ not an error.
 - **Input:** `rac find <query> [directory]` — directory defaults to the
   current directory.
 - **Options:** `--type TYPE` (only match one artifact type) · `--tag TAG`
-  (repeatable; only artifacts carrying every given tag) · `--no-cache` /
-  `--verify` (persistent-store controls) · `--json` · `--explain` ·
-  `--top-level` · `--recursive`
+  (repeatable; only artifacts carrying every given tag) · `--live` (only
+  live artifacts — drop matches whose status is retired for their type,
+  ADR-113) · `--no-cache` / `--verify` (persistent-store controls) ·
+  `--json` · `--explain` · `--top-level` · `--recursive`
 - **Exit codes:** `0` search completed (matches or none) · `2` not a directory
 
 **Tags are searchable (ADR-109).** A query term matches an artifact's frontmatter
@@ -1456,8 +1457,50 @@ rac decisions-for .github/workflows/tests.yml rac/ --json
 ```
 
 The same lookup is available to agents over MCP as an additive optional `path`
-argument on the `find_decisions` tool (the five-tool surface is unchanged);
+argument on the `find_decisions` tool;
 `find_decisions` called with a `topic` is byte-identical to before.
+
+
+---
+
+## retrieve
+
+**One-call task grounding (ADR-113):** the compound deterministic retrieval —
+what an agent (or a benchmark harness) calls when it wants the best grounding
+the corpus offers for a task, without composing search, scope lookup,
+supersedes handling, and budgeting by hand. One pass composes: keyword and tag
+discovery over the index (the `rac find` matching and ranking, unchanged),
+**scope binding** when `--scope` names a file or directory (the
+`decisions-for` semantics — governing decisions bind regardless of keyword
+match and rank first), **supersedes resolution** (a retired match is replaced
+by its live successor along the `## Supersedes` graph), a top-k cut, and
+per-item excerpt shaping under a character budget (ADR-033). Every item
+carries provenance: its discovery `channels` (`keyword` / `scope` /
+`supersedes`), the `matching_entry` that bound it, the retired ids it
+replaced, and the explain-hit `evidence`. Deterministic and offline — no
+model, no network; identical corpus and arguments yield byte-identical JSON.
+
+- **Input:** `rac retrieve "<task>" [directory]` — directory defaults to the
+  current directory.
+- **Options:** `--scope PATH` (include the decisions governing this path,
+  ranked first) · `--top-k K` (default 5) · `--budget N` (response budget in
+  characters of serialized JSON, default 10000; excerpts share it evenly) ·
+  `--live` / `--all` (live-only with supersedes substitution — the default —
+  or everything, unfiltered) · `--json`
+- **Exit codes:** `0` retrieval completed (items or none — empty grounding is
+  a valid answer) · `2` usage error (not a directory, `--top-k` or `--budget`
+  below 1)
+
+```bash
+rac retrieve "add a session refresh endpoint" rac/ --scope src/auth/tokens.py
+rac retrieve "response truncation" rac/ --top-k 3 --budget 4000 --json
+```
+
+The same operation is the `retrieve_grounding` MCP tool — one shared core
+(ADR-031), so the CLI `--json` output is byte-identical to the tool's response
+for the same corpus and arguments. That makes the CLI form the right harness
+seam: a benchmark can score exactly what agents get over MCP, one process per
+cell, no server lifecycle.
 
 
 ---
