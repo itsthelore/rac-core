@@ -6,6 +6,10 @@ details, release history over commit history.
 
 ## Unreleased
 
+_Nothing yet._
+
+## v0.23.0 — the "warm by default" release
+
 **The cache is on by default** (ADR-112, supersedes ADR-110). `rac find`,
 `rac validate`, and `rac mcp` now reuse the persistent derived-index and
 per-file result caches without a flag — repeated queries against an unchanged
