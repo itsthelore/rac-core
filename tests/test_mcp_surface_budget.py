@@ -1,7 +1,7 @@
 """Measured MCP surface budget (lean-context-delivery Init 1, ADR-033 / ADR-066).
 
 The agent-facing footprint is a regression-checked property, not silent drift: a
-deterministic, offline token count of the five-tool surface (descriptions +
+deterministic, offline token count of the pinned tool surface (descriptions +
 schemas) held under a stated budget, plus a per-call response ceiling over a
 pinned fixture. No model, no network — the same input yields the same integer, so
 a description or schema that inflates past the budget fails here rather than
@@ -70,16 +70,18 @@ def test_standing_surface_is_within_budget():
     )
 
 
-def test_surface_is_the_five_tool_surface_unchanged():
-    # The measurement counts the served surface; it adds no tool and removes none.
+def test_surface_is_the_six_tool_surface_unchanged():
+    # The measurement counts the served surface; it adds no tool and removes
+    # none. Six pinned tools since ADR-113 added retrieve_grounding.
     measurement = _measure(MCP_CORPUS)
-    assert len(measurement.tools) == 5
+    assert len(measurement.tools) == 6
     assert {t.name for t in measurement.tools} == {
         "get_summary",
         "search_artifacts",
         "get_artifact",
         "get_related",
         "find_decisions",
+        "retrieve_grounding",
     }
 
 
@@ -95,8 +97,9 @@ def test_measurement_is_deterministic():
 
 
 def test_budget_stays_within_its_hard_cap():
-    # The budget may be raised with review, but never silently past the cap: going
-    # above 1250 is a deliberate change to the cap itself, not a quiet bump.
+    # The budget may be raised with review, but never silently past the cap:
+    # going above it is a deliberate change to the cap itself (the per-tool
+    # ceiling times the pinned tool count), not a quiet bump.
     assert STANDING_BUDGET_TOKENS <= STANDING_BUDGET_HARD_CAP
 
 

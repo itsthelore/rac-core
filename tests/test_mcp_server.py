@@ -24,13 +24,15 @@ from rac.mcp.server import build_server, run_server
 CORPUS = fixture_path("mcp", "corpus")
 
 # The exact tool names the surface pins (ADR-030); order-independent. The four
-# original read tools plus find_decisions (v0.21.16, ADR-067).
+# original read tools, find_decisions (v0.21.16, ADR-067), and
+# retrieve_grounding (ADR-113).
 EXPECTED_TOOLS = {
     "get_artifact",
     "search_artifacts",
     "find_decisions",
     "get_related",
     "get_summary",
+    "retrieve_grounding",
 }
 
 
