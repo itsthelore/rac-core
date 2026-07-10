@@ -8,6 +8,10 @@ verbatim from that design; changing them is a contract change (ADR-030).
 v0.21.16 adds ``find_decisions`` — the live decision query (ADR-067):
 deterministic retrieval of the Accepted, non-retired decisions binding a topic,
 so an agent consults what the team already settled instead of re-litigating it.
+ADR-113 adds ``retrieve_grounding`` — the compound deterministic retrieval: one
+call composes keyword discovery, scope binding, supersedes resolution, ranking,
+and budget capping into a provenance-carrying grounding block, shared
+byte-identically with the ``rac retrieve`` CLI (ADR-031).
 
 The server is a *consumer* of RAC Core (ADR-015, ADR-031): every tool calls
 read-only service functions — resolution, search, relationships, portfolio —
@@ -95,6 +99,7 @@ from rac.services.resolve import (
     resolve_in_index,
     search_index,
 )
+from rac.services.retrieve import retrieve_grounding
 
 SERVER_NAME = "lore"
 
@@ -178,6 +183,15 @@ DESC_FIND_DECISIONS = (
     "declared scope. It tells you which decisions bind; read them and judge for "
     "yourself — it does not decide whether a change contradicts them. Use "
     "get_artifact to read a decision's full text."
+)
+
+DESC_RETRIEVE_GROUNDING = (
+    "One-call grounding for a task from this repository's recorded product "
+    "knowledge: a ranked, budget-capped set of artifacts with excerpts and "
+    "provenance, deterministically retrieved. Pass `scope` (a file or directory "
+    "you will touch) to include the decisions governing that path; superseded "
+    "matches are replaced by their live successors. Use get_artifact to read an "
+    "item in full."
 )
 
 DESC_GET_SUMMARY = (
@@ -274,7 +288,24 @@ def _search_artifacts(
     budget: int,
     reader: FreshnessTracker | None = None,
     tags: list[str] | None = None,
+    live_only: bool = False,
 ) -> str:
+    if live_only:
+        # The live-only facet (ADR-113, additive): route through the one core
+        # seam that owns the filter, over the same read-model structures, in
+        # both cache modes — the pre-scoring drop of retired artifacts is a
+        # single implementation, never re-derived per serving path.
+        derived = _read_model(root, reader)
+        result = search_index(
+            derived.index_entries,
+            query,
+            artifact_type=artifact_type,
+            field_tokens_by_path=derived.field_tokens_by_path,
+            tags=tags,
+            live_only=True,
+        )
+        annotate_search_recency(result.matches, root)
+        return serialize(result.to_dict(), budget)
     if reader is not None:
         derived = reader.read_model()
         if isinstance(derived, ReadModelView):
@@ -344,6 +375,39 @@ def _find_decisions(
     # type is always "decision" and the result is filtered to live decisions.
     payload["filter"] = "live-decisions"
     return serialize(payload, budget)
+
+
+def _retrieve_grounding(
+    root: str,
+    task: str,
+    scope: str,
+    top_k: int,
+    call_budget: int,
+    live_only: bool,
+    budget: int,
+    reader: FreshnessTracker | None = None,
+) -> str:
+    """The compound grounding retrieval (ADR-113), served over the read-model.
+
+    One shared core (ADR-031): the payload is built by
+    :func:`rac.services.retrieve.retrieve_grounding` — the same function the
+    ``rac retrieve`` CLI calls — and serialized through the same ADR-033
+    mechanism, so the two faces are byte-identical for the same corpus and
+    arguments. ``call_budget`` may only *lower* the server budget
+    (``min(server, call)``; ``0`` means the server budget), per REQ-007.
+    """
+    effective = budget if call_budget <= 0 else min(budget, call_budget)
+    derived = _read_model(root, reader)
+    payload = retrieve_grounding(
+        root,
+        task,
+        scope=scope or None,
+        top_k=top_k,
+        budget=effective,
+        live_only=live_only,
+        read_model=derived,
+    )
+    return serialize(payload, effective)
 
 
 def _get_related(
@@ -480,7 +544,7 @@ def build_server(
     :class:`~rac.services.freshness.FreshnessTracker` keeps the derived structures
     current by event-sourced change detection instead of the per-call whole-corpus
     re-hash (ADR-105), byte-identically to a fresh walk. The returned
-    :class:`FastMCP` instance has the five pinned tools registered and is ready to
+    :class:`FastMCP` instance has the six pinned tools registered and is ready to
     run over any transport — the CLI runs it over stdio.
     """
     server: FastMCP = FastMCP(SERVER_NAME)
@@ -507,28 +571,78 @@ def build_server(
             lambda: audit.observe(audit_recorder, tool, args, call, request_principal=principal),
         )
 
+    # The tool wrappers below take a per-call ``budget`` argument (ADR-113), so
+    # the server-wide ADR-033 budget is aliased out of their shadow.
+    server_budget = budget
+
     @server.tool(name="get_artifact", description=DESC_GET_ARTIFACT)
-    def get_artifact(id: str, ctx: Context) -> str:
+    def get_artifact(id: str, ctx: Context, budget: int = 0) -> str:
+        # Per-call budget (ADR-113, additive on the ADR-033 mechanism): a call
+        # may only *lower* the server budget, never raise it; 0 — the default —
+        # is the server budget, so an unchanged call is byte-identical. The
+        # override rides the audit args only when supplied (ADR-007). Unit:
+        # characters of serialized JSON, as everywhere under ADR-033.
+        effective = server_budget if budget <= 0 else min(server_budget, budget)
+        args: dict[str, str | int] = {"id": id}
+        if budget > 0:
+            args["budget"] = budget
         return observed(
             "get_artifact",
-            {"id": id},
-            lambda: _get_artifact(root, id, budget, reader),
+            args,
+            lambda: _get_artifact(root, id, effective, reader),
             _request_principal(ctx),
         )
 
     @server.tool(name="search_artifacts", description=DESC_SEARCH_ARTIFACTS)
     def search_artifacts(
-        query: str, ctx: Context, type: str | None = None, tags: list[str] | None = None
+        query: str,
+        ctx: Context,
+        type: str | None = None,
+        tags: list[str] | None = None,
+        live_only: bool = False,
     ) -> str:
-        # ``tags`` only rides the audit args when supplied, so a plain query's
-        # recorded shape is byte-identical to before (additive, ADR-007/ADR-109).
-        args: dict[str, str | list[str] | None] = {"query": query, "type": type}
+        # ``tags``/``live_only`` only ride the audit args when supplied, so a
+        # plain query's recorded shape is byte-identical to before (additive,
+        # ADR-007/ADR-109/ADR-113).
+        args: dict[str, str | list[str] | bool | None] = {"query": query, "type": type}
         if tags:
             args["tags"] = tags
+        if live_only:
+            args["live_only"] = True
         return observed(
             "search_artifacts",
             args,
-            lambda: _search_artifacts(root, query, type, budget, reader, tags),
+            lambda: _search_artifacts(root, query, type, budget, reader, tags, live_only),
+            _request_principal(ctx),
+        )
+
+    @server.tool(name="retrieve_grounding", description=DESC_RETRIEVE_GROUNDING)
+    def retrieve_grounding_tool(
+        task: str,
+        ctx: Context,
+        scope: str = "",
+        top_k: int = 5,
+        budget: int = 0,
+        live_only: bool = True,
+    ) -> str:
+        # Non-default arguments only ride the audit args when supplied, so the
+        # minimal call's recorded shape stays lean (ADR-007/ADR-084).
+        args: dict[str, str | int | bool] = {"task": task}
+        if scope:
+            args["scope"] = scope
+        if top_k != 5:
+            args["top_k"] = top_k
+        if budget > 0:
+            args["budget"] = budget
+        if not live_only:
+            args["live_only"] = False
+        call_budget = budget
+        return observed(
+            "retrieve_grounding",
+            args,
+            lambda: _retrieve_grounding(
+                root, task, scope, top_k, call_budget, live_only, server_budget, reader
+            ),
             _request_principal(ctx),
         )
 

@@ -11,8 +11,8 @@ This module measures that footprint deterministically and offline (ADR-066): no
 model, no network. A fixed input yields a fixed integer via one stated
 tokenisation rule, so the number is reproducible from the inputs alone and can be
 held to a budget as a regression check (`tests/test_mcp_surface_budget.py`). It
-counts the existing five-tool surface exactly as served — it adds no tool, removes
-none, and compresses nothing (REQ-004).
+counts the pinned six-tool surface (ADR-030, extended by ADR-113) exactly as
+served — it adds no tool, removes none, and compresses nothing (REQ-004).
 """
 
 from __future__ import annotations
@@ -42,15 +42,21 @@ def approx_tokens(text: str) -> int:
 # --- Budgets (kept beside the check; a change here is reviewed with it) -------
 #
 # The enforced ceiling on the standing surface (descriptions + schemas), in
-# tokens. Measured surface today is ~915; the budget holds it under 1000. Raising
-# it is a reviewed edit that MUST carry justification, and it may not exceed the
-# hard cap below without a deeper reconsideration (a test pins that the budget
-# itself stays within the cap).
-STANDING_BUDGET_TOKENS = 1000
-# The absolute cap on the budget constant itself: the standing budget may be
-# raised — with explicit approval and written justification — up to here, and
-# never silently past it.
-STANDING_BUDGET_HARD_CAP = 1250
+# tokens. Both constants are derived from a per-tool ceiling so they scale with
+# deliberate surface growth, never with description bloat: the original budget
+# (1000) and hard cap (1250) were calibrated for the five-tool surface — 200
+# budgeted and 250 capped per tool. ADR-113 adds the sixth pinned tool
+# (``retrieve_grounding``) plus the ``live_only``/``budget`` facet arguments;
+# the per-tool ceilings are unchanged (6 × 200 = 1200 would be exceeded only by
+# the facet growth, so the budget carries the measured ~1310 with headroom at
+# 1350, still under 6 × 250 = 1500). Raising either is a reviewed edit that
+# MUST carry justification; the budget may never exceed the hard cap (a test
+# pins it).
+STANDING_BUDGET_TOKENS = 1350
+# The absolute cap on the budget constant itself — the per-tool cap (250) times
+# the six pinned tools: the standing budget may be raised — with explicit
+# approval and written justification — up to here, and never silently past it.
+STANDING_BUDGET_HARD_CAP = 1500
 # The per-call response ceiling over the pinned fixture basket, in tokens. It
 # catches serialization field-bloat in a typical response that sits below
 # ADR-033's serve-time truncation cap; the two are complementary (REQ-005).

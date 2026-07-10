@@ -1072,6 +1072,18 @@ def _find_from_store(args: argparse.Namespace) -> SearchResult:
             args.query,
             field_tokens_by_path=view.field_tokens_by_path,
         )
+    if args.live:
+        # The live-only facet (ADR-113) routes through the one core seam that
+        # owns the filter, over the store's read-model structures — a single
+        # implementation across cache modes and faces (ADR-031).
+        return search_index(
+            view.index_entries,
+            args.query,
+            artifact_type=args.type,
+            tags=args.tags,
+            field_tokens_by_path=view.field_tokens_by_path,
+            live_only=True,
+        )
     if isinstance(view, ReadModelView):
         return view.search(args.query, artifact_type=args.type, tags=args.tags)
     return search_index(
@@ -1110,6 +1122,7 @@ def cmd_find(args: argparse.Namespace) -> int:
             artifact_type=args.type,
             recursive=not args.top_level,
             tags=args.tags,
+            live_only=args.live,
         )
     # Freshness phase 1 (ADR-045): join git-derived staleness onto matches after
     # ranking, so the matched set and order are unchanged (REQ-005) and the fields
@@ -1148,6 +1161,44 @@ def cmd_decisions_for(args: argparse.Namespace) -> int:
         args,
         human=lambda: outputs.render_decisions_for_human(result),
         json=lambda: outputs.render_decisions_for_json(result),
+    )
+    return EXIT_OK
+
+
+def cmd_retrieve(args: argparse.Namespace) -> int:
+    """One-call compound grounding retrieval (ADR-113).
+
+    The CLI face of the compound retrieval: builds the payload through the same
+    core function the ``retrieve_grounding`` MCP tool calls and serializes it
+    through the same ADR-033 budget mechanism, so ``--json`` output is
+    byte-identical to the tool's response for the same corpus and arguments
+    (ADR-031). An empty ``items`` list is a valid answer (exit 0); bad arguments
+    are usage errors (exit 2). Deterministic and offline — no model, no network.
+    """
+    import json as json_module
+
+    from rac.mcp.budget import serialize
+    from rac.services.retrieve import retrieve_grounding
+
+    if not Path(args.directory).is_dir():
+        _usage_error(f"not a directory: {args.directory}")
+    if args.top_k < 1:
+        _usage_error(f"--top-k must be at least 1, got {args.top_k}")
+    if args.budget < 1:
+        _usage_error(f"--budget must be at least 1, got {args.budget}")
+    payload = retrieve_grounding(
+        args.directory,
+        args.task,
+        scope=args.scope,
+        top_k=args.top_k,
+        budget=args.budget,
+        live_only=not args.all,
+    )
+    serialized = serialize(payload, args.budget)
+    _emit(
+        args,
+        human=lambda: outputs.render_retrieve_human(json_module.loads(serialized)),
+        json=lambda: serialized,
     )
     return EXIT_OK
 
@@ -2268,6 +2319,14 @@ def build_parser() -> argparse.ArgumentParser:
             "required). Narrows the query by tag (ADR-109)."
         ),
     )
+    p_find.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "Only live artifacts: drop matches whose status is retired for "
+            "their type (Superseded, Deprecated, ... — spec-driven, ADR-113)."
+        ),
+    )
     # Persistent store reuse (ADR-112): on by default. Freshness is verified by
     # the persisted stat manifest (only stat-changed files are re-read); the
     # store lives under $XDG_CACHE_HOME/rac/derived (RAC_CACHE_DIR overrides)
@@ -2340,6 +2399,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recurse into subdirectories (the default; accepted for clarity).",
     )
     p_decisions_for.set_defaults(func=cmd_decisions_for)
+
+    p_retrieve = sub.add_parser(
+        "retrieve",
+        help="One-call task grounding: ranked, budget-capped artifacts with provenance.",
+        parents=[version_parent, json_parent],
+    )
+    p_retrieve.add_argument(
+        "task",
+        help="What you are about to do — the keyword query grounding is retrieved for.",
+    )
+    p_retrieve.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="Corpus directory to scan recursively for *.md (default: current directory).",
+    )
+    p_retrieve.add_argument(
+        "--scope",
+        metavar="PATH",
+        help=(
+            "Repository file or directory the task touches: the decisions whose "
+            "declared `## Applies To` governs it are included and ranked first."
+        ),
+    )
+    p_retrieve.add_argument(
+        "--top-k",
+        type=int,
+        default=5,
+        metavar="K",
+        help="Maximum items returned (default: 5).",
+    )
+    p_retrieve.add_argument(
+        "--budget",
+        type=int,
+        default=10_000,
+        metavar="N",
+        help=(
+            "Response budget in characters of serialized JSON (default: 10000; "
+            "the ADR-033 unit). Excerpts share it evenly across items."
+        ),
+    )
+    retrieve_liveness = p_retrieve.add_mutually_exclusive_group()
+    retrieve_liveness.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "Only live artifacts, with superseded matches replaced by their "
+            "live successors (the default; accepted for clarity)."
+        ),
+    )
+    retrieve_liveness.add_argument(
+        "--all",
+        action="store_true",
+        help="Include retired artifacts too: no liveness filter, no supersedes substitution.",
+    )
+    p_retrieve.set_defaults(func=cmd_retrieve)
 
     p_eval = sub.add_parser(
         "eval",

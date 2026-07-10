@@ -1029,6 +1029,47 @@ def render_decisions_for_human(result: ScopeLookupResult) -> str:
     return "\n".join(lines)
 
 
+def render_retrieve_human(payload: dict) -> str:
+    """Human `rac retrieve` output: the compound grounding block (ADR-113).
+
+    Rendered from the budget-shaped payload (after ADR-033 truncation), so the
+    human view reflects exactly what the JSON face carries: aligned rows of
+    ``id  status  title`` with a provenance line under each — the discovery
+    channels, the matching declared scope entry or matched terms, and the
+    retired ids a live successor replaced. An empty result is a valid answer.
+    """
+    items = payload.get("items", [])
+    task = payload.get("task", "")
+    if not items:
+        return f"No grounding for {task!r}."
+    id_w = max(len(i["id"]) for i in items)
+    status_w = max(len(i.get("status") or "—") for i in items)
+    indent = f"{' ' * id_w}  {' ' * status_w}  "
+    lines: list[str] = []
+    for item in items:
+        lines.append(
+            f"{item['id']:<{id_w}}  {(item.get('status') or '—'):<{status_w}}  "
+            f"{item.get('title') or '—'}"
+        )
+        provenance = item.get("provenance", {})
+        via = "+".join(provenance.get("channels", []))
+        detail = ""
+        if "matching_entry" in provenance:
+            detail = f" [applies to: {provenance['matching_entry']}]"
+        elif "evidence" in provenance:
+            evidence = provenance["evidence"]
+            detail = f" [field={evidence['field']} terms={','.join(evidence['terms'])}]"
+        lines.append(f"{indent}↳ via: {via}{detail}")
+        for replaced in provenance.get("superseded", []):
+            lines.append(f"{indent}  replaces: {replaced}")
+    lines.append("")
+    summary = f"{len(items)} item(s) for {task!r}."
+    if payload.get("truncated"):
+        summary += f" (truncated; {payload.get('omitted', 0)} item(s) omitted)"
+    lines.append(summary)
+    return "\n".join(lines)
+
+
 def render_find_human(result: SearchResult, *, explain: bool = False) -> str:
     """Human `rac find` output: aligned match rows, or a valid empty result.
 
