@@ -46,6 +46,7 @@ MARKER_HINT = "hint"
 HINT_SEARCH = "Narrow the query or request a specific artifact ID."
 HINT_RELATED = "Request the artifact directly, or narrow what you are changing."
 HINT_CONTENT = "Request a more specific artifact, or read the file directly for the full content."
+HINT_RETRIEVE = "Lower top_k, raise the budget, or narrow the task."
 HINT_SUMMARY = (
     "The repository summary exceeds the response budget; raise the server "
     "budget to see the full overview."
@@ -91,6 +92,9 @@ def _truncate(payload: dict, budget: int) -> dict:
     - ``matches`` (search_artifacts) — drop whole match entries from the tail.
     - ``incoming`` (get_related) — drop whole incoming entries from the tail.
     - ``content`` (get_artifact) — drop characters from the content tail.
+    - ``items`` (retrieve_grounding, ADR-113) — trim the last kept item's
+      excerpt tail, dropping whole items only when an emptied excerpt still
+      does not fit.
 
     get_summary has no unbounded field; if it ever exceeds budget the marker is
     added without dropping data (its shape is fixed and small in practice).
@@ -99,6 +103,8 @@ def _truncate(payload: dict, budget: int) -> dict:
         return _truncate_list(payload, "matches", budget, HINT_SEARCH)
     if "incoming" in payload:
         return _truncate_list(payload, "incoming", budget, HINT_RELATED)
+    if "items" in payload:
+        return _truncate_items(payload, budget)
     if "content" in payload:
         return _truncate_content(payload, budget)
     # No truncatable field (e.g. get_summary): mark it so the agent knows the
@@ -138,6 +144,50 @@ def _with_marker(payload: dict, key: str, kept: list, omitted: int, hint: str) -
     marked[MARKER_OMITTED] = omitted
     marked[MARKER_HINT] = hint
     return marked
+
+
+def _truncate_items(payload: dict, budget: int) -> dict:
+    """Reduce a retrieve ``items`` payload until it fits (ADR-113 / ADR-033).
+
+    Excerpt-first, then whole-item: at each level, try trimming the last kept
+    item's ``excerpt`` tail (binary search for the largest fitting prefix,
+    like the ``content`` rule); only when even an empty excerpt does not fit is
+    the whole item dropped from the tail. Deterministic — the kept prefix and
+    trim point are identical for identical input. ``omitted`` counts dropped
+    whole items; a pure excerpt trim is ``truncated`` with ``omitted`` 0.
+    """
+    items = list(payload["items"])
+    total = len(items)
+    kept = items
+    while kept:
+        candidate = _with_marker(payload, "items", kept, total - len(kept), HINT_RETRIEVE)
+        if _length(candidate) <= budget:
+            return candidate
+        # Trim the last kept item's excerpt before dropping it entirely.
+        last = dict(kept[-1])
+        excerpt = last.get("excerpt", "")
+        lo, hi = 0, len(excerpt)
+        best: int | None = None
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            last["excerpt"] = excerpt[:mid]
+            trial = _with_marker(
+                payload, "items", [*kept[:-1], last], total - len(kept), HINT_RETRIEVE
+            )
+            if _length(trial) <= budget:
+                best = mid
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        if best is not None:
+            last["excerpt"] = excerpt[:best]
+            return _with_marker(
+                payload, "items", [*kept[:-1], last], total - len(kept), HINT_RETRIEVE
+            )
+        kept = kept[:-1]
+    # Even an empty list does not fit (the envelope alone is over budget):
+    # return the marked empty-list payload — structurally valid, fully omitted.
+    return _with_marker(payload, "items", [], total, HINT_RETRIEVE)
 
 
 def _truncate_content(payload: dict, budget: int) -> dict:

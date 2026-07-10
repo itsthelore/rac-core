@@ -554,6 +554,7 @@ def find_artifacts(
     recursive: bool = True,
     *,
     tags: Sequence[str] | None = None,
+    live_only: bool = False,
 ) -> SearchResult:
     """Search artifacts under ``directory`` by id, title, tags, path, heading, or body.
 
@@ -561,10 +562,11 @@ def find_artifacts(
     matching (ADR-037), the tiered ladder with a tags tier and body text
     (ADR-038/ADR-109), results ordered by match-field priority then sorted path.
     ``tags`` narrows the matched set to artifacts carrying every requested tag
-    (the ``--tag`` facet). An empty result is a valid outcome, not an error.
+    (the ``--tag`` facet); ``live_only`` drops retired artifacts of every type
+    (the ADR-113 facet). An empty result is a valid outcome, not an error.
     """
     entries = build_repository_index(directory, recursive=recursive).artifacts
-    return search_index(entries, query, artifact_type=artifact_type, tags=tags)
+    return search_index(entries, query, artifact_type=artifact_type, tags=tags, live_only=live_only)
 
 
 # --- Live decision query (v0.21.16, ADR-067) ---------------------------------
@@ -814,6 +816,26 @@ def _competition_ranks(scores: dict[str, float]) -> dict[str, int]:
     return ranks
 
 
+def entry_is_retired(entry: SearchableArtifact) -> bool:
+    """Whether ``entry``'s status is retired for its type (the ``live_only`` facet).
+
+    Spec-driven for every artifact type (ADR-113, via ``is_retired_status`` —
+    the generalisation of the ``find_decisions`` liveness rule): the entry's
+    ``## Status`` is re-read from its file, since the index rows carry no
+    status. Deterministic — the file is the same corpus byte source the index
+    was built from. A file that cannot be read or parsed is treated as live
+    (retirement must be provable, never assumed).
+    """
+    from rac.core.markdown import parse_file
+    from rac.services.agent_rules import artifact_status, is_retired_status
+
+    try:
+        status = artifact_status(parse_file(entry.path))
+    except (OSError, UnicodeDecodeError):
+        return False
+    return is_retired_status(entry.type, status)
+
+
 def _entry_has_tags(entry: SearchableArtifact, wanted: frozenset[str]) -> bool:
     """Whether ``entry`` carries every tag in ``wanted`` (the ``--tag`` facet).
 
@@ -831,6 +853,7 @@ def search_index(
     *,
     field_tokens_by_path: dict[str, dict[str, list[str]]] | None = None,
     tags: Sequence[str] | None = None,
+    live_only: bool = False,
 ) -> SearchResult:
     """Search already-discovered entries with `rac find` semantics (v0.8.1).
 
@@ -846,6 +869,12 @@ def search_index(
     ``field_tokens_by_path`` may be supplied precomputed (the derived-index cache,
     ADR-099): it must cover exactly ``entries``, and the result is byte-identical
     to computing it fresh — only the per-call re-tokenisation is skipped.
+
+    ``live_only`` (ADR-113, additive) drops retired artifacts of every type from
+    the matched set before ranking — spec-driven off each type's
+    ``retired_status``, the generalisation of the ``find_decisions`` liveness
+    rule — so survivors rank among themselves. Default off: absent the flag, the
+    result is byte-identical to before.
     """
     terms = tokenize(query)
     # The tag facet is a pre-scoring constraint applied alongside the type filter,
@@ -867,6 +896,11 @@ def search_index(
             match = _match_entry(entry_tokens, terms)
             if match is not None:
                 matched.append((entry, match))
+    # The live-only facet filters the matched set before scoring (ADR-113), so
+    # competition ranks are computed among the live survivors — only matched
+    # files are re-read, never the whole corpus.
+    if live_only and matched:
+        matched = [(e, m) for e, m in matched if not entry_is_retired(e)]
     if not matched:
         return SearchResult(query=query, artifact_type=artifact_type, matches=[])
 

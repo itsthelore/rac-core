@@ -209,6 +209,21 @@ def is_live_decision(product: Product) -> bool:
     return _is_live_decision(product)
 
 
+def is_retired_status(artifact_type: str, status: str) -> bool:
+    """True when ``status`` is a retired status for ``artifact_type`` (ADR-113).
+
+    The generalisation of decision retirement to every typed artifact,
+    spec-driven off the type's ``retired_status`` set (ADR-051) — the same
+    source relationship validation reads — so the ``live_only`` search facet
+    and the compound retrieval honour each type's own retirement vocabulary.
+    An unknown type retires nothing; an empty status is never retired.
+    Structural only — a status string match, never a semantic judgement.
+    """
+    spec = spec_for(artifact_type)
+    retired = {s.casefold() for s in (spec.retired_status if spec else ())}
+    return status.casefold() in retired
+
+
 def _canonical_payload(entries: list[AgentRulesEntry]) -> str:
     """Canonical, formatting-independent serialization the digest hashes.
 
