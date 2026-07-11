@@ -47,10 +47,11 @@ excluded because the native-core rewrite addresses them separately.
   explain-miss diagnostics, and the semantic sidecar for teams that want
   it. Owned by the `paraphrase-recall-response` design, with
   `retrieval-diagnostics` and `lore-supermemory-grounding`.
-- **Agent-originated capture.** A draft-only write path adjacent to the
-  Guide surface, preserving ADR-077's two gates and ADR-065's trust
-  boundary. Owned by the `guide-capture-path` design, alongside the host
-  surfaces recorded in `lore-capture-followups`.
+- **Agent-originated capture.** A draft-only write path on a sibling
+  surface separate from Guide (ADR-113), preserving ADR-077's two gates
+  and ADR-065's trust boundary, and reusable by a future desktop or web
+  application face. Owned by the `guide-capture-path` design, alongside
+  the host surfaces recorded in `lore-capture-followups`.
 - **Own the spec-driven loop's boundary.** Issue decomposition and
   session context packets as deterministic exports, plus the
   `decisions-on-pr` surfacing lever whose dependencies already shipped.
@@ -88,8 +89,9 @@ excluded because the native-core rewrite addresses them separately.
 
 ## Risks
 
-- The capture path's surface decision (inside Guide versus sibling) stalls
-  on the ADR-030/ADR-033 contract question and the demand window passes.
+- The capture surface's own contract and budget (ADR-113 requires both)
+  are under-specified before implementation and drift the way the Guide
+  surface's discipline was designed to prevent.
 - Miss payloads bloat the response budget and degrade the hit path they
   were meant to protect.
 - Decomposition export quietly becomes a tracker: scope discipline against
@@ -110,6 +112,7 @@ excluded because the native-core rewrite addresses them separately.
 - adr-087
 - adr-093
 - adr-096
+- adr-113
 
 ## Related Designs
 
