@@ -1,11 +1,11 @@
 {
   "meta": {
     "subject": "Full Rust rewrite of the rac-core engine (native-engine-spike), byte-parity-gated against the frozen Python oracle, derived-index cache deleted by design",
-    "before_ref": "Python oracle: src/ at 21c8be4 (.venv-oracle, rac 0.1.dev50+g21c8be403, CPython 3.11.15)",
-    "after_ref": "rust/target/release/rac at 91f64e2 (rustc 1.94.1, lto=thin, rayon 4 threads)",
+    "before_ref": "Python oracle: src/ at origin/main 1e0e2c7 (re-pinned; byte-identical src/ to original pin 21c8be4), .venv-oracle rac 0.1.dev50+g21c8be403; plus oracle-next at retrieval branch f2091be (0.1.dev55+gf2091befd) for the retrieve surface",
+    "after_ref": "rust/target/release/rac at 3b557ce (rustc 1.94.1, lto=thin, rayon 4 threads)",
     "select_how": "two binaries, identical argv/cwd/env via the parity harness seam (piped stdio, neutralized telemetry, RAC_NO_CACHE=1)",
     "reference_node": "4 vCPU / 15 GiB container (ADR-107 reference class)",
-    "measured_at": "2026-07-11T16:31Z (final interleaved matrix; medians of >=7 runs, >=3 at 20k)",
+    "measured_at": "2026-07-11T20:45Z re-pin re-measurement (startup/single-file/live corpus, 423 artifacts); synthetic matrix from 16:31Z final run (engine delta since is additive only)",
     "rerun": [
       "cd rust && cargo build --release",
       "python3 tools/perf.py --engines oracle,rust --sizes 1000,5000,20000",
@@ -14,8 +14,8 @@
     ]
   },
   "correctness_gate": {
-    "examiner": "130-case byte-parity suite (stdout bytes + exit codes) + oracle-generated vector suites",
-    "result": "130/130 pass, run twice, scoreboards byte-identical, from forced clean rebuilds, independently verified",
+    "examiner": "174-case byte-parity suite across two oracles (130 mainline + 44 retrieve) + oracle-generated vector suites",
+    "result": "130/130 vs mainline oracle AND 44/44 retrieve cases vs the retrieval-branch oracle, each run twice, scoreboards byte-identical, independently verified",
     "examiner_not_bent": "git diff origin/main...HEAD -- tests/ src/ is empty; parity-cases.json changes vs origin/main audited additive-only",
     "fuzz": {
       "campaigns": 2,
@@ -25,29 +25,19 @@
       "unexplained_divergences": 0,
       "close_protocol": "two consecutive 800-input dry rounds (seeds 305, 306)",
       "honest_finding": "the fuzzer's first real catch was a bug in the rewrite (i64 overflow seam), and 30+ minimized inputs crash the PYTHON oracle uncaught while the rewrite reports a normal finding"
-    }
+    },
+    "retrieve_surface": "rac retrieve (compound grounding retrieval: Applies-To scope binding, supersedes resolution, budget truncation) ported ahead of its merge; every command the six-tool Lore MCP surface depends on now has a parity-proven Rust implementation"
   },
   "wall_clock_ms": {
     "startup": {
-      "before": 191.2,
-      "after": 2.2,
-      "ratio": 87
+      "before": 202.4,
+      "after": 2.1,
+      "ratio": 96
     },
     "single_file_validate": {
-      "before": 195.5,
-      "after": 3.4,
-      "ratio": 57
-    },
-    "live_corpus_417_fresh": {
-      "before": 1588,
-      "after": 28,
-      "ratio": 57
-    },
-    "live_corpus_417_python_warm_cache": {
-      "before": 223,
-      "after": 28,
-      "ratio": 8,
-      "note": "rust has NO cache; python number is its best cached path"
+      "before": 206.4,
+      "after": 3.7,
+      "ratio": 56
     },
     "synthetic_1k": {
       "before": 1536.1,
@@ -63,6 +53,18 @@
       "before": 26057.6,
       "after": 576.4,
       "ratio": 45
+    },
+    "live_corpus_fresh": {
+      "before": 1671.9,
+      "after": 30.2,
+      "ratio": 55,
+      "note": "423 artifacts post re-pin (was 417)"
+    },
+    "live_corpus_python_warm_cache": {
+      "before": 223,
+      "after": 30.2,
+      "ratio": 7,
+      "note": "rust has NO cache; python number is its best cached path"
     }
   },
   "scale_curve_files_per_s": {
@@ -142,6 +144,7 @@
       "MCP serving"
     ],
     "oracle_crashes": "30+ minimized inputs crash the python engine uncaught; the rewrite intentionally reports instead of crashing (documented divergence class)",
-    "amdahl_20k": "synthetic 20k scales only 1.6x over sequential (render + OKF residual); parse-dominated real corpora scale 2.8x on 4 cores"
+    "amdahl_20k": "synthetic 20k scales only 1.6x over sequential (render + OKF residual); parse-dominated real corpora scale 2.8x on 4 cores",
+    "mcp_status": "retrieve ported (44/44); MCP-critical command column now empty; serving-layer path (bindings vs native) remains the open decision"
   }
 }

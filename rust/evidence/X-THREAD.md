@@ -83,7 +83,7 @@ mirror the crash, or document the divergence. We documented.
 
 **Post 12** — attach `figures/fig-verdict.png`
 
-Verdict: 130/130 byte-identical. 0 unexplained divergences. 57x gate speed.
+Verdict: 174/174 byte-identical across two oracles (mainline + the new retrieve surface). 0 unexplained divergences. 56x gate speed.
 29 s per million files against a 432 s budget.
 Full interactive report (method, figures, every rerunnable command):
 https://claude.ai/code/artifact/e7ab3783-f1e6-4c4b-bbdc-f17d3680cb0b
@@ -122,6 +122,6 @@ https://claude.ai/code/artifact/e7ab3783-f1e6-4c4b-bbdc-f17d3680cb0b
 - **fig-fuzz.png**: Stat-tile card: 13,000 fuzz inputs, 120,000 engine-pair
   runs, 9 bugs found and fixed in the rewrite, 30+ inputs that crash the
   original, 0 unexplained divergences, closed on 2 consecutive dry rounds.
-- **fig-verdict.png**: Four verdict tiles: 130/130 byte-identical; 57x
+- **fig-verdict.png**: Four verdict tiles: byte-identical parity cases; 56x
   single-file gate; 29 s per million files (budget 432 s); 0 unexplained
   divergences.
