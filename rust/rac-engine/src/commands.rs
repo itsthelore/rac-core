@@ -630,6 +630,8 @@ pub struct FindArgs {
     pub json: bool,
     pub explain: bool,
     pub top_level: bool,
+    /// The live-only facet (ADR-113): drop retired matches of every type.
+    pub live: bool,
 }
 
 /// Python `datetime.fromisoformat(stamp).isoformat()` round-trip of a git
@@ -705,6 +707,7 @@ pub fn cmd_find(args: &FindArgs) -> i32 {
             args.artifact_type.as_deref(),
             !args.top_level,
             &args.tags,
+            args.live,
         )
     };
     annotate_search_recency(&mut result.matches, &args.directory);
@@ -714,6 +717,49 @@ pub fn cmd_find(args: &FindArgs) -> i32 {
         emit(output::render_find_human(&result, args.explain));
     }
     // An empty result is a valid outcome, not an error.
+    EXIT_OK
+}
+
+pub struct RetrieveArgs {
+    pub task: String,
+    pub directory: String,
+    pub scope: Option<String>,
+    pub top_k: i64,
+    pub budget: i64,
+    pub all: bool,
+    pub json: bool,
+}
+
+/// `cmd_retrieve` — one-call compound grounding retrieval (ADR-113). The
+/// `--json` face emits the budget-capped serialization; the human face renders
+/// the same truncated payload. An empty `items` list is a valid answer.
+pub fn cmd_retrieve(args: &RetrieveArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    if args.top_k < 1 {
+        return usage_error(&format!("--top-k must be at least 1, got {}", args.top_k));
+    }
+    if args.budget < 1 {
+        return usage_error(&format!("--budget must be at least 1, got {}", args.budget));
+    }
+    let payload = crate::retrieve::retrieve_grounding(
+        &args.directory,
+        &args.task,
+        args.scope.as_deref(),
+        args.top_k,
+        args.budget,
+        !args.all,
+    );
+    let serialized = crate::retrieve::serialize(&payload, args.budget);
+    if args.json {
+        emit(serialized);
+    } else {
+        // The oracle renders from json.loads(serialized) — the truncated shape.
+        let truncated: serde_json::Value =
+            serde_json::from_str(&serialized).expect("serialized payload is valid JSON");
+        emit(output::render_retrieve_human(&truncated));
+    }
     EXIT_OK
 }
 

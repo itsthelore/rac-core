@@ -9,9 +9,9 @@
 //! clearly-marked unimplemented stub (stderr, exit 2).
 
 use crate::commands::{
-    cmd_export, cmd_find, cmd_relationships, cmd_resolve, cmd_review, cmd_schema, cmd_stats,
-    cmd_templates, cmd_validate, ExportArgs, FindArgs, RelationshipsArgs, ResolveArgs, ReviewArgs,
-    SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+    cmd_export, cmd_find, cmd_relationships, cmd_resolve, cmd_retrieve, cmd_review, cmd_schema,
+    cmd_stats, cmd_templates, cmd_validate, ExportArgs, FindArgs, RelationshipsArgs, ResolveArgs,
+    RetrieveArgs, ReviewArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -102,7 +102,11 @@ pub fn run(args: &[String]) -> u8 {
     if first.starts_with('-') {
         return argparse_error("rac", &format!("unrecognized arguments: {first}"));
     }
-    if !SUBCOMMANDS.contains(&first.as_str()) {
+    // `retrieve` (ADR-113, oracle-next 0.1.dev55+gf2091befd) dispatches but is
+    // deliberately NOT in SUBCOMMANDS: the mainline oracle's `invalid choice`
+    // message does not list it, and that message's bytes are pinned by the
+    // mainline parity suite (case `err-unknown-subcommand`).
+    if first != "retrieve" && !SUBCOMMANDS.contains(&first.as_str()) {
         return argparse_error("rac", &invalid_choice_message(first));
     }
 
@@ -126,6 +130,7 @@ pub fn run(args: &[String]) -> u8 {
         "templates" => run_templates(&rest),
         "resolve" => run_resolve(&rest),
         "find" => run_find(&rest),
+        "retrieve" => run_retrieve(&rest),
         "review" => run_review(&rest),
         "export" => run_export(&rest),
         other => {
@@ -378,6 +383,7 @@ fn run_find(rest: &[&String]) -> u8 {
     let mut json = false;
     let mut explain = false;
     let mut top_level = false;
+    let mut live = false;
     let mut extras: Vec<String> = Vec::new();
     let mut positional_only = false;
 
@@ -400,6 +406,7 @@ fn run_find(rest: &[&String]) -> u8 {
             "--json" => json = true,
             "--explain" => explain = true,
             "--top-level" => top_level = true,
+            "--live" => live = true, // the live-only facet (ADR-113)
             "--recursive" => {}                        // affirmation of the default
             "--cache" | "--no-cache" | "--verify" => {} // output-neutral (ADR-112)
             "--decisions" => {
@@ -467,6 +474,183 @@ fn run_find(rest: &[&String]) -> u8 {
         json,
         explain,
         top_level,
+        live,
+    }) as u8
+}
+
+/// `int(value)` for argparse `type=int`: Python-style strip, optional sign,
+/// ASCII digits with single interior underscores. (Non-ASCII digit forms are
+/// out of scope for the parity surface.)
+fn py_parse_int(value: &str) -> Option<i64> {
+    let text = crate::pycompat::py_strip(value);
+    let (neg, digits) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text.strip_prefix('+').unwrap_or(text)),
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    let bytes = digits.as_bytes();
+    if bytes[0] == b'_' || bytes[bytes.len() - 1] == b'_' {
+        return None;
+    }
+    let mut out: i64 = 0;
+    let mut prev_underscore = false;
+    for &b in bytes {
+        if b == b'_' {
+            if prev_underscore {
+                return None;
+            }
+            prev_underscore = true;
+            continue;
+        }
+        prev_underscore = false;
+        if !b.is_ascii_digit() {
+            return None;
+        }
+        out = out
+            .saturating_mul(10)
+            .saturating_add(i64::from(b - b'0'));
+    }
+    Some(if neg { -out } else { out })
+}
+
+fn run_retrieve(rest: &[&String]) -> u8 {
+    let prog = "rac retrieve";
+    let mut task: Option<String> = None;
+    let mut directory: Option<String> = None;
+    let mut scope: Option<String> = None;
+    let mut top_k: i64 = 5;
+    let mut budget: i64 = 10_000;
+    let mut live = false;
+    let mut all = false;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    // One int-valued flag consumer: argparse `type=int` + its error line.
+    enum IntErr {
+        Missing,
+        Invalid(String),
+    }
+    let parse_int_flag = |raw: Option<&&String>| -> Result<i64, IntErr> {
+        match raw {
+            Some(v)
+                if !v.starts_with('-')
+                    || v.as_str() == "-"
+                    || looks_like_negative_number(v) =>
+            {
+                py_parse_int(v).ok_or_else(|| IntErr::Invalid(v.to_string()))
+            }
+            _ => Err(IntErr::Missing),
+        }
+    };
+    let int_flag_error = |flag: &str, err: IntErr| -> u8 {
+        match err {
+            IntErr::Missing => {
+                argparse_error(prog, &format!("argument {flag}: expected one argument"))
+            }
+            IntErr::Invalid(v) => argparse_error(
+                prog,
+                &format!("argument {flag}: invalid int value: '{v}'"),
+            ),
+        }
+    };
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || !arg.starts_with('-') || arg == "-" || looks_like_negative_number(arg)
+        {
+            if task.is_none() {
+                task = Some(arg.to_string());
+            } else if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--live" => {
+                if let Err(FlagError(code)) = mutex_check(prog, "--live", "--all", all) {
+                    return code;
+                }
+                live = true;
+                let _ = live; // accepted for clarity; it IS the default
+            }
+            "--all" => {
+                if let Err(FlagError(code)) = mutex_check(prog, "--all", "--live", live) {
+                    return code;
+                }
+                all = true;
+            }
+            "--scope" => {
+                i += 1;
+                match rest.get(i) {
+                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => {
+                        scope = Some(v.to_string());
+                    }
+                    _ => return argparse_error(prog, "argument --scope: expected one argument"),
+                }
+            }
+            other if other.starts_with("--scope=") => {
+                scope = Some(other["--scope=".len()..].to_string());
+            }
+            "--top-k" => {
+                i += 1;
+                match parse_int_flag(rest.get(i)) {
+                    Ok(v) => top_k = v,
+                    Err(e) => return int_flag_error("--top-k", e),
+                }
+            }
+            other if other.starts_with("--top-k=") => {
+                let v = &other["--top-k=".len()..];
+                match py_parse_int(v) {
+                    Some(parsed) => top_k = parsed,
+                    None => return int_flag_error("--top-k", IntErr::Invalid(v.to_string())),
+                }
+            }
+            "--budget" => {
+                i += 1;
+                match parse_int_flag(rest.get(i)) {
+                    Ok(v) => budget = v,
+                    Err(e) => return int_flag_error("--budget", e),
+                }
+            }
+            other if other.starts_with("--budget=") => {
+                let v = &other["--budget=".len()..];
+                match py_parse_int(v) {
+                    Some(parsed) => budget = parsed,
+                    None => return int_flag_error("--budget", IntErr::Invalid(v.to_string())),
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    let Some(task) = task else {
+        return argparse_error(prog, "the following arguments are required: task");
+    };
+    if !extras.is_empty() {
+        return argparse_error(
+            "rac",
+            &format!("unrecognized arguments: {}", extras.join(" ")),
+        );
+    }
+
+    cmd_retrieve(&RetrieveArgs {
+        task,
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        scope,
+        top_k,
+        budget,
+        all,
+        json,
     }) as u8
 }
 

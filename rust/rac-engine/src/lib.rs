@@ -35,6 +35,7 @@ pub mod validate;
 pub mod relationships;
 pub mod stats;
 pub mod resolve;
+pub mod retrieve;
 pub mod gitinfo;
 pub mod portfolio;
 pub mod review;

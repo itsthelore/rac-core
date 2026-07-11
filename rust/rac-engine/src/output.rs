@@ -1780,6 +1780,104 @@ fn find_match_value(m: &ResolvedArtifact, explain: bool) -> Value {
     Value::Object(obj)
 }
 
+/// `render_retrieve_human(payload)` — the human `rac retrieve` block
+/// (ADR-113), rendered from the budget-shaped payload (post-truncation), so
+/// the human view reflects exactly what the JSON face carries.
+pub fn render_retrieve_human(payload: &Value) -> String {
+    let empty: Vec<Value> = Vec::new();
+    let items = payload
+        .get("items")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+    let task = payload.get("task").and_then(Value::as_str).unwrap_or("");
+    if items.is_empty() {
+        return format!("No grounding for {}.", py_repr_str(task));
+    }
+    // `i.get("status") or "—"` / `i.get("title") or "—"` — falsy ⇒ em dash.
+    let disp = |item: &Value, key: &str| -> String {
+        match item.get(key).and_then(Value::as_str) {
+            Some(s) if !s.is_empty() => s.to_string(),
+            _ => "\u{2014}".to_string(),
+        }
+    };
+    let width = |s: &str| s.chars().count();
+    let pad = |s: &str, w: usize| {
+        let n = width(s);
+        if n >= w {
+            s.to_string()
+        } else {
+            format!("{}{}", s, " ".repeat(w - n))
+        }
+    };
+    let id_of = |item: &Value| item["id"].as_str().unwrap_or("").to_string();
+    let id_w = items.iter().map(|i| width(&id_of(i))).max().unwrap_or(0);
+    let status_w = items
+        .iter()
+        .map(|i| width(&disp(i, "status")))
+        .max()
+        .unwrap_or(0);
+    let indent = format!("{}  {}  ", " ".repeat(id_w), " ".repeat(status_w));
+    let mut lines: Vec<String> = Vec::new();
+    for item in items {
+        lines.push(format!(
+            "{}  {}  {}",
+            pad(&id_of(item), id_w),
+            pad(&disp(item, "status"), status_w),
+            disp(item, "title"),
+        ));
+        let empty_map = Map::new();
+        let provenance = item
+            .get("provenance")
+            .and_then(Value::as_object)
+            .unwrap_or(&empty_map);
+        let via = provenance
+            .get("channels")
+            .and_then(Value::as_array)
+            .map(|cs| {
+                cs.iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join("+")
+            })
+            .unwrap_or_default();
+        let detail = if let Some(entry) = provenance.get("matching_entry") {
+            format!(" [applies to: {}]", entry.as_str().unwrap_or(""))
+        } else if let Some(evidence) = provenance.get("evidence") {
+            let field = evidence["field"].as_str().unwrap_or("");
+            let terms = evidence["terms"]
+                .as_array()
+                .map(|ts| {
+                    ts.iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .unwrap_or_default();
+            format!(" [field={field} terms={terms}]")
+        } else {
+            String::new()
+        };
+        lines.push(format!("{indent}\u{21b3} via: {via}{detail}"));
+        if let Some(replaced) = provenance.get("superseded").and_then(Value::as_array) {
+            for r in replaced {
+                lines.push(format!("{indent}  replaces: {}", r.as_str().unwrap_or("")));
+            }
+        }
+    }
+    lines.push(String::new());
+    let mut summary = format!("{} item(s) for {}.", items.len(), py_repr_str(task));
+    if payload
+        .get("truncated")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let omitted = payload.get("omitted").and_then(Value::as_i64).unwrap_or(0);
+        summary.push_str(&format!(" (truncated; {omitted} item(s) omitted)"));
+    }
+    lines.push(summary);
+    lines.join("\n")
+}
+
 /// `render_find_json` — `SearchResult.to_dict(include_evidence=explain)`.
 pub fn render_find_json(result: &SearchResult, explain: bool) -> String {
     let mut m = Map::new();

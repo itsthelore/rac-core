@@ -180,7 +180,7 @@ pub fn build_index(directory: &str, recursive: bool) -> Vec<IndexEntry> {
     index_from_items(&corpus_items(directory, recursive))
 }
 
-fn index_from_items(items: &[CorpusItem]) -> Vec<IndexEntry> {
+pub(crate) fn index_from_items(items: &[CorpusItem]) -> Vec<IndexEntry> {
     let inbound = inbound_counts(items);
     items
         .iter()
@@ -655,6 +655,39 @@ pub fn search_index(
     artifact_type: Option<&str>,
     tags: &[String],
 ) -> SearchResult {
+    search_index_filtered(entries, query, artifact_type, tags, false)
+}
+
+/// `entry_is_retired(entry)` — the `live_only` facet (ADR-113): re-read the
+/// entry's `## Status` from its file and test it against the type's
+/// `retired_status` set (`is_retired_status`). Unreadable/unknown ⇒ live.
+pub fn entry_is_retired(entry: &IndexEntry) -> bool {
+    let status = artifact_status(&crate::parse::parse_file(&entry.path));
+    is_retired_status(&entry.artifact_type, &status)
+}
+
+/// `agent_rules.is_retired_status(artifact_type, status)` (ADR-113):
+/// spec-driven retirement for every typed artifact. An unknown type retires
+/// nothing; an empty status is never retired.
+pub fn is_retired_status(artifact_type: &str, status: &str) -> bool {
+    let Some(spec) = spec_for(artifact_type) else {
+        return false;
+    };
+    let wanted = py_casefold(status);
+    spec.retired_status.iter().any(|s| py_casefold(s) == wanted)
+}
+
+/// `search_index(..., live_only=...)` (ADR-113, additive): with `live_only`,
+/// retired artifacts of every type are dropped from the matched set BEFORE
+/// scoring, so competition ranks are computed among the live survivors. With
+/// `live_only=false` the result is byte-identical to `search_index`.
+pub fn search_index_filtered(
+    entries: &[IndexEntry],
+    query: &str,
+    artifact_type: Option<&str>,
+    tags: &[String],
+    live_only: bool,
+) -> SearchResult {
     let terms = tokenize(query);
     let tag_filter: Vec<String> = tags.iter().map(|t| py_casefold(t)).collect();
     let mut matched: Vec<(usize, TierMatch)> = Vec::new();
@@ -677,6 +710,12 @@ pub fn search_index(
                 matched.push((i, m));
             }
         }
+    }
+    // The live-only facet filters the matched set before scoring (ADR-113), so
+    // competition ranks are computed among the live survivors — only matched
+    // files are re-read, never the whole corpus.
+    if live_only && !matched.is_empty() {
+        matched.retain(|(i, _)| !entry_is_retired(&entries[*i]));
     }
     if matched.is_empty() {
         return SearchResult {
@@ -773,16 +812,17 @@ pub fn search_index(
     }
 }
 
-/// `find_artifacts(directory, query, artifact_type, recursive, tags)`.
+/// `find_artifacts(directory, query, artifact_type, recursive, tags, live_only)`.
 pub fn find_artifacts(
     directory: &str,
     query: &str,
     artifact_type: Option<&str>,
     recursive: bool,
     tags: &[String],
+    live_only: bool,
 ) -> SearchResult {
     let entries = build_index(directory, recursive);
-    search_index(&entries, query, artifact_type, tags)
+    search_index_filtered(&entries, query, artifact_type, tags, live_only)
 }
 
 // ---------------------------------------------------------------------------
@@ -790,7 +830,7 @@ pub fn find_artifacts(
 // ---------------------------------------------------------------------------
 
 /// `agent_rules.artifact_status`: first non-empty stripped line of `## Status`.
-fn artifact_status(artifact: &Artifact) -> String {
+pub(crate) fn artifact_status(artifact: &Artifact) -> String {
     let Some(body) = artifact.section("status") else {
         return String::new();
     };
@@ -806,7 +846,7 @@ fn artifact_status(artifact: &Artifact) -> String {
 }
 
 /// `agent_rules.is_live_decision`: Accepted and not retired.
-fn is_live_decision(artifact: &Artifact) -> bool {
+pub(crate) fn is_live_decision(artifact: &Artifact) -> bool {
     let status = py_casefold(&artifact_status(artifact));
     if status != "accepted" {
         return false;
