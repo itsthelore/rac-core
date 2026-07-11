@@ -1,9 +1,6 @@
 # PARITY-REPORT — Rust engine spike (roadmap:native-engine-spike)
 
-<!-- DRAFT: campaign-2 results and final verification pending; sections marked
-     [PENDING] are spliced in at phase close. -->
-
-Status of the byte-parity claim for the experimental Rust port of the
+Final report. Status of the byte-parity claim for the experimental Rust port of the
 rac-core engine against the frozen Python oracle (`src/` at commit
 `21c8be4`, installed as `.venv-oracle`, version `0.1.dev50+g21c8be403`).
 Everything here is machine-checked: the referee is `rust/parity-harness`,
@@ -13,7 +10,7 @@ cases) before any engine claim was accepted.
 
 ## Headline
 
-**118/118 parity cases pass byte-for-byte** — identical stdout bytes and
+**130/130 parity cases pass byte-for-byte** (the original 118 plus 12 regression cases pinned by the fuzz campaigns) — identical stdout bytes and
 identical exit codes — across the covered command set, on the live `rac/`
 corpus (417 artifacts) and the fixture corpora, in human, `--json`, and
 `--sarif` output modes. Verified twice per run with byte-identical
@@ -36,11 +33,15 @@ Outcome:
 
 - **1 real Rust bug** (`003-rust-bug-bigint-i64-seam`): integers beyond
   i64 aborted the frontmatter load instead of following Python bignum
-  semantics. Status: fixed in phase 3 close; pinned as vectors. [PENDING
-  verification splice]
+  semantics. Status: FIXED — arbitrary-precision integers across all
+  PyYAML bases, exact bignum/float equality in duplicate-key detection,
+  full-value message printing, CPython's 4300-digit conversion-limit
+  crash mirrored as a documented marker; pinned as vectors and verified
+  independently.
 - **1 port-consistency finding** (`002`): one oracle-crash constructor
   path emitted a regular issue instead of the documented divergence
-  marker. Status: aligned in phase 3 close. [PENDING]
+  marker. Status: FIXED — every oracle-crash constructor path now emits
+  the same marker (map-on-scalar, timestamp edge cases audited).
 - **1 intentional divergence class** (`001-oracle-crash-unhashable-key`):
   unhashable YAML keys, constructor/tag mismatches (`!!int ''`), and
   out-of-range timestamps crash the Python oracle uncaught (traceback,
@@ -50,8 +51,25 @@ Outcome:
   `rust/fuzz/pinned/oracle-crashes/`.
 - Oracle nondeterminism: none observed.
 
-Campaign 2 (full command matrix, loop until two consecutive dry rounds):
-[PENDING]
+Campaign 2 (full command matrix: adds resolve, find, schema, export,
+review, relationships inspection, stdin validation, RAC_MAX_FILE_BYTES
+variation, path edge forms, multi-file corpora; 10 engine-pair runs per
+input): ~4,800 further inputs across seeds 201-306. Found and FIXED eight
+more engine bugs — surrogate handling on stdin, RAC_MAX_FILE_BYTES
+Python-int() env parsing, CRLF export edges, fence-at-EOF rendering, a
+stats largest-file tie-break, export --documents/--json body_html edge
+cases, and C0 control stripping in tight list items (markdown-it-py
+strips inline content with Python str.strip(), whose whitespace set
+includes U+001C-001F; the Rust strip rule initially missed list items
+because the markdown-it crate splices tight paragraphs into ListItem
+nodes — closed with a 591-case oracle-generated C0 grid). Each fix is
+pinned as a parity case or vector suite. The campaign closed on a strict
+consecutive dry pair (seeds 305, 306: 800 inputs each, zero new
+signatures of any kind) with a third fully-dry round (301) as
+corroboration; full evidence in `rust/fuzz/CAMPAIGN-2.md`. Total across
+both campaigns: ~13,000 distinct inputs, ~120,000 engine-pair command
+executions, 9 engine bugs found and fixed, zero unexplained divergences
+remaining.
 
 ## Known, documented divergences
 
@@ -74,7 +92,7 @@ Campaign 2 (full command matrix, loop until two consecutive dry rounds):
 Only where output is environment-derived, mirroring the golden tests'
 conventions: `strip-recency-json` / `strip-stale-human` (git-derived
 recency in `find`), `mask-version` (build-derived version in
-`export --json` / SARIF `driver.version`). 16 of 118 cases; all other
+`export --json` / SARIF `driver.version`). 16 of 130 cases; all other
 cases compare raw bytes. The verifier audited every normalization against
 the contract and confirmed none hides real bytes.
 

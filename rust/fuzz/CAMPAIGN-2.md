@@ -119,8 +119,23 @@ Fuzzer/harness work this campaign:
 
 ## Dry-round evidence
 
-TBD at campaign close: two consecutive 800-input rounds with zero new
-engine signatures (journal lines + findings2 catalog state).
+The campaign closed on a strict consecutive dry pair against the final
+engine build (post 039 fix, commit series through the C0 strip fix), with
+one earlier fully-dry round as corroboration:
+
+```text
+campaign2 seed=301 round=0 batch=800 divergent_inputs=80 new_engine_findings=0 new_oracle_crash_repros=0
+campaign2 seed=302 round=0 batch=800 divergent_inputs=82 new_engine_findings=0 new_oracle_crash_repros=1  (038: documented 001-class oracle crash, first seen via resolve)
+campaign2 seed=303 round=0 batch=800 divergent_inputs=86 new_engine_findings=0 new_oracle_crash_repros=0
+campaign2 seed=304 round=0 batch=800 divergent_inputs=87 new_engine_findings=1 new_oracle_crash_repros=0  (039: C0 strip in tight list items — fixed, pinned)
+campaign2 seed=305 round=0 batch=800 divergent_inputs=82 new_engine_findings=0 new_oracle_crash_repros=0  DRY
+campaign2 seed=306 round=0 batch=800 divergent_inputs=95 new_engine_findings=0 new_oracle_crash_repros=0  DRY
+```
+
+Every "divergent_inputs" count in the dry rounds consists solely of
+already-catalogued 001-class oracle crashes (divergence by design); the
+per-round signature sets introduced nothing new. Full log:
+`rust/fuzz/campaign.log`; catalog: `rust/fuzz/findings2/`.
 
 ## Pinned regressions
 
