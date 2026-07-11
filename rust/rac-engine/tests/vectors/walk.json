@@ -1,0 +1,182 @@
+{
+  "cases": [
+    {
+      "name": "mixed_sort_and_exclusions",
+      "recursive": true,
+      "dirs": [
+        "realdir",
+        "sub",
+        ".hidden"
+      ],
+      "files": [
+        "Z.md",
+        "a.md",
+        "b.md",
+        "space file.md",
+        "sub-x.md",
+        "sub.md",
+        "sub0.md",
+        "realdir/r.md",
+        "sub/c.md",
+        ".dotfile.md",
+        ".hidden/h.md",
+        "upper.MD",
+        "x.Md",
+        "x.markdown",
+        "plain.txt"
+      ],
+      "symlinks": [
+        {
+          "link": "alink.md",
+          "target": "a.md"
+        },
+        {
+          "link": "linkdir",
+          "target": "realdir"
+        }
+      ],
+      "expected": [
+        "Z.md",
+        "a.md",
+        "alink.md",
+        "b.md",
+        "realdir/r.md",
+        "space file.md",
+        "sub/c.md",
+        "sub-x.md",
+        "sub.md",
+        "sub0.md"
+      ]
+    },
+    {
+      "name": "component_wise_sort_trap",
+      "recursive": true,
+      "dirs": [
+        "a",
+        "a/deep"
+      ],
+      "files": [
+        "a-b.md",
+        "a.md",
+        "a/b.md",
+        "a/deep/z.md",
+        "a/deep/a.md",
+        "a0.md"
+      ],
+      "symlinks": [],
+      "expected": [
+        "a/b.md",
+        "a/deep/a.md",
+        "a/deep/z.md",
+        "a-b.md",
+        "a.md",
+        "a0.md"
+      ]
+    },
+    {
+      "name": "nested_hidden_and_symlink_dir",
+      "recursive": true,
+      "dirs": [
+        "docs",
+        "docs/.git",
+        "docs/sub",
+        "target_dir"
+      ],
+      "files": [
+        "docs/one.md",
+        "docs/.git/config.md",
+        "docs/sub/two.md",
+        "target_dir/deep.md"
+      ],
+      "symlinks": [
+        {
+          "link": "docs/link_to_target",
+          "target": "../target_dir"
+        },
+        {
+          "link": "docs/broken.md",
+          "target": "nonexistent_file"
+        }
+      ],
+      "expected": [
+        "docs/broken.md",
+        "docs/one.md",
+        "docs/sub/two.md",
+        "target_dir/deep.md"
+      ]
+    },
+    {
+      "name": "top_level_only",
+      "recursive": false,
+      "dirs": [
+        "nested"
+      ],
+      "files": [
+        "top.md",
+        "nested/inner.md"
+      ],
+      "symlinks": [],
+      "expected": [
+        "top.md"
+      ]
+    }
+  ],
+  "normalize": [
+    {
+      "arg": "rac/",
+      "expected": "rac"
+    },
+    {
+      "arg": "./rac/",
+      "expected": "rac"
+    },
+    {
+      "arg": "rac//",
+      "expected": "rac"
+    },
+    {
+      "arg": "rac/./x",
+      "expected": "rac/x"
+    },
+    {
+      "arg": "rac",
+      "expected": "rac"
+    },
+    {
+      "arg": ".",
+      "expected": "."
+    },
+    {
+      "arg": "",
+      "expected": "."
+    },
+    {
+      "arg": "/abs/path/",
+      "expected": "/abs/path"
+    },
+    {
+      "arg": "//double/leading",
+      "expected": "//double/leading"
+    },
+    {
+      "arg": "///triple",
+      "expected": "/triple"
+    },
+    {
+      "arg": "a/../b",
+      "expected": "a/../b"
+    },
+    {
+      "arg": "a/b/../c",
+      "expected": "a/b/../c"
+    },
+    {
+      "arg": "./",
+      "expected": "."
+    },
+    {
+      "arg": "x/y/z",
+      "expected": "x/y/z"
+    }
+  ]
+}

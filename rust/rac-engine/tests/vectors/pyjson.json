@@ -1,0 +1,569 @@
+{
+ "generated_by": "rust/spec/gen_vectors_pyjson.py",
+ "python": "3.11.15",
+ "rows": [
+  {
+   "doc": null,
+   "indent2": "null",
+   "compact": "null"
+  },
+  {
+   "doc": true,
+   "indent2": "true",
+   "compact": "true"
+  },
+  {
+   "doc": false,
+   "indent2": "false",
+   "compact": "false"
+  },
+  {
+   "doc": 0,
+   "indent2": "0",
+   "compact": "0"
+  },
+  {
+   "doc": 1,
+   "indent2": "1",
+   "compact": "1"
+  },
+  {
+   "doc": -1,
+   "indent2": "-1",
+   "compact": "-1"
+  },
+  {
+   "doc": 42,
+   "indent2": "42",
+   "compact": "42"
+  },
+  {
+   "doc": -9007199254740993,
+   "indent2": "-9007199254740993",
+   "compact": "-9007199254740993"
+  },
+  {
+   "doc": 9223372036854775807,
+   "indent2": "9223372036854775807",
+   "compact": "9223372036854775807"
+  },
+  {
+   "doc": 18446744073709551615,
+   "indent2": "18446744073709551615",
+   "compact": "18446744073709551615"
+  },
+  {
+   "doc": 0.0,
+   "indent2": "0.0",
+   "compact": "0.0"
+  },
+  {
+   "doc": -0.0,
+   "indent2": "-0.0",
+   "compact": "-0.0"
+  },
+  {
+   "doc": 1.0,
+   "indent2": "1.0",
+   "compact": "1.0"
+  },
+  {
+   "doc": 2.0,
+   "indent2": "2.0",
+   "compact": "2.0"
+  },
+  {
+   "doc": 0.1,
+   "indent2": "0.1",
+   "compact": "0.1"
+  },
+  {
+   "doc": 1e-05,
+   "indent2": "1e-05",
+   "compact": "1e-05"
+  },
+  {
+   "doc": 1e+20,
+   "indent2": "1e+20",
+   "compact": "1e+20"
+  },
+  {
+   "doc": 100.0,
+   "indent2": "100.0",
+   "compact": "100.0"
+  },
+  {
+   "doc": 1234567.0,
+   "indent2": "1234567.0",
+   "compact": "1234567.0"
+  },
+  {
+   "doc": 0.7,
+   "indent2": "0.7",
+   "compact": "0.7"
+  },
+  {
+   "doc": 3.3,
+   "indent2": "3.3",
+   "compact": "3.3"
+  },
+  {
+   "doc": 0.33,
+   "indent2": "0.33",
+   "compact": "0.33"
+  },
+  {
+   "doc": 2.675,
+   "indent2": "2.675",
+   "compact": "2.675"
+  },
+  {
+   "doc": 5e-324,
+   "indent2": "5e-324",
+   "compact": "5e-324"
+  },
+  {
+   "doc": 9999999999999998.0,
+   "indent2": "9999999999999998.0",
+   "compact": "9999999999999998.0"
+  },
+  {
+   "doc": 123456789012345.6,
+   "indent2": "123456789012345.6",
+   "compact": "123456789012345.6"
+  },
+  {
+   "doc": 0.8571428571428571,
+   "indent2": "0.8571428571428571",
+   "compact": "0.8571428571428571"
+  },
+  {
+   "doc": -1e-05,
+   "indent2": "-1e-05",
+   "compact": "-1e-05"
+  },
+  {
+   "doc": 0.30000000000000004,
+   "indent2": "0.30000000000000004",
+   "compact": "0.30000000000000004"
+  },
+  {
+   "doc": "",
+   "indent2": "\"\"",
+   "compact": "\"\""
+  },
+  {
+   "doc": "plain",
+   "indent2": "\"plain\"",
+   "compact": "\"plain\""
+  },
+  {
+   "doc": "with \"quotes\"",
+   "indent2": "\"with \\\"quotes\\\"\"",
+   "compact": "\"with \\\"quotes\\\"\""
+  },
+  {
+   "doc": "back\\slash",
+   "indent2": "\"back\\\\slash\"",
+   "compact": "\"back\\\\slash\""
+  },
+  {
+   "doc": "tab\there\nnewline\rcr",
+   "indent2": "\"tab\\there\\nnewline\\rcr\"",
+   "compact": "\"tab\\there\\nnewline\\rcr\""
+  },
+  {
+   "doc": "control\u0000\u0001\u001f\b\f",
+   "indent2": "\"control\\u0000\\u0001\\u001f\\b\\f\"",
+   "compact": "\"control\\u0000\\u0001\\u001f\\b\\f\""
+  },
+  {
+   "doc": "del\u007f",
+   "indent2": "\"del\\u007f\"",
+   "compact": "\"del\u007f\""
+  },
+  {
+   "doc": "caf\u00e9 \u00fcn\u00efcode \u2192",
+   "indent2": "\"caf\\u00e9 \\u00fcn\\u00efcode \\u2192\"",
+   "compact": "\"caf\u00e9 \u00fcn\u00efcode \u2192\""
+  },
+  {
+   "doc": "\u6c49\u5b57 \ud55c\uae00 \u05e2\u05d1\u05e8\u05d9\u05ea",
+   "indent2": "\"\\u6c49\\u5b57 \\ud55c\\uae00 \\u05e2\\u05d1\\u05e8\\u05d9\\u05ea\"",
+   "compact": "\"\u6c49\u5b57 \ud55c\uae00 \u05e2\u05d1\u05e8\u05d9\u05ea\""
+  },
+  {
+   "doc": "\ud83c\udf89 astral \ud835\udd18",
+   "indent2": "\"\\ud83c\\udf89 astral \\ud835\\udd18\"",
+   "compact": "\"\ud83c\udf89 astral \ud835\udd18\""
+  },
+  {
+   "doc": "em\u2014dash \u21b3 \u2717 \u2705 \u26a0\ufe0f",
+   "indent2": "\"em\\u2014dash \\u21b3 \\u2717 \\u2705 \\u26a0\\ufe0f\"",
+   "compact": "\"em\u2014dash \u21b3 \u2717 \u2705 \u26a0\ufe0f\""
+  },
+  {
+   "doc": "\u00a0\u00ad",
+   "indent2": "\"\\u00a0\\u00ad\"",
+   "compact": "\"\u00a0\u00ad\""
+  },
+  {
+   "doc": "/slash</script>",
+   "indent2": "\"/slash</script>\"",
+   "compact": "\"/slash</script>\""
+  },
+  {
+   "doc": "\u200bzwsp\ufeffbom",
+   "indent2": "\"\\u200bzwsp\\ufeffbom\"",
+   "compact": "\"\u200bzwsp\ufeffbom\""
+  },
+  {
+   "doc": [],
+   "indent2": "[]",
+   "compact": "[]"
+  },
+  {
+   "doc": {},
+   "indent2": "{}",
+   "compact": "{}"
+  },
+  {
+   "doc": [
+    []
+   ],
+   "indent2": "[\n  []\n]",
+   "compact": "[[]]"
+  },
+  {
+   "doc": [
+    {}
+   ],
+   "indent2": "[\n  {}\n]",
+   "compact": "[{}]"
+  },
+  {
+   "doc": {
+    "a": []
+   },
+   "indent2": "{\n  \"a\": []\n}",
+   "compact": "{\"a\": []}"
+  },
+  {
+   "doc": {
+    "a": {}
+   },
+   "indent2": "{\n  \"a\": {}\n}",
+   "compact": "{\"a\": {}}"
+  },
+  {
+   "doc": [
+    1
+   ],
+   "indent2": "[\n  1\n]",
+   "compact": "[1]"
+  },
+  {
+   "doc": [
+    1,
+    2,
+    3
+   ],
+   "indent2": "[\n  1,\n  2,\n  3\n]",
+   "compact": "[1, 2, 3]"
+  },
+  {
+   "doc": [
+    "a",
+    "b"
+   ],
+   "indent2": "[\n  \"a\",\n  \"b\"\n]",
+   "compact": "[\"a\", \"b\"]"
+  },
+  {
+   "doc": [
+    null,
+    true,
+    false
+   ],
+   "indent2": "[\n  null,\n  true,\n  false\n]",
+   "compact": "[null, true, false]"
+  },
+  {
+   "doc": [
+    0.1,
+    1,
+    "x",
+    null
+   ],
+   "indent2": "[\n  0.1,\n  1,\n  \"x\",\n  null\n]",
+   "compact": "[0.1, 1, \"x\", null]"
+  },
+  {
+   "doc": {
+    "a": 1
+   },
+   "indent2": "{\n  \"a\": 1\n}",
+   "compact": "{\"a\": 1}"
+  },
+  {
+   "doc": {
+    "a": 1,
+    "b": 2
+   },
+   "indent2": "{\n  \"a\": 1,\n  \"b\": 2\n}",
+   "compact": "{\"a\": 1, \"b\": 2}"
+  },
+  {
+   "doc": {
+    "b": 2,
+    "a": 1
+   },
+   "indent2": "{\n  \"b\": 2,\n  \"a\": 1\n}",
+   "compact": "{\"b\": 2, \"a\": 1}"
+  },
+  {
+   "doc": {
+    "z": 1,
+    "y": 2,
+    "x": 3,
+    "a": 4
+   },
+   "indent2": "{\n  \"z\": 1,\n  \"y\": 2,\n  \"x\": 3,\n  \"a\": 4\n}",
+   "compact": "{\"z\": 1, \"y\": 2, \"x\": 3, \"a\": 4}"
+  },
+  {
+   "doc": {
+    "key with space": 1,
+    "\u043a\u043b\u044e\u0447": 2,
+    "\ud83c\udf8a": 3,
+    "tab\tkey": 4
+   },
+   "indent2": "{\n  \"key with space\": 1,\n  \"\\u043a\\u043b\\u044e\\u0447\": 2,\n  \"\\ud83c\\udf8a\": 3,\n  \"tab\\tkey\": 4\n}",
+   "compact": "{\"key with space\": 1, \"\u043a\u043b\u044e\u0447\": 2, \"\ud83c\udf8a\": 3, \"tab\\tkey\": 4}"
+  },
+  {
+   "doc": {
+    "empty_list": [],
+    "empty_dict": {},
+    "nested": {
+     "deep": {
+      "deeper": []
+     }
+    }
+   },
+   "indent2": "{\n  \"empty_list\": [],\n  \"empty_dict\": {},\n  \"nested\": {\n    \"deep\": {\n      \"deeper\": []\n    }\n  }\n}",
+   "compact": "{\"empty_list\": [], \"empty_dict\": {}, \"nested\": {\"deep\": {\"deeper\": []}}}"
+  },
+  {
+   "doc": [
+    [
+     1,
+     [
+      2,
+      [
+       3,
+       [
+        4
+       ]
+      ]
+     ]
+    ]
+   ],
+   "indent2": "[\n  [\n    1,\n    [\n      2,\n      [\n        3,\n        [\n          4\n        ]\n      ]\n    ]\n  ]\n]",
+   "compact": "[[1, [2, [3, [4]]]]]"
+  },
+  {
+   "doc": {
+    "a": [
+     1,
+     {
+      "b": [
+       2,
+       {
+        "c": []
+       }
+      ]
+     }
+    ]
+   },
+   "indent2": "{\n  \"a\": [\n    1,\n    {\n      \"b\": [\n        2,\n        {\n          \"c\": []\n        }\n      ]\n    }\n  ]\n}",
+   "compact": "{\"a\": [1, {\"b\": [2, {\"c\": []}]}]}"
+  },
+  {
+   "doc": {
+    "path": "rac/decisions/ADR-001-markdown-first.md",
+    "id": "RAC-KTQ63DPSMF19",
+    "type": "decision",
+    "title": "ADR-001 Markdown First",
+    "valid": true,
+    "issues": [],
+    "confidence": 0.8571428571428571,
+    "tags": [
+     "architecture",
+     "markdown"
+    ]
+   },
+   "indent2": "{\n  \"path\": \"rac/decisions/ADR-001-markdown-first.md\",\n  \"id\": \"RAC-KTQ63DPSMF19\",\n  \"type\": \"decision\",\n  \"title\": \"ADR-001 Markdown First\",\n  \"valid\": true,\n  \"issues\": [],\n  \"confidence\": 0.8571428571428571,\n  \"tags\": [\n    \"architecture\",\n    \"markdown\"\n  ]\n}",
+   "compact": "{\"path\": \"rac/decisions/ADR-001-markdown-first.md\", \"id\": \"RAC-KTQ63DPSMF19\", \"type\": \"decision\", \"title\": \"ADR-001 Markdown First\", \"valid\": true, \"issues\": [], \"confidence\": 0.8571428571428571, \"tags\": [\"architecture\", \"markdown\"]}"
+  },
+  {
+   "doc": {
+    "summary": {
+     "total": 417,
+     "valid": 417,
+     "invalid": 0,
+     "average_requirements_per_feature": 3.3
+    },
+    "unrecognized": {
+     "count": 1,
+     "files": [
+      {
+       "path": "notes \u2014 draft.md",
+       "confidence": 0.67
+      }
+     ]
+    }
+   },
+   "indent2": "{\n  \"summary\": {\n    \"total\": 417,\n    \"valid\": 417,\n    \"invalid\": 0,\n    \"average_requirements_per_feature\": 3.3\n  },\n  \"unrecognized\": {\n    \"count\": 1,\n    \"files\": [\n      {\n        \"path\": \"notes \\u2014 draft.md\",\n        \"confidence\": 0.67\n      }\n    ]\n  }\n}",
+   "compact": "{\"summary\": {\"total\": 417, \"valid\": 417, \"invalid\": 0, \"average_requirements_per_feature\": 3.3}, \"unrecognized\": {\"count\": 1, \"files\": [{\"path\": \"notes \u2014 draft.md\", \"confidence\": 0.67}]}}"
+  },
+  {
+   "doc": {
+    "version": "2.1.0",
+    "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+    "runs": [
+     {
+      "tool": {
+       "driver": {
+        "name": "rac",
+        "informationUri": "https://github.com/itsthelore/rac-core",
+        "version": "0.1.dev50+g21c8be403",
+        "rules": [
+         {
+          "id": "REL001"
+         },
+         {
+          "id": "VAL002"
+         }
+        ]
+       }
+      },
+      "results": [
+       {
+        "ruleId": "VAL002",
+        "level": "warning",
+        "message": {
+         "text": "missing field: 'status'"
+        },
+        "locations": [
+         {
+          "physicalLocation": {
+           "artifactLocation": {
+            "uri": "rac/caf%C3%A9%20note.md"
+           },
+           "region": {
+            "startLine": 3
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "indent2": "{\n  \"version\": \"2.1.0\",\n  \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\",\n  \"runs\": [\n    {\n      \"tool\": {\n        \"driver\": {\n          \"name\": \"rac\",\n          \"informationUri\": \"https://github.com/itsthelore/rac-core\",\n          \"version\": \"0.1.dev50+g21c8be403\",\n          \"rules\": [\n            {\n              \"id\": \"REL001\"\n            },\n            {\n              \"id\": \"VAL002\"\n            }\n          ]\n        }\n      },\n      \"results\": [\n        {\n          \"ruleId\": \"VAL002\",\n          \"level\": \"warning\",\n          \"message\": {\n            \"text\": \"missing field: 'status'\"\n          },\n          \"locations\": [\n            {\n              \"physicalLocation\": {\n                \"artifactLocation\": {\n                  \"uri\": \"rac/caf%C3%A9%20note.md\"\n                },\n                \"region\": {\n                  \"startLine\": 3\n                }\n              }\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}",
+   "compact": "{\"version\": \"2.1.0\", \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\", \"runs\": [{\"tool\": {\"driver\": {\"name\": \"rac\", \"informationUri\": \"https://github.com/itsthelore/rac-core\", \"version\": \"0.1.dev50+g21c8be403\", \"rules\": [{\"id\": \"REL001\"}, {\"id\": \"VAL002\"}]}}, \"results\": [{\"ruleId\": \"VAL002\", \"level\": \"warning\", \"message\": {\"text\": \"missing field: 'status'\"}, \"locations\": [{\"physicalLocation\": {\"artifactLocation\": {\"uri\": \"rac/caf%C3%A9%20note.md\"}, \"region\": {\"startLine\": 3}}}]}]}]}"
+  },
+  {
+   "doc": {
+    "id": "RAC-KTQ63DPSMF19",
+    "title": "D\u00e9cision \u2014 na\u00efve r\u00e9sum\u00e9 \ud83c\udf89",
+    "body": "line one\nline two\ttabbed\n",
+    "score": 0.024390243902439025,
+    "fused": 0.03278688524590164,
+    "counts": {
+     "requirements": 12,
+     "decisions": 0
+    }
+   },
+   "indent2": "{\n  \"id\": \"RAC-KTQ63DPSMF19\",\n  \"title\": \"D\\u00e9cision \\u2014 na\\u00efve r\\u00e9sum\\u00e9 \\ud83c\\udf89\",\n  \"body\": \"line one\\nline two\\ttabbed\\n\",\n  \"score\": 0.024390243902439025,\n  \"fused\": 0.03278688524590164,\n  \"counts\": {\n    \"requirements\": 12,\n    \"decisions\": 0\n  }\n}",
+   "compact": "{\"id\": \"RAC-KTQ63DPSMF19\", \"title\": \"D\u00e9cision \u2014 na\u00efve r\u00e9sum\u00e9 \ud83c\udf89\", \"body\": \"line one\\nline two\\ttabbed\\n\", \"score\": 0.024390243902439025, \"fused\": 0.03278688524590164, \"counts\": {\"requirements\": 12, \"decisions\": 0}}"
+  },
+  {
+   "doc": {
+    "int": 2,
+    "float": 2.0,
+    "neg_zero": -0.0,
+    "tiny": 5e-324,
+    "big": 1e+20
+   },
+   "indent2": "{\n  \"int\": 2,\n  \"float\": 2.0,\n  \"neg_zero\": -0.0,\n  \"tiny\": 5e-324,\n  \"big\": 1e+20\n}",
+   "compact": "{\"int\": 2, \"float\": 2.0, \"neg_zero\": -0.0, \"tiny\": 5e-324, \"big\": 1e+20}"
+  },
+  {
+   "doc": [
+    1.0,
+    1,
+    -1.0,
+    -1,
+    0.5,
+    2,
+    1e+16,
+    10000000000000000
+   ],
+   "indent2": "[\n  1.0,\n  1,\n  -1.0,\n  -1,\n  0.5,\n  2,\n  1e+16,\n  10000000000000000\n]",
+   "compact": "[1.0, 1, -1.0, -1, 0.5, 2, 1e+16, 10000000000000000]"
+  },
+  {
+   "doc": {
+    "scores": [
+     0.1,
+     0.2,
+     0.30000000000000004
+    ]
+   },
+   "indent2": "{\n  \"scores\": [\n    0.1,\n    0.2,\n    0.30000000000000004\n  ]\n}",
+   "compact": "{\"scores\": [0.1, 0.2, 0.30000000000000004]}"
+  },
+  {
+   "doc": {
+    "a": {
+     "b": {
+      "c": {
+       "d": {
+        "e": [
+         1,
+         2,
+         {
+          "f": "g",
+          "h": []
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "indent2": "{\n  \"a\": {\n    \"b\": {\n      \"c\": {\n        \"d\": {\n          \"e\": [\n            1,\n            2,\n            {\n              \"f\": \"g\",\n              \"h\": []\n            }\n          ]\n        }\n      }\n    }\n  }\n}",
+   "compact": "{\"a\": {\"b\": {\"c\": {\"d\": {\"e\": [1, 2, {\"f\": \"g\", \"h\": []}]}}}}}"
+  },
+  {
+   "doc": [
+    "mixed",
+    {
+     "k": [
+      true,
+      null,
+      0.1,
+      "\ud83c\udf88"
+     ]
+    },
+    [],
+    {}
+   ],
+   "indent2": "[\n  \"mixed\",\n  {\n    \"k\": [\n      true,\n      null,\n      0.1,\n      \"\\ud83c\\udf88\"\n    ]\n  },\n  [],\n  {}\n]",
+   "compact": "[\"mixed\", {\"k\": [true, null, 0.1, \"\ud83c\udf88\"]}, [], {}]"
+  }
+ ]
+}

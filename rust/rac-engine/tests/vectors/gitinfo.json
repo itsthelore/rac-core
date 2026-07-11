@@ -1,0 +1,149 @@
+{
+  "regenerable": true,
+  "note": "computed against rac-core git history; rerun gen_vectors_gitinfo.py if paths are re-committed",
+  "reference_iso": "2027-01-01T00:00:00+00:00",
+  "reference_epoch": 1798761600,
+  "paths": [
+    {
+      "path": "README.md",
+      "tracked": true,
+      "last_committed": "2026-07-07T12:50:13+01:00",
+      "age_days": 177,
+      "default_threshold": 180,
+      "default_stale": false,
+      "boundary": [
+        {
+          "threshold": 176,
+          "stale": true
+        },
+        {
+          "threshold": 177,
+          "stale": false
+        },
+        {
+          "threshold": 178,
+          "stale": false
+        }
+      ]
+    },
+    {
+      "path": "CLAUDE.md",
+      "tracked": true,
+      "last_committed": "2026-07-09T09:20:19+01:00",
+      "age_days": 175,
+      "default_threshold": 180,
+      "default_stale": false,
+      "boundary": [
+        {
+          "threshold": 174,
+          "stale": true
+        },
+        {
+          "threshold": 175,
+          "stale": false
+        },
+        {
+          "threshold": 176,
+          "stale": false
+        }
+      ]
+    },
+    {
+      "path": "rac/prompts/rac-agent-session-start.md",
+      "tracked": true,
+      "last_committed": "2026-07-08T10:46:04+01:00",
+      "age_days": 176,
+      "default_threshold": 180,
+      "default_stale": false,
+      "boundary": [
+        {
+          "threshold": 175,
+          "stale": true
+        },
+        {
+          "threshold": 176,
+          "stale": false
+        },
+        {
+          "threshold": 177,
+          "stale": false
+        }
+      ]
+    },
+    {
+      "path": "rac/prompts/rac-agent-commit-guidelines.md",
+      "tracked": true,
+      "last_committed": "2026-07-07T12:50:13+01:00",
+      "age_days": 177,
+      "default_threshold": 180,
+      "default_stale": false,
+      "boundary": [
+        {
+          "threshold": 176,
+          "stale": true
+        },
+        {
+          "threshold": 177,
+          "stale": false
+        },
+        {
+          "threshold": 178,
+          "stale": false
+        }
+      ]
+    },
+    {
+      "path": "rust/PORT-CONTRACT.md",
+      "tracked": true,
+      "last_committed": "2026-07-11T09:31:43+00:00",
+      "age_days": 173,
+      "default_threshold": 180,
+      "default_stale": false,
+      "boundary": [
+        {
+          "threshold": 172,
+          "stale": true
+        },
+        {
+          "threshold": 173,
+          "stale": false
+        },
+        {
+          "threshold": 174,
+          "stale": false
+        }
+      ]
+    },
+    {
+      "path": "rust/PORT-CONTRACT.d/09-walk-stats-export-review-schema.md",
+      "tracked": true,
+      "last_committed": "2026-07-11T09:31:43+00:00",
+      "age_days": 173,
+      "default_threshold": 180,
+      "default_stale": false,
+      "boundary": [
+        {
+          "threshold": 172,
+          "stale": true
+        },
+        {
+          "threshold": 173,
+          "stale": false
+        },
+        {
+          "threshold": 174,
+          "stale": false
+        }
+      ]
+    },
+    {
+      "path": "this-file-does-not-exist-parity-xyz.md",
+      "tracked": false,
+      "last_committed": null,
+      "age_days": null,
+      "default_threshold": 180,
+      "default_stale": null,
+      "boundary": []
+    }
+  ]
+}
