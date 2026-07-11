@@ -102,38 +102,44 @@ pub fn validate_directory(directory: &str, recursive: bool) -> DirectoryValidati
     let entries = corpus_items(directory, recursive);
     let overrides = load_overrides(directory);
     let provider = load_ticketing_provider(directory);
-    let mut files: Vec<FileValidation> = Vec::new();
-    for item in &entries {
-        let artifact_type = item
-            .spec
-            .map(|s| s.name.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        if item.spec.is_none() {
-            files.push(FileValidation {
+    // Per-file validation in parallel over the sorted corpus (PORT-CONTRACT
+    // decision 5): an indexed rayon iterator, so `collect` preserves the
+    // sorted order and the worker count is invisible in the output. The
+    // shared inputs (overrides, provider) are read-only.
+    use rayon::prelude::*;
+    let files: Vec<FileValidation> = entries
+        .par_iter()
+        .map(|item| {
+            let artifact_type = item
+                .spec
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| "unknown".to_string());
+            if item.spec.is_none() {
+                return FileValidation {
+                    path: item.path.clone(),
+                    artifact_type,
+                    status: STATUS_SKIPPED,
+                    issues: Vec::new(),
+                };
+            }
+            let issues = apply_overrides(
+                validate(&item.artifact, provider.as_deref(), Some(&artifact_type)),
+                &artifact_type,
+                &overrides,
+            );
+            let status = if has_errors(&issues) {
+                STATUS_INVALID
+            } else {
+                STATUS_VALID
+            };
+            FileValidation {
                 path: item.path.clone(),
                 artifact_type,
-                status: STATUS_SKIPPED,
-                issues: Vec::new(),
-            });
-            continue;
-        }
-        let issues = apply_overrides(
-            validate(&item.artifact, provider.as_deref(), Some(&artifact_type)),
-            &artifact_type,
-            &overrides,
-        );
-        let status = if has_errors(&issues) {
-            STATUS_INVALID
-        } else {
-            STATUS_VALID
-        };
-        files.push(FileValidation {
-            path: item.path.clone(),
-            artifact_type,
-            status,
-            issues,
-        });
-    }
+                status,
+                issues,
+            }
+        })
+        .collect();
     let okf_entries: Vec<OkfEntry> = entries
         .iter()
         .map(|item| OkfEntry {

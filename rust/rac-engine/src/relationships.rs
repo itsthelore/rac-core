@@ -921,9 +921,16 @@ pub struct CorpusItem {
 
 /// `_corpus_items(directory, recursive)` — the sorted-path walk, parsed and
 /// classified.
+///
+/// The per-file parse+classify work is parallelized with rayon over the
+/// already-sorted file list (PORT-CONTRACT decision 5). `into_par_iter` on a
+/// `Vec` is an indexed parallel iterator, so `collect` reassembles results in
+/// the original (sorted) order — the worker count is invisible in the output.
+/// Rendering stays sequential over the ordered results.
 pub fn corpus_items(directory: &str, recursive: bool) -> Vec<CorpusItem> {
+    use rayon::prelude::*;
     find_markdown_files(directory, recursive)
-        .into_iter()
+        .into_par_iter()
         .map(|entry| {
             let artifact = parse_file(&entry.display);
             let spec = spec_for(&classify(&artifact).artifact_type);
