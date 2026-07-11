@@ -138,6 +138,7 @@
   {"id": "pin-c2-export-documents-crlf", "argv": ["export", "rust/fuzz/pinned/crlf", "--documents"], "expect_exit": 0},
   {"id": "pin-c2-export-json-crlf", "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"}, "argv": ["export", "rust/fuzz/pinned/crlf", "--json"], "expect_exit": 0, "normalize": ["mask-version"]},
   {"id": "pin-c2-export-render-fence-eof-strip", "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"}, "argv": ["export", "rust/fuzz/pinned/render", "--json"], "expect_exit": 0, "normalize": ["mask-version"]},
+  {"id": "pin-c2-export-json-li-c0-strip", "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"}, "argv": ["export", "rust/fuzz/pinned/li-c0-strip", "--json"], "expect_exit": 0, "normalize": ["mask-version"]},
   {"id": "pin-c2-stats-largest-tie-json", "argv": ["stats", "rust/fuzz/pinned/stats-tie", "--json"], "expect_exit": 0},
   {"id": "pin-c2-stats-largest-tie-human", "argv": ["stats", "rust/fuzz/pinned/stats-tie"], "expect_exit": 0}
 ]

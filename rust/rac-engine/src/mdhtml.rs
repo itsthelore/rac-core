@@ -17,6 +17,7 @@ use markdown_it::parser::inline::InlineRoot;
 use markdown_it::plugins::cmark::block::fence::CodeFence;
 use markdown_it::plugins::cmark::block::heading::ATXHeading;
 use markdown_it::plugins::cmark::block::lheading::SetextHeader;
+use markdown_it::plugins::cmark::block::list::ListItem;
 use markdown_it::plugins::cmark::block::paragraph::Paragraph;
 use markdown_it::{MarkdownIt, Node};
 
@@ -27,6 +28,13 @@ use markdown_it::{MarkdownIt, Node};
 /// pending inline content with Python semantics BEFORE inline parsing runs
 /// (fuzz campaign 2, finding 009). Trimming shifts inline srcmaps by the
 /// leading cut; nothing in the export renderer consumes inline srcmaps.
+///
+/// Tight lists need the same treatment via `ListItem`: markdown-it-py keeps
+/// the paragraph tokens (merely hidden), so their content is still
+/// `str.strip()`-ed, while the markdown-it crate SPLICES tight paragraphs'
+/// children directly into the list item (`mark_tight_paragraphs`), leaving
+/// `InlineRoot` nodes whose parent is the `ListItem` itself (fuzz campaign 2,
+/// finding 039).
 struct PyStripInlineRule;
 
 impl CoreRule for PyStripInlineRule {
@@ -34,7 +42,8 @@ impl CoreRule for PyStripInlineRule {
         fn walk(node: &mut Node) {
             let strip_it = node.is::<ATXHeading>()
                 || node.is::<SetextHeader>()
-                || node.is::<Paragraph>();
+                || node.is::<Paragraph>()
+                || node.is::<ListItem>();
             for child in node.children.iter_mut() {
                 if strip_it {
                     if let Some(inline) = child.cast_mut::<InlineRoot>() {
