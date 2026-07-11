@@ -118,6 +118,44 @@ the contract and confirmed none hides real bytes.
   both engines agreed on the substituted probes (dangling symlink,
   directory-named-`.md`).
 
+## Open question at mainline: the MCP serving path
+
+The MCP server is the most consequential unported surface, but the recorded
+architecture bounds the problem tightly: ADR-030 makes the server
+tools-only, ADR-031 forbids it from owning intelligence (it imports
+`rac.services` in-process and only shapes results), and ADR-032 makes every
+tool call a stateless full re-read of the repository. There is no stateful,
+intelligent server to port — the intelligence below it is exactly what this
+spike ported and parity-proved.
+
+The spike's numbers strengthen the recorded posture rather than straining
+it: ADR-032 accepted stateless reads while a full corpus read cost
+milliseconds and named `collect_corpus` as the optimization seam if scale
+demanded one. The Rust engine's cache-free full read of the live corpus is
+28 ms — cheaper than the Python engine's warm cache hit — so the stateless
+contract holds permanently and the freshness machinery ADR-105 builds for
+serving is not needed on a native path.
+
+Three options work within the recorded decisions, in ascending effort:
+
+1. **Status quo during transition** — the Python server stays on the Python
+   engine; the conformance suite keeps both engines byte-agreeing. Dual
+   maintenance; acceptable only as a temporary state.
+2. **Bindings** — the Python server consumes the Rust core in-process via
+   native bindings (e.g. PyO3). ADR-031's in-process rule holds literally;
+   one source of truth; server code untouched. The binding layer becomes new
+   contract surface.
+3. **Native server** — port the thin server layer itself (protocol plumbing
+   plus presentation shaping, per ADR-031's own boundary), taking ADR-098's
+   shared HTTP serving with it. Cleanest single-engine end state.
+
+A fourth path — the server shelling out to the 2.2 ms Rust CLI per tool
+call — is newly viable on the numbers but was explicitly considered and
+rejected by ADR-031 when the CLI cost ~200 ms. Adopting it would mean
+re-opening that accepted decision with this new evidence, not working
+around it; it is recorded here as evidence for that file, not as a
+recommendation.
+
 ## Reproduce
 
 ```sh
