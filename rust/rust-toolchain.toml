@@ -1,0 +1,5 @@
+[toolchain]
+# Pinned for the native-engine spike so parity and perf numbers are
+# reproducible; bump deliberately, never implicitly.
+channel = "1.94.1"
+components = ["rustfmt", "clippy"]
