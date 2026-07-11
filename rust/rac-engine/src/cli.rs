@@ -9,8 +9,8 @@
 //! clearly-marked unimplemented stub (stderr, exit 2).
 
 use crate::commands::{
-    cmd_relationships, cmd_schema, cmd_stats, cmd_templates, cmd_validate, RelationshipsArgs,
-    SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+    cmd_find, cmd_relationships, cmd_resolve, cmd_schema, cmd_stats, cmd_templates, cmd_validate,
+    FindArgs, RelationshipsArgs, ResolveArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -127,6 +127,8 @@ pub fn run(args: &[String]) -> u8 {
         "stats" => run_stats(&rest),
         "schema" => run_schema(&rest),
         "templates" => run_templates(&rest),
+        "resolve" => run_resolve(&rest),
+        "find" => run_find(&rest),
         other => {
             // UNIMPLEMENTED STUB — no parity cases run these in this phase.
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
@@ -317,6 +319,156 @@ fn run_stats(rest: &[&String]) -> u8 {
     }
 
     cmd_stats(&StatsArgs { directory, json }) as u8
+}
+
+fn run_resolve(rest: &[&String]) -> u8 {
+    let prog = "rac resolve";
+    let mut id: Option<String> = None;
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut top_level = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || !arg.starts_with('-') {
+            if id.is_none() {
+                id = Some(arg.to_string());
+            } else if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {} // affirmation of the default
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    let Some(id) = id else {
+        return argparse_error(prog, "the following arguments are required: id");
+    };
+    if !extras.is_empty() {
+        return argparse_error(
+            "rac",
+            &format!("unrecognized arguments: {}", extras.join(" ")),
+        );
+    }
+
+    cmd_resolve(&ResolveArgs {
+        id,
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        json,
+        top_level,
+    }) as u8
+}
+
+fn run_find(rest: &[&String]) -> u8 {
+    let prog = "rac find";
+    let mut query: Option<String> = None;
+    let mut directory: Option<String> = None;
+    let mut artifact_type: Option<String> = None;
+    let mut decisions = false;
+    let mut tags: Vec<String> = Vec::new();
+    let mut json = false;
+    let mut explain = false;
+    let mut top_level = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || !arg.starts_with('-') {
+            if query.is_none() {
+                query = Some(arg.to_string());
+            } else if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--explain" => explain = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {}                        // affirmation of the default
+            "--cache" | "--no-cache" | "--verify" => {} // output-neutral (ADR-112)
+            "--decisions" => {
+                // Mutually exclusive with --type (argparse group).
+                if let Err(FlagError(code)) =
+                    mutex_check(prog, "--decisions", "--type", artifact_type.is_some())
+                {
+                    return code;
+                }
+                decisions = true;
+            }
+            "--type" => {
+                if let Err(FlagError(code)) = mutex_check(prog, "--type", "--decisions", decisions)
+                {
+                    return code;
+                }
+                i += 1;
+                match rest.get(i) {
+                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => {
+                        artifact_type = Some(v.to_string());
+                    }
+                    _ => return argparse_error(prog, "argument --type: expected one argument"),
+                }
+            }
+            other if other.starts_with("--type=") => {
+                if let Err(FlagError(code)) = mutex_check(prog, "--type", "--decisions", decisions)
+                {
+                    return code;
+                }
+                artifact_type = Some(other["--type=".len()..].to_string());
+            }
+            "--tag" => {
+                i += 1;
+                match rest.get(i) {
+                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => {
+                        tags.push(v.to_string());
+                    }
+                    _ => return argparse_error(prog, "argument --tag: expected one argument"),
+                }
+            }
+            other if other.starts_with("--tag=") => {
+                tags.push(other["--tag=".len()..].to_string());
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    let Some(query) = query else {
+        return argparse_error(prog, "the following arguments are required: query");
+    };
+    if !extras.is_empty() {
+        return argparse_error(
+            "rac",
+            &format!("unrecognized arguments: {}", extras.join(" ")),
+        );
+    }
+
+    cmd_find(&FindArgs {
+        query,
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        artifact_type,
+        decisions,
+        tags,
+        json,
+        explain,
+        top_level,
+    }) as u8
 }
 
 fn run_schema(rest: &[&String]) -> u8 {

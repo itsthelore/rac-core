@@ -462,6 +462,146 @@ pub fn cmd_templates(args: &TemplatesArgs) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// cmd_resolve / cmd_find (PORT-CONTRACT.d/06)
+// ---------------------------------------------------------------------------
+
+pub struct ResolveArgs {
+    pub id: String,
+    pub directory: String,
+    pub json: bool,
+    pub top_level: bool,
+}
+
+pub fn cmd_resolve(args: &ResolveArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let result = crate::resolve::resolve_artifact(&args.directory, &args.id, !args.top_level);
+    if args.json {
+        emit(output::render_resolve_json(&result));
+    } else if result.outcome == crate::resolve::OUTCOME_RESOLVED {
+        emit(output::render_resolve_human(
+            result.artifact.as_ref().expect("resolved implies artifact"),
+        ));
+    } else if result.outcome == crate::resolve::OUTCOME_DUPLICATE {
+        let found: Vec<String> = result
+            .duplicate_paths
+            .iter()
+            .map(|p| format!("- {p}"))
+            .collect();
+        eprintln!(
+            "rac: duplicate artifact ID: {}\n\nFound in:\n{}",
+            args.id,
+            found.join("\n")
+        );
+    } else {
+        eprintln!("rac: artifact not found: {}", args.id);
+    }
+    // Not-found and duplicate identity are both repository findings (exit 1).
+    if result.outcome == crate::resolve::OUTCOME_RESOLVED {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+pub struct FindArgs {
+    pub query: String,
+    pub directory: String,
+    pub artifact_type: Option<String>,
+    pub decisions: bool,
+    pub tags: Vec<String>,
+    pub json: bool,
+    pub explain: bool,
+    pub top_level: bool,
+}
+
+/// Python `datetime.fromisoformat(stamp).isoformat()` round-trip of a git
+/// `%cI` stamp: verbatim for the `±HH:MM` form git emits; a trailing `Z`
+/// re-serializes as `+00:00`, a colonless `±HHMM` gains its colon, and a
+/// space separator becomes `T`.
+fn py_isoformat_roundtrip(stamp: &str) -> String {
+    let mut s = stamp.to_string();
+    if s.len() > 10 && s.as_bytes()[10] == b' ' {
+        s.replace_range(10..11, "T");
+    }
+    if s.ends_with('Z') || s.ends_with('z') {
+        s.truncate(s.len() - 1);
+        s.push_str("+00:00");
+        return s;
+    }
+    // ±HHMM (no colon) -> ±HH:MM; ±HH -> ±HH:00. Find the offset sign after
+    // the time part (beyond index 10 to skip the date's hyphens).
+    if let Some(pos) = s.rfind(['+', '-']) {
+        if pos > 10 {
+            let body = &s[pos + 1..];
+            if body.len() == 4 && body.bytes().all(|b| b.is_ascii_digit()) {
+                let fixed = format!("{}:{}", &body[..2], &body[2..]);
+                s.replace_range(pos + 1.., &fixed);
+            } else if body.len() == 2 && body.bytes().all(|b| b.is_ascii_digit()) {
+                let fixed = format!("{body}:00");
+                s.replace_range(pos + 1.., &fixed);
+            }
+        }
+    }
+    s
+}
+
+/// `annotate_search_recency(matches, directory)` — the read-surface join
+/// (ADR-045): git-derived staleness per match, computed AFTER ranking so the
+/// matched set and order are unchanged. All-null outside a git repository.
+fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact], directory: &str) {
+    use crate::gitinfo;
+    if matches.is_empty() {
+        return;
+    }
+    let threshold = crate::validate::load_freshness_threshold(directory);
+    let reference = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let repo_root = gitinfo::repository_root(Path::new(directory));
+    for m in matches.iter_mut() {
+        let last = repo_root
+            .as_ref()
+            .and_then(|root| gitinfo::last_committed(root, Path::new(&m.path)));
+        let st = gitinfo::staleness(last.as_deref(), threshold, reference);
+        m.recency = Some(crate::resolve::Recency {
+            last_committed: st.last_committed.as_deref().map(py_isoformat_roundtrip),
+            age_days: st.age_days,
+            stale: st.stale,
+        });
+    }
+}
+
+pub fn cmd_find(args: &FindArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let mut result = if args.decisions {
+        // The live decision query (ADR-067): decision type filter + the
+        // Accepted/non-retired liveness filter; `--tag` is silently ignored.
+        crate::resolve::find_decisions(&args.directory, &args.query, !args.top_level)
+    } else {
+        crate::resolve::find_artifacts(
+            &args.directory,
+            &args.query,
+            args.artifact_type.as_deref(),
+            !args.top_level,
+            &args.tags,
+        )
+    };
+    annotate_search_recency(&mut result.matches, &args.directory);
+    if args.json {
+        emit(output::render_find_json(&result, args.explain));
+    } else {
+        emit(output::render_find_human(&result, args.explain));
+    }
+    // An empty result is a valid outcome, not an error.
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
 // Helpers reused by cli.rs
 // ---------------------------------------------------------------------------
 

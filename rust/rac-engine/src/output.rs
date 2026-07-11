@@ -1362,3 +1362,230 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
 
     lines.join("\n")
 }
+
+// --- resolve / find (PORT-CONTRACT.d/06 §3.1, §11–13) -------------------------
+
+use crate::pycompat::{py_float_repr, py_repr_str};
+use crate::pyjson::py_float;
+use crate::resolve::{
+    Recency, ResolutionResult, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
+};
+
+/// `render_resolve_human`: the resolved-artifact card. Missing title renders
+/// `—` (U+2014); the id is bold only on a tty.
+pub fn render_resolve_human(artifact: &ResolvedArtifact) -> String {
+    format!(
+        "{}\n\nType: {}\nTitle: {}\nPath: {}",
+        bold(&artifact.id),
+        artifact.artifact_type,
+        artifact.title.as_deref().filter(|t| !t.is_empty()).unwrap_or("\u{2014}"),
+        artifact.path
+    )
+}
+
+/// `render_resolve_json` — `ResolutionResult.to_dict()` with `indent=2`.
+pub fn render_resolve_json(result: &ResolutionResult) -> String {
+    let mut m = Map::new();
+    m.insert("schema_version".into(), json!("1"));
+    if result.outcome == OUTCOME_RESOLVED {
+        let artifact = result.artifact.as_ref().expect("resolved implies artifact");
+        m.insert("id".into(), json!(artifact.id));
+        m.insert("type".into(), json!(artifact.artifact_type));
+        m.insert(
+            "title".into(),
+            match &artifact.title {
+                Some(t) => json!(t),
+                None => Value::Null,
+            },
+        );
+        m.insert("path".into(), json!(artifact.path));
+        // section/snippet/evidence/recency/tags are never set on the
+        // resolution path — the keys stay absent.
+    } else {
+        m.insert("error".into(), json!(result.outcome));
+        m.insert("id".into(), json!(result.artifact_id)); // as given, unstripped
+        if !result.duplicate_paths.is_empty() {
+            m.insert("paths".into(), json!(result.duplicate_paths));
+        }
+    }
+    dumps_indent2(&Value::Object(m))
+}
+
+fn recency_value(recency: &Recency) -> Value {
+    let mut m = Map::new();
+    m.insert(
+        "last_committed".into(),
+        match &recency.last_committed {
+            Some(s) => json!(s),
+            None => Value::Null,
+        },
+    );
+    m.insert(
+        "age_days".into(),
+        match recency.age_days {
+            Some(d) => json!(d),
+            None => Value::Null,
+        },
+    );
+    m.insert(
+        "stale".into(),
+        match recency.stale {
+            Some(b) => json!(b),
+            None => Value::Null,
+        },
+    );
+    Value::Object(m)
+}
+
+fn find_match_value(m: &ResolvedArtifact, explain: bool) -> Value {
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(m.id));
+    obj.insert("type".into(), json!(m.artifact_type));
+    obj.insert(
+        "title".into(),
+        match &m.title {
+            Some(t) => json!(t),
+            None => Value::Null,
+        },
+    );
+    obj.insert("path".into(), json!(m.path));
+    if let Some(section) = &m.section {
+        obj.insert("section".into(), json!(section));
+    }
+    if let Some(snippet) = &m.snippet {
+        obj.insert("snippet".into(), json!(snippet));
+    }
+    if explain {
+        if let Some(e) = &m.evidence {
+            let mut ev = Map::new();
+            ev.insert("field".into(), json!(e.field));
+            ev.insert("terms".into(), json!(e.terms));
+            ev.insert("tier".into(), json!(e.tier));
+            ev.insert("score".into(), py_float(e.score));
+            let mut components = Map::new();
+            components.insert("bm25".into(), py_float(e.bm25));
+            components.insert("lexical_rank".into(), json!(e.lexical_rank));
+            components.insert("graph_rank".into(), json!(e.graph_rank));
+            components.insert("inbound".into(), json!(e.inbound));
+            ev.insert("components".into(), Value::Object(components));
+            obj.insert("evidence".into(), Value::Object(ev));
+        }
+    }
+    if let Some(recency) = &m.recency {
+        obj.insert("recency".into(), recency_value(recency));
+    }
+    if !m.tags.is_empty() {
+        obj.insert("tags".into(), json!(m.tags));
+    }
+    Value::Object(obj)
+}
+
+/// `render_find_json` — `SearchResult.to_dict(include_evidence=explain)`.
+pub fn render_find_json(result: &SearchResult, explain: bool) -> String {
+    let mut m = Map::new();
+    m.insert("schema_version".into(), json!("1"));
+    m.insert("query".into(), json!(result.query));
+    m.insert(
+        "type".into(),
+        match &result.artifact_type {
+            Some(t) => json!(t),
+            None => Value::Null,
+        },
+    );
+    m.insert("match_count".into(), json!(result.matches.len()));
+    m.insert(
+        "matches".into(),
+        Value::Array(
+            result
+                .matches
+                .iter()
+                .map(|mm| find_match_value(mm, explain))
+                .collect(),
+        ),
+    );
+    dumps_indent2(&Value::Object(m))
+}
+
+/// `render_find_human` — aligned match rows, or a valid empty result
+/// (PORT-CONTRACT.d/06 §13). `{query!r}` is Python string repr.
+pub fn render_find_human(result: &SearchResult, explain: bool) -> String {
+    if result.matches.is_empty() {
+        return format!("No artifacts match {}.", py_repr_str(&result.query));
+    }
+    let id_w = result
+        .matches
+        .iter()
+        .map(|m| m.id.chars().count())
+        .max()
+        .unwrap_or(0);
+    let type_w = result
+        .matches
+        .iter()
+        .map(|m| m.artifact_type.chars().count())
+        .max()
+        .unwrap_or(0);
+    let indent = format!("{}  {}  ", " ".repeat(id_w), " ".repeat(type_w));
+    let pad = |value: &str, width: usize| {
+        let len = value.chars().count();
+        if len >= width {
+            value.to_string()
+        } else {
+            format!("{}{}", value, " ".repeat(width - len))
+        }
+    };
+    let mut lines: Vec<String> = Vec::new();
+    for m in &result.matches {
+        let mut row = format!(
+            "{}  {}  {}",
+            pad(&m.id, id_w),
+            pad(&m.artifact_type, type_w),
+            m.title.as_deref().filter(|t| !t.is_empty()).unwrap_or("\u{2014}")
+        );
+        if let Some(recency) = &m.recency {
+            if recency.stale == Some(true) {
+                let marker = match recency.age_days {
+                    Some(age) => format!("  \u{26a0} stale ({age}d)"),
+                    None => "  \u{26a0} stale".to_string(),
+                };
+                row.push_str(&yellow(&marker));
+            }
+        }
+        lines.push(row);
+        if let Some(snippet) = &m.snippet {
+            let section = match m.section.as_deref() {
+                Some(s) if !s.is_empty() => format!("{s}: "),
+                _ => String::new(),
+            };
+            lines.push(format!("{indent}\u{21b3} {section}{snippet}"));
+        }
+        if explain {
+            if let Some(e) = &m.evidence {
+                let mut attribution =
+                    format!("field={} terms={}", e.field, e.terms.join(","));
+                if let Some(snippet) = &m.snippet {
+                    let where_ = match m.section.as_deref() {
+                        Some(s) if !s.is_empty() => format!("{s}: "),
+                        _ => String::new(),
+                    };
+                    attribution.push_str(&format!(" [{where_}{snippet}]"));
+                }
+                lines.push(format!("{indent}\u{2022} {attribution}"));
+                lines.push(format!(
+                    "{indent}  score={} bm25={} lexical_rank={} graph_rank={} inbound={}",
+                    py_float_repr(e.score),
+                    py_float_repr(e.bm25),
+                    e.lexical_rank,
+                    e.graph_rank,
+                    e.inbound
+                ));
+            }
+        }
+    }
+    lines.push(String::new());
+    lines.push(format!(
+        "{} match(es) for {}.",
+        result.matches.len(),
+        py_repr_str(&result.query)
+    ));
+    lines.join("\n")
+}
