@@ -29,21 +29,21 @@
     {
       "path": "CLAUDE.md",
       "tracked": true,
-      "last_committed": "2026-07-09T09:20:19+01:00",
-      "age_days": 175,
+      "last_committed": "2026-07-11T13:25:43+01:00",
+      "age_days": 173,
       "default_threshold": 180,
       "default_stale": false,
       "boundary": [
         {
-          "threshold": 174,
+          "threshold": 172,
           "stale": true
         },
         {
-          "threshold": 175,
+          "threshold": 173,
           "stale": false
         },
         {
-          "threshold": 176,
+          "threshold": 174,
           "stale": false
         }
       ]
