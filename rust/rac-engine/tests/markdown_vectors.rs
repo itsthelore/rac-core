@@ -1,0 +1,211 @@
+//! Oracle-vector conformance tests for `rac_engine::markdown`.
+//!
+//! Vectors: tests/vectors/markdown.json (420+ synthetic contract edge cases)
+//! and tests/vectors/markdown_corpus.json (every .md under rac/ and tests/),
+//! generated from the Python oracle by rust/spec/gen_vectors_markdown.py.
+//! Each case carries the complete extracted structure (title, sections map,
+//! typed fields, search sections, issues) plus, for text cases, the consumed
+//! block-token surface; the Rust port must replay everything byte-exactly.
+
+use rac_engine::markdown::{
+    consumed_events, max_file_bytes_from, parse_file, parse_file_with_cap, parse_with_cap,
+    split_frontmatter, Product, DEFAULT_MAX_FILE_BYTES,
+};
+use serde_json::{json, Value};
+
+fn product_value(p: &Product) -> Value {
+    json!({
+        "title": p.title,
+        "extra_title_lines": p.extra_title_lines,
+        "problem": p.problem,
+        "requirements": p.requirements.iter()
+            .map(|r| json!([r.id, r.text, r.line]))
+            .collect::<Vec<_>>(),
+        "malformed_requirements": p.malformed_requirements.iter()
+            .map(|m| json!([m.raw, m.line, m.bad_id, m.empty_text]))
+            .collect::<Vec<_>>(),
+        "success_metrics": p.success_metrics,
+        "risks": p.risks,
+        "sections": p.sections.iter()
+            .map(|(k, v)| json!([k, v]))
+            .collect::<Vec<_>>(),
+        "search_sections": p.search_sections.iter()
+            .map(|s| json!([s.heading, s.lines]))
+            .collect::<Vec<_>>(),
+        "has": [
+            p.has_problem_section,
+            p.has_requirements_section,
+            p.has_metrics_section,
+            p.has_risks_section,
+        ],
+        "source_path": p.source_path,
+        "frontmatter_raw": p.frontmatter_raw,
+        "metadata_issues": p.metadata_issues.iter()
+            .map(|i| json!([i.severity, i.code, i.message, i.line]))
+            .collect::<Vec<_>>(),
+        "parse_issues": p.parse_issues.iter()
+            .map(|i| json!([i.severity, i.code, i.message, i.line]))
+            .collect::<Vec<_>>(),
+    })
+}
+
+fn events_value(body: &str) -> Value {
+    Value::Array(
+        consumed_events(body)
+            .into_iter()
+            .map(|e| {
+                json!([
+                    if e.heading { "h" } else { "b" },
+                    e.tag,
+                    e.line,
+                    e.content
+                ])
+            })
+            .collect(),
+    )
+}
+
+/// Locate the first differing path between two JSON values, for failure
+/// messages that don't dump megabytes.
+fn first_diff(path: &str, a: &Value, b: &Value) -> Option<String> {
+    if a == b {
+        return None;
+    }
+    match (a, b) {
+        (Value::Array(x), Value::Array(y)) => {
+            for (i, (xi, yi)) in x.iter().zip(y.iter()).enumerate() {
+                if let Some(d) = first_diff(&format!("{path}[{i}]"), xi, yi) {
+                    return Some(d);
+                }
+            }
+            if x.len() != y.len() {
+                return Some(format!(
+                    "{path}: array length {} (rust) vs {} (oracle)",
+                    x.len(),
+                    y.len()
+                ));
+            }
+            None
+        }
+        (Value::Object(x), Value::Object(y)) => {
+            for (k, xv) in x.iter() {
+                match y.get(k) {
+                    Some(yv) => {
+                        if let Some(d) = first_diff(&format!("{path}.{k}"), xv, yv) {
+                            return Some(d);
+                        }
+                    }
+                    None => return Some(format!("{path}.{k}: missing in oracle value")),
+                }
+            }
+            Some(format!("{path}: object mismatch"))
+        }
+        _ => {
+            let sa = a.to_string();
+            let sb = b.to_string();
+            let trunc = |s: &str| -> String {
+                if s.chars().count() > 200 {
+                    let head: String = s.chars().take(200).collect();
+                    format!("{head}… ({} chars)", s.chars().count())
+                } else {
+                    s.to_string()
+                }
+            };
+            Some(format!("{path}: rust={} oracle={}", trunc(&sa), trunc(&sb)))
+        }
+    }
+}
+
+fn assert_value_eq(name: &str, what: &str, got: &Value, want: &Value) {
+    if got != want {
+        let diff = first_diff("$", got, want).unwrap_or_else(|| "<no diff found>".into());
+        panic!("case {name}: {what} mismatch: {diff}");
+    }
+}
+
+fn cap_of(case: &Value) -> Option<u128> {
+    case["cap"].as_u64().map(|c| c as u128)
+}
+
+fn run_case(case: &Value) {
+    let name = case["name"].as_str().unwrap();
+    match case["kind"].as_str().unwrap() {
+        "text" => {
+            let text = case["text"].as_str().unwrap();
+            let source_path = case["source_path"].as_str().unwrap_or("");
+            let split = split_frontmatter(text);
+            let got_split = json!({
+                "raw": split.raw,
+                "line_offset": split.line_offset,
+                "unterminated": split.unterminated,
+            });
+            assert_value_eq(name, "split", &got_split, &case["split"]);
+            if !case["events"].is_null() {
+                let got_events = events_value(&split.body);
+                assert_value_eq(name, "events", &got_events, &case["events"]);
+            }
+            let product = match cap_of(case) {
+                Some(cap) => parse_with_cap(text, source_path, cap),
+                None => parse_with_cap(text, source_path, DEFAULT_MAX_FILE_BYTES),
+            };
+            assert_value_eq(name, "product", &product_value(&product), &case["product"]);
+        }
+        "file" => {
+            let path = case["path"].as_str().unwrap();
+            let product = match cap_of(case) {
+                Some(cap) => parse_file_with_cap(path, cap),
+                None => parse_file(path),
+            };
+            assert_value_eq(name, "product", &product_value(&product), &case["product"]);
+        }
+        "cap" => {
+            let raw = case["raw"].as_str();
+            let got = max_file_bytes_from(raw).to_string();
+            let want = case["expected"].as_str().unwrap();
+            assert_eq!(got, want, "case {name}: cap mismatch");
+        }
+        other => panic!("unknown case kind {other:?}"),
+    }
+}
+
+fn load(file: &str) -> Value {
+    let path = format!("{}/tests/vectors/{file}", env!("CARGO_MANIFEST_DIR"));
+    let text = std::fs::read_to_string(&path).expect("vector file readable");
+    serde_json::from_str(&text).expect("vector file parses")
+}
+
+#[test]
+fn synthetic_vectors_match_oracle() {
+    assert!(
+        std::env::var_os("RAC_MAX_FILE_BYTES").is_none(),
+        "RAC_MAX_FILE_BYTES must be unset for vector replay"
+    );
+    let v = load("markdown.json");
+    let cases = v["cases"].as_array().expect("cases present");
+    assert!(
+        cases.len() >= 400,
+        "expected >=400 synthetic markdown cases, got {}",
+        cases.len()
+    );
+    for case in cases {
+        run_case(case);
+    }
+}
+
+#[test]
+fn corpus_vectors_match_oracle() {
+    assert!(
+        std::env::var_os("RAC_MAX_FILE_BYTES").is_none(),
+        "RAC_MAX_FILE_BYTES must be unset for vector replay"
+    );
+    let v = load("markdown_corpus.json");
+    let cases = v["cases"].as_array().expect("cases present");
+    assert!(
+        cases.len() >= 500,
+        "expected >=500 corpus cases, got {}",
+        cases.len()
+    );
+    for case in cases {
+        run_case(case);
+    }
+}
