@@ -1,0 +1,147 @@
+{
+  "meta": {
+    "subject": "Full Rust rewrite of the rac-core engine (native-engine-spike), byte-parity-gated against the frozen Python oracle, derived-index cache deleted by design",
+    "before_ref": "Python oracle: src/ at 21c8be4 (.venv-oracle, rac 0.1.dev50+g21c8be403, CPython 3.11.15)",
+    "after_ref": "rust/target/release/rac at 91f64e2 (rustc 1.94.1, lto=thin, rayon 4 threads)",
+    "select_how": "two binaries, identical argv/cwd/env via the parity harness seam (piped stdio, neutralized telemetry, RAC_NO_CACHE=1)",
+    "reference_node": "4 vCPU / 15 GiB container (ADR-107 reference class)",
+    "measured_at": "2026-07-11T16:31Z (final interleaved matrix; medians of >=7 runs, >=3 at 20k)",
+    "rerun": [
+      "cd rust && cargo build --release",
+      "python3 tools/perf.py --engines oracle,rust --sizes 1000,5000,20000",
+      "target/release/parity-harness --engine-a ../.venv-oracle/bin/rac --engine-b target/release/rac --cases parity-cases.json --scoreboard-dir parity-out",
+      "python3 fuzz/difffuzz.py --seed 305 --rounds 1 --batch 800 --jobs 8"
+    ]
+  },
+  "correctness_gate": {
+    "examiner": "130-case byte-parity suite (stdout bytes + exit codes) + oracle-generated vector suites",
+    "result": "130/130 pass, run twice, scoreboards byte-identical, from forced clean rebuilds, independently verified",
+    "examiner_not_bent": "git diff origin/main...HEAD -- tests/ src/ is empty; parity-cases.json changes vs origin/main audited additive-only",
+    "fuzz": {
+      "campaigns": 2,
+      "distinct_inputs": 13000,
+      "engine_pair_executions": 120000,
+      "engine_bugs_found_and_fixed": 9,
+      "unexplained_divergences": 0,
+      "close_protocol": "two consecutive 800-input dry rounds (seeds 305, 306)",
+      "honest_finding": "the fuzzer's first real catch was a bug in the rewrite (i64 overflow seam), and 30+ minimized inputs crash the PYTHON oracle uncaught while the rewrite reports a normal finding"
+    }
+  },
+  "wall_clock_ms": {
+    "startup": {
+      "before": 191.2,
+      "after": 2.2,
+      "ratio": 87
+    },
+    "single_file_validate": {
+      "before": 195.5,
+      "after": 3.4,
+      "ratio": 57
+    },
+    "live_corpus_417_fresh": {
+      "before": 1588,
+      "after": 28,
+      "ratio": 57
+    },
+    "live_corpus_417_python_warm_cache": {
+      "before": 223,
+      "after": 28,
+      "ratio": 8,
+      "note": "rust has NO cache; python number is its best cached path"
+    },
+    "synthetic_1k": {
+      "before": 1536.1,
+      "after": 29.5,
+      "ratio": 52
+    },
+    "synthetic_5k": {
+      "before": 6944.7,
+      "after": 136.5,
+      "ratio": 51
+    },
+    "synthetic_20k": {
+      "before": 26057.6,
+      "after": 576.4,
+      "ratio": 45
+    }
+  },
+  "scale_curve_files_per_s": {
+    "points": [
+      1000,
+      5000,
+      20000
+    ],
+    "before": [
+      651.0,
+      720.0,
+      767.5
+    ],
+    "after": [
+      33906.4,
+      36639.2,
+      34696.9
+    ],
+    "note": "after-line flat (scale-invariant) across 1k-20k; before-line flat but 45-52x lower; ADR-107 recorded python OOM at 15.9 GiB at 1M pre-streaming"
+  },
+  "million_file_projection": {
+    "budget_s": 432,
+    "before_s": 1128,
+    "after_s": 29,
+    "note": "ADR-107 budget line; before = 18.8 min recorded, after = 1e6 / 34697"
+  },
+  "memory": {
+    "peak_rss_20k_mib": {
+      "before_isolated_run": 77.3,
+      "after_isolated_run": 167.0,
+      "final_shared_run_both": 230.0
+    },
+    "note": "getrusage(children); final-run identical readings likely a shared measurement artifact; either reading is far under the 1 GiB target",
+    "python_scale_wall": "pre-streaming build OOM at 15.9 GiB at 1M files (ADR-107)"
+  },
+  "cache_deletion": {
+    "python_cache_stack": "ADR-099/103/104/105/106/107/108/112: mmap index store, event-sourced freshness, stat-proxy scans, parallel cold build",
+    "python_fresh_ms": 1588,
+    "python_warm_ms": 223,
+    "rust_no_cache_ms": 28,
+    "claim": "the rewrite beats python's best cached path 8x while deleting the entire cache stack"
+  },
+  "structure_loc": {
+    "note": "cross-language; counts via wc -l on .rs vs .py, engine scope only, not directly comparable line-for-line",
+    "python_engine_scope_loc": 11096,
+    "rust_engine_loc": 17243,
+    "rust_loc_breakdown": "the YAML-1.1 SafeLoader port (scanner/parser/composer/resolver) is ~4k lines alone; python gets it free from PyYAML",
+    "rewrite_authenticity": "total by construction (different language); the meaningful fidelity axis is semantic: the 130-case byte-parity suite + ~10 MB of oracle-generated vector suites"
+  },
+  "not_solved": {
+    "uncovered_commands": [
+      "diff",
+      "inspect",
+      "improve",
+      "rename",
+      "doctor",
+      "coverage",
+      "gate",
+      "watchkeeper",
+      "portfolio(full)",
+      "index",
+      "telemetry",
+      "usage",
+      "new",
+      "templates",
+      "init",
+      "quickstart",
+      "decisions-for",
+      "eval",
+      "migrate",
+      "skill",
+      "hook"
+    ],
+    "by_design_sidecar": [
+      "ingest (markitdown stays python)",
+      "explorer TUI",
+      "MCP serving"
+    ],
+    "oracle_crashes": "30+ minimized inputs crash the python engine uncaught; the rewrite intentionally reports instead of crashing (documented divergence class)",
+    "amdahl_20k": "synthetic 20k scales only 1.6x over sequential (render + OKF residual); parse-dominated real corpora scale 2.8x on 4 cores"
+  }
+}
