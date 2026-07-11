@@ -247,7 +247,10 @@ completeness.
 
 `Path(path).stem` = filename without the LAST suffix. **LANDMINE:** Python
 `Path("a.b.md").stem == "a.b"` (strips only final `.md`); `Path("a.").stem ==
-"a"`; `Path(".hidden").stem == ".hidden"` (a leading-dot name has no suffix);
+"a."` (CORRECTION 2026-07-11, verified against the oracle interpreter: a
+trailing dot is NOT a suffix — pathlib requires `0 < rfind('.') < len-1` —
+so the stem keeps it; this file previously claimed `"a"`);
+`Path(".hidden").stem == ".hidden"` (a leading-dot name has no suffix);
 `Path("a/b/").stem == "b"`. Replicate `pathlib` stem semantics, not a naive
 split-on-first-dot.
 
