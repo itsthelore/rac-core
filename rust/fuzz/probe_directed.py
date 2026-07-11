@@ -101,7 +101,7 @@ def main():
         if hits:
             n_div += 1
             for spec, detail, triage in hits:
-                slug, t = fz.file_finding(f"probe={name}", data, [name], spec, detail, triage)
+                slug, t = fz.file_finding(worker, f"probe={name}", data, [name], spec, detail, triage)
                 print(f"DIVERGE {name}: cmd={spec['name']} [{t}] -> {slug or 'duplicate-signature'}")
         else:
             print(f"ok      {name}")

@@ -727,7 +727,7 @@ mod tests {
 
     /// stdin surrogateescape decode: each undecodable byte becomes one
     /// sentinel char, exactly as CPython maps each bad byte to U+DC00+b
-    /// (fuzz campaign 2, findings 002/003). NOTE: tests only ever turn the
+    /// (fuzz campaign 2, finding 005). NOTE: tests only ever turn the
     /// process-wide sentinel flag ON (never off) so parallel test threads
     /// cannot race each other; non-sentinel chars are unaffected by it.
     #[test]

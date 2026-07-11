@@ -224,7 +224,7 @@ fn read_validate_input(target: &str) -> Result<Artifact, i32> {
         let mut buf = Vec::new();
         let _ = std::io::stdin().lock().read_to_end(&mut buf);
         // The oracle reads stdin as TEXT with errors="surrogateescape"
-        // (fuzz campaign 2, findings 002/003) — NOT the errors="replace"
+        // (fuzz campaign 2, finding 005) — NOT the errors="replace"
         // lossy decode used for files.
         let text = crate::pycompat::decode_stdin_surrogateescape(&buf);
         return Ok(parse_text(&text, "-"));

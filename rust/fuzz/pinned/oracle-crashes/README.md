@@ -46,6 +46,20 @@ marker issues (`rust/rac-engine/src/frontmatter.rs`, `FileCap`); boundaries
 were pinned empirically against CPython 3.11 and are asserted in
 `rust/rac-engine/tests/frontmatter_vectors.rs`.
 
+## Class D — export re-reads with strict UTF-8 (campaign-2)
+
+`export DIR [--json|--documents]` re-reads each classified artifact in text
+mode (`open(path, encoding="utf-8")`, `services/export.py _body_markdown`)
+with the STRICT error handler — even though the classification walk decoded
+the same file with `errors="replace"`. A classified artifact containing
+invalid UTF-8 therefore crashes the oracle's export with an uncaught
+`UnicodeDecodeError` before anything is printed. The Rust engine keeps its
+lossy-decoded body and exports normally (no per-artifact issue channel
+exists on this surface).
+
+- `export-nonutf8/` — a recognizable decision whose body contains a raw
+  `0xCC` byte; `rac export corpus --json` / `--documents` crash the oracle.
+
 ## Class C — surrogate text meets `str.encode` (campaign-2, stdin arm)
 
 `validate -` with undecodable stdin bytes produces lone-surrogate text

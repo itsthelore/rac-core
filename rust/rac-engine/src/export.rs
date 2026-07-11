@@ -68,8 +68,20 @@ fn status(artifact: &Artifact, spec: &ArtifactSpec) -> String {
 }
 
 /// The Markdown body after the frontmatter envelope, re-read from disk.
+///
+/// The oracle re-reads in TEXT mode (`open(path, encoding="utf-8")`), which
+/// applies universal newlines — `\r\n` and lone `\r` become `\n` — before
+/// `split_frontmatter` (fuzz campaign 2, finding 006). Mirror that here.
+///
+/// The oracle's text-mode read is also STRICT utf-8: a file with invalid
+/// bytes CRASHES the oracle uncaught (`UnicodeDecodeError`) even though the
+/// classification walk decoded it with `errors="replace"`. Per PORT-CONTRACT
+/// decision 3 this port never crashes; export has no per-artifact issue
+/// channel, so the divergence-by-design here is "the Rust export simply
+/// succeeds" (catalogued in rust/fuzz/pinned/oracle-crashes/).
 fn body_markdown(path: &str) -> String {
     let text = std::fs::read_to_string(path).unwrap_or_default();
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
     split_frontmatter(&text).body
 }
 

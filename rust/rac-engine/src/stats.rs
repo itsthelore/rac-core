@@ -102,12 +102,13 @@ impl PortfolioStats {
     /// `max(features, key=(requirements, _neg_name(name)))`.
     pub fn largest_feature(&self) -> Option<&FeatureStat> {
         self.features.iter().reduce(|best, f| {
-            // Larger requirements wins; tie -> alphabetically-earliest name.
+            // Larger requirements wins; tie -> greater _neg_name (earliest
+            // name at the first differing code point, LONGER name when one
+            // is a prefix of the other — see neg_name_gt).
             match f.requirements.cmp(&best.requirements) {
                 std::cmp::Ordering::Greater => f,
                 std::cmp::Ordering::Less => best,
                 std::cmp::Ordering::Equal => {
-                    // _neg_name larger == name smaller (code-point).
                     if neg_name_gt(&f.name, &best.name) {
                         f
                     } else {
@@ -189,8 +190,10 @@ impl PortfolioStats {
 }
 
 /// `_neg_name(a) > _neg_name(b)` ⇔ `a` sorts before `b` by code point
-/// (element-wise `-ord`), the tuple length breaking a shared prefix so the
-/// shorter string is "larger".
+/// (element-wise `-ord`). On a shared prefix Python tuple comparison makes
+/// the SHORTER tuple smaller — so between "Feature" and "Feature With
+/// Broken Ref" the LONGER name has the greater `_neg_name` and wins the
+/// `max()` tie (fuzz campaign 2, finding 008; the prefix rule was inverted).
 fn neg_name_gt(a: &str, b: &str) -> bool {
     let mut ai = a.chars();
     let mut bi = b.chars();
@@ -202,11 +205,11 @@ fn neg_name_gt(a: &str, b: &str) -> bool {
                     return (ca as u32) < (cb as u32);
                 }
             }
-            // Prefix equal so far: the shorter negated tuple is larger (Python
-            // compares (-o,...) tuples; the shorter runs out first and a shorter
-            // tuple is greater when it is a prefix of the longer).
-            (None, Some(_)) => return true,
-            (Some(_), None) => return false,
+            // Prefix equal so far: Python compares the (-ord, ...) tuples,
+            // and a tuple that is a strict prefix of the other is SMALLER —
+            // so `a` is greater exactly when it is LONGER.
+            (None, Some(_)) => return false,
+            (Some(_), None) => return true,
             (None, None) => return false,
         }
     }
@@ -451,4 +454,22 @@ pub fn collect_stats(directory: &str) -> PortfolioStats {
         }
     }
     stats
+}
+
+#[cfg(test)]
+mod tests {
+    use super::neg_name_gt;
+
+    /// Fuzz campaign 2, finding 008: Python compares `tuple(-ord(c) ...)`
+    /// keys, where a strict-prefix tuple is SMALLER — so between tied
+    /// features the longer prefix-sharing name wins `max()`.
+    #[test]
+    fn neg_name_prefix_tie_prefers_longer() {
+        assert!(neg_name_gt("Feature With Broken Ref", "Feature"));
+        assert!(!neg_name_gt("Feature", "Feature With Broken Ref"));
+        // plain code-point ordering still applies on the first difference
+        assert!(neg_name_gt("Alpha", "Beta"));
+        assert!(!neg_name_gt("Beta", "Alpha"));
+        assert!(!neg_name_gt("Same", "Same"));
+    }
 }
