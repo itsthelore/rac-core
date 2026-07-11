@@ -71,6 +71,20 @@ both campaigns: ~13,000 distinct inputs, ~120,000 engine-pair command
 executions, 9 engine bugs found and fixed, zero unexplained divergences
 remaining.
 
+## rac-spec acceptance suite
+
+The public specification repo (itsthelore/rac-spec, v0.1.0) ships an
+executable acceptance suite (`examples/manifest.json`: 2 valid corpora +
+16 invalid cases with expected blocking finding codes). Both engines were
+run over all 18 cases with identical argv/env: **18/18 byte-identical
+stdout and exit codes**, every exit matching the manifest's expectation.
+This is the first second implementation of the spec, and it makes the
+spec's implementation-neutrality claim ("any conformant implementation
+must agree") a demonstrated property rather than an intention. At
+mainline, the Rust engine should be certified against rac-spec's
+`schema/` and `vocabulary/` directly, retiring this spike's derived
+`rust/spec/artifact-specs.json` extraction.
+
 ## Known, documented divergences
 
 1. **Oracle crash inputs (001 class)** — divergence by design, see above.
