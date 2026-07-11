@@ -1,14 +1,40 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! rac-engine — experimental Rust port of the rac-core engine
+//! (roadmap:native-engine-spike). The Python tree at `src/` is the frozen
+//! oracle; the binding behavior contract is `rust/PORT-CONTRACT.md`.
+//!
+//! Module map (one workstream each; keep cross-module surface minimal):
+//! - `pycompat`: CPython string/float/round/repr semantics, table-driven
+//!   from `rust/spec/pycompat-tables.json`.
+//! - `pyjson`: the Python `json.dumps`-shaped writer (indent=2 and JSONL).
+//! - `frontmatter`: bounded PyYAML-1.1 SafeLoader subset.
+//! - `markdown`: CommonMark block-boundary tokenizer (headings + inline raw).
+//! - `spec`: artifact specs loaded from `rust/spec/artifact-specs.json`.
+//! - `walk`: corpus discovery in component-wise sorted-path order.
+//! - `parse`: file -> parsed artifact (frontmatter + sections + fields).
+//! - `classify`: deterministic classification over specs.
+//! - `identity`: artifact identifiers and the id grammar.
+//! - `validate`: structural validation and the finding catalog.
+//! - `relationships`: edge extraction, resolution, validation issues.
+//! - `resolve`: BM25F + RRF search with pinned f64 operation order.
+//! - `gitinfo`: git-derived recency/staleness via the real git CLI.
+//! - `output`: human/JSON/SARIF renderers per command.
+//! - `commands`: CLI command entry points (argv already parsed).
+//! - `cli`: argv parsing and exit codes matching the oracle's argparse
+//!   surface (PORT-CONTRACT.d/01).
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod pycompat;
+pub mod pyjson;
+pub mod frontmatter;
+pub mod markdown;
+pub mod spec;
+pub mod walk;
+pub mod parse;
+pub mod classify;
+pub mod identity;
+pub mod validate;
+pub mod relationships;
+pub mod resolve;
+pub mod gitinfo;
+pub mod output;
+pub mod commands;
+pub mod cli;
