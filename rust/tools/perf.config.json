@@ -1,0 +1,25 @@
+{
+  "engines": {
+    "oracle": {
+      "bin": "/home/user/rac-core/.venv-oracle/bin/rac",
+      "version": ["--version"],
+      "single_validate": ["validate", "{file}", "--no-cache"],
+      "walk": ["validate", "{dir}", "--no-cache"]
+    },
+    "rust": {
+      "bin": "/home/user/rac-core/rust/target/release/rac",
+      "version": ["--version"],
+      "single_validate": ["validate", "{file}"],
+      "walk": ["validate", "{dir}"]
+    }
+  },
+  "corpora": {
+    "1000": ".corpora/c1000",
+    "5000": ".corpora/c5000",
+    "20000": ".corpora/c20000"
+  },
+  "runs": {
+    "default": 7,
+    "20000": 3
+  }
+}
