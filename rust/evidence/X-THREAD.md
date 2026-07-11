@@ -21,24 +21,24 @@ original, on every command, or it doesn't count.
 **Post 3**
 
 The rigor came from one decision: the Python tree was FROZEN as an oracle.
-Zero edits to src/ or tests/ all spike (diff-verified). A 130-case harness
+Zero edits to src/ or tests/ all spike (diff-verified). A 174-case harness (two oracles)
 pipes identical argv/cwd/env into both binaries and compares raw bytes. The
 harness itself was tested first: it must go red on 1 corrupted byte.
 
 **Post 4** — attach `figures/fig-gate.png`
 
 Finding 1: the interpreter tax was the whole product problem.
-Startup: 191 ms → 2.2 ms (87x).
-Validate one file: 195 ms → 3.4 ms (57x).
+Startup: 202 ms → 2.1 ms (96x).
+Validate one file: 206 ms → 3.7 ms (56x).
 An agent gate-checking every edit used to pay ~200 ms of Python import tax
 per call. That line item is now zero.
 
 **Post 5** — attach `figures/fig-cache.png`
 
 Finding 2: we deleted the cache and got faster than the cache.
-Python fresh walk: 1588 ms. Python's warm cache (a mmap store + freshness
-events, 8 ADRs of machinery): 223 ms. Rust with NO cache at all: 28 ms.
-8x faster than the thing the cache existed to achieve.
+Python fresh walk: 1672 ms. Python's warm cache (a mmap store + freshness
+events, 8 ADRs of machinery): 223 ms. Rust with NO cache at all: 30 ms.
+7x faster than the thing the cache existed to achieve.
 
 **Post 6** — attach `figures/fig-scale.png`
 
@@ -105,14 +105,14 @@ https://claude.ai/code/artifact/e7ab3783-f1e6-4c4b-bbdc-f17d3680cb0b
 ## Alt-text
 
 - **banner-5x2.png**: Newsprint-style banner reading "The oracle and the
-  rewrite. 130 cases. Zero unexplained bytes." with paired bars comparing
-  1588 ms (Python) to 28 ms (Rust) and a pass checklist: parity, fuzz dry,
+  rewrite. 174 cases. Zero unexplained bytes." with paired bars comparing
+  1672 ms (Python) to 30 ms (Rust) and a pass checklist: parity, fuzz dry,
   perf budget, examiner frozen.
-- **fig-gate.png**: Bar chart of median wall-clock. Startup: Python 191.2 ms
-  vs Rust 2.2 ms (87x). Validate one file: Python 195.5 ms vs Rust 3.4 ms
-  (57x). The Rust bars are a few pixels wide at scale.
-- **fig-cache.png**: Three bars for validating the live 417-artifact corpus:
-  Python fresh 1588 ms, Python warm cache 223 ms, Rust with no cache 28 ms,
+- **fig-gate.png**: Bar chart of median wall-clock. Startup: Python 202.4 ms
+  vs Rust 2.1 ms (96x). Validate one file: Python 206.4 ms vs Rust 3.7 ms
+  (56x). The Rust bars are a few pixels wide at scale.
+- **fig-cache.png**: Three bars for validating the live 423-artifact corpus:
+  Python fresh 1672 ms, Python warm cache 223 ms, Rust with no cache 30 ms,
   annotated "the whole cache stack buys this" on the 223 ms bar.
 - **fig-scale.png**: Two aligned panels of throughput vs corpus size (1k, 5k,
   20k files). Rust holds flat around 35,000 files/s; Python holds flat around
