@@ -804,8 +804,20 @@ class Fuzzer:
                 nums.append(int(m.group(1)))
         return max(nums) + 1
 
-    def file_finding(self, seed_label, original: bytes, op_names, cmd_name, argv):
-        # Re-check + minimize against this command.
+    def file_finding(self, seed_label, original: bytes, op_names, cmd_name, argv, detail=None):
+        # Dedup on the ORIGINAL divergence signature, before minimization.
+        # (Minimization only preserves "some divergence on this command", so
+        # two different root causes can ddmin-collapse into one minimized
+        # signature; deduping post-minimization would silently drop the
+        # second root cause. The signature window — exits + 64 bytes around
+        # the first diff — is stable per divergence class, so original-level
+        # dedup keeps noise down without that risk. It also skips the
+        # minimization cost for known classes entirely.)
+        if detail is None:
+            _, detail = self.diverges(original, argv)
+        orig_sig = signature(cmd_name, detail[0], detail[2], detail[1], detail[3])
+        if orig_sig in self.seen:
+            return None
         minimized = self.minimize(original, argv)
         div, (ea, oa, eb, ob) = self.diverges(minimized, argv)
         if not div:  # flaky (should not happen — deterministic engines)
@@ -815,10 +827,13 @@ class Fuzzer:
                 return None
         off = first_diff(oa, ob)
         sig = signature(cmd_name, ea, eb, oa, ob)
-        if sig in self.seen:
-            return None
+        same_class = sig != orig_sig and sig in self.seen
+        self._save_signature(orig_sig)
+        # New original signature but a known minimized class: file it anyway,
+        # suffixed -sameclass, so a human can confirm it is the same root cause
+        # rather than a second bug that ddmin-collapsed into the known one.
         num = self.next_finding_number()
-        slug = f"{num:03d}-{cmd_name}-{sig[:8]}"
+        slug = f"{num:03d}-{cmd_name}-{sig[:8]}" + ("-sameclass" if same_class else "")
         fdir = os.path.join(self.findings_dir, slug)
         os.makedirs(fdir, exist_ok=True)
         write(os.path.join(fdir, "repro.md"), minimized)
@@ -827,7 +842,8 @@ class Fuzzer:
         write(os.path.join(fdir, "rust.stdout"), ob)
         readme = self._readme(slug, seed_label, op_names, cmd_name, argv, ea, eb, oa, ob, off, minimized)
         write(os.path.join(fdir, "README.md"), readme.encode("utf-8"))
-        self._save_signature(sig)
+        if not same_class:
+            self._save_signature(sig)
         return slug
 
     def _readme(self, slug, seed_label, op_names, cmd_name, argv, ea, eb, oa, ob, off, minimized):
@@ -963,9 +979,10 @@ def main():
             if hit:
                 batch_div += 1
                 total_div += 1
-                cmd_name, argv, _ = hit
+                cmd_name, argv, detail = hit
                 slug = fz.file_finding(
-                    f"seed={args.seed} round={rnd} case={i}", data, op_names, cmd_name, argv
+                    f"seed={args.seed} round={rnd} case={i}", data, op_names, cmd_name, argv,
+                    detail=detail,
                 )
                 if slug:
                     new_findings.append(slug)

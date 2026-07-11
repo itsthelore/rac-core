@@ -400,6 +400,109 @@ pub fn cmd_stats(args: &StatsArgs) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// cmd_review
+// ---------------------------------------------------------------------------
+
+pub struct ReviewArgs {
+    pub directory: String,
+    pub json: bool,
+    pub sarif: bool,
+    pub top_level: bool,
+    /// `--stale-after`: None when absent; Some(days) when present (const 14).
+    pub stale_after: Option<i64>,
+}
+
+pub fn cmd_review(args: &ReviewArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    if let Some(days) = args.stale_after {
+        if days < 0 {
+            return usage_error("--stale-after must be a non-negative number of days");
+        }
+    }
+    let report = crate::review::build_review(&args.directory, !args.top_level, args.stale_after);
+    if args.sarif {
+        emit(output::render_review_sarif(&report));
+    } else if args.json {
+        emit(output::render_review_json(&report));
+    } else {
+        emit(output::render_review_human(&report));
+    }
+    if report.ok() {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+// ---------------------------------------------------------------------------
+// cmd_export
+// ---------------------------------------------------------------------------
+
+pub struct ExportArgs {
+    pub directory: String,
+    pub json: bool,
+    pub graph: bool,
+    pub documents: bool,
+    pub html: bool,
+    pub okf: bool,
+    pub agent_rules: bool,
+    pub check: bool,
+    pub client: Vec<String>,
+    pub out: Option<String>,
+}
+
+pub fn cmd_export(args: &ExportArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    if args.agent_rules {
+        // Agent-rules is a distinct, drift-guarded projection mode; not part of
+        // the export-payload parity surface (named gap for this stage).
+        eprintln!("rac-rs: export --agent-rules is not implemented in this stage");
+        return EXIT_USAGE;
+    }
+    if args.check {
+        return usage_error("--check requires --agent-rules");
+    }
+    if !args.client.is_empty() {
+        return usage_error("--client requires --agent-rules");
+    }
+    if args.json && (args.html || args.okf) {
+        return usage_error("--json cannot combine with --html or --okf");
+    }
+    if args.out.is_some() && !(args.html || args.okf) {
+        return usage_error("--out requires --html or --okf (--json writes to stdout)");
+    }
+    if args.documents {
+        emit(output::render_documents_jsonl(
+            &crate::export::build_documents_export(&args.directory),
+        ));
+        return EXIT_OK;
+    }
+    if args.graph {
+        emit(output::render_graph_json(&crate::export::build_graph_export(
+            &args.directory,
+        )));
+        return EXIT_OK;
+    }
+    let export = crate::export::build_corpus_export(&args.directory, output::rac_version());
+    if args.okf {
+        // OKF bundle writing is another workstream's scope (named gap).
+        eprintln!("rac-rs: export --okf is not implemented in this stage");
+        return EXIT_USAGE;
+    }
+    if !args.html {
+        emit(output::render_export_json(&export));
+        return EXIT_OK;
+    }
+    // HTML portal writing is out of the export-payload parity surface (named gap).
+    eprintln!("rac-rs: export --html is not implemented in this stage");
+    EXIT_USAGE
+}
+
+// ---------------------------------------------------------------------------
 // cmd_schema / cmd_templates
 // ---------------------------------------------------------------------------
 

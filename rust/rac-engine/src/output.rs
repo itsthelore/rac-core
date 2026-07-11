@@ -1363,6 +1363,306 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
     lines.join("\n")
 }
 
+// --- review ------------------------------------------------------------------
+
+use crate::pyjson::dumps_compact;
+use crate::review::{ReviewIssue, ReviewReport};
+
+fn priority_label(priority: i64) -> &'static str {
+    match priority {
+        1 => "Invalid artifacts",
+        2 => "Broken relationships",
+        3 => "Unrecognized artifacts",
+        4 => "Missing recommended information",
+        5 => "Write cadence",
+        6 => "Possible drift (review recommended)",
+        _ => "",
+    }
+}
+
+fn review_issue_value(i: &ReviewIssue) -> Value {
+    let mut m = Map::new();
+    m.insert("priority".into(), json!(i.priority));
+    m.insert("severity".into(), json!(i.severity));
+    m.insert("path".into(), json!(i.path));
+    m.insert("identifier".into(), json!(i.identifier));
+    m.insert("code".into(), json!(i.code));
+    m.insert("message".into(), json!(i.message));
+    m.insert("action".into(), json!(i.action));
+    m.insert("impact".into(), json!(i.impact));
+    Value::Object(m)
+}
+
+pub fn render_review_json(r: &ReviewReport) -> String {
+    let p = &r.portfolio;
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("directory".into(), json!(r.directory));
+    payload.insert("recursive".into(), json!(r.recursive));
+    payload.insert("ok".into(), json!(r.ok()));
+    payload.insert("empty".into(), json!(p.total_artifacts() == 0));
+
+    let mut by_type = Map::new();
+    for (t, c) in &p.by_type {
+        by_type.insert(t.clone(), json!(c));
+    }
+    let mut artifacts = Map::new();
+    artifacts.insert("total".into(), json!(p.total_artifacts()));
+    artifacts.insert("by_type".into(), Value::Object(by_type));
+    artifacts.insert("unknown_paths".into(), json!(p.unknown_paths));
+    payload.insert("artifacts".into(), Value::Object(artifacts));
+
+    let mut validation = Map::new();
+    validation.insert("valid".into(), json!(p.valid_artifacts));
+    validation.insert("invalid".into(), json!(p.invalid_artifacts));
+    payload.insert("validation".into(), Value::Object(validation));
+
+    let mut relationships = Map::new();
+    relationships.insert("total".into(), json!(p.relationships.total));
+    relationships.insert("valid".into(), json!(p.relationships.valid));
+    relationships.insert("broken".into(), json!(p.relationships.broken));
+    relationships.insert("orphaned".into(), json!(p.relationships.orphaned));
+    relationships.insert("coverage".into(), py_float(p.relationships.coverage));
+    payload.insert("relationships".into(), Value::Object(relationships));
+
+    let mut health = Map::new();
+    health.insert("score".into(), json!(p.health_score()));
+    payload.insert("health".into(), Value::Object(health));
+
+    payload.insert(
+        "issues".into(),
+        Value::Array(r.issues.iter().map(review_issue_value).collect()),
+    );
+    payload.insert("actions".into(), json!(r.actions()));
+    dumps_indent2(&Value::Object(payload))
+}
+
+pub fn render_review_human(r: &ReviewReport) -> String {
+    let p = &r.portfolio;
+    let mut lines: Vec<String> = vec![
+        bold("Repository Review"),
+        "=================".to_string(),
+        String::new(),
+        format!("Directory:  {}", r.directory),
+        format!("Artifacts:  {}", p.total_artifacts()),
+        String::new(),
+    ];
+    for (type_name, count) in &p.by_type {
+        if *count > 0 {
+            lines.push(format!("  {:<14} {count}", py_title(type_name)));
+        }
+    }
+
+    lines.extend([
+        String::new(),
+        bold("Validation"),
+        "----------".to_string(),
+        String::new(),
+        format!("  Valid:    {}", p.valid_artifacts),
+        format!("  Invalid:  {}", p.invalid_artifacts),
+        String::new(),
+        bold("Relationships"),
+        "-------------".to_string(),
+        String::new(),
+        format!("  Total:    {}", p.relationships.total),
+        format!("  Valid:    {}", p.relationships.valid),
+        format!("  Broken:   {}", p.relationships.broken),
+    ]);
+
+    if !r.issues.is_empty() {
+        lines.extend([
+            String::new(),
+            bold(&format!("Issues ({})", r.issues.len())),
+            "------".to_string(),
+        ]);
+        for priority in 1..=6 {
+            let group: Vec<&ReviewIssue> =
+                r.issues.iter().filter(|i| i.priority == priority).collect();
+            if group.is_empty() {
+                continue;
+            }
+            lines.push(String::new());
+            lines.push(format!(
+                "  Priority {priority} \u{2014} {}:",
+                priority_label(priority)
+            ));
+            for issue in group {
+                let icon = match issue.severity.as_str() {
+                    "error" => red("\u{2717}"),
+                    "warning" => yellow("!"),
+                    _ => "\u{00b7}".to_string(),
+                };
+                lines.push(format!("    {icon} {}", issue.identifier));
+                lines.push(format!("        {}", issue.message));
+            }
+        }
+        lines.extend([
+            String::new(),
+            bold("Suggested Actions"),
+            "-----------------".to_string(),
+            String::new(),
+        ]);
+        for (n, action) in r.actions().iter().enumerate() {
+            lines.push(format!("  {}. {action}", n + 1));
+        }
+    } else {
+        lines.push(String::new());
+        lines.push(green("\u{2713} Nothing needs attention."));
+    }
+
+    let score = p.health_score();
+    let colored = if score >= 80 {
+        green(&score.to_string())
+    } else if score >= 60 {
+        yellow(&score.to_string())
+    } else {
+        red(&score.to_string())
+    };
+    lines.extend([
+        String::new(),
+        bold("Health Score"),
+        "------------".to_string(),
+        String::new(),
+        format!("  {colored} / 100"),
+    ]);
+    if p.total_artifacts() == 0 {
+        lines.push(String::new());
+        lines.push(EMPTY_CORPUS_HINT.to_string());
+    }
+    lines.join("\n")
+}
+
+pub fn render_review_sarif(r: &ReviewReport) -> String {
+    let results: Vec<SarifResult> = r
+        .issues
+        .iter()
+        .map(|issue| SarifResult {
+            rule_id: issue.code.clone(),
+            level: sarif_level(&issue.severity),
+            message: if issue.action.is_empty() {
+                issue.message.clone()
+            } else {
+                format!("{} \u{2014} {}", issue.message, issue.action)
+            },
+            uri: quote_uri(&issue.path),
+            line: None,
+        })
+        .collect();
+    sarif_document(results)
+}
+
+// --- export ------------------------------------------------------------------
+
+use crate::export::{CorpusExport, DocumentsExport, GraphExport};
+
+pub fn render_export_json(export: &CorpusExport) -> String {
+    let mut corpus = Map::new();
+    corpus.insert("name".into(), json!(export.corpus_name));
+    corpus.insert("rac_version".into(), json!(export.rac_version));
+    corpus.insert("artifact_count".into(), json!(export.artifact_count()));
+
+    let artifacts: Vec<Value> = export
+        .artifacts
+        .iter()
+        .map(|a| {
+            let mut m = Map::new();
+            m.insert("id".into(), json!(a.id));
+            m.insert("aliases".into(), json!(a.aliases));
+            m.insert("type".into(), json!(a.artifact_type));
+            m.insert("status".into(), json!(a.status));
+            m.insert("title".into(), json!(a.title));
+            m.insert("path".into(), json!(a.path));
+            m.insert("body_html".into(), json!(a.body_html));
+            Value::Object(m)
+        })
+        .collect();
+
+    let relationships: Vec<Value> = export
+        .relationships
+        .iter()
+        .map(|e| {
+            let mut m = Map::new();
+            m.insert("from".into(), json!(e.from));
+            m.insert("to".into(), json!(e.to));
+            m.insert("type".into(), json!(e.edge_type));
+            Value::Object(m)
+        })
+        .collect();
+
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("corpus".into(), Value::Object(corpus));
+    payload.insert("artifacts".into(), Value::Array(artifacts));
+    payload.insert("relationships".into(), Value::Array(relationships));
+    dumps_indent2(&Value::Object(payload))
+}
+
+pub fn render_documents_jsonl(export: &DocumentsExport) -> String {
+    export
+        .documents
+        .iter()
+        .map(|d| {
+            let mut meta = Map::new();
+            meta.insert("path".into(), json!(d.path));
+            meta.insert("aliases".into(), json!(d.aliases));
+            meta.insert("tags".into(), json!(d.tags));
+            meta.insert("source".into(), json!(export.corpus_name));
+            let mut m = Map::new();
+            m.insert("schema_version".into(), json!("1"));
+            m.insert("id".into(), json!(d.id));
+            m.insert("type".into(), json!(d.artifact_type));
+            m.insert("status".into(), json!(d.status));
+            m.insert("title".into(), json!(d.title));
+            m.insert("text".into(), json!(d.text));
+            m.insert("metadata".into(), Value::Object(meta));
+            dumps_compact(&Value::Object(m))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn render_graph_json(export: &GraphExport) -> String {
+    let nodes: Vec<Value> = export
+        .nodes
+        .iter()
+        .map(|n| {
+            let mut m = Map::new();
+            m.insert("id".into(), json!(n.id));
+            m.insert("type".into(), json!(n.artifact_type));
+            m.insert("status".into(), json!(n.status));
+            m.insert("title".into(), json!(n.title));
+            Value::Object(m)
+        })
+        .collect();
+    let edges: Vec<Value> = export
+        .edges
+        .iter()
+        .map(|e| {
+            let mut m = Map::new();
+            m.insert("source".into(), json!(e.source));
+            m.insert("target".into(), json!(e.target));
+            m.insert("type".into(), json!(e.edge_type));
+            m.insert("directed".into(), json!(e.directed));
+            m.insert("resolved".into(), json!(e.resolved));
+            m.insert("external".into(), json!(e.external));
+            m.insert(
+                "provider".into(),
+                match &e.provider {
+                    Some(p) => json!(p),
+                    None => Value::Null,
+                },
+            );
+            Value::Object(m)
+        })
+        .collect();
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("source".into(), json!(export.corpus_name));
+    payload.insert("nodes".into(), Value::Array(nodes));
+    payload.insert("edges".into(), Value::Array(edges));
+    dumps_indent2(&Value::Object(payload))
+}
+
 // --- resolve / find (PORT-CONTRACT.d/06 §3.1, §11–13) -------------------------
 
 use crate::pycompat::{py_float_repr, py_repr_str};

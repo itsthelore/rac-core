@@ -54,6 +54,25 @@ fn mapped<'a>(artifact: &'a Artifact, spec: &'a ArtifactSpec) -> Vec<&'a str> {
     out
 }
 
+/// `missing_sections(product, spec)` -> `(missing_required, missing_recommended)`
+/// in schema declaration order, synonym-aware.
+pub fn missing_sections(artifact: &Artifact, spec: &ArtifactSpec) -> (Vec<String>, Vec<String>) {
+    let m = mapped(artifact, spec);
+    let missing_required = spec
+        .required
+        .iter()
+        .filter(|s| !m.contains(&s.as_str()))
+        .cloned()
+        .collect();
+    let missing_recommended = spec
+        .recommended
+        .iter()
+        .filter(|s| !m.contains(&s.as_str()))
+        .cloned()
+        .collect();
+    (missing_required, missing_recommended)
+}
+
 /// `score_artifacts(product)`: scores best-fit-first with the exact Python
 /// sort semantics.
 pub fn score_artifacts(artifact: &Artifact) -> Vec<TypeScore> {

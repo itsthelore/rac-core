@@ -9,8 +9,9 @@
 //! clearly-marked unimplemented stub (stderr, exit 2).
 
 use crate::commands::{
-    cmd_find, cmd_relationships, cmd_resolve, cmd_schema, cmd_stats, cmd_templates, cmd_validate,
-    FindArgs, RelationshipsArgs, ResolveArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+    cmd_export, cmd_find, cmd_relationships, cmd_resolve, cmd_review, cmd_schema, cmd_stats,
+    cmd_templates, cmd_validate, ExportArgs, FindArgs, RelationshipsArgs, ResolveArgs, ReviewArgs,
+    SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -84,22 +85,18 @@ fn invalid_choice_message(token: &str) -> String {
 
 pub fn run(args: &[String]) -> u8 {
     let mut it = args.iter();
-    let first = loop {
-        match it.next() {
-            None => {
-                return argparse_error("rac", "the following arguments are required: command")
-            }
-            Some(a) if a == "--version" => {
-                print_stdout(&version_line());
-                return 0;
-            }
-            Some(a) if a == "-h" || a == "--help" => {
-                // Help body is out of parity scope; emit a stub to stdout.
-                print_stdout("usage: rac [-h] [--version] <command> ...");
-                return 0;
-            }
-            Some(a) => break a,
+    let first = match it.next() {
+        None => return argparse_error("rac", "the following arguments are required: command"),
+        Some(a) if a == "--version" => {
+            print_stdout(&version_line());
+            return 0;
         }
+        Some(a) if a == "-h" || a == "--help" => {
+            // Help body is out of parity scope; emit a stub to stdout.
+            print_stdout("usage: rac [-h] [--version] <command> ...");
+            return 0;
+        }
+        Some(a) => a,
     };
 
     if first.starts_with('-') {
@@ -129,6 +126,8 @@ pub fn run(args: &[String]) -> u8 {
         "templates" => run_templates(&rest),
         "resolve" => run_resolve(&rest),
         "find" => run_find(&rest),
+        "review" => run_review(&rest),
+        "export" => run_export(&rest),
         other => {
             // UNIMPLEMENTED STUB — no parity cases run these in this phase.
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
@@ -469,6 +468,258 @@ fn run_find(rest: &[&String]) -> u8 {
         explain,
         top_level,
     }) as u8
+}
+
+/// argparse treats a token matching `^-\d+$` / `^-\d*\.\d+$` as a value, not an
+/// option (the parser has no option strings that look like negative numbers).
+fn looks_like_negative_number(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix('-') else {
+        return false;
+    };
+    if rest.is_empty() {
+        return false;
+    }
+    let mut seen_dot = false;
+    let mut seen_digit = false;
+    for ch in rest.chars() {
+        if ch == '.' {
+            if seen_dot {
+                return false;
+            }
+            seen_dot = true;
+        } else if ch.is_ascii_digit() {
+            seen_digit = true;
+        } else {
+            return false;
+        }
+    }
+    seen_digit
+}
+
+fn run_review(rest: &[&String]) -> u8 {
+    let prog = "rac review";
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut sarif = false;
+    let mut top_level = false;
+    let mut stale_after: Option<i64> = None;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || !arg.starts_with('-') || arg == "-" {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--sarif" => sarif = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {}
+            "--stale-after" => {
+                // nargs="?" const=14: consume the next token only if it is a
+                // value (not another option), including a negative number.
+                let consume = match rest.get(i + 1) {
+                    Some(v) => !v.starts_with('-') || looks_like_negative_number(v),
+                    None => false,
+                };
+                if consume {
+                    i += 1;
+                    let raw = rest[i].as_str();
+                    match raw.trim().parse::<i64>() {
+                        Ok(v) => stale_after = Some(v),
+                        Err(_) => {
+                            return argparse_error(
+                                prog,
+                                &format!("argument --stale-after: invalid int value: '{raw}'"),
+                            )
+                        }
+                    }
+                } else {
+                    stale_after = Some(14);
+                }
+            }
+            other if other.starts_with("--stale-after=") => {
+                let raw = &other["--stale-after=".len()..];
+                match raw.trim().parse::<i64>() {
+                    Ok(v) => stale_after = Some(v),
+                    Err(_) => {
+                        return argparse_error(
+                            prog,
+                            &format!("argument --stale-after: invalid int value: '{raw}'"),
+                        )
+                    }
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    let Some(directory) = directory else {
+        return argparse_error(prog, "the following arguments are required: directory");
+    };
+    if !extras.is_empty() {
+        return argparse_error("rac", &format!("unrecognized arguments: {}", extras.join(" ")));
+    }
+
+    cmd_review(&ReviewArgs {
+        directory,
+        json,
+        sarif,
+        top_level,
+        stale_after,
+    }) as u8
+}
+
+fn run_export(rest: &[&String]) -> u8 {
+    let prog = "rac export";
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut html = false;
+    let mut okf = false;
+    let mut documents = false;
+    let mut graph = false;
+    let mut agent_rules = false;
+    let mut check = false;
+    let mut client: Vec<String> = Vec::new();
+    let mut out: Option<String> = None;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    // Track the last write-mode flag seen for argparse mutex diagnostics.
+    let mut last_mode: Option<&'static str> = None;
+    let set_mode = |flag: &'static str,
+                        slot: &mut bool,
+                        last_mode: &mut Option<&'static str>|
+     -> Result<(), FlagError> {
+        if let Some(prev) = *last_mode {
+            if prev != flag {
+                return Err(FlagError(argparse_error(
+                    prog,
+                    &format!("argument {flag}: not allowed with argument {prev}"),
+                )));
+            }
+        }
+        *slot = true;
+        *last_mode = Some(flag);
+        Ok(())
+    };
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || !arg.starts_with('-') || arg == "-" {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--html" => {
+                if let Err(FlagError(c)) = set_mode("--html", &mut html, &mut last_mode) {
+                    return c;
+                }
+            }
+            "--okf" => {
+                if let Err(FlagError(c)) = set_mode("--okf", &mut okf, &mut last_mode) {
+                    return c;
+                }
+            }
+            "--documents" => {
+                if let Err(FlagError(c)) = set_mode("--documents", &mut documents, &mut last_mode) {
+                    return c;
+                }
+            }
+            "--graph" => {
+                if let Err(FlagError(c)) = set_mode("--graph", &mut graph, &mut last_mode) {
+                    return c;
+                }
+            }
+            "--agent-rules" => {
+                if let Err(FlagError(c)) =
+                    set_mode("--agent-rules", &mut agent_rules, &mut last_mode)
+                {
+                    return c;
+                }
+            }
+            "--check" => check = true,
+            "--client" => {
+                i += 1;
+                match rest.get(i) {
+                    Some(v) if is_client_choice(v) => client.push(v.to_string()),
+                    Some(v) if !v.starts_with('-') => {
+                        return argparse_error(
+                            prog,
+                            &format!(
+                                "argument --client: invalid choice: '{v}' (choose from 'claude', 'agents', 'cursor', 'copilot')"
+                            ),
+                        )
+                    }
+                    _ => return argparse_error(prog, "argument --client: expected one argument"),
+                }
+            }
+            other if other.starts_with("--client=") => {
+                let v = &other["--client=".len()..];
+                if is_client_choice(v) {
+                    client.push(v.to_string());
+                } else {
+                    return argparse_error(
+                        prog,
+                        &format!(
+                            "argument --client: invalid choice: '{v}' (choose from 'claude', 'agents', 'cursor', 'copilot')"
+                        ),
+                    );
+                }
+            }
+            "--out" => {
+                i += 1;
+                match rest.get(i) {
+                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => out = Some(v.to_string()),
+                    _ => return argparse_error(prog, "argument --out: expected one argument"),
+                }
+            }
+            other if other.starts_with("--out=") => {
+                out = Some(other["--out=".len()..].to_string());
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    if !extras.is_empty() {
+        return argparse_error("rac", &format!("unrecognized arguments: {}", extras.join(" ")));
+    }
+
+    cmd_export(&ExportArgs {
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        json,
+        graph,
+        documents,
+        html,
+        okf,
+        agent_rules,
+        check,
+        client,
+        out,
+    }) as u8
+}
+
+fn is_client_choice(v: &str) -> bool {
+    matches!(v, "claude" | "agents" | "cursor" | "copilot")
 }
 
 fn run_schema(rest: &[&String]) -> u8 {
