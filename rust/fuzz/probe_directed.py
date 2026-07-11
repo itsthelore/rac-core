@@ -93,14 +93,16 @@ def main():
     args = ap.parse_args()
     args.log = os.path.join(os.path.dirname(args.findings), "probe.log")
     fz = difffuzz.Fuzzer(args)
+    worker = fz.worker0
     n_div = 0
     for name, data in PROBES:
-        hit = fz.check_all(data)
-        if hit:
+        worker.set_aux([])
+        hits = fz.check_all(worker, data, difffuzz.CORE_COMMANDS)
+        if hits:
             n_div += 1
-            cmd_name, argv, detail = hit
-            slug = fz.file_finding(f"probe={name}", data, [name], cmd_name, argv, detail=detail)
-            print(f"DIVERGE {name}: cmd={cmd_name} -> {slug or 'duplicate-signature'}")
+            for spec, detail, triage in hits:
+                slug, t = fz.file_finding(f"probe={name}", data, [name], spec, detail, triage)
+                print(f"DIVERGE {name}: cmd={spec['name']} [{t}] -> {slug or 'duplicate-signature'}")
         else:
             print(f"ok      {name}")
     print(f"{n_div}/{len(PROBES)} probes diverged")

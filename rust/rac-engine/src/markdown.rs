@@ -56,6 +56,11 @@ fn nd_digit_value(c: char) -> Option<u32> {
 /// unlike `str.strip()`, excludes U+001C-U+001F — verified empirically, and
 /// it matches Rust `char::is_whitespace`), accepts an optional sign, Unicode
 /// Nd digits, and single underscores strictly between digits.
+///
+/// Python ints are unbounded; magnitudes beyond i128 SATURATE to i128::MAX
+/// (sign applied afterwards). Every consumer only cares about "positive and
+/// at least N" thresholds far below the saturation point, so the clamp is
+/// unobservable.
 pub fn py_parse_int(raw: &str) -> Option<i128> {
     let s = raw.trim_matches(|c: char| c.is_whitespace());
     let mut chars = s.chars().peekable();
@@ -82,7 +87,9 @@ pub fn py_parse_int(raw: &str) -> Option<i128> {
             continue;
         }
         let d = nd_digit_value(c)?;
-        value = value.checked_mul(10)?.checked_add(d as i128)?;
+        value = value
+            .saturating_mul(10)
+            .saturating_add(d as i128);
         last_was_digit = true;
         any_digit = true;
     }

@@ -127,5 +127,12 @@
   {"id": "export-err-missing-dir", "argv": ["export", "tests/fixtures/nope"], "expect_exit": 2, "expect_nonzero_ok": true},
 
   {"id": "root-err-no-subcommand", "argv": [], "expect_exit": 2, "expect_nonzero_ok": true},
-  {"id": "root-err-invalid-subcommand", "argv": ["frobnicate"], "expect_exit": 2, "expect_nonzero_ok": true}
+  {"id": "root-err-invalid-subcommand", "argv": ["frobnicate"], "expect_exit": 2, "expect_nonzero_ok": true},
+
+  {"id": "pin-c2-stdin-fm-surrogate-json", "argv": ["validate", "-", "--json"], "stdin_file": "rust/fuzz/pinned/stdin-fm-surrogate.md", "expect_exit": 1, "expect_nonzero_ok": true},
+  {"id": "pin-c2-stdin-fm-surrogate-human", "argv": ["validate", "-"], "stdin_file": "rust/fuzz/pinned/stdin-fm-surrogate.md", "expect_exit": 1, "expect_nonzero_ok": true},
+  {"id": "pin-c2-stdin-body-surrogate-json", "argv": ["validate", "-", "--json"], "stdin_file": "rust/fuzz/pinned/stdin-body-surrogate.md", "expect_exit": 1, "expect_nonzero_ok": true},
+  {"id": "pin-c2-stdin-body-surrogate-human", "argv": ["validate", "-"], "stdin_file": "rust/fuzz/pinned/stdin-body-surrogate.md", "expect_exit": 1, "expect_nonzero_ok": true},
+  {"id": "pin-c2-maxbytes-unicode-digits-json", "argv": ["validate", "rust/fuzz/pinned/maxbytes-artifact.md", "--json"], "env": {"RAC_MAX_FILE_BYTES": "٣٢"}, "expect_exit": 1, "expect_nonzero_ok": true},
+  {"id": "pin-c2-maxbytes-underscore-human", "argv": ["validate", "rust/fuzz/pinned/maxbytes-artifact.md"], "env": {"RAC_MAX_FILE_BYTES": "6_4"}, "expect_exit": 1, "expect_nonzero_ok": true}
 ]

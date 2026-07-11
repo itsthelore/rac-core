@@ -52,6 +52,11 @@ struct Case {
     /// Default none: comparison is raw bytes.
     #[serde(default)]
     normalize: Vec<String>,
+    /// Optional file (relative to the repo root) whose RAW BYTES are piped
+    /// to both engines' stdin — for `validate -` cases (fuzz campaign 2
+    /// pinned regressions). Default: null stdin (immediate EOF).
+    #[serde(default)]
+    stdin_file: Option<String>,
 }
 
 fn default_cwd() -> String {
@@ -275,10 +280,22 @@ fn run_engine(
     base: &[(String, String)],
 ) -> Result<RunOutput, String> {
     let cwd = repo_root.join(&case.cwd);
+    let stdin_bytes = match &case.stdin_file {
+        Some(rel) => Some(std::fs::read(repo_root.join(rel)).map_err(|e| {
+            format!("failed to read stdin_file {rel} for case {}: {e}", case.id)
+        })?),
+        None => None,
+    };
     let mut cmd = Command::new(engine);
     cmd.args(&case.argv)
         .current_dir(&cwd)
-        .stdin(Stdio::null()) // immediate EOF; isatty(stdin) false
+        // Piped stdin when the case supplies bytes, else immediate EOF.
+        // isatty(stdin) is false either way.
+        .stdin(if stdin_bytes.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped()) // isatty(stdout) false -> no ANSI on either side
         .stderr(Stdio::piped());
     cmd.env_clear();
@@ -288,9 +305,22 @@ fn run_engine(
     for (k, v) in &case.env {
         cmd.env(k, v);
     }
-    let out = cmd
-        .output()
-        .map_err(|e| format!("failed to spawn {}: {e}", engine.display()))?;
+    let out = if let Some(bytes) = stdin_bytes {
+        use std::io::Write;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("failed to spawn {}: {e}", engine.display()))?;
+        {
+            let mut sink = child.stdin.take().expect("piped stdin");
+            let _ = sink.write_all(&bytes); // drop closes the pipe -> EOF
+        }
+        child
+            .wait_with_output()
+            .map_err(|e| format!("failed to wait on {}: {e}", engine.display()))?
+    } else {
+        cmd.output()
+            .map_err(|e| format!("failed to spawn {}: {e}", engine.display()))?
+    };
     let exit = out.status.code().unwrap_or_else(|| {
         use std::os::unix::process::ExitStatusExt;
         128 + out.status.signal().unwrap_or(0)

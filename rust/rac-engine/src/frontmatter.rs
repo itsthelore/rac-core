@@ -12,10 +12,18 @@
 //! Known oracle crashes (PORT-CONTRACT decision 3): several inputs crash the
 //! oracle with uncaught non-YAML exceptions (unhashable mapping keys,
 //! explicit-tag/value mismatches like `!!int ''`, out-of-range dates such as
-//! `2026-13-01`). This port does NOT crash: those paths return a
-//! distinguishable internal issue (code `internal-oracle-divergence`) whose
-//! message mirrors the Python exception (`"TypeError: unhashable type:
-//! 'list'"`, ...). Phase 3 decides whether to mirror the crash observably.
+//! `2026-13-01`, `!!map` on a non-empty scalar/sequence — fuzz finding 002 —
+//! and CPython's 4300-digit int<->str conversion limit). This port does NOT
+//! crash: every such path returns a distinguishable internal issue (code
+//! `internal-oracle-divergence`) whose message mirrors the Python exception
+//! (`"TypeError: unhashable type: 'list'"`, ...). Phase 3 (fuzz campaign 1)
+//! settled this as the observable behavior: the marker is intentional and the
+//! parity harness treats it as the documented divergence class.
+//!
+//! Integers are unbounded like Python's `int` (fuzz finding 003): values
+//! beyond i64 construct `Yaml::BigInt` (sign + decimal digits) instead of
+//! overflowing, and duplicate-key equality / `repr()` / validator messages
+//! follow CPython semantics for them exactly.
 //!
 //! SEAM(phase3): the malformed-YAML message catalog below covers every
 //! failure class the contract lists plus the full ported PyYAML message set;
@@ -43,66 +51,61 @@ pub fn exceeds_byte_cap(text: &str, cap: usize) -> bool {
     text.len() > cap
 }
 
-/// Python `int()` (base 10) over an env-var string: Unicode-strip, optional
-/// sign, ASCII digits with single underscores strictly between digits.
-/// SEAM(phase3): CPython also accepts non-ASCII decimal digits; an override
-/// using those falls back to the default here (divergence, unobservable via
-/// any covered CLI surface with sane environments).
-fn py_int_base10(s: &str) -> Option<i64> {
-    let t = py_strip(s);
-    let bytes = t.as_bytes();
-    if bytes.is_empty() {
-        return None;
-    }
-    let mut i = 0;
-    let neg = match bytes[0] {
-        b'-' => {
-            i = 1;
-            true
-        }
-        b'+' => {
-            i = 1;
-            false
-        }
-        _ => false,
-    };
-    if i >= bytes.len() {
-        return None;
-    }
-    let mut value: i64 = 0;
-    let mut prev_digit = false;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b == b'_' {
-            if !prev_digit || i + 1 >= bytes.len() || !bytes[i + 1].is_ascii_digit() {
-                return None;
-            }
-            prev_digit = false;
-        } else if b.is_ascii_digit() {
-            value = value.checked_mul(10)?.checked_add((b - b'0') as i64)?;
-            prev_digit = true;
-        } else {
-            return None;
-        }
-        i += 1;
-    }
-    if !prev_digit {
-        return None;
-    }
-    Some(if neg { -value } else { value })
+/// The per-file byte cap at the READ stage (fuzz campaign 2, finding 004).
+///
+/// The oracle's `parse_file` runs `fh.read(cap + 1)`, which CRASHES the
+/// oracle uncaught for huge caps (PORT-CONTRACT decision-3 marker class),
+/// with the boundary verified empirically against CPython 3.11:
+///   - cap >= 2^63 - 1  (`cap + 1 > sys.maxsize`):
+///       `OverflowError: cannot fit 'int' into an index-sized integer`
+///   - 2^63 - 34 <= cap <= 2^63 - 2  (`cap + 1` exceeds the bytes-object
+///     size limit `PY_SSIZE_T_MAX - 33`):
+///       `OverflowError: byte string is too large`
+///   - below that, down to roughly the machine's allocatable memory, the
+///     oracle raises `MemoryError` — an ENVIRONMENT-DEPENDENT crash that
+///     cannot be mirrored deterministically and is deliberately NOT
+///     mirrored (the Rust engine reads incrementally and never
+///     preallocates the cap).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileCap {
+    Cap(u64),
+    /// Every file READ crashes the oracle with this exception line.
+    OracleCrash(&'static str),
 }
 
-/// The per-file byte cap, honoring `RAC_MAX_FILE_BYTES` (unparseable or
-/// non-positive overrides fall back to the default).
-pub fn max_file_bytes() -> u64 {
-    if let Ok(raw) = std::env::var("RAC_MAX_FILE_BYTES") {
-        match py_int_base10(&raw) {
-            Some(v) if v > 0 => return v as u64,
-            Some(_) => return DEFAULT_MAX_FILE_BYTES,
-            None => return DEFAULT_MAX_FILE_BYTES,
+/// `cap + 1 > sys.maxsize`, i.e. cap >= 2^63 - 1.
+const ORACLE_READ_OVERFLOW_MIN: i128 = i64::MAX as i128;
+/// `cap + 1` over the CPython bytes allocation limit (PY_SSIZE_T_MAX - 33).
+const ORACLE_READ_TOOLARGE_MIN: i128 = i64::MAX as i128 - 33;
+
+/// The per-file byte cap, honoring `RAC_MAX_FILE_BYTES` — Python `int()`
+/// semantics (Unicode digits, underscores, unbounded magnitude; unparseable
+/// or non-positive overrides fall back to the default). Shared parser with
+/// `markdown::max_file_bytes_from` so the read and parse stages agree.
+pub fn file_cap() -> FileCap {
+    match std::env::var("RAC_MAX_FILE_BYTES") {
+        Ok(raw) => file_cap_from(Some(&raw)),
+        Err(_) => FileCap::Cap(DEFAULT_MAX_FILE_BYTES),
+    }
+}
+
+pub fn file_cap_from(raw: Option<&str>) -> FileCap {
+    if let Some(raw) = raw {
+        if let Some(v) = crate::markdown::py_parse_int(raw) {
+            if v >= ORACLE_READ_OVERFLOW_MIN {
+                return FileCap::OracleCrash(
+                    "OverflowError: cannot fit 'int' into an index-sized integer",
+                );
+            }
+            if v >= ORACLE_READ_TOOLARGE_MIN {
+                return FileCap::OracleCrash("OverflowError: byte string is too large");
+            }
+            if v > 0 {
+                return FileCap::Cap(v as u64);
+            }
         }
     }
-    DEFAULT_MAX_FILE_BYTES
+    FileCap::Cap(DEFAULT_MAX_FILE_BYTES)
 }
 
 // ---------------------------------------------------------------------------
@@ -128,9 +131,27 @@ impl Issue {
     }
 }
 
+/// `ArtifactMetadata.schema_version`: Python keeps the parsed int as-is,
+/// which can exceed i64 (an unsupported-but-integer version is stored with
+/// only an issue recorded). `Display` matches Python `str(int)`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SchemaVersion {
+    Int(i64),
+    Big(BigInt),
+}
+
+impl std::fmt::Display for SchemaVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SchemaVersion::Int(v) => write!(f, "{v}"),
+            SchemaVersion::Big(b) => write!(f, "{b}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArtifactMetadata {
-    pub schema_version: i64,
+    pub schema_version: SchemaVersion,
     pub id: Option<String>,
     pub artifact_type: Option<String>,
     /// Ordered (kind -> targets), preserving YAML document order.
@@ -181,13 +202,36 @@ pub fn is_valid_id(value: &str) -> bool {
 // Value model — what PyYAML SafeLoader construction can yield here
 // ---------------------------------------------------------------------------
 
+/// Arbitrary-precision integer (sign + decimal digits), mirroring Python's
+/// unbounded `int` for values outside i64 (PORT-CONTRACT 02 §4: the YAML 1.1
+/// int constructor never overflows — fuzz finding 003).
+///
+/// Invariant: the magnitude never fits i64 (smaller values construct
+/// `Yaml::Int`), and `digits` has no leading zeros, so cross-class equality
+/// with `Int`/`Bool` is always false and `BigInt` equality is digit equality.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BigInt {
+    pub neg: bool,
+    /// Decimal magnitude digits, most significant first.
+    pub digits: String,
+}
+
+impl std::fmt::Display for BigInt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.neg {
+            f.write_str("-")?;
+        }
+        f.write_str(&self.digits)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Yaml {
     Null,
     Bool(bool),
-    /// SEAM(phase3): Python ints are unbounded; values beyond i64 surface as
-    /// an internal-oracle-divergence issue instead of a bignum.
     Int(i64),
+    /// Python bignum — an int whose value is outside the i64 range.
+    BigInt(BigInt),
     Float(f64),
     Str(String),
     Date {
@@ -248,6 +292,16 @@ pub fn py_eq(a: &Yaml, b: &Yaml) -> bool {
         (Yaml::List(x), Yaml::List(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(p, q)| py_eq(p, q))
         }
+        (Yaml::BigInt(x), Yaml::BigInt(y)) => x == y,
+        // Invariant: a BigInt never fits i64, so it can never equal an
+        // Int or Bool (Python compares the mathematical values).
+        (Yaml::BigInt(_), Yaml::Int(_) | Yaml::Bool(_))
+        | (Yaml::Int(_) | Yaml::Bool(_), Yaml::BigInt(_)) => false,
+        // Python bignum == float compares mathematically (exactly).
+        (Yaml::BigInt(x), Yaml::Float(f)) | (Yaml::Float(f), Yaml::BigInt(x)) => {
+            bigint_eq_float(x, *f)
+        }
+        (Yaml::BigInt(_), _) | (_, Yaml::BigInt(_)) => false,
         _ => match (num(a), num(b)) {
             (Some(x), Some(y)) => {
                 if x.is_nan() && y.is_nan() {
@@ -288,6 +342,204 @@ fn float_eq_int(f: f64, i: i64) -> bool {
         return false;
     }
     (f as i64) == i && (f as i64) as f64 == f
+}
+
+// ---------------------------------------------------------------------------
+// Arbitrary-precision decimal magnitude — just enough bignum for PyYAML int
+// construction and Python's exact cross-class numeric equality.
+// ---------------------------------------------------------------------------
+
+/// CPython's default `sys.get_int_max_str_digits()` (Python 3.11+): int<->str
+/// conversions beyond this many decimal digits raise `ValueError` — uncaught
+/// by the oracle, so decision-3 internal markers mirror them.
+const INT_MAX_STR_DIGITS: usize = 4300;
+
+/// `str(int)` / `repr(int)` over the limit (message has no digit count).
+fn int_to_str_limit_err() -> YErr {
+    YErr::Internal(
+        "ValueError: Exceeds the limit (4300 digits) for integer string conversion; \
+         use sys.set_int_max_str_digits() to increase the limit"
+            .to_string(),
+    )
+}
+
+/// `int(str)` (base 10 only) over the limit (message carries the count).
+fn int_parse_limit_err(ndigits: usize) -> YErr {
+    YErr::Internal(format!(
+        "ValueError: Exceeds the limit (4300 digits) for integer string conversion: \
+         value has {ndigits} digits; use sys.set_int_max_str_digits() to increase the limit"
+    ))
+}
+
+/// Unsigned magnitude in base 1e9 limbs, least significant first. Base 1e9
+/// keeps the arithmetic O(digits^2/9) worst case and makes the decimal
+/// rendering a straight concatenation.
+#[derive(Clone, Debug)]
+struct Mag(Vec<u32>);
+
+const MAG_BASE: u64 = 1_000_000_000;
+
+impl Mag {
+    fn zero() -> Mag {
+        Mag(vec![0])
+    }
+
+    fn from_u64(mut v: u64) -> Mag {
+        let mut limbs = Vec::new();
+        loop {
+            limbs.push((v % MAG_BASE) as u32);
+            v /= MAG_BASE;
+            if v == 0 {
+                break;
+            }
+        }
+        Mag(limbs)
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0.iter().all(|&l| l == 0)
+    }
+
+    fn trim(&mut self) {
+        while self.0.len() > 1 && *self.0.last().unwrap() == 0 {
+            self.0.pop();
+        }
+    }
+
+    /// self = self * m + a  (m, a < 2^32).
+    fn mul_add_small(&mut self, m: u64, a: u64) {
+        let mut carry = a;
+        for limb in &mut self.0 {
+            let v = *limb as u64 * m + carry;
+            *limb = (v % MAG_BASE) as u32;
+            carry = v / MAG_BASE;
+        }
+        while carry > 0 {
+            self.0.push((carry % MAG_BASE) as u32);
+            carry /= MAG_BASE;
+        }
+        self.trim();
+    }
+
+    fn add(&mut self, other: &Mag) {
+        if other.0.len() > self.0.len() {
+            self.0.resize(other.0.len(), 0);
+        }
+        let mut carry = 0u64;
+        for (i, limb) in self.0.iter_mut().enumerate() {
+            let v = *limb as u64 + other.0.get(i).map_or(0, |&l| l as u64) + carry;
+            *limb = (v % MAG_BASE) as u32;
+            carry = v / MAG_BASE;
+        }
+        if carry > 0 {
+            self.0.push(carry as u32);
+        }
+    }
+
+    /// self - other; requires self >= other.
+    fn sub(&mut self, other: &Mag) {
+        let mut borrow = 0i64;
+        for (i, limb) in self.0.iter_mut().enumerate() {
+            let mut v = *limb as i64 - other.0.get(i).map_or(0, |&l| l as i64) - borrow;
+            if v < 0 {
+                v += MAG_BASE as i64;
+                borrow = 1;
+            } else {
+                borrow = 0;
+            }
+            *limb = v as u32;
+        }
+        debug_assert_eq!(borrow, 0, "Mag::sub underflow");
+        self.trim();
+    }
+
+    fn cmp_mag(&self, other: &Mag) -> std::cmp::Ordering {
+        let (mut a, mut b) = (self.clone(), other.clone());
+        a.trim();
+        b.trim();
+        if a.0.len() != b.0.len() {
+            return a.0.len().cmp(&b.0.len());
+        }
+        for (x, y) in a.0.iter().rev().zip(b.0.iter().rev()) {
+            if x != y {
+                return x.cmp(y);
+            }
+        }
+        std::cmp::Ordering::Equal
+    }
+
+    /// Decimal digits, most significant first, no leading zeros.
+    fn to_decimal(&self) -> String {
+        let mut limbs = self.0.clone();
+        while limbs.len() > 1 && *limbs.last().unwrap() == 0 {
+            limbs.pop();
+        }
+        let mut out = format!("{}", limbs.last().unwrap());
+        for limb in limbs.iter().rev().skip(1) {
+            out.push_str(&format!("{limb:09}"));
+        }
+        out
+    }
+
+    /// The signed value when it fits i64 (magnitude up to 2^63 when `neg`).
+    fn to_i64(&self, neg: bool) -> Option<i64> {
+        let mut acc: i64 = 0;
+        for &limb in self.0.iter().rev() {
+            acc = acc.checked_mul(MAG_BASE as i64)?;
+            acc = if neg {
+                acc.checked_sub(limb as i64)?
+            } else {
+                acc.checked_add(limb as i64)?
+            };
+        }
+        Some(acc)
+    }
+}
+
+/// The `Yaml` value for a signed magnitude: `Int` when it fits i64, else the
+/// exact Python bignum.
+fn yaml_int(neg: bool, mag: &Mag) -> Yaml {
+    match mag.to_i64(neg) {
+        Some(v) => Yaml::Int(v),
+        None => Yaml::BigInt(BigInt {
+            neg,
+            digits: mag.to_decimal(),
+        }),
+    }
+}
+
+/// Python `bignum == float` (exact): true iff the float is finite, integral,
+/// and its exact value has the same sign and decimal digits.
+fn bigint_eq_float(x: &BigInt, f: f64) -> bool {
+    if !f.is_finite() || f != f.trunc() || f == 0.0 {
+        return false;
+    }
+    if (f < 0.0) != x.neg {
+        return false;
+    }
+    f64_integral_magnitude(f.abs()) == x.digits
+}
+
+/// Exact decimal digits of a positive integral f64 (mantissa * 2^exp).
+fn f64_integral_magnitude(f: f64) -> String {
+    let bits = f.to_bits();
+    let exp = ((bits >> 52) & 0x7ff) as i64;
+    let frac = bits & ((1u64 << 52) - 1);
+    let (mut m, mut e) = if exp == 0 {
+        (frac, -1074i64)
+    } else {
+        (frac | (1 << 52), exp - 1075)
+    };
+    // Integral input: any negative exponent shifts out exactly.
+    while e < 0 {
+        m >>= 1;
+        e += 1;
+    }
+    let mut mag = Mag::from_u64(m);
+    for _ in 0..e {
+        mag.mul_add_small(2, 0);
+    }
+    mag.to_decimal()
 }
 
 fn datetime_eq(a: &Yaml, b: &Yaml) -> bool {
@@ -417,13 +669,28 @@ fn py_repr_tzinfo(offset_seconds: i64) -> String {
     }
 }
 
-/// CPython `repr()` for every value the loader can produce.
-pub fn py_repr(v: &Yaml) -> String {
-    match v {
+/// CPython `repr()` for every value the loader can produce. Fallible: a
+/// bignum beyond the 4300-digit conversion limit raises `ValueError` in the
+/// oracle (uncaught — decision-3 internal marker), at any nesting depth.
+fn py_repr(v: &Yaml) -> Result<String, YErr> {
+    fn join(items: &[Yaml]) -> Result<String, YErr> {
+        Ok(items
+            .iter()
+            .map(py_repr)
+            .collect::<Result<Vec<_>, _>>()?
+            .join(", "))
+    }
+    Ok(match v {
         Yaml::Null => "None".to_string(),
         Yaml::Bool(true) => "True".to_string(),
         Yaml::Bool(false) => "False".to_string(),
         Yaml::Int(i) => i.to_string(),
+        Yaml::BigInt(b) => {
+            if b.digits.len() > INT_MAX_STR_DIGITS {
+                return Err(int_to_str_limit_err());
+            }
+            b.to_string()
+        }
         Yaml::Float(f) => py_float_repr(*f),
         Yaml::Str(s) => py_repr_str(s),
         Yaml::Date { year, month, day } => {
@@ -455,35 +722,26 @@ pub fn py_repr(v: &Yaml) -> String {
         Yaml::Bytes(b) => py_repr_bytes(b),
         Yaml::Tuple(items) => match items.len() {
             0 => "()".to_string(),
-            1 => format!("({},)", py_repr(&items[0])),
-            _ => format!(
-                "({})",
-                items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
-            ),
+            1 => format!("({},)", py_repr(&items[0])?),
+            _ => format!("({})", join(items)?),
         },
-        Yaml::List(items) => format!(
-            "[{}]",
-            items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
-        ),
+        Yaml::List(items) => format!("[{}]", join(items)?),
         Yaml::Map(pairs) => format!(
             "{{{}}}",
             pairs
                 .iter()
-                .map(|(k, v)| format!("{}: {}", py_repr(k), py_repr(v)))
-                .collect::<Vec<_>>()
+                .map(|(k, v)| Ok(format!("{}: {}", py_repr(k)?, py_repr(v)?)))
+                .collect::<Result<Vec<_>, YErr>>()?
                 .join(", ")
         ),
         Yaml::Set(items) => {
             if items.is_empty() {
                 "set()".to_string()
             } else {
-                format!(
-                    "{{{}}}",
-                    items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
-                )
+                format!("{{{}}}", join(items)?)
             }
         }
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -900,6 +1158,13 @@ fn yaml_printable(c: char) -> bool {
 
 fn check_printable(data: &str) -> Result<(), YErr> {
     for (pos, c) in data.chars().enumerate() {
+        // stdin surrogateescape sentinel: the oracle holds a lone surrogate
+        // here (never yaml-printable) and reports ITS code point.
+        if let Some(sur) = crate::pycompat::sentinel_surrogate(c) {
+            return Err(YErr::Reader(format!(
+                "unacceptable character #x{sur:04x}: special characters are not allowed\n  in \"<unicode string>\", position {pos}",
+            )));
+        }
         if !yaml_printable(c) {
             return Err(YErr::Reader(format!(
                 "unacceptable character #x{:04x}: special characters are not allowed\n  in \"<unicode string>\", position {}",
@@ -2799,6 +3064,15 @@ impl Node {
     }
 }
 
+/// PyYAML node class names, as CPython prints them in unpack TypeErrors.
+fn py_node_class(n: &Node) -> &'static str {
+    match n {
+        Node::Scalar { .. } => "ScalarNode",
+        Node::Seq { .. } => "SequenceNode",
+        Node::Map { .. } => "MappingNode",
+    }
+}
+
 struct Composer {
     p: Parser,
     anchors: std::collections::HashSet<String>,
@@ -2961,26 +3235,94 @@ fn construct_yaml_bool(node: &Node) -> Result<Yaml, YErr> {
     }
 }
 
-fn int_from_digits(s: &str, radix: u32, base_desc: u32) -> Result<i64, YErr> {
-    match i64::from_str_radix(s, radix) {
-        Ok(v) => Ok(v),
-        Err(_) => {
-            if s.is_empty() || s.chars().any(|c| !c.is_digit(radix)) {
-                // Oracle: ValueError out of int() (uncaught crash).
-                Err(YErr::Internal(format!(
-                    "ValueError: invalid literal for int() with base {}: {}",
-                    base_desc,
-                    py_repr_str(s)
-                )))
-            } else {
-                // SEAM(phase3): Python bignum; out of i64 range here.
-                Err(YErr::Internal(format!(
-                    "OverflowError: int value exceeds i64 (rust port seam): {}",
-                    py_repr_str(s)
-                )))
+/// CPython `int(s, base)` for base 2/8/10/16 over the strings PyYAML's int
+/// constructor produces: Unicode strip, one optional sign, an optional
+/// matching base prefix (`0b`/`0B`, `0o`/`0O`, `0x`/`0X` — never for base
+/// 10), single underscores strictly between digits (or right after the
+/// prefix), and — base 10 only — the 4300-digit conversion limit, checked on
+/// the leading digit span before trailing junk is diagnosed (matches CPython
+/// order: `int('9'*4301 + 'z')` reports the limit, not the literal).
+/// Returns (negative, magnitude). Invalid input mirrors the oracle's uncaught
+/// `ValueError` (decision 3).
+/// SEAM(phase3): CPython also accepts non-ASCII `Nd` decimal digits
+/// (`int('٥') == 5`); those still report invalid-literal here.
+fn py_int_parse(s: &str, base: u32) -> Result<(bool, Mag), YErr> {
+    let invalid = || {
+        YErr::Internal(format!(
+            "ValueError: invalid literal for int() with base {}: {}",
+            base,
+            py_repr_str(s)
+        ))
+    };
+    let t = py_strip(s);
+    let chars: Vec<char> = t.chars().collect();
+    let mut i = 0;
+    let neg = match chars.first() {
+        Some('-') => {
+            i = 1;
+            true
+        }
+        Some('+') => {
+            i = 1;
+            false
+        }
+        _ => false,
+    };
+    // Optional base prefix (only the one matching `base`).
+    let prefix = match base {
+        2 => Some(('b', 'B')),
+        8 => Some(('o', 'O')),
+        16 => Some(('x', 'X')),
+        _ => None,
+    };
+    if let Some((lo, hi)) = prefix {
+        if chars.get(i) == Some(&'0') && matches!(chars.get(i + 1), Some(c) if *c == lo || *c == hi)
+        {
+            i += 2;
+            // A single underscore may follow the prefix.
+            if chars.get(i) == Some(&'_') && chars.get(i + 1).is_some_and(|c| c.is_digit(base)) {
+                i += 1;
             }
         }
     }
+    // The 4300-digit limit is checked on the leading digit/underscore span.
+    if base == 10 {
+        let span_digits = chars[i..]
+            .iter()
+            .take_while(|c| c.is_ascii_digit() || **c == '_')
+            .filter(|c| c.is_ascii_digit())
+            .count();
+        if span_digits > INT_MAX_STR_DIGITS {
+            return Err(int_parse_limit_err(span_digits));
+        }
+    }
+    let mut mag = Mag::zero();
+    let mut prev_digit = false;
+    let mut ndigits = 0usize;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '_' {
+            if !prev_digit || !chars.get(i + 1).is_some_and(|c| c.is_digit(base)) {
+                return Err(invalid());
+            }
+            prev_digit = false;
+        } else if let Some(d) = c.to_digit(base) {
+            if !c.is_ascii() {
+                // Unicode digits: SEAM above (to_digit is ASCII-only anyway).
+                return Err(invalid());
+            }
+            mag.mul_add_small(base as u64, d as u64);
+            prev_digit = true;
+            ndigits += 1;
+        } else {
+            return Err(invalid());
+        }
+        i += 1;
+    }
+    if ndigits == 0 {
+        return Err(invalid());
+    }
+    Ok((neg, mag))
 }
 
 fn construct_yaml_int(node: &Node) -> Result<Yaml, YErr> {
@@ -2992,10 +3334,10 @@ fn construct_yaml_int(node: &Node) -> Result<Yaml, YErr> {
             "IndexError: string index out of range".to_string(),
         ));
     }
-    let mut sign: i64 = 1;
+    let mut neg = false;
     let mut v = value.as_str();
     if v.starts_with('-') {
-        sign = -1;
+        neg = true;
         v = &v[1..];
     } else if v.starts_with('+') {
         v = &v[1..];
@@ -3004,36 +3346,50 @@ fn construct_yaml_int(node: &Node) -> Result<Yaml, YErr> {
         return Ok(Yaml::Int(0));
     }
     if let Some(rest) = v.strip_prefix("0b") {
-        return Ok(Yaml::Int(sign * int_from_digits(rest, 2, 2)?));
+        let (pneg, mag) = py_int_parse(rest, 2)?;
+        return Ok(yaml_int(neg ^ pneg, &mag));
     }
     if let Some(rest) = v.strip_prefix("0x") {
-        // Python int(x, 16) is case-insensitive; from_str_radix too.
-        return Ok(Yaml::Int(sign * int_from_digits(rest, 16, 16)?));
+        let (pneg, mag) = py_int_parse(rest, 16)?;
+        return Ok(yaml_int(neg ^ pneg, &mag));
     }
-    if v.starts_with('0') && !v.is_empty() {
-        return Ok(Yaml::Int(sign * int_from_digits(v, 8, 8)?));
+    if v.starts_with('0') {
+        let (pneg, mag) = py_int_parse(v, 8)?;
+        return Ok(yaml_int(neg ^ pneg, &mag));
     }
     if v.contains(':') {
-        let mut digits: Vec<i64> = Vec::new();
+        // digits.reverse() + base*=60 in PyYAML == Horner in document order.
+        // Parts go through full int(part), so each may carry its own sign.
+        let mut acc_neg = false;
+        let mut acc = Mag::zero();
         for part in v.split(':') {
-            digits.push(int_from_digits(part, 10, 10)?);
+            let (pneg, pmag) = py_int_parse(part, 10)?;
+            acc.mul_add_small(60, 0);
+            if acc_neg == pneg || pmag.is_zero() {
+                acc.add(&pmag);
+            } else {
+                match acc.cmp_mag(&pmag) {
+                    std::cmp::Ordering::Less => {
+                        let mut m = pmag.clone();
+                        m.sub(&acc);
+                        acc = m;
+                        acc_neg = pneg;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        acc = Mag::zero();
+                        acc_neg = false;
+                    }
+                    std::cmp::Ordering::Greater => acc.sub(&pmag),
+                }
+            }
+            if acc.is_zero() {
+                acc_neg = false;
+            }
         }
-        digits.reverse();
-        let mut base: i64 = 1;
-        let mut acc: i64 = 0;
-        for d in digits {
-            acc = acc
-                .checked_add(d.checked_mul(base).ok_or_else(overflow_seam)?)
-                .ok_or_else(overflow_seam)?;
-            base = base.checked_mul(60).unwrap_or(i64::MAX);
-        }
-        return Ok(Yaml::Int(sign * acc));
+        return Ok(yaml_int(neg ^ acc_neg, &acc));
     }
-    Ok(Yaml::Int(sign * int_from_digits(v, 10, 10)?))
-}
-
-fn overflow_seam() -> YErr {
-    YErr::Internal("OverflowError: int value exceeds i64 (rust port seam)".to_string())
+    let (pneg, mag) = py_int_parse(v, 10)?;
+    Ok(yaml_int(neg ^ pneg, &mag))
 }
 
 fn construct_yaml_float(node: &Node) -> Result<Yaml, YErr> {
@@ -3316,10 +3672,13 @@ fn construct_yaml_timestamp(node: &Node) -> Result<Yaml, YErr> {
         // Python calls construct_scalar first (errors on non-scalar); if that
         // somehow succeeds (value-key map), the regexp match on `node.value`
         // then crashes the oracle with a TypeError.
+        // Reachable only via a value-key mapping (`!!timestamp {=: ...}`):
+        // `construct_scalar` succeeds, then `re.match` runs on `node.value`
+        // — a list for a MappingNode (verified against Python 3.11.15).
         _ => {
             construct_scalar_value(node)?;
             return Err(YErr::Internal(
-                "TypeError: expected string or bytes-like object".to_string(),
+                "TypeError: expected string or bytes-like object, got 'list'".to_string(),
             ));
         }
     };
@@ -3495,10 +3854,29 @@ fn construct_mapping_plain(node: &Node) -> Result<Vec<(Yaml, Yaml)>, YErr> {
 /// Python equality semantics before any value is constructed.
 fn construct_strict_map(node: &Node) -> Result<Yaml, YErr> {
     let Node::Map { pairs, .. } = node else {
-        return Err(YErr::Marked(format!(
-            "expected a mapping node, but found {}",
-            node.id()
-        )));
+        // The oracle's `_no_duplicates` iterates `node.value` directly with
+        // no mapping type check, so an explicit `!!map` on a non-mapping node
+        // crashes it before the base constructor's ConstructorError can fire
+        // (fuzz finding 002). ORACLE DIVERGENCE (PORT-CONTRACT decision 3):
+        // mirror those crashes as internal markers, same as every other
+        // oracle-crash class. Only *empty* scalars/sequences skip the loop
+        // and reach the caught "expected a mapping node" ConstructorError.
+        return match node {
+            Node::Scalar { value, .. } if !value.is_empty() => {
+                // `for key, _ in "<str>"` unpacks 1-char strings.
+                Err(YErr::Internal(
+                    "ValueError: not enough values to unpack (expected 2, got 1)".to_string(),
+                ))
+            }
+            Node::Seq { items, .. } if !items.is_empty() => Err(YErr::Internal(format!(
+                "TypeError: cannot unpack non-iterable {} object",
+                py_node_class(&items[0])
+            ))),
+            _ => Err(YErr::Marked(format!(
+                "expected a mapping node, but found {}",
+                node.id()
+            ))),
+        };
     };
     let mut seen: Vec<Yaml> = Vec::new();
     for (k_node, _) in pairs {
@@ -3514,9 +3892,10 @@ fn construct_strict_map(node: &Node) -> Result<Yaml, YErr> {
             )));
         }
         if seen.iter().any(|s| py_eq(s, &key)) {
+            // py_repr can itself crash the oracle (4300-digit str limit).
             return Err(YErr::Marked(format!(
                 "duplicate frontmatter key: {}",
-                py_repr(&key)
+                py_repr(&key)?
             )));
         }
         seen.push(key);
@@ -3692,7 +4071,7 @@ pub fn load_frontmatter_mapping(raw: &str) -> (Option<Vec<(Yaml, Yaml)>>, Vec<Is
     }
 }
 
-fn check_unknown_fields(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) {
+fn check_unknown_fields(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> Result<(), YErr> {
     for (key, _) in pairs {
         let known = matches!(key, Yaml::Str(s) if SUPPORTED_FIELDS.contains(&s.as_str()));
         if !known {
@@ -3700,36 +4079,51 @@ fn check_unknown_fields(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) {
                 "invalid-metadata-field",
                 format!(
                     "unsupported frontmatter field: {} (supported: {})",
-                    py_repr(key),
+                    py_repr(key)?,
                     SUPPORTED_FIELDS.join(", ")
                 ),
             ));
         }
     }
+    Ok(())
 }
 
-fn validate_schema_version(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> Option<i64> {
+fn validate_schema_version(
+    pairs: &[(Yaml, Yaml)],
+    issues: &mut Vec<Issue>,
+) -> Result<Option<SchemaVersion>, YErr> {
     if !map_contains(pairs, "schema_version") {
         issues.push(Issue::error(
             "invalid-metadata-field",
             "frontmatter is missing required field 'schema_version'".to_string(),
         ));
-        return None; // data.get() is None here
+        return Ok(None); // data.get() is None here
     }
     let value = map_get(pairs, "schema_version").unwrap();
-    let Yaml::Int(v) = value else {
-        issues.push(Issue::error(
-            "invalid-metadata-field",
-            "frontmatter field 'schema_version' must be an integer".to_string(),
-        ));
-        return None;
+    // Python: isinstance(v, int) and not isinstance(v, bool) — bignums pass.
+    let (supported, sv) = match value {
+        Yaml::Int(v) => (SUPPORTED_SCHEMA_VERSIONS.contains(v), SchemaVersion::Int(*v)),
+        Yaml::BigInt(b) => (false, SchemaVersion::Big(b.clone())),
+        _ => {
+            issues.push(Issue::error(
+                "invalid-metadata-field",
+                "frontmatter field 'schema_version' must be an integer".to_string(),
+            ));
+            return Ok(None);
+        }
     };
-    if !SUPPORTED_SCHEMA_VERSIONS.contains(v) {
+    if !supported {
+        // f-string str(int): over the 4300-digit limit the oracle crashes.
+        if let SchemaVersion::Big(b) = &sv {
+            if b.digits.len() > INT_MAX_STR_DIGITS {
+                return Err(int_to_str_limit_err());
+            }
+        }
         issues.push(Issue::error(
             "unsupported-schema-version",
             format!(
                 "unsupported frontmatter schema_version: {} (supported: {})",
-                v,
+                sv,
                 SUPPORTED_SCHEMA_VERSIONS
                     .iter()
                     .map(|s| s.to_string())
@@ -3738,7 +4132,7 @@ fn validate_schema_version(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> O
             ),
         ));
     }
-    Some(*v)
+    Ok(Some(sv))
 }
 
 fn validate_id(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> Option<String> {
@@ -3766,10 +4160,15 @@ fn validate_id(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> Option<String
     Some(normalize_id(s))
 }
 
-fn validate_type(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> Option<String> {
-    let value = map_get(pairs, "type")?;
+fn validate_type(
+    pairs: &[(Yaml, Yaml)],
+    issues: &mut Vec<Issue>,
+) -> Result<Option<String>, YErr> {
+    let Some(value) = map_get(pairs, "type") else {
+        return Ok(None);
+    };
     if matches!(value, Yaml::Null) {
-        return None;
+        return Ok(None);
     }
     let registered = match value {
         Yaml::Str(s) => crate::spec::spec_for(s).is_some(),
@@ -3780,15 +4179,15 @@ fn validate_type(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> Option<Stri
             "invalid-metadata-field",
             format!(
                 "frontmatter field 'type' is not a registered artifact type: {}",
-                py_repr(value)
+                py_repr(value)?
             ),
         ));
-        return None;
+        return Ok(None);
     }
-    match value {
+    Ok(match value {
         Yaml::Str(s) => Some(s.clone()),
         _ => None,
-    }
+    })
 }
 
 fn validate_relationships(
@@ -3882,23 +4281,44 @@ pub fn parse_frontmatter(raw: &str) -> (Option<ArtifactMetadata>, Vec<Issue>) {
     let Some(pairs) = data else {
         return (None, issues);
     };
-    check_unknown_fields(&pairs, &mut issues);
-    let schema_version = validate_schema_version(&pairs, &mut issues);
-    let id = validate_id(&pairs, &mut issues);
-    let artifact_type = validate_type(&pairs, &mut issues);
-    let relationships = validate_relationships(&pairs, &mut issues);
-    let tags = parse_tags(&pairs, &mut issues);
-    (
-        Some(ArtifactMetadata {
-            schema_version: schema_version.unwrap_or(0),
-            id,
-            artifact_type,
-            relationships,
-            tags,
-            provenance: "frontmatter",
-        }),
-        issues,
-    )
+    match validate_fields(&pairs, &mut issues) {
+        Ok(metadata) => (Some(metadata), issues),
+        // ORACLE DIVERGENCE (PORT-CONTRACT decision 3): message formatting in
+        // a field validator can crash the oracle (4300-digit int->str limit
+        // on a bignum key/value). Mirror it as the internal marker; nothing
+        // else survives the oracle's crash, so earlier issues are dropped.
+        Err(YErr::Internal(msg)) => (
+            None,
+            vec![Issue {
+                severity: "error",
+                code: "internal-oracle-divergence".to_string(),
+                message: msg,
+                line: None,
+            }],
+        ),
+        // Validators only raise the Internal class.
+        Err(_) => unreachable!("field validators raise only internal errors"),
+    }
+}
+
+fn validate_fields(
+    pairs: &[(Yaml, Yaml)],
+    issues: &mut Vec<Issue>,
+) -> Result<ArtifactMetadata, YErr> {
+    check_unknown_fields(pairs, issues)?;
+    let schema_version = validate_schema_version(pairs, issues)?;
+    let id = validate_id(pairs, issues);
+    let artifact_type = validate_type(pairs, issues)?;
+    let relationships = validate_relationships(pairs, issues);
+    let tags = parse_tags(pairs, issues);
+    Ok(ArtifactMetadata {
+        schema_version: schema_version.unwrap_or(SchemaVersion::Int(0)),
+        id,
+        artifact_type,
+        relationships,
+        tags,
+        provenance: "frontmatter",
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -3976,7 +4396,7 @@ fn py_oserror_message(e: &std::io::Error, path: &str) -> String {
 /// `from_utf8_lossy` follows the same WHATWG policy).
 pub fn read_artifact_text(path: &str) -> ArtifactRead {
     use std::io::Read;
-    let cap = max_file_bytes();
+    let cap_state = file_cap();
     let unreadable = |e: &std::io::Error| ArtifactRead {
         text: None,
         issue: Some(Issue {
@@ -3990,6 +4410,29 @@ pub fn read_artifact_text(path: &str) -> ArtifactRead {
     let size = match std::fs::metadata(path) {
         Ok(m) => m.len(),
         Err(e) => return unreadable(&e),
+    };
+    let cap = match cap_state {
+        FileCap::Cap(cap) => cap,
+        // ORACLE DIVERGENCE (PORT-CONTRACT decision 3): a cap >= 2^63 - 1
+        // makes the oracle's `fh.read(cap + 1)` crash uncaught on EVERY
+        // successfully opened file (fuzz campaign 2, finding 004). Mirror it
+        // as the marker. The oracle stats the path and opens the file first,
+        // so an unreadable path still reports unreadable-artifact.
+        FileCap::OracleCrash(msg) => {
+            return match std::fs::File::open(path) {
+                Ok(_) => ArtifactRead {
+                    text: None,
+                    issue: Some(Issue {
+                        severity: "error",
+                        code: "internal-oracle-divergence".to_string(),
+                        message: msg.to_string(),
+                        line: None,
+                    }),
+                    lossy: false,
+                },
+                Err(e) => unreadable(&e),
+            };
+        }
     };
     if size > cap {
         return ArtifactRead {

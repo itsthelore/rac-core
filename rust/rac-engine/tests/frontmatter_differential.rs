@@ -83,6 +83,7 @@ fn enc_yaml(v: &Yaml) -> Value {
         Yaml::Null => json!({"t": "none"}),
         Yaml::Bool(b) => json!({"t": "bool", "v": b}),
         Yaml::Int(i) => json!({"t": "int", "v": i.to_string()}),
+        Yaml::BigInt(b) => json!({"t": "int", "v": b.to_string()}),
         Yaml::Float(f) => json!({"t": "float", "v": rac_engine::pycompat::py_float_repr(*f)}),
         Yaml::Str(s) => json!({"t": "str", "v": s}),
         Yaml::Bytes(b) => json!({"t": "bytes", "v": b}),
@@ -128,7 +129,7 @@ fn enc_meta(m: &Option<ArtifactMetadata>) -> Value {
     match m {
         None => Value::Null,
         Some(m) => json!({
-            "schema_version": m.schema_version,
+            "schema_version": m.schema_version.to_string(),
             "id": m.id,
             "type": m.artifact_type,
             "relationships": m
@@ -160,6 +161,16 @@ fn differential_batch() {
             continue;
         }
         let (meta, issues) = parse_frontmatter(raw);
+        if meta.is_none()
+            && issues
+                .first()
+                .is_some_and(|i| i.code == "internal-oracle-divergence")
+        {
+            // Validator-stage oracle crash (int->str limit): load succeeded,
+            // the marker surfaces from parse_frontmatter.
+            results.push(json!({"internal": issues[0].message}));
+            continue;
+        }
         results.push(json!({
             "data": match &data {
                 None => Value::Null,

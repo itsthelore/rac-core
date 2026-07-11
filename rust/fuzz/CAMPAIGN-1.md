@@ -7,13 +7,12 @@ currently-green command set, per the native-engine spike phase 3.
 - Oracle: `.venv-oracle/bin/rac` (rac 0.1.dev50+g21c8be403, Python 3.11.15,
   PyYAML 6.0.3).
 - Rust engine: `rust/target/release/rac`, prebuilt by the port workflow.
-  NOTE: the port workflow rebuilt the binary mid-campaign (13:01 UTC,
-  md5 b11e73e689f742c3d11a46eabf28534d, working tree ahead of commit
-  e7e6425). Wave 1 ran mostly against the b8db3af build; wave 2 (the full
-  deterministic re-run of the same seeds), the directed probes, and all
-  filed findings were run/verified against the current build. Divergence
-  behavior was identical across both builds (wave-2 per-round divergence
-  counts reproduced wave 1 exactly).
+  NOTE: the port workflow rebuilt the binary twice mid-campaign (working
+  tree ahead of commit e7e6425; final build md5
+  57c7fa4f0741e0e650d125f1262250ec). Wave 1 ran mostly against the b8db3af
+  build; wave 2 replayed all wave-1 inputs against the newer builds with
+  identical per-seed divergence totals (20/25/20/27), and all three filed
+  finding classes were re-verified byte-level against the final build.
 - Command matrix per input (9): `validate FILE [--json]`,
   `validate DIR [--json|--sarif]`, `relationships DIR --validate [--json]`,
   `stats DIR [--json]` — raw stdout bytes + exit codes compared under the
@@ -77,20 +76,22 @@ All 32 operators exercised in every wave.
 
 ## Divergences
 
-Random campaign: **92 divergent inputs in wave 1** (per-seed 13/24/19/36…
-see `campaign.log`) and comparable rates in wave 2 — **every one of them
-reduces to a single root-cause class** (finding 001 below; original-signature
-audit in wave 2 confirmed no second class was masked by minimization
-collapse). Directed probes added **24/50 divergent inputs** falling into two
-further classes (002, 003). Multi-file probes: **0/16 diverged**.
+Random campaign: **92 divergent inputs in wave 1** (per-seed 20/25/20/27,
+see `campaign.log`) and **141 in wave 2** (the same 92 replayed with
+identical per-seed totals, plus 49 from fresh seeds 21/22) — **every one of
+them reduces to a single root-cause class** (finding 001 below; the wave-2
+original-signature audit filed zero new signatures, confirming no second
+class was masked by minimization collapse in wave 1). Directed probes added
+**24/50 divergent inputs** falling into two further classes (002, 003).
+Multi-file probes: **0/16 diverged**.
 
 ### Findings (catalog: `rust/fuzz/findings/`)
 
-| finding | class | command | summary |
-|---|---|---|---|
-| `001-oracle-crash-unhashable-key` | (b) oracle crash | validate (all) | `? []` et al. unhashable YAML keys, tag/value constructor mismatches (`!!int ''`, `!!bool banana`), and out-of-range plain timestamps (`2026-13-01`) crash the oracle uncaught (`frontmatter.py:52 _no_duplicates`); Rust deliberately emits `internal-oracle-divergence` instead (PORT-CONTRACT decision 3, 02 §3b). Expected, intentional divergence. |
-| `002-oracle-crash-map-tag-on-scalar` | (b) oracle crash, port-consistency note | validate (all) | `!!map <scalar>` crashes the oracle (`ValueError: not enough values to unpack`), but Rust maps it to a *regular* `malformed-frontmatter` issue instead of the decision-3 `internal-oracle-divergence` marker — the port assumed a catchable ConstructorError on this path. Flagged for the port team. |
-| `003-rust-bug-bigint-i64-seam` (+`003a`) | **(a) Rust engine bug** | validate (all; any command parsing frontmatter) | Integers beyond i64 (`9999999999999999999`, `0xFFFFFFFFFFFFFFFFFF`, i64::MAX+1) abort the whole frontmatter load with `internal-oracle-divergence OverflowError … (rust port seam)`; the oracle parses them as Python bignums and reports normal per-field issues. Violates 02 §4 (int resolver is unbounded) and §5 (validator messages must print the value, e.g. `unsupported frontmatter schema_version: 99999999999999999999 (supported: 1)`). Root cause: `Value::Int(i64)` in `rac-engine/src/frontmatter.rs` (`SEAM(phase3)` comment ~line 188; overflow raise ~lines 2978/3036). Boundary verified: i64::MAX clean, i64::MAX+1 diverges. Not fixed here (engine files owned by the port workflow). |
+| finding | class | command | summary | resolution |
+|---|---|---|---|---|
+| `001-oracle-crash-unhashable-key` | (b) oracle crash | validate (all) | `? []` et al. unhashable YAML keys, tag/value constructor mismatches (`!!int ''`, `!!bool banana`), and out-of-range plain timestamps (`2026-13-01`) crash the oracle uncaught (`frontmatter.py:52 _no_duplicates`); Rust deliberately emits `internal-oracle-divergence` instead (PORT-CONTRACT decision 3, 02 §3b). Expected, intentional divergence. | **WONTFIX (by design).** Documented decision-3 marker class; repro re-verified after the 002/003 fixes — the marker mirrors the oracle's exception string byte-exactly. |
+| `002-oracle-crash-map-tag-on-scalar` | (b) oracle crash, port-consistency note | validate (all) | `!!map <scalar>` crashes the oracle (`ValueError: not enough values to unpack`), but Rust mapped it to a *regular* `malformed-frontmatter` issue instead of the decision-3 `internal-oracle-divergence` marker — the port assumed a catchable ConstructorError on this path. | **RESOLVED (aligned).** `construct_strict_map` now mirrors `_no_duplicates`: `!!map` on a non-empty scalar → internal `ValueError: not enough values to unpack (expected 2, got 1)`; on a non-empty sequence → internal `TypeError: cannot unpack non-iterable {Scalar,Sequence,Mapping}Node object`; empty scalar/sequence still reach the caught `expected a mapping node` ConstructorError. Constructor audit also aligned `!!timestamp {=: …}` (message now carries `, got 'list'`) and added the CPython 4300-digit int<->str limit crashes (see 003). Repro now dedups into the 001 signature class. |
+| `003-rust-bug-bigint-i64-seam` (+`003a`) | **(a) Rust engine bug** | validate (all; any command parsing frontmatter) | Integers beyond i64 (`9999999999999999999`, `0xFFFFFFFFFFFFFFFFFF`, i64::MAX+1) aborted the whole frontmatter load with `internal-oracle-divergence OverflowError … (rust port seam)`; the oracle parses them as Python bignums and reports normal per-field issues. Violated 02 §4 (int resolver is unbounded) and §5 (validator messages must print the value). | **FIXED.** `Yaml::BigInt` (sign + decimal digits, base-1e9 arithmetic) makes int construction unbounded across decimal/hex/octal/binary/sexagesimal spellings; Python-equality duplicate-key semantics (`bignum == float` compared exactly), `repr()`, and validator messages (`unsupported frontmatter schema_version: 99999999999999999999 (supported: 1)`) follow CPython, including the 4300-digit int<->str conversion-limit crashes (mirrored as decision-3 markers, `crash_stage` tracked in the vector suite). Repros 003/003a and a fresh 24-input grid (i64::MAX±1, i64::MIN±1, u64::MAX+1, 100-digit, negative huge, hex/octal/binary/sexagesimal huge, bignum-vs-float dup keys, 4300/4301-digit boundary) verified byte-identical vs the oracle; grid + crash classes added to `frontmatter.json` vectors (511 parse cases, 37 crash). |
 
 Oracle nondeterminism observed: **none** (all divergences reproduced
 deterministically on re-run; wave-2 replay counts matched wave 1 per round).
@@ -135,9 +136,16 @@ Fuzzer bugs found and fixed during the campaign:
 ## Verdict
 
 After ~4,900 distinct inputs and ~72,000 engine-pair command executions, the
-only true engine-behavior gap in the green command set is the **beyond-i64
+only true engine-behavior gap in the green command set was the **beyond-i64
 integer seam (finding 003)**. Everything else is parity-clean or an
-intentional, documented response to oracle crashes. Recommend the port
-workflow (1) fix 003 with a bignum-capable value representation, and
-(2) align the `!!map <scalar>` path (002) with the decision-3 marker
-convention; then re-run this campaign (same seeds reproduce byte-for-byte).
+intentional, documented response to oracle crashes.
+
+**Post-campaign resolution (2026-07-11):** the port workflow (1) fixed 003
+with an arbitrary-precision `Yaml::BigInt` representation and (2) aligned the
+`!!map <scalar>` path (002) with the decision-3 marker convention. After the
+fixes: `cargo test -p rac-engine` green, the full parity suite passed 118/118
+twice with identical scoreboards, all catalog repros re-verified (003/003a
+parity-clean; 001/002 are the documented oracle-crash marker divergence), and
+a directed-probe re-run dropped from 24/50 to 16/50 divergent — every
+remaining one dedups into the single 001 oracle-crash signature class (all
+bigint probes now clean).

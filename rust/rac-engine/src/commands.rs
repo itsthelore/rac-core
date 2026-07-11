@@ -34,8 +34,12 @@ fn usage_error(message: &str) -> i32 {
 
 fn emit(text: String) {
     use std::io::Write;
+    // stdin surrogateescape sentinels re-materialize as their raw bytes on
+    // stdout (the oracle's stdout encoder uses surrogateescape). No-op —
+    // a borrowed passthrough — unless stdin decoding produced sentinels.
+    let payload = crate::pycompat::encode_stdout_surrogateescape(&text);
     let mut stdout = std::io::stdout().lock();
-    let _ = stdout.write_all(text.as_bytes());
+    let _ = stdout.write_all(&payload);
     let _ = stdout.write_all(b"\n");
     let _ = stdout.flush();
 }
@@ -219,7 +223,10 @@ fn read_validate_input(target: &str) -> Result<Artifact, i32> {
         use std::io::Read;
         let mut buf = Vec::new();
         let _ = std::io::stdin().lock().read_to_end(&mut buf);
-        let text = String::from_utf8_lossy(&buf).into_owned();
+        // The oracle reads stdin as TEXT with errors="surrogateescape"
+        // (fuzz campaign 2, findings 002/003) — NOT the errors="replace"
+        // lossy decode used for files.
+        let text = crate::pycompat::decode_stdin_surrogateescape(&buf);
         return Ok(parse_text(&text, "-"));
     }
     read_named_file(target)

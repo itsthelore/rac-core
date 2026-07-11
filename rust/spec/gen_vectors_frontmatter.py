@@ -87,7 +87,8 @@ def enc_meta(m):
     if m is None:
         return None
     return {
-        "schema_version": m.schema_version,
+        # str: schema_version can be a Python bignum beyond i64/JSON numbers.
+        "schema_version": str(m.schema_version),
         "id": m.id,
         "type": m.type,
         "relationships": [[k, list(v)] for k, v in m.relationships.items()],
@@ -430,6 +431,59 @@ PARSE_CASES = (
         "k: " + "x" * 65532 + "\n",  # 65537 bytes -> oversize
         "k: " + "é" * 32766,         # 65536 bytes (2-byte chars) -> passes
         "k: " + "é" * 32767,         # 65538 bytes -> oversize
+        # beyond-i64 integers (fuzz finding 003: Python bignums, no overflow)
+        "n: 9223372036854775806",
+        "n: 9223372036854775807",   # i64::MAX
+        "n: 9223372036854775808",   # i64::MAX + 1
+        "n: -9223372036854775807",
+        "n: -9223372036854775808",  # i64::MIN
+        "n: -9223372036854775809",  # i64::MIN - 1
+        "n: 18446744073709551615",  # u64::MAX
+        "n: 18446744073709551616",  # u64::MAX + 1
+        "n: " + "9" * 100,          # 100-digit
+        "n: -" + "9" * 100,         # negative huge
+        "n: 0xFFFFFFFFFFFFFFFFFF",  # hex huge
+        "n: -0xFFFFFFFFFFFFFFFFFF",
+        "n: 0777777777777777777777777",  # octal huge
+        "n: 0b" + "1" * 70,         # binary huge
+        "n: 99999999999999999999:30",  # sexagesimal huge
+        "n: 1_000_000_000_000_000_000_0",
+        "n: !!int '0xFF_FF_FFFFFFFFFFFFFF'",
+        "n: !!int '9223372036854775808'",
+        "schema_version: 99999999999999999999",
+        "schema_version: -99999999999999999999",
+        "schema_version: 9223372036854775808",
+        # huge-int keys: Python-equality duplicate classes incl. vs float
+        "10000000000000000000: a\n1e19: b",  # 1e19 resolves as str, no dup
+        "99999999999999999999: a\n99999999999999999999: b",
+        "10000000000000000000: a\n10000000000000000000.0: b",  # bigint == 1e19 float
+        "10000000000000000000: a\n1.0e+19: b",                 # same, exp spelling
+        "10000000000000000001: a\n10000000000000000000.0: b",  # off by one: no dup
+        "9999999999999999999: a\n1e19: b",  # i64-range int vs str key
+        # CPython 4300-digit int<->str conversion limit (oracle crashes)
+        "n: " + "9" * 4300,
+        "n: " + "9" * 4301,
+        "n: -" + "9" * 4300,
+        "a: !!int '" + "9" * 4301 + "'",
+        "? 0x" + "F" * 3568 + "\n: x",  # 4295 decimal digits: repr fits
+        "? 0x" + "F" * 3600 + "\n: x",  # repr over the limit: validate crash
+        "schema_version: 0x" + "F" * 3600,
+        "type: [0x" + "F" * 3600 + "]\nschema_version: 1",
+        "? 0x" + "F" * 3600 + "\n: x\n? 0x" + "F" * 3600 + "\n: y",  # dup: load crash
+        # !!map on non-mapping nodes (fuzz finding 002: `_no_duplicates`
+        # iterates node.value with no type check — non-empty scalars and
+        # sequences crash the oracle; empty ones reach the caught
+        # ConstructorError)
+        "!!map a",
+        "k: !!map a",
+        "k: !!map ''",
+        "k: !!map []",
+        "k: !!map [x]",
+        "k: !!map [[x]]",
+        "k: !!map [{a: 1}]",
+        "? !!map xy\n: 1",
+        "k: !!map |\n  text",
+        "k: !!timestamp {=: 2026-07-11}",
         # oracle-crash catalog (recorded as crash strings)
         "? [1, 2]\n: x",
         "? {a: 1}\n: x",
@@ -542,6 +596,11 @@ READ_CODES = ("artifact-oversize", "unreadable-artifact", "non-utf8-content")
 ENV_CAP_VALUES = [
     None, "abc", "", " ", "0", "-1", "1", "16", "65536", " 123 ", "1_0",
     "+9", "0x10", "12.5", "1e3", "\t2048\n", "999999999999",
+    # CPython int() accepts non-ASCII Nd digits and Unicode whitespace
+    # (fuzz campaign 2, finding 004 hardening).
+    "٣٢", " ١٢٣ ", "1_000_000", "1__0", "_1", "1_",
+    # just below the oracle read-crash zone: still a real cap
+    "9223372036854775773",
 ]
 
 ID_VALUES = [
@@ -590,9 +649,17 @@ def gen_parse_case(raw: str):
         entry["raw"] = raw
     try:
         data, load_issues = _load_frontmatter_mapping(raw)
-        meta, issues = parse_frontmatter(raw)
     except Exception as e:  # noqa: BLE001 — oracle crash catalog
         entry["crash"] = f"{type(e).__name__}: {e}"
+        return entry
+    try:
+        meta, issues = parse_frontmatter(raw)
+    except Exception as e:  # noqa: BLE001 — validator-stage crash (the load
+        # succeeded; e.g. the 4300-digit int->str limit while formatting a
+        # field-issue message). The Rust port surfaces the marker from
+        # parse_frontmatter only.
+        entry["crash"] = f"{type(e).__name__}: {e}"
+        entry["crash_stage"] = "validate"
         return entry
     if data is not None and len(raw) > 2000:
         # Skip the (huge) data echo for cap-boundary cases; issues/metadata

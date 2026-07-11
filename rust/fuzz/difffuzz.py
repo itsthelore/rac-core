@@ -1,22 +1,46 @@
 #!/usr/bin/env python3
 """difffuzz — differential fuzzer for the RAC native-engine divergence hunt.
 
-Phase 3 of the native-engine spike: generate/mutate Markdown artifacts aimed
-at the parity landmine classes recorded in rust/PORT-CONTRACT.d/02 (YAML 1.1
-frontmatter), 03 (markdown extraction), and 04 (classification/validation),
-run BOTH engines (Python oracle + Rust port) over a command matrix under the
-parity-harness environment, and compare stdout bytes + exit codes.
+Campaign 2 of the native-engine spike: generate/mutate Markdown artifacts
+aimed at the parity landmine classes recorded in rust/PORT-CONTRACT.d/02
+(YAML 1.1 frontmatter), 03 (markdown extraction), 04 (classification/
+validation), 05 (relationships), 06 (resolve/find ranking) and 09 (walk/
+stats/export/review/schema), run BOTH engines (Python oracle + Rust port)
+over a command matrix under the parity-harness environment, and compare
+stdout bytes + exit codes.
 
-On divergence the input is greedily minimized (line-level ddmin, then
-byte-level) while the divergence persists, and a repro bundle is written
-under findings/<NNN>-<slug>/ with both engines' outputs and a README giving
-the command, first-diff offset, and hexdump context.
+Campaign-2 matrix additions over campaign 1:
+  - resolve QUERY corpus [--json] / find QUERY corpus [--json] with queries
+    derived from the mutated corpus content (id fragments, unicode words,
+    duplicated tokens, title words),
+  - schema [NAME [--template]] [--json] / schema --list [--json],
+  - export corpus [--json] and export corpus --documents,
+  - review corpus [--json|--sarif],
+  - relationships corpus [--json] (inspection arm, no --validate),
+  - validate - (stdin) [--json] [--corpus corpus],
+  - RAC_MAX_FILE_BYTES env variation on validate,
+  - path-argument edge forms (trailing slash, ./ prefix, doubled slash,
+    .markdown extension as a direct file argument),
+  - multi-file corpora (auxiliary artifacts next to the mutated primary).
 
-stdlib only. Fully deterministic given --seed: corpus listings are sorted,
-all randomness flows from random.Random instances derived from the seed.
+Every input runs a CORE command set plus a deterministic sample of the
+EXTENDED pool. On divergence the input is greedily minimized (line-level
+ddmin, then byte-level) while the divergence AND its triage class persist,
+and a repro bundle is written under <findings>/<NNN>-<slug>/.
+
+Oracle-crash triage: inputs that crash the oracle uncaught (Python
+traceback on stderr) while the Rust engine emits the documented
+`internal-oracle-divergence` marker are the campaign-1 finding-001 class —
+divergence by design (PORT-CONTRACT decision 3). They are filed at most
+once per command with an `-oracle-crash` suffix and DO NOT count against a
+round's dry verdict.
+
+stdlib only. Generation is fully deterministic given --seed; with
+--jobs > 1 execution order (and hence finding numbering) may vary, but the
+set of divergence signatures found is order-independent.
 
 Usage:
-  python3 rust/fuzz/difffuzz.py --seed 1 --rounds 10 --batch 50
+  python3 rust/fuzz/difffuzz.py --seed 201 --rounds 1 --batch 800 --jobs 8
 
 Journal: one line per batch appended to rust/fuzz/campaign.log.
 """
@@ -32,6 +56,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 # ---------------------------------------------------------------------------
 # Locations / constants
@@ -42,33 +67,21 @@ REPO_ROOT = os.path.dirname(os.path.dirname(FUZZ_DIR))
 
 DEFAULT_ORACLE = os.path.join(REPO_ROOT, ".venv-oracle", "bin", "rac")
 DEFAULT_ENGINE = os.path.join(REPO_ROOT, "rust", "target", "release", "rac")
-DEFAULT_FINDINGS = os.path.join(FUZZ_DIR, "findings")
+DEFAULT_FINDINGS = os.path.join(FUZZ_DIR, "findings2")
 CAMPAIGN_LOG = os.path.join(FUZZ_DIR, "campaign.log")
 
 # The version seam: makes the Rust binary report the oracle's setuptools-scm
 # version so --version / SARIF driver.version compare raw (see parity-cases).
 RAC_RS_VERSION = "0.1.dev50+g21c8be403"
 
-# Campaign command matrix. Paths are relative to the per-case cwd so both
-# engines print identical path strings. The generated file always lands at
-# corpus/case.md inside the case dir.
-COMMANDS = [
-    ("validate-file", ["validate", "corpus/case.md"]),
-    ("validate-file-json", ["validate", "corpus/case.md", "--json"]),
-    ("validate-dir", ["validate", "corpus"]),
-    ("validate-dir-json", ["validate", "corpus", "--json"]),
-    ("validate-dir-sarif", ["validate", "corpus", "--sarif"]),
-    ("relationships-validate", ["relationships", "corpus", "--validate"]),
-    ("relationships-validate-json", ["relationships", "corpus", "--validate", "--json"]),
-    ("stats-dir", ["stats", "corpus"]),
-    ("stats-dir-json", ["stats", "corpus", "--json"]),
-]
-
 RUN_TIMEOUT_S = 30
 TIMEOUT_EXIT = -9999  # sentinel exit code for a timed-out engine
 MAX_FILE_BYTES = 1 << 20  # 1 MiB cap on generated inputs
 MAX_MINIMIZE_EVALS = 350  # predicate-evaluation budget per finding
 BYTE_MIN_LIMIT = 4096  # only byte-minimize inputs at or under this size
+
+ORACLE_CRASH_MARK = b"Traceback (most recent call last)"
+RUST_MARKER = b"internal-oracle-divergence"
 
 # ---------------------------------------------------------------------------
 # Parity environment (mirrors rust/parity-harness/src/main.rs base_env)
@@ -94,24 +107,33 @@ def parity_env(xdg_root: str) -> dict:
     return env
 
 
-def run_engine(engine: str, argv: list, cwd: str, env: dict):
-    """Run one engine; return (exit_code, stdout_bytes). Piped stdio, null stdin."""
+def run_engine(engine: str, argv: list, cwd: str, env: dict, stdin_data=None):
+    """Run one engine; return (exit_code, stdout_bytes). Piped stdio."""
+    code, out, _ = run_engine_full(engine, argv, cwd, env, stdin_data)
+    return code, out
+
+
+def run_engine_full(engine: str, argv: list, cwd: str, env: dict, stdin_data=None):
+    """Run one engine; return (exit_code, stdout_bytes, stderr_bytes)."""
+    kwargs = dict(
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=RUN_TIMEOUT_S,
+    )
+    if stdin_data is None:
+        kwargs["stdin"] = subprocess.DEVNULL
+    else:
+        kwargs["input"] = stdin_data
     try:
-        p = subprocess.run(
-            [engine] + argv,
-            cwd=cwd,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=RUN_TIMEOUT_S,
-        )
+        p = subprocess.run([engine] + argv, **kwargs)
     except subprocess.TimeoutExpired:
-        return TIMEOUT_EXIT, b""
+        return TIMEOUT_EXIT, b"", b""
     code = p.returncode
     if code < 0:  # killed by signal: match the harness's 128+sig convention
         code = 128 + (-code)
-    return code, p.stdout
+    return code, p.stdout, p.stderr
 
 # ---------------------------------------------------------------------------
 # Seed corpus
@@ -392,6 +414,26 @@ def op_fm_tags_mutate(rng, data, ctx):
     return to_bytes("\n".join(lines) + "\n")
 
 
+def op_fm_relationships(rng, data, ctx):
+    """Relationship blocks aimed at the resolution/validation arm (05)."""
+    lines = to_text(data).splitlines()
+    lines, fm = ensure_fm(rng, lines)
+    ids = ctx.get("known_ids") or ["RAC-KTQ63DPT6008"]
+    tgt = rng.choice(ids + ["RAC-KTQ63DQZZZZZ", "ADR-007", "adr-007",
+                            "  spaced id  ", "", "RAC-KTQ63DPSMF19"])
+    kind = rng.choice(["implements", "supersedes", "depends_on", "verified_by",
+                       "frobnicates", "references"])
+    forms = [
+        f"relationships:\n  {kind}: [{tgt}]" if tgt.strip() else f"relationships:\n  {kind}: ['{tgt}']",
+        f"relationships:\n  {kind}:\n    - '{tgt}'\n    - '{tgt}'",
+        f"relationships:\n  {kind}: {tgt or '~'}",
+        "relationships: not-a-map",
+        f"relationships:\n  {kind}: [{rng.choice(TRICKY_SCALARS) or '~'}]",
+    ]
+    lines[fm[1]:fm[1]] = rng.choice(forms).split("\n")
+    return to_bytes("\n".join(lines) + "\n")
+
+
 def op_fm_complex_key(rng, data, ctx):
     lines = to_text(data).splitlines()
     lines, fm = ensure_fm(rng, lines)
@@ -444,7 +486,7 @@ def op_nbsp_delim(rng, data, ctx):
         lines.insert(0, "---")
         targets = [0]
     i = rng.choice(targets)
-    nb = " "
+    nb = " "
     lines[i] = rng.choice([nb + lines[i], lines[i] + nb, lines[i].replace("---", "-" + nb + "--")])
     return to_bytes("\n".join(lines) + "\n")
 
@@ -580,7 +622,7 @@ def op_unicode_heading(rng, data, ctx):
     lines = to_text(data).splitlines()
     pos = _random_line(rng, lines)
     lines.insert(pos, rng.choice([
-        "# Requireḿents",              # combining acute
+        "# Requireḿents",              # combining acute
         "# שלום Status",  # RTL
         "# Zero​Width‍Joined",
         "# ＃ Fullwidth Hash",
@@ -681,7 +723,8 @@ def op_byte_edit(rng, data, ctx):
 OPERATORS = [
     op_fm_scalar_swap, op_fm_quote, op_fm_anchor_alias, op_fm_merge_key,
     op_fm_dup_key, op_fm_dup_key_cross_type, op_fm_deep_nesting,
-    op_fm_oversize, op_fm_tags_mutate, op_fm_complex_key, op_fm_tab,
+    op_fm_oversize, op_fm_tags_mutate, op_fm_relationships, op_fm_complex_key,
+    op_fm_tab,
     op_bom, op_crlf, op_nbsp_delim, op_delim_games,
     op_setext, op_heading_in_container, op_fences, op_indented_code,
     op_html_block, op_tabs, op_hash_games, op_unicode_heading,
@@ -693,21 +736,209 @@ OPERATORS = [
 # Weight the frontmatter-scalar op up: it targets landmine class #1.
 WEIGHTS = [3 if op is op_fm_scalar_swap else 1 for op in OPERATORS]
 
+KNOWN_IDS = ["RAC-KTQ63DPSMF19", "RAC-KTQ63DPT6008", "RAC-KTQ63DPVVB37",
+             "RAC-KVA46RJE43ZJ", "RAC-KTW0M8104880", "RAC-KTY0D0DFTCJA"]
+
+AUX_TEMPLATE = (
+    "---\nschema_version: 1\nid: {id}\ntype: decision\n"
+    "{rel}---\n# ADR-{n} Aux {name}\n\n## Status\n\nAccepted\n\n"
+    "## Context\n\nC.\n\n## Decision\n\nD.\n\n## Consequences\n\n- One.\n"
+)
+
 
 def generate(rng: random.Random, corpus: list) -> tuple:
-    """One fuzz input: base pick + 1..4 mutations. Returns (bytes, op_names)."""
+    """One fuzz input: base pick + 1..4 mutations, plus optional auxiliary
+    corpus files (multi-file mode). Returns (bytes, op_names, aux) where aux
+    is a list of (relpath, bytes) written next to corpus/case.md."""
     data = rng.choice(corpus)
-    ctx = {"corpus": corpus}
+    ctx = {"corpus": corpus, "known_ids": KNOWN_IDS}
     names = []
     for _ in range(rng.randrange(1, 5)):
         op = rng.choices(OPERATORS, weights=WEIGHTS, k=1)[0]
         data = op(rng, data, ctx)[:MAX_FILE_BYTES]
         names.append(op.__name__)
-    return data, names
+
+    aux = []
+    if rng.random() < 0.35:  # multi-file corpus mode
+        n_aux = rng.randrange(1, 4)
+        primary_ids = re.findall(r"RAC-[A-Za-z0-9]{6,16}", to_text(data))
+        for j in range(n_aux):
+            form = rng.randrange(10)
+            if form < 5:  # plain corpus pick
+                blob = rng.choice(corpus)
+            elif form < 8:  # corpus pick with one mutation
+                op = rng.choices(OPERATORS, weights=WEIGHTS, k=1)[0]
+                blob = op(rng, rng.choice(corpus), ctx)[:MAX_FILE_BYTES]
+                names.append("aux:" + op.__name__)
+            else:  # synthetic decision referencing an id from the primary
+                tgt = rng.choice(primary_ids) if primary_ids else rng.choice(KNOWN_IDS)
+                rel = f"relationships:\n  supersedes: [{tgt}]\n"
+                blob = to_bytes(AUX_TEMPLATE.format(
+                    id=rng.choice(KNOWN_IDS), rel=rel, n=900 + j, name=f"A{j}"))
+            ext = ".markdown" if rng.random() < 0.1 else ".md"
+            sub = "sub/" if rng.random() < 0.25 else ""
+            aux.append((f"{sub}aux{j}{ext}", blob))
+    return data, names, aux
+
+# ---------------------------------------------------------------------------
+# Command matrix
+#
+# A command spec is a dict:
+#   name       stable coarse name (feeds the dedup signature)
+#   argv       argv after the engine binary; cwd = case dir
+#   env        extra env vars merged over the parity env
+#   stdin      "primary" to feed the (current) primary bytes on stdin
+#   copy_as    also write the primary bytes at this relpath before running
+# ---------------------------------------------------------------------------
+
+
+def cmd(name, argv, env=None, stdin=None, copy_as=None):
+    return {"name": name, "argv": argv, "env": env or {}, "stdin": stdin,
+            "copy_as": copy_as}
+
+
+# Always run: broad, cheap detectors for the parse/validate pipeline.
+CORE_COMMANDS = [
+    cmd("validate-file", ["validate", "corpus/case.md"]),
+    cmd("validate-file-json", ["validate", "corpus/case.md", "--json"]),
+    cmd("validate-dir-sarif", ["validate", "corpus", "--sarif"]),
+    cmd("relationships-validate-json", ["relationships", "corpus", "--validate", "--json"]),
+    cmd("stats-dir-json", ["stats", "corpus", "--json"]),
+]
+
+# RAC_MAX_FILE_BYTES probe values (plus data-length-derived boundary values
+# added at build time). Mixes valid, boundary, non-positive, unparseable,
+# underscore/sign/whitespace forms, huge (beyond i64/u64) and non-ASCII
+# decimal digits (CPython int() accepts them).
+MAXBYTES_VALUES = [
+    "16", "64", "100", "1024", "0", "-1", "abc", "", " 4096 ", "1_024",
+    "+512", "99999999999999999999", "٣٢",  # Arabic-Indic "32"
+    "0x400", "1e6", "  ", " 128", "18446744073709551617",
+]
+
+SCHEMA_NAMES = ["requirement", "decision", "roadmap", "prompt", "design"]
+
+EXTENDED_SAMPLE = 5  # extended commands sampled per input
+
+
+def derive_queries(rng: random.Random, data: bytes) -> list:
+    """Deterministic query candidates from the mutated content: full ids,
+    id fragments, unicode words, duplicated tokens, title words."""
+    text = to_text(data)[:20000]
+    cands = []
+    ids = re.findall(r"RAC-[A-Za-z0-9]{4,20}", text)
+    for i in ids[:4]:
+        cands.append(i)
+        if len(i) > 8:
+            cands.append(i[: rng.randrange(6, len(i))])  # fragment
+        cands.append(i.lower())
+    adrs = re.findall(r"ADR-\d+", text)
+    cands.extend(adrs[:2])
+    words = re.findall(r"\w{2,24}", text, re.UNICODE)
+    non_ascii = [w for w in words if any(ord(c) > 127 for c in w)]
+    if words:
+        w = rng.choice(words)
+        cands.append(w)
+        cands.append(f"{w} {w}")  # duplicate token
+        if len(words) >= 2:
+            cands.append(" ".join(rng.sample(words, 2)))
+    if non_ascii:
+        cands.append(rng.choice(non_ascii))
+    for line in text.splitlines():
+        if line.startswith("# "):
+            cands.append(line[2:].strip()[:60])
+            break
+    cands.extend(["", "the system SHALL", "RAC"])
+    cands = [c for c in cands if len(c) <= 80]
+    return cands or ["RAC"]
+
+
+def build_commands(rng: random.Random, data: bytes) -> list:
+    """CORE + a deterministic sample of the extended pool for this input."""
+    qs = derive_queries(rng, data)
+    q_resolve = rng.choice(qs)
+    q_find = rng.choice(qs)
+    mb_pool = MAXBYTES_VALUES + [str(len(data)), str(max(1, len(data) - 1)),
+                                 str(len(data) + 1)]
+    mb = rng.choice(mb_pool)
+    schema_name = rng.choice(SCHEMA_NAMES + [q_find[:30] or "requirement", "Requirement", "REQUIREMENT"])
+    schema_variant = rng.choice([
+        cmd("schema-list", ["schema", "--list"]),
+        cmd("schema-list-json", ["schema", "--list", "--json"]),
+        cmd("schema-name", ["schema", schema_name]),
+        cmd("schema-name-json", ["schema", schema_name, "--json"]),
+        cmd("schema-name-template", ["schema", schema_name, "--template"]),
+    ])
+
+    pool = [
+        # plain dir arms not in CORE
+        cmd("validate-dir", ["validate", "corpus"]),
+        cmd("validate-dir-json", ["validate", "corpus", "--json"]),
+        cmd("relationships-validate", ["relationships", "corpus", "--validate"]),
+        cmd("stats-dir", ["stats", "corpus"]),
+        # inspection arm
+        cmd("relationships-inspect", ["relationships", "corpus"]),
+        cmd("relationships-inspect-json", ["relationships", "corpus", "--json"]),
+        # review
+        cmd("review-dir", ["review", "corpus"]),
+        cmd("review-dir-json", ["review", "corpus", "--json"]),
+        cmd("review-dir-sarif", ["review", "corpus", "--sarif"]),
+        # export
+        cmd("export-dir", ["export", "corpus"]),
+        cmd("export-dir-json", ["export", "corpus", "--json"]),
+        cmd("export-dir-documents", ["export", "corpus", "--documents"]),
+        # resolve / find (content-derived queries)
+        cmd("resolve-query", ["resolve", q_resolve, "corpus"]),
+        cmd("resolve-query-json", ["resolve", q_resolve, "corpus", "--json"]),
+        cmd("find-query", ["find", q_find, "corpus"]),
+        cmd("find-query-json", ["find", q_find, "corpus", "--json"]),
+        # schema (one sampled variant)
+        schema_variant,
+        # stdin
+        cmd("validate-stdin", ["validate", "-"], stdin="primary"),
+        cmd("validate-stdin-json", ["validate", "-", "--json"], stdin="primary"),
+        cmd("validate-stdin-corpus-json",
+            ["validate", "-", "--corpus", "corpus", "--json"], stdin="primary"),
+        # RAC_MAX_FILE_BYTES env variation
+        cmd("validate-file-maxbytes", ["validate", "corpus/case.md", "--json"],
+            env={"RAC_MAX_FILE_BYTES": mb}),
+        cmd("validate-dir-maxbytes", ["validate", "corpus"],
+            env={"RAC_MAX_FILE_BYTES": mb}),
+        # path-argument edge forms
+        cmd("validate-dir-slash", ["validate", "corpus/"]),
+        cmd("validate-dir-dot", ["validate", "./corpus", "--json"]),
+        cmd("validate-file-doubleslash", ["validate", "corpus//case.md"]),
+        cmd("stats-dir-slash", ["stats", "corpus/"]),
+        cmd("validate-markdown-ext", ["validate", "corpus/case.markdown"],
+            copy_as="corpus/case.markdown"),
+    ]
+    return CORE_COMMANDS + rng.sample(pool, EXTENDED_SAMPLE)
 
 # ---------------------------------------------------------------------------
 # Differential execution
 # ---------------------------------------------------------------------------
+
+
+class Worker:
+    """Per-thread scratch context: its own case dir + XDG root."""
+
+    def __init__(self, root: str, idx: int):
+        self.case_dir = os.path.join(root, f"case{idx}")
+        self.corpus_dir = os.path.join(self.case_dir, "corpus")
+        os.makedirs(self.corpus_dir, exist_ok=True)
+        self.env = parity_env(os.path.join(root, f"xdg{idx}"))
+        self.aux = []
+
+    def set_aux(self, aux):
+        """Reset the corpus dir to hold exactly `aux` (primary written later)."""
+        self.aux = aux
+        shutil.rmtree(self.corpus_dir, ignore_errors=True)
+        os.makedirs(self.corpus_dir, exist_ok=True)
+        for rel, blob in aux:
+            p = os.path.join(self.corpus_dir, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as fh:
+                fh.write(blob)
 
 
 class Fuzzer:
@@ -718,10 +949,8 @@ class Fuzzer:
         self.workdir = os.path.abspath(args.workdir) if args.workdir else tempfile.mkdtemp(prefix="difffuzz-")
         os.makedirs(self.workdir, exist_ok=True)
         os.makedirs(self.findings_dir, exist_ok=True)
-        self.env = parity_env(os.path.join(self.workdir, "xdg"))
-        self.case_dir = os.path.join(self.workdir, "case")
-        os.makedirs(os.path.join(self.case_dir, "corpus"), exist_ok=True)
-        self.case_file = os.path.join(self.case_dir, "corpus", "case.md")
+        self.lock = threading.Lock()
+        self.worker0 = Worker(self.workdir, 0)
         self.seen = self._load_signatures()
         self.evals = 0
 
@@ -736,46 +965,80 @@ class Fuzzer:
         except FileNotFoundError:
             return set()
 
-    def _save_signature(self, sig):
+    def _save_signature_locked(self, sig):
         self.seen.add(sig)
         with open(self._sig_path(), "a") as fh:
             fh.write(sig + "\n")
 
     # -- core check
-    def run_pair(self, argv):
-        a = run_engine(self.oracle, argv, self.case_dir, self.env)
-        b = run_engine(self.engine, argv, self.case_dir, self.env)
-        return a, b
+    def diverges(self, worker: Worker, data: bytes, spec: dict):
+        """Write data as the primary case file (aux already staged in the
+        worker), run one command spec on both engines.
 
-    def diverges(self, data: bytes, argv):
-        """Write data as the case file, run one command on both engines."""
-        with open(self.case_file, "wb") as fh:
+        Returns (diverged, detail, triage) where detail = (ea, oa, eb, ob)
+        and triage = "oracle-crash" for the documented 001 class (oracle
+        uncaught traceback + Rust marker) else "engine"."""
+        with open(os.path.join(worker.corpus_dir, "case.md"), "wb") as fh:
             fh.write(data)
+        if spec["copy_as"]:
+            p = os.path.join(worker.case_dir, spec["copy_as"])
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as fh:
+                fh.write(data)
+        env = dict(worker.env)
+        env.update(spec["env"])
+        stdin_data = data if spec["stdin"] == "primary" else None
         self.evals += 1
-        (ea, oa), (eb, ob) = self.run_pair(argv)
+        ea, oa, sa = run_engine_full(self.oracle, spec["argv"], worker.case_dir, env, stdin_data)
+        eb, ob, sb = run_engine_full(self.engine, spec["argv"], worker.case_dir, env, stdin_data)
+        if spec["copy_as"]:
+            try:
+                os.remove(os.path.join(worker.case_dir, spec["copy_as"]))
+            except OSError:
+                pass
+        detail = (ea, oa, eb, ob)
         if ea == TIMEOUT_EXIT and eb == TIMEOUT_EXIT:
-            return False, (ea, oa, eb, ob)
-        return (ea != eb or oa != ob), (ea, oa, eb, ob)
+            return False, detail, "engine"
+        div = ea != eb or oa != ob
+        triage = "engine"
+        # Any uncaught oracle traceback is the documented finding-001 class:
+        # the oracle died, so divergence is unavoidable and by design
+        # (PORT-CONTRACT decision 3). The reverse case — Rust emitting the
+        # marker while the oracle exits cleanly — stays "engine" (that shape
+        # was campaign-1 finding 003, a real port bug).
+        if div and ORACLE_CRASH_MARK in sa:
+            triage = "oracle-crash"
+        _ = sb
+        return div, detail, triage
 
-    def check_all(self, data: bytes):
-        """Run the whole matrix; return first diverging (cmd_name, argv, detail)."""
-        for name, argv in COMMANDS:
-            div, detail = self.diverges(data, argv)
+    def check_all(self, worker: Worker, data: bytes, commands: list) -> list:
+        """Run the full per-input matrix; return every diverging
+        (spec, detail, triage)."""
+        hits = []
+        for spec in commands:
+            div, detail, triage = self.diverges(worker, data, spec)
             if div:
-                return name, argv, detail
-        return None
+                hits.append((spec, detail, triage))
+        return hits
 
     # -- minimization
-    def minimize(self, data: bytes, argv) -> bytes:
-        """Greedy reduction while the divergence on argv persists.
+    def minimize(self, worker: Worker, data: bytes, spec: dict, triage: str) -> bytes:
+        """Greedy reduction while the divergence on spec persists WITH the
+        same triage class (so an engine bug never drifts into the documented
+        oracle-crash class mid-shrink, or vice versa).
         Line-level ddmin first, then byte-level for small inputs."""
         self.evals = 0
-        data = self._ddmin(data.split(b"\n"), argv, joiner=b"\n")
+
+        def pred(blob: bytes) -> bool:
+            div, _, t = self.diverges(worker, blob, spec)
+            return div and t == triage
+
+        data = self._ddmin(data.split(b"\n"), pred, joiner=b"\n")
         if len(data) <= BYTE_MIN_LIMIT:
-            data = self._ddmin([data[i:i + 1] for i in range(len(data))], argv, joiner=b"")
+            data = self._ddmin([data[i:i + 1] for i in range(len(data))], pred, joiner=b"")
         return data
 
-    def _ddmin(self, atoms: list, argv, joiner: bytes) -> bytes:
+    def _ddmin(self, atoms: list, pred, joiner: bytes) -> bytes:
         n = 2
         while len(atoms) >= 2 and self.evals < MAX_MINIMIZE_EVALS:
             chunk = max(1, len(atoms) // n)
@@ -783,8 +1046,7 @@ class Fuzzer:
             i = 0
             while i < len(atoms) and self.evals < MAX_MINIMIZE_EVALS:
                 candidate = atoms[:i] + atoms[i + chunk:]
-                div, _ = self.diverges(joiner.join(candidate), argv)
-                if div:
+                if pred(joiner.join(candidate)):
                     atoms = candidate
                     reduced = True
                 else:
@@ -796,7 +1058,7 @@ class Fuzzer:
         return joiner.join(atoms)
 
     # -- reporting
-    def next_finding_number(self):
+    def _next_finding_number_locked(self):
         nums = [0]
         for name in os.listdir(self.findings_dir):
             m = re.match(r"^(\d{3})-", name)
@@ -804,62 +1066,81 @@ class Fuzzer:
                 nums.append(int(m.group(1)))
         return max(nums) + 1
 
-    def file_finding(self, seed_label, original: bytes, op_names, cmd_name, argv, detail=None):
-        # Dedup on the ORIGINAL divergence signature, before minimization.
-        # (Minimization only preserves "some divergence on this command", so
-        # two different root causes can ddmin-collapse into one minimized
-        # signature; deduping post-minimization would silently drop the
-        # second root cause. The signature window — exits + 64 bytes around
-        # the first diff — is stable per divergence class, so original-level
-        # dedup keeps noise down without that risk. It also skips the
-        # minimization cost for known classes entirely.)
-        if detail is None:
-            _, detail = self.diverges(original, argv)
-        orig_sig = signature(cmd_name, detail[0], detail[2], detail[1], detail[3])
-        if orig_sig in self.seen:
-            return None
-        minimized = self.minimize(original, argv)
-        div, (ea, oa, eb, ob) = self.diverges(minimized, argv)
-        if not div:  # flaky (should not happen — deterministic engines)
+    def file_finding(self, worker: Worker, seed_label, original: bytes, op_names,
+                     spec: dict, detail, triage: str):
+        """Returns (slug_or_None, triage). Dedup on the ORIGINAL divergence
+        signature, before minimization (see campaign-1 dedup-masking note).
+        The documented oracle-crash class dedups coarsely (one repro per
+        command name) and is marked so rounds can discount it."""
+        cmd_name = spec["name"]
+        if triage == "oracle-crash":
+            orig_sig = hashlib.sha1(f"001|{cmd_name}".encode()).hexdigest()
+        else:
+            orig_sig = signature(cmd_name, detail[0], detail[2], detail[1], detail[3])
+        with self.lock:
+            if orig_sig in self.seen:
+                return None, triage
+            self.seen.add(orig_sig)  # claim before the (slow) minimize
+        minimized = self.minimize(worker, original, spec, triage)
+        div, (ea, oa, eb, ob), t = self.diverges(worker, minimized, spec)
+        if not div or t != triage:  # flaky (should not happen — deterministic)
             minimized = original
-            div, (ea, oa, eb, ob) = self.diverges(minimized, argv)
+            div, (ea, oa, eb, ob), t = self.diverges(worker, minimized, spec)
             if not div:
-                return None
+                return None, triage
         off = first_diff(oa, ob)
         sig = signature(cmd_name, ea, eb, oa, ob)
-        same_class = sig != orig_sig and sig in self.seen
-        self._save_signature(orig_sig)
-        # New original signature but a known minimized class: file it anyway,
-        # suffixed -sameclass, so a human can confirm it is the same root cause
-        # rather than a second bug that ddmin-collapsed into the known one.
-        num = self.next_finding_number()
-        slug = f"{num:03d}-{cmd_name}-{sig[:8]}" + ("-sameclass" if same_class else "")
-        fdir = os.path.join(self.findings_dir, slug)
-        os.makedirs(fdir, exist_ok=True)
+        with self.lock:
+            self._save_signature_locked(orig_sig)
+            same_class = sig != orig_sig and sig in self.seen
+            if not same_class and triage != "oracle-crash":
+                self._save_signature_locked(sig)
+            num = self._next_finding_number_locked()
+            suffix = "-oracle-crash" if triage == "oracle-crash" else ""
+            slug = f"{num:03d}-{cmd_name}-{sig[:8]}" + ("-sameclass" if same_class else "") + suffix
+            fdir = os.path.join(self.findings_dir, slug)
+            os.makedirs(fdir, exist_ok=True)
         write(os.path.join(fdir, "repro.md"), minimized)
         write(os.path.join(fdir, "original.md"), original)
         write(os.path.join(fdir, "oracle.stdout"), oa)
         write(os.path.join(fdir, "rust.stdout"), ob)
-        readme = self._readme(slug, seed_label, op_names, cmd_name, argv, ea, eb, oa, ob, off, minimized)
+        for rel, blob in worker.aux:
+            p = os.path.join(fdir, "aux", rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            write(p, blob)
+        readme = self._readme(worker, slug, seed_label, op_names, spec, triage,
+                              ea, eb, oa, ob, off, minimized)
         write(os.path.join(fdir, "README.md"), readme.encode("utf-8"))
-        if not same_class:
-            self._save_signature(sig)
-        return slug
+        return slug, triage
 
-    def _readme(self, slug, seed_label, op_names, cmd_name, argv, ea, eb, oa, ob, off, minimized):
+    def _readme(self, worker, slug, seed_label, op_names, spec, triage,
+                ea, eb, oa, ob, off, minimized):
+        base_env = worker.env
         env_line = " ".join(
-            f"{k}={self.env[k]}"
+            f"{k}={base_env[k]}"
             for k in ("LC_ALL", "TZ", "COLUMNS", "RAC_NO_CACHE", "PYTHONHASHSEED", "RAC_RS_VERSION")
         )
+        for k, v in spec["env"].items():
+            env_line += f" {k}={v!r}"
+        argv = spec["argv"]
         lines = [
             f"# Finding {slug}",
             "",
             f"- command: `rac {' '.join(argv)}`  (cwd = a dir containing `corpus/case.md` = `repro.md`)",
+            f"- triage: {'documented oracle-crash class (001, divergence by design)' if triage == 'oracle-crash' else 'engine divergence'}",
             f"- campaign: {seed_label}; mutation chain: {', '.join(op_names)}",
             f"- exit codes: oracle={fmt_exit(ea)} rust={fmt_exit(eb)}",
             f"- stdout bytes: oracle={len(oa)} rust={len(ob)}",
             f"- first stdout diff offset: {off if off is not None else 'none (exit-code-only divergence)'}",
             f"- repro input: `repro.md` (minimized, {len(minimized)} bytes); pre-minimization input: `original.md`",
+        ]
+        if spec["stdin"]:
+            lines.append("- stdin: the repro bytes are ALSO fed on stdin (`validate -`)")
+        if spec["copy_as"]:
+            lines.append(f"- the repro bytes are also written at `{spec['copy_as']}`")
+        if worker.aux:
+            lines.append(f"- auxiliary corpus files (under `aux/`): {', '.join(rel for rel, _ in worker.aux)}")
+        lines += [
             "",
             "Reproduce:",
             "",
@@ -867,7 +1148,7 @@ class Fuzzer:
             "mkdir -p /tmp/repro/corpus && cp repro.md /tmp/repro/corpus/case.md && cd /tmp/repro",
             f"env -i PATH=\"$PATH\" HOME=\"$HOME\" {env_line} \\",
             f"  XDG_CONFIG_HOME=/tmp/repro/xdg/config XDG_STATE_HOME=/tmp/repro/xdg/state XDG_CACHE_HOME=/tmp/repro/xdg/cache \\",
-            f"  <engine> {' '.join(argv)} </dev/null",
+            f"  <engine> {' '.join(sh_quote(a) for a in argv)} " + ("< corpus/case.md" if spec["stdin"] else "</dev/null"),
             "```",
             "",
         ]
@@ -887,6 +1168,10 @@ class Fuzzer:
                 "",
             ]
         return "\n".join(lines)
+
+
+def sh_quote(s: str) -> str:
+    return s if re.fullmatch(r"[\w./:@=+-]+", s) else "'" + s.replace("'", "'\\''") + "'"
 
 
 def fmt_exit(code):
@@ -947,11 +1232,63 @@ def hexdump_window(data: bytes, offset: int) -> str:
 # ---------------------------------------------------------------------------
 
 
+def run_round(fz: Fuzzer, corpus: list, seed: int, rnd: int, batch: int, jobs: int):
+    """Generate `batch` inputs deterministically, evaluate them across `jobs`
+    threads. Returns (divergent_inputs, new_engine_findings, new_crash_findings)."""
+    rng = random.Random(f"{seed}:{rnd}")
+    inputs = []
+    for i in range(batch):
+        data, op_names, aux = generate(rng, corpus)
+        cmds = build_commands(random.Random(f"{seed}:{rnd}:cmds:{i}"), data)
+        inputs.append((i, data, op_names, aux, cmds))
+
+    workers = [Worker(fz.workdir, w) for w in range(jobs)]
+    results = []  # (i, n_hits, [(slug, triage)])
+    res_lock = threading.Lock()
+    idx_lock = threading.Lock()
+    cursor = [0]
+
+    def loop(worker: Worker):
+        while True:
+            with idx_lock:
+                if cursor[0] >= len(inputs):
+                    return
+                item = inputs[cursor[0]]
+                cursor[0] += 1
+            i, data, op_names, aux, cmds = item
+            worker.set_aux(aux)
+            hits = fz.check_all(worker, data, cmds)
+            filed = []
+            for spec, detail, triage in hits:
+                slug, t = fz.file_finding(
+                    worker, f"seed={seed} round={rnd} case={i}", data, op_names,
+                    spec, detail, triage)
+                if slug:
+                    filed.append((slug, t))
+                    print(f"  DIVERGENCE [{t}] -> {os.path.basename(fz.findings_dir)}/{slug}",
+                          file=sys.stderr)
+            if hits:
+                with res_lock:
+                    results.append((i, len(hits), filed))
+
+    threads = [threading.Thread(target=loop, args=(w,)) for w in workers]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    n_div_inputs = len(results)
+    new_engine = [s for _, _, filed in results for s, t in filed if t == "engine"]
+    new_crash = [s for _, _, filed in results for s, t in filed if t == "oracle-crash"]
+    return n_div_inputs, new_engine, new_crash
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seed", type=int, required=True, help="master PRNG seed")
     ap.add_argument("--rounds", type=int, default=1, help="number of batches")
     ap.add_argument("--batch", type=int, default=25, help="files per batch")
+    ap.add_argument("--jobs", type=int, default=1, help="worker threads")
     ap.add_argument("--oracle", default=DEFAULT_ORACLE)
     ap.add_argument("--engine", default=DEFAULT_ENGINE)
     ap.add_argument("--findings", default=DEFAULT_FINDINGS)
@@ -966,32 +1303,17 @@ def main():
     fz = Fuzzer(args)
     corpus = load_seed_corpus(random.Random(f"corpus:{args.seed}"))
     print(f"difffuzz: seed={args.seed} corpus={len(corpus)} operators={len(OPERATORS)} "
-          f"commands={len(COMMANDS)} workdir={fz.workdir}", file=sys.stderr)
+          f"core={len(CORE_COMMANDS)}+{EXTENDED_SAMPLE} jobs={args.jobs} workdir={fz.workdir}",
+          file=sys.stderr)
 
     total_div = 0
     for rnd in range(args.rounds):
-        rng = random.Random(f"{args.seed}:{rnd}")
-        batch_div = 0
-        new_findings = []
-        for i in range(args.batch):
-            data, op_names = generate(rng, corpus)
-            hit = fz.check_all(data)
-            if hit:
-                batch_div += 1
-                total_div += 1
-                cmd_name, argv, detail = hit
-                slug = fz.file_finding(
-                    f"seed={args.seed} round={rnd} case={i}", data, op_names, cmd_name, argv,
-                    detail=detail,
-                )
-                if slug:
-                    new_findings.append(slug)
-                    print(f"  DIVERGENCE -> findings/{slug}", file=sys.stderr)
-                else:
-                    print(f"  divergence (duplicate signature, cmd={cmd_name})", file=sys.stderr)
-        line = (f"seed={args.seed} round={rnd} batch={args.batch} "
-                f"divergences={batch_div} new_findings={len(new_findings)} "
-                f"findings=[{','.join(new_findings)}]")
+        n_div, new_engine, new_crash = run_round(fz, corpus, args.seed, rnd, args.batch, args.jobs)
+        total_div += n_div
+        line = (f"campaign2 seed={args.seed} round={rnd} batch={args.batch} "
+                f"divergent_inputs={n_div} new_engine_findings={len(new_engine)} "
+                f"new_oracle_crash_repros={len(new_crash)} "
+                f"engine=[{','.join(new_engine)}] crash=[{','.join(new_crash)}]")
         with open(args.log, "a") as fh:
             fh.write(line + "\n")
         print(f"round {rnd}: {line}", file=sys.stderr)
