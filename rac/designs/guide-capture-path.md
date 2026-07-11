@@ -34,6 +34,10 @@ than the author.
 Add a capture path that writes only untrusted drafts, keeping both gates of
 ADR-077 intact:
 
+- The capability mounts as a sibling write surface, not inside Guide
+  (ADR-113): a separately-mounted module the Guide server layer never
+  imports, so the ADR-031 isolation battery passes unchanged and any
+  future desktop or web application face consumes the same write path.
 - A single additive tool (working name `propose_artifact`) accepting a type,
   a title, and body Markdown. It runs `rac new` semantics (engine mints the
   id, canonical template, never overwrites), writes under the untrusted
@@ -55,9 +59,10 @@ ADR-077 intact:
 - ADR-034 (agent reasoning boundary) and ADR-031 (in-process core
   consumption) — the engine still never judges content; validation stays
   structural.
-- ADR-030 pins the Guide tools-only surface and ADR-033 budgets it; a sixth
-  tool is a ratified contract change and must fit the token budget or ship
-  as a separately-mounted capture surface rather than growing Guide.
+- ADR-030 pins the Guide tools-only surface and ADR-033 budgets it;
+  ADR-113 resolves the mounting question — the capture surface is a
+  sibling with its own pinned contract and budget, and Guide is not
+  amended.
 - ADR-065: artifact content is untrusted input; the draft location must be
   outside what `lore` serves as trusted grounding.
 - ADR-077: both gates preserved; the tool must be incapable of promotion.
@@ -86,9 +91,6 @@ precisely this shape of automation.
 
 ## Open Questions
 
-- Does `propose_artifact` mount inside Guide (contract change to ADR-030,
-  budget change to ADR-033) or as a sibling surface on the same server
-  process? The budget measurement should decide.
 - Drafts location: `drafts/` directory versus capture branch — which does
   the promotion PR flow handle with less friction?
 - Should the tool accept relationship links, or leave linking to the
@@ -104,6 +106,7 @@ precisely this shape of automation.
 - adr-077
 - adr-084
 - adr-098
+- adr-113
 
 ## Related Roadmaps
 
