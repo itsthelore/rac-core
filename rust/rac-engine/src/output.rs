@@ -11,9 +11,9 @@ use crate::commands::{DirectoryValidation, StdinCorpusValidation, STATUS_INVALID
 use crate::parse::Issue;
 use crate::pyjson::dumps_indent2;
 use crate::relationships::{
-    RelationshipIssue, RelationshipValidation, ISSUE_DUPLICATE_IDENTIFIER, ISSUE_EDGE_UNSUPPORTED,
-    ISSUE_RELATIONSHIP_CYCLE, ISSUE_SCOPE_TARGET_NOT_FOUND, ISSUE_SELF_REFERENCE,
-    ISSUE_TARGET_AMBIGUOUS, ISSUE_TARGET_NOT_FOUND, ISSUE_TARGET_SUPERSEDED,
+    RelationshipIssue, RelationshipReport, RelationshipValidation, ISSUE_DUPLICATE_IDENTIFIER,
+    ISSUE_EDGE_UNSUPPORTED, ISSUE_RELATIONSHIP_CYCLE, ISSUE_SCOPE_TARGET_NOT_FOUND,
+    ISSUE_SELF_REFERENCE, ISSUE_TARGET_AMBIGUOUS, ISSUE_TARGET_NOT_FOUND, ISSUE_TARGET_SUPERSEDED,
     ISSUE_TARGET_TYPE_MISMATCH,
 };
 use crate::spec::spec_for;
@@ -619,6 +619,83 @@ pub fn render_relationships_sarif(validation: &RelationshipValidation) -> String
     sarif_document(results)
 }
 
+// --- relationships (inspection, non --validate) ------------------------------
+
+pub fn render_relationships_json(report: &RelationshipReport) -> String {
+    let mut payload = Map::new();
+    payload.insert("directory".into(), json!(report.directory));
+    payload.insert("recursive".into(), json!(report.recursive));
+    payload.insert("total_files".into(), json!(report.total_files));
+    payload.insert(
+        "artifacts_with_relationships".into(),
+        json!(report.artifacts_with_relationships()),
+    );
+    payload.insert(
+        "relationship_count".into(),
+        json!(report.relationship_count()),
+    );
+    let mut counts = Map::new();
+    for (section, count) in report.counts() {
+        counts.insert(section, json!(count));
+    }
+    payload.insert("counts".into(), Value::Object(counts));
+    let artifacts: Vec<Value> = report
+        .artifacts
+        .iter()
+        .map(|artifact| {
+            let mut relationships = Map::new();
+            for (section, refs) in &artifact.relationships {
+                relationships.insert(section.clone(), json!(refs));
+            }
+            let mut m = Map::new();
+            m.insert("path".into(), json!(artifact.path));
+            m.insert("type".into(), json!(artifact.type_name));
+            m.insert("relationships".into(), Value::Object(relationships));
+            Value::Object(m)
+        })
+        .collect();
+    payload.insert("artifacts".into(), Value::Array(artifacts));
+    dumps_indent2(&Value::Object(payload))
+}
+
+pub fn render_relationships_human(report: &RelationshipReport) -> String {
+    let mut lines: Vec<String> = vec![
+        bold("Relationships"),
+        String::new(),
+        format!("Files Inspected: {}", report.total_files),
+        format!(
+            "Artifacts With Relationships: {}",
+            report.artifacts_with_relationships()
+        ),
+        format!("Relationships Found: {}", report.relationship_count()),
+    ];
+
+    let counts = report.counts();
+    if !counts.is_empty() {
+        lines.push(String::new());
+        lines.push(bold("By Type:"));
+        for (section, count) in &counts {
+            lines.push(format!("- {}: {count}", relationship_label(section)));
+        }
+    }
+
+    for artifact in &report.artifacts {
+        lines.push(String::new());
+        lines.push(artifact.path.clone());
+        for (section, refs) in &artifact.relationships {
+            lines.push(format!("  {}:", relationship_label(section)));
+            for reference in refs {
+                match report.labels.get(&crate::pycompat::py_casefold(reference)) {
+                    Some(resolved) => lines.push(format!("  - {reference} \u{2014} {resolved}")),
+                    None => lines.push(format!("  - {reference}")),
+                }
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
 // --- relationships --validate ----------------------------------------------------
 
 fn relationship_issue_value(issue: &RelationshipIssue) -> Value {
@@ -786,6 +863,501 @@ pub fn render_relationship_validation_human(report: &RelationshipValidation) -> 
                 suffix
             )));
         }
+    }
+
+    lines.join("\n")
+}
+
+// --- schema / templates ------------------------------------------------------
+
+use crate::spec::{snake as spec_snake, ArtifactSpec};
+
+pub fn render_schema_list_human(names: &[&str]) -> String {
+    let mut lines = vec![bold("Available Schemas:")];
+    for name in names {
+        lines.push(format!("- {name}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_schema_list_json(names: &[&str]) -> String {
+    let mut m = Map::new();
+    m.insert(
+        "schemas".into(),
+        Value::Array(names.iter().map(|n| json!(n)).collect()),
+    );
+    dumps_indent2(&Value::Object(m))
+}
+
+pub fn render_unknown_schema(name: &str, available: &[&str]) -> String {
+    let mut lines = vec![
+        format!("Unknown schema: {name}"),
+        String::new(),
+        "Available schemas:".to_string(),
+    ];
+    for schema in available {
+        lines.push(format!("- {schema}"));
+    }
+    lines.join("\n")
+}
+
+fn snake_map_value(pairs: &[(String, Vec<String>)]) -> Value {
+    let mut m = Map::new();
+    for (section, values) in pairs {
+        m.insert(spec_snake(section), json!(values));
+    }
+    Value::Object(m)
+}
+
+pub fn render_schema_json(spec: &ArtifactSpec) -> String {
+    let mut m = Map::new();
+    m.insert("type".into(), json!(spec.name));
+    m.insert(
+        "required".into(),
+        Value::Array(spec.required.iter().map(|s| json!(spec_snake(s))).collect()),
+    );
+    m.insert(
+        "recommended".into(),
+        Value::Array(
+            spec.recommended
+                .iter()
+                .map(|s| json!(spec_snake(s)))
+                .collect(),
+        ),
+    );
+    m.insert(
+        "optional".into(),
+        Value::Array(spec.optional.iter().map(|s| json!(spec_snake(s))).collect()),
+    );
+    let mut descriptions = Map::new();
+    for (section, desc) in &spec.descriptions {
+        descriptions.insert(spec_snake(section), json!(desc));
+    }
+    m.insert("descriptions".into(), Value::Object(descriptions));
+    m.insert("guidance".into(), snake_map_value(&spec.guidance));
+    m.insert("metadata".into(), snake_map_value(&spec.metadata));
+    dumps_indent2(&Value::Object(m))
+}
+
+pub fn render_schema_human(spec: &ArtifactSpec) -> String {
+    let mut lines = vec![bold(&format!("Artifact Type: {}", spec.display)), String::new()];
+
+    let mut section_block = |title: &str, names: &[String]| {
+        lines.push(bold(title));
+        if names.is_empty() {
+            lines.push("  (none)".to_string());
+            lines.push(String::new());
+            return;
+        }
+        for name in names {
+            lines.push(format!("  - {}", py_title(name)));
+            if let Some((_, description)) =
+                spec.descriptions.iter().find(|(k, _)| k == name)
+            {
+                if !description.is_empty() {
+                    lines.push(format!("      Description: {description}"));
+                }
+            }
+            if let Some((_, guidance)) = spec.guidance.iter().find(|(k, _)| k == name) {
+                if !guidance.is_empty() {
+                    lines.push("      Guidance:".to_string());
+                    for item in guidance {
+                        lines.push(format!("        - {item}"));
+                    }
+                }
+            }
+        }
+        lines.push(String::new());
+    };
+
+    section_block("Required Sections:", &spec.required);
+    section_block("Recommended Sections:", &spec.recommended);
+    section_block("Optional Sections:", &spec.optional);
+
+    if !spec.metadata.is_empty() {
+        lines.push(bold("Metadata Fields:"));
+        for (name, values) in &spec.metadata {
+            lines.push(format!("  - {}: {}", py_title(name), values.join(" | ")));
+        }
+    }
+    lines.join("\n").trim_end().to_string()
+}
+
+/// `_metadata_default(section, values)`.
+fn metadata_default(section: &str, values: &[String]) -> String {
+    if section == "status" && values.iter().any(|v| v == "Proposed") {
+        return "Proposed".to_string();
+    }
+    if section == "category" && values.iter().any(|v| v == "Other") {
+        return "Other".to_string();
+    }
+    values.first().cloned().unwrap_or_else(|| "TODO".to_string())
+}
+
+/// `_starter_body(ref, section, metadata_values)`.
+fn starter_body(spec: &ArtifactSpec, section: &str, metadata_values: &[String]) -> String {
+    if !metadata_values.is_empty() {
+        return metadata_default(section, metadata_values);
+    }
+    match spec.starter_bodies.iter().find(|(k, _)| k == section) {
+        Some((_, body)) if !body.is_empty() => body.clone(),
+        _ => format!("TODO: describe {section}."),
+    }
+}
+
+pub fn render_schema_template(spec: &ArtifactSpec) -> String {
+    let mut blocks: Vec<String> = vec!["# Title".to_string()];
+    // template_sections = required + recommended.
+    let sections: Vec<&String> = spec.required.iter().chain(spec.recommended.iter()).collect();
+    for section in sections {
+        let metadata_values: &[String] = spec
+            .metadata
+            .iter()
+            .find(|(k, _)| k == section)
+            .map(|(_, v)| v.as_slice())
+            .unwrap_or(&[]);
+        let body = starter_body(spec, section, metadata_values);
+        let mut block = format!("## {}\n\n{}", py_title(section), body);
+        let mut comments: Vec<String> = Vec::new();
+        if !metadata_values.is_empty() {
+            comments.push(format!("Choose one: {}", metadata_values.join(" | ")));
+        }
+        if let Some((_, guidance)) = spec.guidance.iter().find(|(k, _)| k == section) {
+            comments.extend(guidance.iter().cloned());
+        }
+        if !comments.is_empty() {
+            let rendered: Vec<String> =
+                comments.iter().map(|c| format!("<!-- {c} -->")).collect();
+            block.push_str("\n\n");
+            block.push_str(&rendered.join("\n"));
+        }
+        blocks.push(block);
+    }
+    format!("{}\n", blocks.join("\n\n"))
+}
+
+pub fn render_templates_human(names: &[&str]) -> String {
+    let mut lines = vec![bold("Available artifact templates:"), String::new()];
+    for name in names {
+        lines.push(format!("- {name}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_templates_json(names: &[&str]) -> String {
+    let mut m = Map::new();
+    m.insert("schema_version".into(), json!("1"));
+    m.insert(
+        "templates".into(),
+        Value::Array(names.iter().map(|n| json!(n)).collect()),
+    );
+    dumps_indent2(&Value::Object(m))
+}
+
+// --- stats -------------------------------------------------------------------
+
+use crate::pycompat::{py_format_1f, py_round};
+use crate::stats::PortfolioStats;
+
+const EMPTY_CORPUS_HINT: &str = "No artifacts yet — create your first with: rac quickstart";
+
+fn invalid_files_json(items: &[(&str, &[String])]) -> Value {
+    Value::Array(
+        items
+            .iter()
+            .map(|(path, codes)| {
+                let mut m = Map::new();
+                m.insert("file".into(), json!(path));
+                m.insert("errors".into(), json!(codes));
+                Value::Object(m)
+            })
+            .collect(),
+    )
+}
+
+pub fn render_stats_json(s: &PortfolioStats) -> String {
+    let mut payload = Map::new();
+    payload.insert("directory".into(), json!(s.directory));
+    payload.insert("empty".into(), json!(s.is_empty()));
+    payload.insert("features".into(), json!(s.files_found()));
+    payload.insert("valid_features".into(), json!(s.valid_features()));
+    payload.insert("invalid_features".into(), json!(s.invalid_features()));
+    payload.insert("requirements".into(), json!(s.total_requirements()));
+    payload.insert("metrics".into(), json!(s.total_metrics()));
+    payload.insert("risks".into(), json!(s.total_risks()));
+    payload.insert(
+        "features_missing_metrics".into(),
+        json!(s.missing_metrics().len()),
+    );
+    payload.insert(
+        "features_missing_risks".into(),
+        json!(s.missing_risks().len()),
+    );
+    payload.insert("missing_metrics".into(), json!(s.missing_metrics()));
+    payload.insert("missing_risks".into(), json!(s.missing_risks()));
+    payload.insert(
+        "average_requirements_per_feature".into(),
+        crate::pyjson::py_float(py_round(s.average_requirements(), 1)),
+    );
+    payload.insert(
+        "largest_feature".into(),
+        match s.largest_feature() {
+            Some(f) => {
+                let mut m = Map::new();
+                m.insert("name".into(), json!(f.name));
+                m.insert("requirements".into(), json!(f.requirements));
+                Value::Object(m)
+            }
+            None => Value::Null,
+        },
+    );
+    payload.insert(
+        "requirements_by_feature".into(),
+        Value::Array(
+            s.requirements_by_feature()
+                .iter()
+                .map(|f| {
+                    let mut m = Map::new();
+                    m.insert("name".into(), json!(f.name));
+                    m.insert("requirements".into(), json!(f.requirements));
+                    Value::Object(m)
+                })
+                .collect(),
+        ),
+    );
+    let invalid: Vec<(&str, &[String])> = s
+        .invalid()
+        .iter()
+        .map(|f| (f.path.as_str(), f.error_codes.as_slice()))
+        .collect();
+    payload.insert("invalid".into(), invalid_files_json(&invalid));
+
+    if !s.decisions.is_empty() {
+        let mut m = Map::new();
+        m.insert("count".into(), json!(s.decision_count()));
+        let mut by_status = Map::new();
+        for (k, c) in s.decision_status_counts() {
+            by_status.insert(k, json!(c));
+        }
+        m.insert("by_status".into(), Value::Object(by_status));
+        let mut by_category = Map::new();
+        for (k, c) in s.decision_category_counts() {
+            by_category.insert(k, json!(c));
+        }
+        m.insert("by_category".into(), Value::Object(by_category));
+        payload.insert("decisions".into(), Value::Object(m));
+    }
+
+    let mut family = |key: &str, count: usize, valid: usize, invalid: Vec<(&str, &[String])>| {
+        let mut m = Map::new();
+        m.insert("count".into(), json!(count));
+        m.insert("valid".into(), json!(valid));
+        m.insert("invalid".into(), invalid_files_json(&invalid));
+        payload.insert(key.into(), Value::Object(m));
+    };
+
+    if !s.roadmaps.is_empty() {
+        let invalid: Vec<(&str, &[String])> = s
+            .invalid_roadmaps()
+            .iter()
+            .map(|r| (r.path.as_str(), r.error_codes.as_slice()))
+            .collect();
+        family("roadmaps", s.roadmap_count(), s.valid_roadmaps(), invalid);
+    }
+    if !s.prompts.is_empty() {
+        let invalid: Vec<(&str, &[String])> = s
+            .invalid_prompts()
+            .iter()
+            .map(|p| (p.path.as_str(), p.error_codes.as_slice()))
+            .collect();
+        family("prompts", s.prompt_count(), s.valid_prompts(), invalid);
+    }
+    if !s.designs.is_empty() {
+        let invalid: Vec<(&str, &[String])> = s
+            .invalid_designs()
+            .iter()
+            .map(|d| (d.path.as_str(), d.error_codes.as_slice()))
+            .collect();
+        family("designs", s.design_count(), s.valid_designs(), invalid);
+    }
+
+    if !s.unrecognized.is_empty() {
+        let mut m = Map::new();
+        m.insert("count".into(), json!(s.unrecognized_count()));
+        m.insert(
+            "files".into(),
+            Value::Array(
+                s.unrecognized
+                    .iter()
+                    .map(|u| {
+                        let mut fm = Map::new();
+                        fm.insert("file".into(), json!(u.path));
+                        fm.insert("name".into(), json!(u.name));
+                        fm.insert("confidence".into(), crate::pyjson::py_float(py_round(u.confidence, 2)));
+                        Value::Object(fm)
+                    })
+                    .collect(),
+            ),
+        );
+        payload.insert("unrecognized".into(), Value::Object(m));
+    }
+
+    if !s.relationship_counts.is_empty() {
+        let mut m = Map::new();
+        for (section, count) in &s.relationship_counts {
+            m.insert(crate::spec::snake(section), json!(count));
+        }
+        payload.insert("relationships".into(), Value::Object(m));
+    }
+
+    dumps_indent2(&Value::Object(payload))
+}
+
+pub fn render_stats_human(s: &PortfolioStats) -> String {
+    let mut lines: Vec<String> = vec![
+        bold("Portfolio Overview"),
+        "==================".to_string(),
+        String::new(),
+        format!("Features: {}", s.files_found()),
+        format!("Requirements: {}", s.total_requirements()),
+        format!("Metrics: {}", s.total_metrics()),
+        format!("Risks: {}", s.total_risks()),
+        String::new(),
+        bold("Quality"),
+        "=======".to_string(),
+        String::new(),
+    ];
+
+    let mut missing_block = |label: &str, names: &[&str]| {
+        lines.push(format!("{label}: {}", names.len()));
+        for name in names {
+            lines.push(format!("  - {name}"));
+        }
+    };
+    missing_block("Features Missing Metrics", &s.missing_metrics());
+    missing_block("Features Missing Risks", &s.missing_risks());
+    lines.push(format!(
+        "Average Requirements Per Feature: {}",
+        py_format_1f(s.average_requirements())
+    ));
+
+    match s.largest_feature() {
+        Some(f) => lines.push(format!(
+            "Largest Feature: {} ({} requirements)",
+            f.name, f.requirements
+        )),
+        None => lines.push("Largest Feature: (none)".to_string()),
+    }
+
+    lines.push(String::new());
+    lines.push(bold("Requirements by Feature"));
+    lines.push("=======================".to_string());
+    lines.push(String::new());
+    let by_feature = s.requirements_by_feature();
+    if !by_feature.is_empty() {
+        let width = by_feature.iter().map(|f| f.name.chars().count()).max().unwrap_or(0) + 4;
+        for f in &by_feature {
+            let pad = width.saturating_sub(f.name.chars().count());
+            lines.push(format!("{}{}{}", f.name, " ".repeat(pad), f.requirements));
+        }
+    } else {
+        lines.push("(none)".to_string());
+    }
+
+    let invalid = s.invalid();
+    if !invalid.is_empty() {
+        lines.push(String::new());
+        lines.push(bold(&format!("Invalid Features ({})", invalid.len())));
+        for f in &invalid {
+            let reasons = if f.error_codes.is_empty() {
+                "unknown".to_string()
+            } else {
+                f.error_codes.join(", ")
+            };
+            lines.push(format!("  {} \u{2014} {reasons}", red(&f.path)));
+        }
+    }
+
+    if !s.decisions.is_empty() {
+        lines.push(String::new());
+        lines.push(bold("Decisions"));
+        lines.push("=========".to_string());
+        lines.push(String::new());
+        lines.push(format!("Total: {}", s.decision_count()));
+        let mut breakdown = |label: &str, counts: &[(String, usize)]| {
+            lines.push(String::new());
+            lines.push(bold(label));
+            if counts.is_empty() {
+                lines.push("  (none recorded)".to_string());
+            } else {
+                for (name, count) in counts {
+                    lines.push(format!("  - {name}: {count}"));
+                }
+            }
+        };
+        breakdown("Status", &s.decision_status_counts());
+        breakdown("Category", &s.decision_category_counts());
+    }
+
+    let mut family = |label: &str, underline: &str, count: usize, valid: usize, invalid_label: &str, invalid: &[&crate::stats::ValidityStat]| {
+        lines.push(String::new());
+        lines.push(bold(label));
+        lines.push(underline.to_string());
+        lines.push(String::new());
+        lines.push(format!("Total: {count}"));
+        lines.push(format!("Valid: {valid}"));
+        if !invalid.is_empty() {
+            lines.push(String::new());
+            lines.push(bold(&format!("{invalid_label} ({})", invalid.len())));
+            for r in invalid {
+                let reasons = if r.error_codes.is_empty() {
+                    "unknown".to_string()
+                } else {
+                    r.error_codes.join(", ")
+                };
+                lines.push(format!("  {} \u{2014} {reasons}", red(&r.path)));
+            }
+        }
+    };
+
+    if !s.roadmaps.is_empty() {
+        family("Roadmaps", "========", s.roadmap_count(), s.valid_roadmaps(), "Invalid Roadmaps", &s.invalid_roadmaps());
+    }
+    if !s.prompts.is_empty() {
+        family("Prompts", "=======", s.prompt_count(), s.valid_prompts(), "Invalid Prompts", &s.invalid_prompts());
+    }
+    if !s.designs.is_empty() {
+        family("Designs", "=======", s.design_count(), s.valid_designs(), "Invalid Designs", &s.invalid_designs());
+    }
+
+    if !s.unrecognized.is_empty() {
+        let count = s.unrecognized_count();
+        let noun = if count == 1 { "document" } else { "documents" };
+        lines.push(String::new());
+        lines.push(bold("Unrecognized"));
+        lines.push("============".to_string());
+        lines.push(String::new());
+        lines.push(format!(
+            "{count} {noun} matched no known artifact schema (not errors — see ADR-010):"
+        ));
+        for u in &s.unrecognized {
+            lines.push(format!("  {}", u.path));
+        }
+    }
+
+    if !s.relationship_counts.is_empty() {
+        lines.push(String::new());
+        lines.push(bold("Relationships"));
+        lines.push("=============".to_string());
+        lines.push(String::new());
+        for (section, count) in &s.relationship_counts {
+            lines.push(format!("Artifacts with {}: {count}", py_title(section)));
+        }
+    }
+
+    if s.is_empty() {
+        lines.push(String::new());
+        lines.push(EMPTY_CORPUS_HINT.to_string());
     }
 
     lines.join("\n")

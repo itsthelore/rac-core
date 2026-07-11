@@ -33,6 +33,7 @@ pub mod classify;
 pub mod identity;
 pub mod validate;
 pub mod relationships;
+pub mod stats;
 pub mod resolve;
 pub mod gitinfo;
 pub mod output;

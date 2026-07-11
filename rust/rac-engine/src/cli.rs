@@ -8,7 +8,10 @@
 //! `--version` (root + every subcommand). Every other subcommand is a
 //! clearly-marked unimplemented stub (stderr, exit 2).
 
-use crate::commands::{cmd_relationships, cmd_validate, RelationshipsArgs, ValidateArgs};
+use crate::commands::{
+    cmd_relationships, cmd_schema, cmd_stats, cmd_templates, cmd_validate, RelationshipsArgs,
+    SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+};
 use crate::output::rac_version;
 
 /// Root subcommand table, in argparse declaration order (the order the
@@ -121,6 +124,9 @@ pub fn run(args: &[String]) -> u8 {
     match first.as_str() {
         "validate" => run_validate(&rest),
         "relationships" => run_relationships(&rest),
+        "stats" => run_stats(&rest),
+        "schema" => run_schema(&rest),
+        "templates" => run_templates(&rest),
         other => {
             // UNIMPLEMENTED STUB — no parity cases run these in this phase.
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
@@ -274,4 +280,122 @@ fn run_relationships(rest: &[&String]) -> u8 {
         json,
         top_level,
     }) as u8
+}
+
+fn run_stats(rest: &[&String]) -> u8 {
+    let prog = "rac stats";
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    let Some(directory) = directory else {
+        return argparse_error(prog, "the following arguments are required: directory");
+    };
+    if !extras.is_empty() {
+        return argparse_error(
+            "rac",
+            &format!("unrecognized arguments: {}", extras.join(" ")),
+        );
+    }
+
+    cmd_stats(&StatsArgs { directory, json }) as u8
+}
+
+fn run_schema(rest: &[&String]) -> u8 {
+    let prog = "rac schema";
+    let mut schema: Option<String> = None;
+    let mut list = false;
+    let mut json = false;
+    let mut template = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || !arg.starts_with('-') {
+            if schema.is_none() {
+                schema = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--list" => list = true,
+            "--json" => {
+                if let Err(FlagError(code)) = mutex_check(prog, "--json", "--template", template) {
+                    return code;
+                }
+                json = true;
+            }
+            "--template" => {
+                if let Err(FlagError(code)) = mutex_check(prog, "--template", "--json", json) {
+                    return code;
+                }
+                template = true;
+            }
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    if !extras.is_empty() {
+        return argparse_error(
+            "rac",
+            &format!("unrecognized arguments: {}", extras.join(" ")),
+        );
+    }
+
+    cmd_schema(&SchemaArgs {
+        schema,
+        list,
+        json,
+        template,
+    }) as u8
+}
+
+fn run_templates(rest: &[&String]) -> u8 {
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || !arg.starts_with('-') {
+            extras.push(arg.to_string());
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    if !extras.is_empty() {
+        return argparse_error(
+            "rac",
+            &format!("unrecognized arguments: {}", extras.join(" ")),
+        );
+    }
+
+    cmd_templates(&TemplatesArgs { json }) as u8
 }

@@ -742,6 +742,149 @@ pub fn validation_from_rows(
 }
 
 // ---------------------------------------------------------------------------
+// Repository-level relationship inspection (non-validate report)
+// ---------------------------------------------------------------------------
+
+/// One artifact's relationships in a report (`ArtifactRelationships`).
+#[derive(Debug, Clone)]
+pub struct ArtifactRelationships {
+    pub path: String,
+    pub type_name: String,
+    /// `(snake_section, refs)` in `spec.optional` order.
+    pub relationships: Vec<(String, Vec<String>)>,
+}
+
+/// `RelationshipReport` (non-validate inspection).
+#[derive(Debug)]
+pub struct RelationshipReport {
+    pub directory: String,
+    pub recursive: bool,
+    pub total_files: usize,
+    pub artifacts: Vec<ArtifactRelationships>,
+    /// `{casefold(ref) -> "Title (type · id)"}` for uniquely-resolved refs.
+    /// Insertion-ordered (first-seen wins); presentation-only, never in JSON.
+    pub labels: HashMap<String, String>,
+}
+
+impl RelationshipReport {
+    pub fn artifacts_with_relationships(&self) -> usize {
+        self.artifacts.len()
+    }
+
+    /// References per relationship type, canonical order, zero types omitted.
+    pub fn counts(&self) -> Vec<(String, usize)> {
+        let mut totals: HashMap<String, usize> = HashMap::new();
+        for artifact in &self.artifacts {
+            for (section, refs) in &artifact.relationships {
+                *totals.entry(section.clone()).or_insert(0) += refs.len();
+            }
+        }
+        let mut out = Vec::new();
+        for (_, snake_key) in crate::spec::RELATIONSHIP_SECTIONS.iter() {
+            if let Some(count) = totals.get(*snake_key) {
+                out.push((snake_key.to_string(), *count));
+            }
+        }
+        out
+    }
+
+    pub fn relationship_count(&self) -> usize {
+        self.counts().iter().map(|(_, c)| c).sum()
+    }
+}
+
+/// `_resolution_labels(artifacts, items)`.
+fn resolution_labels(
+    artifacts: &[ArtifactRelationships],
+    items: &[CorpusItem],
+) -> HashMap<String, String> {
+    // Resolution index over every alias of every item, in item order.
+    let mut index = ResolutionIndex::new();
+    let mut info: HashMap<&str, (String, Option<&'static ArtifactSpec>, Option<String>)> =
+        HashMap::new();
+    for item in items {
+        let identifiers = artifact_identifiers(&item.artifact, item.spec, &item.path);
+        for ident in &identifiers {
+            index.insert(py_casefold(ident), (item.path.clone(), ident.clone()));
+        }
+        let canonical = artifact_identifier(&item.artifact, item.spec, &item.path);
+        info.insert(
+            item.path.as_str(),
+            (canonical, item.spec, item.artifact.product.title.clone()),
+        );
+    }
+    let mut labels: HashMap<String, String> = HashMap::new();
+    for artifact in artifacts {
+        for (_, refs) in &artifact.relationships {
+            for reference in refs {
+                let key = py_casefold(reference);
+                if labels.contains_key(&key) {
+                    continue;
+                }
+                let entries = index.get(&key);
+                let mut distinct: Vec<&str> = entries.iter().map(|(p, _)| p.as_str()).collect();
+                distinct.sort();
+                distinct.dedup();
+                if distinct.len() != 1 {
+                    continue;
+                }
+                let (canonical, spec, title) = &info[distinct[0]];
+                let type_name = spec.map(|s| s.name.as_str()).unwrap_or("unknown");
+                let display = match title {
+                    Some(t) if !t.is_empty() => t.as_str(),
+                    _ => canonical.as_str(),
+                };
+                labels.insert(key, format!("{display} ({type_name} · {canonical})"));
+            }
+        }
+    }
+    labels
+}
+
+/// `_build_report(directory, items, recursive)`.
+fn build_report(directory: &str, items: Vec<CorpusItem>, recursive: bool) -> RelationshipReport {
+    let mut artifacts: Vec<ArtifactRelationships> = Vec::new();
+    for item in &items {
+        let Some(spec) = item.spec else {
+            continue;
+        };
+        let relationships = extract_relationships_full(&item.artifact, spec);
+        if !relationships.is_empty() {
+            artifacts.push(ArtifactRelationships {
+                path: item.path.clone(),
+                type_name: spec.name.clone(),
+                relationships,
+            });
+        }
+    }
+    let labels = resolution_labels(&artifacts, &items);
+    RelationshipReport {
+        directory: directory.to_string(),
+        recursive,
+        total_files: items.len(),
+        artifacts,
+        labels,
+    }
+}
+
+/// `build_relationship_report(directory, recursive)`.
+pub fn build_relationship_report(directory: &str, recursive: bool) -> RelationshipReport {
+    build_report(directory, corpus_items(directory, recursive), recursive)
+}
+
+/// `build_relationship_report_file(path)`.
+pub fn build_relationship_report_file(path: &str) -> RelationshipReport {
+    let artifact = parse_file(path);
+    let spec = spec_for(&classify(&artifact).artifact_type);
+    let items = vec![CorpusItem {
+        path: path.to_string(),
+        artifact,
+        spec,
+    }];
+    build_report(path, items, false)
+}
+
+// ---------------------------------------------------------------------------
 // Corpus entry points
 // ---------------------------------------------------------------------------
 

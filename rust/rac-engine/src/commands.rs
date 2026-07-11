@@ -8,8 +8,9 @@ use crate::classify::classify;
 use crate::output;
 use crate::parse::{parse_file, parse_text, Artifact, Issue};
 use crate::relationships::{
-    corpus_items, validate_document_against_corpus, validate_relationships,
-    validate_relationships_file, RelationshipIssue,
+    build_relationship_report, build_relationship_report_file, corpus_items,
+    validate_document_against_corpus, validate_relationships, validate_relationships_file,
+    RelationshipIssue,
 };
 use crate::validate::{
     apply_overrides, check_okf_conformance, has_errors, load_overrides, load_ticketing_provider,
@@ -358,10 +359,106 @@ pub fn cmd_relationships(args: &RelationshipsArgs) -> i32 {
         };
     }
 
-    // UNIMPLEMENTED STUB (this phase wires validate + --version only; the
-    // relationships inspection arm has no parity case in the current filters).
-    eprintln!("rac-rs: 'relationships' without --validate is not yet implemented");
-    EXIT_USAGE
+    // Inspection arm (non --validate): always exit 0.
+    let report = if is_dir {
+        build_relationship_report(&args.path, !args.top_level)
+    } else {
+        build_relationship_report_file(&args.path)
+    };
+    if args.json {
+        emit(output::render_relationships_json(&report));
+    } else {
+        emit(output::render_relationships_human(&report));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
+// cmd_stats
+// ---------------------------------------------------------------------------
+
+pub struct StatsArgs {
+    pub directory: String,
+    pub json: bool,
+}
+
+pub fn cmd_stats(args: &StatsArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let stats = crate::stats::collect_stats(&args.directory);
+    if args.json {
+        emit(output::render_stats_json(&stats));
+    } else {
+        emit(output::render_stats_human(&stats));
+    }
+    if stats.has_meaningful_content() || stats.is_empty() {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+// ---------------------------------------------------------------------------
+// cmd_schema / cmd_templates
+// ---------------------------------------------------------------------------
+
+pub struct SchemaArgs {
+    pub schema: Option<String>,
+    pub list: bool,
+    pub json: bool,
+    pub template: bool,
+}
+
+pub fn cmd_schema(args: &SchemaArgs) -> i32 {
+    let names = crate::spec::available_schemas();
+    if args.list {
+        if args.template {
+            return usage_error("--template cannot be used with --list");
+        }
+        if args.schema.is_some() {
+            return usage_error("schema name cannot be used with --list");
+        }
+        if args.json {
+            emit(output::render_schema_list_json(&names));
+        } else {
+            emit(output::render_schema_list_human(&names));
+        }
+        return EXIT_OK;
+    }
+
+    let Some(name) = &args.schema else {
+        return usage_error("schema name required unless --list is passed");
+    };
+
+    let Some(spec) = crate::spec::spec_for(name) else {
+        // Unknown schema: multi-line blob to stderr, exit 2 (no `rac:` prefix).
+        eprintln!("{}", output::render_unknown_schema(name, &names));
+        return EXIT_USAGE;
+    };
+
+    if args.json {
+        emit(output::render_schema_json(spec));
+    } else if args.template {
+        emit(output::render_schema_template(spec));
+    } else {
+        emit(output::render_schema_human(spec));
+    }
+    EXIT_OK
+}
+
+pub struct TemplatesArgs {
+    pub json: bool,
+}
+
+pub fn cmd_templates(args: &TemplatesArgs) -> i32 {
+    let names = crate::spec::available_schemas();
+    if args.json {
+        emit(output::render_templates_json(&names));
+    } else {
+        emit(output::render_templates_human(&names));
+    }
+    EXIT_OK
 }
 
 // ---------------------------------------------------------------------------
