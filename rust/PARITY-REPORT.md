@@ -71,6 +71,25 @@ both campaigns: ~13,000 distinct inputs, ~120,000 engine-pair command
 executions, 9 engine bugs found and fixed, zero unexplained divergences
 remaining.
 
+## Oracle re-pin and the retrieval surface
+
+The oracle was re-pinned to the latest `origin/main` after the spike's
+main phases closed: `src/` is byte-identical between the original pin
+(`21c8be4`) and current main, so the 130/130 claim carries over unchanged
+(re-verified by a full run after the merge). The in-flight
+grounding-retrieval surface (`rac retrieve` + the `retrieve_grounding`
+MCP tool, roadmap:grounding-retrieval-surface, unmerged branch at
+`f2091be`) was ported ahead of its merge against a second oracle pinned
+to that branch head: **44/44 retrieve parity cases byte-identical**
+(`rust/parity-cases-retrieve.json`, run twice), mainline 130/130 intact,
+independently verified with fresh adversarial probes (supersedes forks
+and cycles, zero-overlap scope binding, budget=1 truncation, empty
+corpus). Recon confirmed the branch's service deltas are purely additive
+to existing commands; its sole existing-surface byte change (the root
+argparse choices list gains `retrieve`) is deliberately not adopted
+until the branch merges. With this, every command the six-tool Lore MCP
+surface depends on has a parity-proven Rust implementation.
+
 ## rac-spec acceptance suite
 
 The public specification repo (itsthelore/rac-spec, v0.1.0) ships an
