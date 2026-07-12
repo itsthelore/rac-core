@@ -40,9 +40,7 @@ def _scratch_env(scratch):
     env["XDG_STATE_HOME"] = os.path.join(scratch, "state")
     env["XDG_CONFIG_HOME"] = os.path.join(scratch, "config")
     env["XDG_CACHE_HOME"] = os.path.join(scratch, "cache")
-    for k in list(env):
-        if k in ("RAC_TIMING",):
-            del env[k]
+    env.pop("RAC_TIMING", None)
     return env
 
 
@@ -79,8 +77,6 @@ def _measure(bin_path, args, env, runs):
 
 def _peak_rss_kib(bin_path, args, env):
     """Peak RSS (KiB) for one run. Prefer /usr/bin/time -v, else getrusage."""
-    time_bin = shutil.which("time") or (
-        "/usr/bin/time" if os.path.exists("/usr/bin/time") else None)
     if os.path.exists("/usr/bin/time"):
         proc = subprocess.run(
             ["/usr/bin/time", "-v", bin_path] + args,

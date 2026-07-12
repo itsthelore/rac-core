@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import statistics
 import subprocess
@@ -42,15 +43,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT_INFO = {"name": "mcp-parity-harness", "version": "0.0.1"}
-READ_TIMEOUT = 120  # seconds per response line
 
 
 class Server:
     """One MCP server subprocess with the neutralized environment."""
 
     def __init__(self, cmd: list[str], root: str, xdg_dir: Path):
-        import os
-
         env = dict(os.environ)
         for name, sub in (
             ("HOME", "home"),
@@ -343,7 +341,9 @@ def perf_engine(cmd: list[str], root: str, out_dir: Path, label: str) -> dict:
                 retrieve_calls.append(time.perf_counter() - t)
         finally:
             server.close()
-    med = lambda xs: round(statistics.median(xs) * 1000, 2) if xs else None
+    def med(xs):
+        return round(statistics.median(xs) * 1000, 2) if xs else None
+
     return {
         "startup_to_first_result_ms_median": med(startups),
         "get_summary_ms_median": med(summary_calls),
