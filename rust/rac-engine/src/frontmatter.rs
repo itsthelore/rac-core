@@ -57,10 +57,10 @@ pub fn exceeds_byte_cap(text: &str, cap: usize) -> bool {
 /// oracle uncaught for huge caps (PORT-CONTRACT decision-3 marker class),
 /// with the boundary verified empirically against CPython 3.11:
 ///   - cap >= 2^63 - 1  (`cap + 1 > sys.maxsize`):
-///       `OverflowError: cannot fit 'int' into an index-sized integer`
+///     `OverflowError: cannot fit 'int' into an index-sized integer`
 ///   - 2^63 - 34 <= cap <= 2^63 - 2  (`cap + 1` exceeds the bytes-object
 ///     size limit `PY_SSIZE_T_MAX - 33`):
-///       `OverflowError: byte string is too large`
+///     `OverflowError: byte string is too large`
 ///   - below that, down to roughly the machine's allocatable memory, the
 ///     oracle raises `MemoryError` — an ENVIRONMENT-DEPENDENT crash that
 ///     cannot be mirrored deterministically and is deliberately NOT
@@ -338,7 +338,7 @@ fn float_eq_int(f: f64, i: i64) -> bool {
     if !f.is_finite() || f != f.trunc() {
         return false;
     }
-    if f < -9.223_372_036_854_776E18 || f >= 9.223_372_036_854_776E18 {
+    if !(-9.223_372_036_854_776E18..9.223_372_036_854_776E18).contains(&f) {
         return false;
     }
     (f as i64) == i && (f as i64) as f64 == f
@@ -2069,7 +2069,7 @@ impl Scanner {
                 let byte = codes.get(pos).copied().unwrap_or(0);
                 let reason = if pos + 1 >= codes.len() && e.utf8_error().error_len().is_none() {
                     "unexpected end of data"
-                } else if byte >= 0x80 && byte < 0xc0 {
+                } else if (0x80..0xc0).contains(&byte) {
                     "invalid start byte"
                 } else {
                     "invalid continuation byte"
@@ -3541,9 +3541,11 @@ struct TsParts {
     year: i64,
     month: u32,
     day: u32,
-    time: Option<(u32, u32, u32, String, Option<(i64, u32, u32)>, bool)>,
+    time: Option<TsTime>,
     // time = (hour, minute, second, fraction_digits, tz_sign_hour_minute, tz_z)
 }
+
+type TsTime = (u32, u32, u32, String, Option<(i64, u32, u32)>, bool);
 
 fn match_ts_constructor(v: &str) -> Option<TsParts> {
     let b = v.as_bytes();

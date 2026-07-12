@@ -113,14 +113,14 @@ fn ears_if(text: &str) -> bool {
     let mut it = rest.chars();
     match (it.next(), it.next()) {
         (Some(a), Some(b))
-            if a.to_ascii_lowercase() == 'i' && b.to_ascii_lowercase() == 'f' =>
+            if a.eq_ignore_ascii_case(&'i') && b.eq_ignore_ascii_case(&'f') =>
         {
             match it.next() {
                 Some(c) => !is_word_char(c),
                 None => true,
             }
         }
-        (Some(a), None) if a.to_ascii_lowercase() == 'i' => false,
+        (Some(a), None) if a.eq_ignore_ascii_case(&'i') => false,
         _ => false,
     }
 }
@@ -242,8 +242,10 @@ fn servicenow_ref(e: &str) -> bool {
     rest.len() >= 5 && rest.iter().all(|&c| is_re_digit(c))
 }
 
+type TicketValidator = fn(&str) -> bool;
+
 /// `(validator, label)` per recognised provider.
-fn ticketing_provider(name: &str) -> Option<(fn(&str) -> bool, &'static str)> {
+fn ticketing_provider(name: &str) -> Option<(TicketValidator, &'static str)> {
     match name {
         "jira" => Some((jira_key, "Jira key (e.g. PROJ-1234) or URL")),
         "github" => Some((github_ref, "GitHub issue (e.g. owner/repo#123) or URL")),
