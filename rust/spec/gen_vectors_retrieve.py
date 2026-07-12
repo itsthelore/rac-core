@@ -57,7 +57,11 @@ CASES: list[dict] = [
     {"dir": RAC, "task": "markdown", "scope": "does/not/exist.py"},
     {"dir": RAC, "task": "markdown", "scope": "../outside.py"},
     {"dir": RAC, "task": "markdown", "scope": "/etc/passwd"},
-    {"dir": RAC, "task": "markdown", "scope": str(REPO / "src/rac/cli.py")},
+    # Repo-relative on purpose: an absolute scope would bake this machine's
+    # checkout path into the pinned payload bytes and break on any other
+    # checkout (CI runs from a different root). Relative scope still
+    # exercises the same binding channel and echoes portably.
+    {"dir": RAC, "task": "markdown", "scope": "src/rac/cli.py"},
     # top-k / budget shaping
     {"dir": RAC, "task": "markdown", "top_k": 1},
     {"dir": RAC, "task": "markdown", "top_k": 2, "budget": 400},
