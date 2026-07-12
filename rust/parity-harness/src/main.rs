@@ -131,20 +131,25 @@ fn parse_args() -> Result<Args, String> {
 /// still covered by the raw JSON cases.
 fn strip_recency_json(stdout: &[u8]) -> Result<Vec<u8>, String> {
     let mut value = parse_json(stdout)?;
-    fn walk(v: &mut Value) {
-        match v {
-            Value::Object(map) => {
-                map.shift_remove("recency");
-                for (_, child) in map.iter_mut() {
-                    walk(child);
-                }
-            }
-            Value::Array(items) => items.iter_mut().for_each(walk),
-            _ => {}
-        }
-    }
-    walk(&mut value);
+    for_each_object(&mut value, &mut |map| {
+        map.shift_remove("recency");
+    });
     serialize_json(&value)
+}
+
+/// Depth-first walk applying `f` to every JSON object, parent before
+/// children — the shared traversal skeleton of the two JSON normalizers.
+fn for_each_object(v: &mut Value, f: &mut impl FnMut(&mut serde_json::Map<String, Value>)) {
+    match v {
+        Value::Object(map) => {
+            f(map);
+            for (_, child) in map.iter_mut() {
+                for_each_object(child, f);
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(|item| for_each_object(item, f)),
+        _ => {}
+    }
 }
 
 /// "strip-stale-human" — `find` human output appends a git/wall-clock-derived
@@ -184,26 +189,16 @@ fn strip_stale_human(stdout: &[u8]) -> Result<Vec<u8>, String> {
 /// stays valid once engine B is the Rust binary without the seam set.
 fn mask_version(stdout: &[u8]) -> Result<Vec<u8>, String> {
     let mut value = parse_json(stdout)?;
-    fn walk(v: &mut Value) {
-        match v {
-            Value::Object(map) => {
-                if map.contains_key("rac_version") {
-                    map["rac_version"] = json!("<MASKED-VERSION>");
-                }
-                let is_rac_driver = map.get("name").and_then(Value::as_str) == Some("rac")
-                    && map.contains_key("version");
-                if is_rac_driver {
-                    map["version"] = json!("<MASKED-VERSION>");
-                }
-                for (_, child) in map.iter_mut() {
-                    walk(child);
-                }
-            }
-            Value::Array(items) => items.iter_mut().for_each(walk),
-            _ => {}
+    for_each_object(&mut value, &mut |map| {
+        if let Some(slot) = map.get_mut("rac_version") {
+            *slot = json!("<MASKED-VERSION>");
         }
-    }
-    walk(&mut value);
+        if map.get("name").and_then(Value::as_str) == Some("rac") {
+            if let Some(slot) = map.get_mut("version") {
+                *slot = json!("<MASKED-VERSION>");
+            }
+        }
+    });
     serialize_json(&value)
 }
 
@@ -636,9 +631,7 @@ fn run() -> Result<i32, String> {
     }
 
     let board = scoreboard_json(&args, &results);
-    let mut board_bytes = serde_json::to_vec_pretty(&board).map_err(|e| e.to_string())?;
-    board_bytes.push(b'\n');
-    fs::write(args.scoreboard_dir.join("scoreboard.json"), board_bytes)
+    fs::write(args.scoreboard_dir.join("scoreboard.json"), serialize_json(&board)?)
         .map_err(|e| e.to_string())?;
     fs::write(
         args.scoreboard_dir.join("scoreboard.md"),

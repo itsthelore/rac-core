@@ -169,7 +169,7 @@ def render_body(rng, artifact_type, kind):
     return paragraph(rng)
 
 
-def build_artifact(rng, artifact_type, index, stem, by_type):
+def build_artifact(rng, artifact_type, index, by_type):
     aid = crockford_id(rng, index)
     tags = sorted({rng.choice(WORDS) for _ in range(rng.randint(1, 3))})
     title_kind = artifact_type.capitalize()
@@ -209,7 +209,7 @@ def build_artifact(rng, artifact_type, index, stem, by_type):
             lines.append(f"- {target_stem}")
         lines.append("")
 
-    return title, "\n".join(lines).rstrip() + "\n"
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def main(argv=None):
@@ -249,7 +249,7 @@ def main(argv=None):
         atype = plan[index]
         counters[atype] += 1
         stem = f"{PREFIX[atype]}-{counters[atype]:05d}-{slug(rng)}"
-        title, content = build_artifact(rng, atype, index, stem, by_type)
+        content = build_artifact(rng, atype, index, by_type)
         path = os.path.join(out, dirmap[atype], stem + ".md")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(content)
