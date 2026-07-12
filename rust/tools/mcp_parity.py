@@ -34,6 +34,7 @@ import json
 import shlex
 import statistics
 import subprocess
+import tempfile
 import sys
 import time
 from pathlib import Path
@@ -67,11 +68,16 @@ class Server:
         # path every other parity claim in this spike compares against. The
         # Rust server ignores the variable (it re-reads per call, ADR-032).
         env["RAC_NO_CACHE"] = "1"
+        # stderr goes to a temp file, never compared (contract §9) but kept
+        # for the crash diagnostic in recv(); a PIPE could deadlock unread.
+        self._errfile = tempfile.NamedTemporaryFile(
+            mode="w+b", prefix="mcp-stderr-", delete=False
+        )
         self.proc = subprocess.Popen(
             [*cmd, "--root", root],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=self._errfile,
             cwd=str(REPO_ROOT),
             env=env,
         )
@@ -97,12 +103,13 @@ class Server:
             # Surface the server's dying words — a silent EOF is undiagnosable
             # in CI logs (stderr is never compared, only reported here).
             err = b""
-            if self.proc.stderr is not None:
-                try:
-                    self.proc.wait(timeout=5)
-                    err = self.proc.stderr.read() or b""
-                except Exception:
-                    pass
+            try:
+                self.proc.wait(timeout=5)
+                self._errfile.flush()
+                self._errfile.seek(0)
+                err = self._errfile.read() or b""
+            except Exception:
+                pass
             tail = err.decode("utf-8", "replace")[-2000:]
             raise RuntimeError(
                 f"server closed stdout unexpectedly (exit={self.proc.poll()}); stderr tail:\n{tail}"
