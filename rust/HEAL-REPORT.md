@@ -196,6 +196,16 @@ decision first.
    around; `--tag -` and `--client -` bare-dash consumption differs
    from the oracle. Candidates for new pinned cases + fixes in the
    spec revision.
+5. **The oracle-crash divergence class should close from the Python
+   side** (RAC-KXBPS7SRM6ZB). The Python engine crashes with a raw
+   traceback on Markdown with malformed frontmatter (e.g. unhashable
+   YAML mapping keys) anywhere in its walk — observed making `rac new`
+   unusable in a checkout carrying the fuzz repro fixtures. The Rust
+   engine already handles every catalogued input gracefully. Hardening
+   the oracle changes bytes on inputs the port contract currently
+   classifies as oracle-crash divergences, so the fix, the spec's
+   divergence catalog, and new pinned regression cases must move
+   together in the spec revision.
 
 ## Evidence trail
 
