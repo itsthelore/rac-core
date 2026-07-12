@@ -375,26 +375,27 @@ fn scope_rows_from_items(items: &[CorpusItem]) -> Vec<ScopeRow> {
     rows
 }
 
-/// One governing decision (the fields retrieve reads).
-struct Governing {
-    id: String,
-    title: String,
-    status: String,
-    path: String,
-    matching_entry: String,
+/// One governing decision (`GoverningDecision` — the fields retrieve and
+/// `rac decisions-for` read).
+pub struct GoverningDecision {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub path: String,
+    pub matching_entry: String,
 }
 
 /// `governing_decisions(scope_rows, directory, path).decisions`.
-fn governing_decisions(rows: &[ScopeRow], directory: &str, path: &str) -> Vec<Governing> {
+fn governing_decisions(rows: &[ScopeRow], directory: &str, path: &str) -> Vec<GoverningDecision> {
     let root = repository_root(directory);
     let Some(query) = normalize_query(path, &root) else {
         return Vec::new();
     };
-    let mut matches: Vec<Governing> = Vec::new();
+    let mut matches: Vec<GoverningDecision> = Vec::new();
     for row in rows {
         for declared in &row.scope_entries {
             if entry_covers(declared, &query) {
-                matches.push(Governing {
+                matches.push(GoverningDecision {
                     id: row.id.clone(),
                     title: row.title.clone(),
                     status: row.status.clone(),
@@ -411,6 +412,65 @@ fn governing_decisions(rows: &[ScopeRow], directory: &str, path: &str) -> Vec<Go
     matches
 }
 
+/// `ScopeLookupResult` — the decisions governing a queried path. `query` is
+/// the POSIX repo-relative form when the path lies inside the repository,
+/// else the raw stripped input; an outside-repository or ungoverned path is
+/// a valid empty answer, never an error (REQ-004).
+pub struct ScopeLookupResult {
+    pub query: String,
+    pub in_repository: bool,
+    pub decisions: Vec<GoverningDecision>,
+}
+
+/// `rac.services.scope.decisions_for_path(directory, path, recursive)` — the
+/// CLI face of the scope lookup. Byte-identical to the derived-cache path
+/// (`governing_decisions`) for the same corpus and path; `recursive` threads
+/// the CLI's `--top-level` through the corpus walk (the MCP `find_decisions`
+/// path mode always walks recursively).
+pub fn decisions_for_path(directory: &str, path: &str, recursive: bool) -> ScopeLookupResult {
+    let root = repository_root(directory);
+    match normalize_query(path, &root) {
+        None => ScopeLookupResult {
+            query: py_strip(path).to_string(),
+            in_repository: false,
+            decisions: Vec::new(),
+        },
+        Some(query) => {
+            let items = corpus_items(directory, recursive);
+            let rows = scope_rows_from_items(&items);
+            ScopeLookupResult {
+                query,
+                in_repository: true,
+                decisions: governing_decisions(&rows, directory, path),
+            }
+        }
+    }
+}
+
+/// `ScopeLookupResult.to_dict()` — `{schema_version, query, in_repository,
+/// decisions}` in Python dict insertion order.
+pub fn scope_lookup_value(result: &ScopeLookupResult) -> Value {
+    let mut payload = Map::new();
+    payload.insert("schema_version".to_string(), json!("1"));
+    payload.insert("query".to_string(), json!(result.query));
+    payload.insert("in_repository".to_string(), json!(result.in_repository));
+    let decisions: Vec<Value> = result
+        .decisions
+        .iter()
+        .map(|d| {
+            let mut m = Map::new();
+            m.insert("id".to_string(), json!(d.id));
+            m.insert("title".to_string(), json!(d.title));
+            m.insert("status".to_string(), json!(d.status));
+            m.insert("path".to_string(), json!(d.path));
+            m.insert("matching_entry".to_string(), json!(d.matching_entry));
+            Value::Object(m)
+        })
+        .collect();
+    payload.insert("decisions".to_string(), Value::Array(decisions));
+    Value::Object(payload)
+}
+
 /// `find_decisions` path mode (MCP surface): the `ScopeLookupResult.to_dict()`
 /// payload — `{schema_version, query, in_repository, decisions}` — for the live
 /// decisions whose declared `## Applies To` scope governs `path`. Additive
@@ -418,36 +478,7 @@ fn governing_decisions(rows: &[ScopeRow], directory: &str, path: &str) -> Vec<Go
 /// (`scope_rows_from_items` / `normalize_query` / `entry_covers`), byte-identical
 /// to `rac.services.derived_cache.governing_decisions(...).to_dict()`.
 pub fn find_decisions_path_payload(directory: &str, path: &str) -> Value {
-    let root = repository_root(directory);
-    let mut payload = Map::new();
-    payload.insert("schema_version".to_string(), json!("1"));
-    match normalize_query(path, &root) {
-        None => {
-            payload.insert("query".to_string(), json!(py_strip(path)));
-            payload.insert("in_repository".to_string(), json!(false));
-            payload.insert("decisions".to_string(), json!([]));
-        }
-        Some(query) => {
-            let items = corpus_items(directory, true);
-            let rows = scope_rows_from_items(&items);
-            let decisions: Vec<Value> = governing_decisions(&rows, directory, path)
-                .into_iter()
-                .map(|d| {
-                    let mut m = Map::new();
-                    m.insert("id".to_string(), json!(d.id));
-                    m.insert("title".to_string(), json!(d.title));
-                    m.insert("status".to_string(), json!(d.status));
-                    m.insert("path".to_string(), json!(d.path));
-                    m.insert("matching_entry".to_string(), json!(d.matching_entry));
-                    Value::Object(m)
-                })
-                .collect();
-            payload.insert("query".to_string(), json!(query));
-            payload.insert("in_repository".to_string(), json!(true));
-            payload.insert("decisions".to_string(), Value::Array(decisions));
-        }
-    }
-    Value::Object(payload)
+    scope_lookup_value(&decisions_for_path(directory, path, true))
 }
 
 // ---------------------------------------------------------------------------

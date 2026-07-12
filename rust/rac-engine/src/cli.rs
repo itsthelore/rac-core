@@ -5,10 +5,11 @@
 //! (decision 9) — stdout stays byte-identical (empty on errors).
 
 use crate::commands::{
-    cmd_diff, cmd_export, cmd_find, cmd_improve, cmd_inspect, cmd_relationships, cmd_resolve,
-    cmd_retrieve, cmd_review, cmd_schema, cmd_stats, cmd_templates, cmd_validate, DiffArgs,
-    ExportArgs, FindArgs, ImproveArgs, InspectArgs, RelationshipsArgs, ResolveArgs, RetrieveArgs,
-    ReviewArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+    cmd_coverage, cmd_decisions_for, cmd_diff, cmd_export, cmd_find, cmd_improve, cmd_inspect,
+    cmd_portfolio, cmd_relationships, cmd_resolve, cmd_retrieve, cmd_review, cmd_schema,
+    cmd_stats, cmd_templates, cmd_validate, CoverageArgs, DecisionsForArgs, DiffArgs, ExportArgs,
+    FindArgs, ImproveArgs, InspectArgs, PortfolioArgs, RelationshipsArgs, ResolveArgs,
+    RetrieveArgs, ReviewArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -142,6 +143,9 @@ pub fn run(args: &[String]) -> u8 {
         "retrieve" => run_retrieve(&rest),
         "review" => run_review(&rest),
         "export" => run_export(&rest),
+        "portfolio" => run_portfolio(&rest),
+        "coverage" => run_coverage(&rest),
+        "decisions-for" => run_decisions_for(&rest),
         other => {
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
             2
@@ -473,6 +477,128 @@ fn run_stats(rest: &[&String]) -> u8 {
     }
 
     cmd_stats(&StatsArgs { directory, json }) as u8
+}
+
+fn run_portfolio(rest: &[&String]) -> u8 {
+    let prog = "rac portfolio";
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut top_level = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {} // affirmation of the default
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    // `directory` is REQUIRED here, unlike the sibling index/export parsers.
+    let Some(directory) = directory else {
+        return argparse_error(prog, "the following arguments are required: directory");
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_portfolio(&PortfolioArgs {
+        directory,
+        json,
+        top_level,
+    }) as u8
+}
+
+fn run_coverage(rest: &[&String]) -> u8 {
+    // Optional positional (default '.'); json_parent only — an unknown flag
+    // (e.g. --top-level) bubbles to the TOP-LEVEL parser's error.
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_coverage(&CoverageArgs {
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        json,
+    }) as u8
+}
+
+fn run_decisions_for(rest: &[&String]) -> u8 {
+    let prog = "rac decisions-for";
+    let mut path: Option<String> = None;
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut top_level = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if path.is_none() {
+                path = Some(arg.to_string());
+            } else if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {} // affirmation of the default
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    let Some(path) = path else {
+        return argparse_error(prog, "the following arguments are required: path");
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_decisions_for(&DecisionsForArgs {
+        path,
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        json,
+        top_level,
+    }) as u8
 }
 
 fn run_resolve(rest: &[&String]) -> u8 {

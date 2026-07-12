@@ -554,6 +554,80 @@ pub fn cmd_stats(args: &StatsArgs) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// cmd_portfolio
+// ---------------------------------------------------------------------------
+
+pub struct PortfolioArgs {
+    pub directory: String,
+    pub json: bool,
+    pub top_level: bool,
+}
+
+pub fn cmd_portfolio(args: &PortfolioArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let recursive = !args.top_level;
+    let items = corpus_items(&args.directory, recursive);
+    let summary = crate::portfolio::portfolio_from_corpus(&args.directory, &items, recursive);
+    if args.json {
+        emit(output::render_portfolio_json(&summary));
+    } else {
+        emit(output::render_portfolio_human(&summary));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
+// cmd_coverage
+// ---------------------------------------------------------------------------
+
+pub struct CoverageArgs {
+    pub directory: String,
+    pub json: bool,
+}
+
+/// Advisory, never a build failure: exit 0 on every valid run (REQ-005).
+pub fn cmd_coverage(args: &CoverageArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let report = crate::coverage::analyze_coverage(&args.directory);
+    if args.json {
+        emit(output::render_coverage_json(&report));
+    } else {
+        emit(output::render_coverage_human(&report));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
+// cmd_decisions_for
+// ---------------------------------------------------------------------------
+
+pub struct DecisionsForArgs {
+    pub path: String,
+    pub directory: String,
+    pub json: bool,
+    pub top_level: bool,
+}
+
+/// A query always succeeds: governed, ungoverned, and outside-repository
+/// paths all exit 0 (REQ-004); only a bad corpus directory is a usage error.
+pub fn cmd_decisions_for(args: &DecisionsForArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let result = crate::retrieve::decisions_for_path(&args.directory, &args.path, !args.top_level);
+    if args.json {
+        emit(output::render_decisions_for_json(&result));
+    } else {
+        emit(output::render_decisions_for_human(&result));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
 // cmd_review
 // ---------------------------------------------------------------------------
 
