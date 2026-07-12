@@ -3,6 +3,7 @@
 
 # Virtual environments
 .venv/
+.venv-oracle/
 venv/
 
 # Python
