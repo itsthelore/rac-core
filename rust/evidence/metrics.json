@@ -26,7 +26,9 @@
       "close_protocol": "two consecutive 800-input dry rounds (seeds 305, 306)",
       "honest_finding": "the fuzzer's first real catch was a bug in the rewrite (i64 overflow seam), and 30+ minimized inputs crash the PYTHON oracle uncaught while the rewrite reports a normal finding"
     },
-    "retrieve_surface": "rac retrieve (compound grounding retrieval: Applies-To scope binding, supersedes resolution, budget truncation) ported ahead of its merge; every command the six-tool Lore MCP surface depends on now has a parity-proven Rust implementation"
+    "retrieve_surface": "rac retrieve (compound grounding retrieval: Applies-To scope binding, supersedes resolution, budget truncation) ported ahead of its merge; every command the six-tool Lore MCP surface depends on now has a parity-proven Rust implementation",
+    "mcp_surface": "native rust MCP server (rust/rac-mcp): six tools, wire parity 56/56 vs mainline python server and 76/76 vs retrieval-branch server (byte-equal frames, twice each, adversarially verified); serving startup-to-first-result 2206ms->35ms, get_summary 1973ms->39ms, retrieve_grounding 1117ms->172ms",
+    "oracle_defect_found": "python cache-on dedupes df, no-cache double-counts duplicate query tokens: warm vs cold python return different ranking-evidence bytes, violating ADR-112's byte-identical invariant (PORT-CONTRACT.d/10 section 0a); rust matches no-cache; upstream fix needed"
   },
   "wall_clock_ms": {
     "startup": {
@@ -140,11 +142,11 @@
     ],
     "by_design_sidecar": [
       "ingest (markitdown stays python)",
-      "explorer TUI",
-      "MCP serving"
+      "explorer TUI (being retired)",
+      "MCP HTTP transport (stdio ported; ADR-098 http pending)"
     ],
     "oracle_crashes": "30+ minimized inputs crash the python engine uncaught; the rewrite intentionally reports instead of crashing (documented divergence class)",
     "amdahl_20k": "synthetic 20k scales only 1.6x over sequential (render + OKF residual); parse-dominated real corpora scale 2.8x on 4 cores",
-    "mcp_status": "retrieve ported (44/44); MCP-critical command column now empty; serving-layer path (bindings vs native) remains the open decision"
+    "mcp_status": "native stdio MCP server ported with wire parity (56/56 + 76/76); remaining: HTTP transport, audit/telemetry sidecars behind documented seam"
   }
 }

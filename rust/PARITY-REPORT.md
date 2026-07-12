@@ -151,7 +151,39 @@ the contract and confirmed none hides real bytes.
   both engines agreed on the substituted probes (dangling symlink,
   directory-named-`.md`).
 
-## Open question at mainline: the MCP serving path
+## The MCP serving surface — now prototyped natively
+
+Following the engine-side closure, the serving layer itself was ported:
+`rust/rac-mcp` is a native stdio MCP server implementing the full six-tool
+Lore surface (including `retrieve_grounding`) over the parity-proven engine
+services, per the wire contract in `PORT-CONTRACT.d/10-mcp-surface.md`
+(framing, handshake, pinned schema bytes, the ADR-033 budget mechanism
+ported bug-for-bug, ADR-034 error shapes, ADR-032 stateless reads).
+
+Wire parity: **56/56 frames byte-identical vs the mainline Python server
+and 76/76 vs the retrieval-branch server** (run twice each, byte-identical
+scoreboards, independently verified with harness break-tests and 20+ fresh
+adversarial probes). Serving latency on the live corpus (7-run medians):
+startup-to-first-tool-result 2 206 ms (Python) vs 35 ms; `get_summary`
+1 973 ms vs 39 ms; `retrieve_grounding` 1 117 ms vs 172 ms.
+
+**Oracle defect found by this verification** (documented in contract
+section 0a): Python's cache-on path computes deduped document frequency
+while its no-cache path double-counts duplicate query tokens — warm and
+cold Python return different ranking-evidence bytes for duplicate-token
+queries, violating ADR-112's byte-identical invariant. The Rust engine
+matches the no-cache path (per contract 06); the MCP harness pins
+`RAC_NO_CACHE=1` on both servers as the canonical comparison path. This
+needs an upstream Python fix at mainline, after which the pin can drop.
+
+Declared gaps: HTTP transport (ADR-098) not ported (stdio only);
+audit/telemetry sidecars stubbed behind a documented seam (contractually
+wire-neutral, verified); `resources/list` inferred, excluded from the
+certified basket.
+
+## Superseded: the original path options
+
+The pre-port analysis below is retained for the decision record.
 
 The MCP server is the most consequential unported surface, but the recorded
 architecture bounds the problem tightly: ADR-030 makes the server
