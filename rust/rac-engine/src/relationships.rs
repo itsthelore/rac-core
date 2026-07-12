@@ -54,6 +54,12 @@ pub struct EdgeSpec {
     pub forbids_target_status: bool,
     pub external: bool,
     pub filesystem_scoped: bool,
+    /// `supersedes`/`verified_by`/`applies_to` are directional; `related_*` and
+    /// `related_tickets` are not.
+    pub directional: bool,
+    /// Whether an external edge's target lives in the repository's configured
+    /// ticketing provider (`related_tickets` only, ADR-088).
+    pub external_provider: bool,
 }
 
 /// `edge_spec(name)` over the built-in registry.
@@ -66,6 +72,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: false,
             filesystem_scoped: false,
+            directional: false,
+            external_provider: false,
         },
         EdgeSpec {
             name: "related_decisions",
@@ -74,6 +82,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: false,
             filesystem_scoped: false,
+            directional: false,
+            external_provider: false,
         },
         EdgeSpec {
             name: "related_roadmaps",
@@ -82,6 +92,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: false,
             filesystem_scoped: false,
+            directional: false,
+            external_provider: false,
         },
         EdgeSpec {
             name: "related_prompts",
@@ -90,6 +102,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: false,
             filesystem_scoped: false,
+            directional: false,
+            external_provider: false,
         },
         EdgeSpec {
             name: "related_designs",
@@ -98,6 +112,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: false,
             filesystem_scoped: false,
+            directional: false,
+            external_provider: false,
         },
         EdgeSpec {
             name: "supersedes",
@@ -106,6 +122,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: false,
             external: false,
             filesystem_scoped: false,
+            directional: true,
+            external_provider: false,
         },
         EdgeSpec {
             name: "related_tickets",
@@ -114,6 +132,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: true,
             filesystem_scoped: false,
+            directional: false,
+            external_provider: true,
         },
         EdgeSpec {
             name: "verified_by",
@@ -122,6 +142,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: true,
             filesystem_scoped: false,
+            directional: true,
+            external_provider: false,
         },
         EdgeSpec {
             name: "applies_to",
@@ -130,6 +152,8 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
             forbids_target_status: true,
             external: true,
             filesystem_scoped: true,
+            directional: true,
+            external_provider: false,
         },
     ];
     REGISTRY.iter().find(|e| e.name == name)
@@ -742,6 +766,149 @@ pub fn validation_from_rows(
 }
 
 // ---------------------------------------------------------------------------
+// Repository-level relationship inspection (non-validate report)
+// ---------------------------------------------------------------------------
+
+/// One artifact's relationships in a report (`ArtifactRelationships`).
+#[derive(Debug, Clone)]
+pub struct ArtifactRelationships {
+    pub path: String,
+    pub type_name: String,
+    /// `(snake_section, refs)` in `spec.optional` order.
+    pub relationships: Vec<(String, Vec<String>)>,
+}
+
+/// `RelationshipReport` (non-validate inspection).
+#[derive(Debug)]
+pub struct RelationshipReport {
+    pub directory: String,
+    pub recursive: bool,
+    pub total_files: usize,
+    pub artifacts: Vec<ArtifactRelationships>,
+    /// `{casefold(ref) -> "Title (type · id)"}` for uniquely-resolved refs.
+    /// Insertion-ordered (first-seen wins); presentation-only, never in JSON.
+    pub labels: HashMap<String, String>,
+}
+
+impl RelationshipReport {
+    pub fn artifacts_with_relationships(&self) -> usize {
+        self.artifacts.len()
+    }
+
+    /// References per relationship type, canonical order, zero types omitted.
+    pub fn counts(&self) -> Vec<(String, usize)> {
+        let mut totals: HashMap<String, usize> = HashMap::new();
+        for artifact in &self.artifacts {
+            for (section, refs) in &artifact.relationships {
+                *totals.entry(section.clone()).or_insert(0) += refs.len();
+            }
+        }
+        let mut out = Vec::new();
+        for (_, snake_key) in crate::spec::RELATIONSHIP_SECTIONS.iter() {
+            if let Some(count) = totals.get(*snake_key) {
+                out.push((snake_key.to_string(), *count));
+            }
+        }
+        out
+    }
+
+    pub fn relationship_count(&self) -> usize {
+        self.counts().iter().map(|(_, c)| c).sum()
+    }
+}
+
+/// `_resolution_labels(artifacts, items)`.
+fn resolution_labels(
+    artifacts: &[ArtifactRelationships],
+    items: &[CorpusItem],
+) -> HashMap<String, String> {
+    // Resolution index over every alias of every item, in item order.
+    let mut index = ResolutionIndex::new();
+    let mut info: HashMap<&str, (String, Option<&'static ArtifactSpec>, Option<String>)> =
+        HashMap::new();
+    for item in items {
+        let identifiers = artifact_identifiers(&item.artifact, item.spec, &item.path);
+        for ident in &identifiers {
+            index.insert(py_casefold(ident), (item.path.clone(), ident.clone()));
+        }
+        let canonical = artifact_identifier(&item.artifact, item.spec, &item.path);
+        info.insert(
+            item.path.as_str(),
+            (canonical, item.spec, item.artifact.product.title.clone()),
+        );
+    }
+    let mut labels: HashMap<String, String> = HashMap::new();
+    for artifact in artifacts {
+        for (_, refs) in &artifact.relationships {
+            for reference in refs {
+                let key = py_casefold(reference);
+                if labels.contains_key(&key) {
+                    continue;
+                }
+                let entries = index.get(&key);
+                let mut distinct: Vec<&str> = entries.iter().map(|(p, _)| p.as_str()).collect();
+                distinct.sort();
+                distinct.dedup();
+                if distinct.len() != 1 {
+                    continue;
+                }
+                let (canonical, spec, title) = &info[distinct[0]];
+                let type_name = spec.map(|s| s.name.as_str()).unwrap_or("unknown");
+                let display = match title {
+                    Some(t) if !t.is_empty() => t.as_str(),
+                    _ => canonical.as_str(),
+                };
+                labels.insert(key, format!("{display} ({type_name} · {canonical})"));
+            }
+        }
+    }
+    labels
+}
+
+/// `_build_report(directory, items, recursive)`.
+fn build_report(directory: &str, items: Vec<CorpusItem>, recursive: bool) -> RelationshipReport {
+    let mut artifacts: Vec<ArtifactRelationships> = Vec::new();
+    for item in &items {
+        let Some(spec) = item.spec else {
+            continue;
+        };
+        let relationships = extract_relationships_full(&item.artifact, spec);
+        if !relationships.is_empty() {
+            artifacts.push(ArtifactRelationships {
+                path: item.path.clone(),
+                type_name: spec.name.clone(),
+                relationships,
+            });
+        }
+    }
+    let labels = resolution_labels(&artifacts, &items);
+    RelationshipReport {
+        directory: directory.to_string(),
+        recursive,
+        total_files: items.len(),
+        artifacts,
+        labels,
+    }
+}
+
+/// `build_relationship_report(directory, recursive)`.
+pub fn build_relationship_report(directory: &str, recursive: bool) -> RelationshipReport {
+    build_report(directory, corpus_items(directory, recursive), recursive)
+}
+
+/// `build_relationship_report_file(path)`.
+pub fn build_relationship_report_file(path: &str) -> RelationshipReport {
+    let artifact = parse_file(path);
+    let spec = spec_for(&classify(&artifact).artifact_type);
+    let items = vec![CorpusItem {
+        path: path.to_string(),
+        artifact,
+        spec,
+    }];
+    build_report(path, items, false)
+}
+
+// ---------------------------------------------------------------------------
 // Corpus entry points
 // ---------------------------------------------------------------------------
 
@@ -754,9 +921,16 @@ pub struct CorpusItem {
 
 /// `_corpus_items(directory, recursive)` — the sorted-path walk, parsed and
 /// classified.
+///
+/// The per-file parse+classify work is parallelized with rayon over the
+/// already-sorted file list (PORT-CONTRACT decision 5). `into_par_iter` on a
+/// `Vec` is an indexed parallel iterator, so `collect` reassembles results in
+/// the original (sorted) order — the worker count is invisible in the output.
+/// Rendering stays sequential over the ordered results.
 pub fn corpus_items(directory: &str, recursive: bool) -> Vec<CorpusItem> {
+    use rayon::prelude::*;
     find_markdown_files(directory, recursive)
-        .into_iter()
+        .into_par_iter()
         .map(|entry| {
             let artifact = parse_file(&entry.display);
             let spec = spec_for(&classify(&artifact).artifact_type);
@@ -822,4 +996,173 @@ pub fn validate_document_against_corpus(
         relationships_checked: result.relationships_checked,
         issues: own,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Resolved relationship objects (rac.services.relationships.Relationship)
+// ---------------------------------------------------------------------------
+
+/// One declared cross-artifact reference with its resolution outcome
+/// (`Relationship`). `resolved_path` is set only when the reference resolves
+/// uniquely to another artifact.
+#[derive(Debug, Clone)]
+pub struct Relationship {
+    pub source_path: String,
+    pub relationship: String,
+    pub target: String,
+    pub resolved_path: Option<String>,
+    pub issue: Option<String>,
+}
+
+/// `resolve_relationships(rows, index)` — the single resolve loop. Rows in
+/// order, sections in each row's schema order, refs in declaration order.
+pub fn resolve_relationships(
+    rows: &[ValidationRow],
+    index: &ResolutionIndex,
+) -> Vec<Relationship> {
+    let mut out = Vec::new();
+    for row in rows {
+        for (section, refs) in &row.edges {
+            let external = edge_spec(section).is_some_and(|e| e.external);
+            for reference in refs {
+                if external {
+                    out.push(Relationship {
+                        source_path: row.path.clone(),
+                        relationship: section.clone(),
+                        target: reference.clone(),
+                        resolved_path: None,
+                        issue: None,
+                    });
+                    continue;
+                }
+                let targets = index.get(&py_casefold(reference));
+                let (resolved, issue) = if targets.is_empty() {
+                    (None, Some(ISSUE_TARGET_NOT_FOUND.to_string()))
+                } else if targets.len() > 1 {
+                    (None, Some(ISSUE_TARGET_AMBIGUOUS.to_string()))
+                } else if targets[0].0 == row.path {
+                    (None, Some(ISSUE_SELF_REFERENCE.to_string()))
+                } else {
+                    (Some(targets[0].0.clone()), None)
+                };
+                out.push(Relationship {
+                    source_path: row.path.clone(),
+                    relationship: section.clone(),
+                    target: reference.clone(),
+                    resolved_path: resolved,
+                    issue,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// `relationships_from_corpus(entries)` — every declared reference in a corpus
+/// snapshot, resolved. Ordering matches `_resolve_references`.
+pub fn relationships_from_corpus(items: &[CorpusItem]) -> Vec<Relationship> {
+    let rows = rows_from_items(items);
+    let index = resolution_index_from_rows(&rows);
+    resolve_relationships(&rows, &index)
+}
+
+// ---------------------------------------------------------------------------
+// Relationship summary (rac.services.relationships.RelationshipSummary)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub struct RelationshipSummary {
+    pub total: usize,
+    pub valid: usize,
+    pub broken: usize,
+    pub orphaned: usize,
+    pub coverage: f64,
+    pub issues: Vec<RelationshipIssue>,
+}
+
+/// `_resolve_references(rows, index)` returning also the set of resolved target
+/// paths (for orphan detection).
+fn resolve_references_full(
+    rows: &[ValidationRow],
+    index: &ResolutionIndex,
+) -> (usize, Vec<RelationshipIssue>, std::collections::HashSet<String>) {
+    let mut issues = Vec::new();
+    let mut resolved_targets: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut checked = 0usize;
+    for row in rows {
+        if row.spec_name.is_none() {
+            continue;
+        }
+        for (section, refs) in &row.edges {
+            if edge_spec(section).is_some_and(|e| e.external) {
+                continue;
+            }
+            for reference in refs {
+                checked += 1;
+                let targets = index.get(&py_casefold(reference));
+                let code = if targets.is_empty() {
+                    ISSUE_TARGET_NOT_FOUND
+                } else if targets.len() > 1 {
+                    ISSUE_TARGET_AMBIGUOUS
+                } else if targets[0].0 == row.path {
+                    ISSUE_SELF_REFERENCE
+                } else {
+                    resolved_targets.insert(targets[0].0.clone());
+                    continue;
+                };
+                issues.push(RelationshipIssue::reference(code, &row.path, section, reference));
+            }
+        }
+    }
+    (checked, issues, resolved_targets)
+}
+
+/// `summary_from_rows(rows)`.
+pub fn summary_from_rows(rows: &[ValidationRow]) -> RelationshipSummary {
+    if rows.is_empty() {
+        return RelationshipSummary {
+            total: 0,
+            valid: 0,
+            broken: 0,
+            orphaned: 0,
+            coverage: 1.0,
+            issues: Vec::new(),
+        };
+    }
+    let index = resolution_index_from_rows(rows);
+    let (checked, ref_issues, resolved_targets) = resolve_references_full(rows, &index);
+    let broken = ref_issues.len();
+    let valid = checked - broken;
+
+    let known_paths: Vec<&str> = rows
+        .iter()
+        .filter(|r| r.spec_name.is_some())
+        .map(|r| r.path.as_str())
+        .collect();
+    let orphaned = known_paths
+        .iter()
+        .filter(|p| !resolved_targets.contains(**p))
+        .count();
+    let artifacts_with_rels = rows
+        .iter()
+        .filter(|r| r.spec_name.is_some() && !r.edges.is_empty())
+        .count();
+    let coverage = if known_paths.is_empty() {
+        1.0
+    } else {
+        crate::pycompat::py_round(artifacts_with_rels as f64 / known_paths.len() as f64, 4)
+    };
+    RelationshipSummary {
+        total: checked,
+        valid,
+        broken,
+        orphaned,
+        coverage,
+        issues: ref_issues,
+    }
+}
+
+/// Public alias so callers outside this module build validation rows.
+pub fn rows_from_corpus_items(items: &[CorpusItem]) -> Vec<ValidationRow> {
+    rows_from_items(items)
 }

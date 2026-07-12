@@ -9,3 +9,4 @@ publish.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 rayon = "1"
+markdown-it = { version = "0.6.1", default-features = false }

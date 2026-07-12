@@ -121,7 +121,9 @@ fn collect(
 /// Build `str(root / rel)` — the normalized root prefix joined to the relative
 /// components with `/`. Mirrors `str(path)` for paths from `rglob`.
 fn join_display(prefix: &str, components: &[String]) -> String {
-    if prefix.is_empty() {
+    if prefix.is_empty() || prefix == "." {
+        // pathlib drops a bare-`.` root when joining: Path('.')/'a.md' ->
+        // PosixPath('a.md'), so walked paths under `.` carry no prefix.
         components.join("/")
     } else if prefix == "/" {
         // Absolute root "/": avoid a doubled leading slash.

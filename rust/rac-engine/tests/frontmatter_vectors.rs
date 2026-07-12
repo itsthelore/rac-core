@@ -9,9 +9,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rac_engine::frontmatter::{
-    exceeds_byte_cap, is_valid_id, load_frontmatter_mapping, max_file_bytes, non_utf8_issue,
-    normalize_id, oversize_parse_issue, parse_frontmatter, read_artifact_text,
-    split_frontmatter, unterminated_issue, ArtifactMetadata, Issue, Yaml,
+    exceeds_byte_cap, file_cap, file_cap_from, is_valid_id, load_frontmatter_mapping,
+    non_utf8_issue, normalize_id, oversize_parse_issue, parse_frontmatter, read_artifact_text,
+    split_frontmatter, unterminated_issue, ArtifactMetadata, FileCap, Issue, Yaml,
 };
 use serde_json::{json, Value};
 
@@ -92,6 +92,7 @@ fn enc_yaml(v: &Yaml) -> Value {
         Yaml::Null => json!({"t": "none"}),
         Yaml::Bool(b) => json!({"t": "bool", "v": b}),
         Yaml::Int(i) => json!({"t": "int", "v": i.to_string()}),
+        Yaml::BigInt(b) => json!({"t": "int", "v": b.to_string()}),
         Yaml::Float(f) => json!({"t": "float", "v": rac_engine::pycompat::py_float_repr(*f)}),
         Yaml::Str(s) => json!({"t": "str", "v": s}),
         Yaml::Bytes(b) => json!({"t": "bytes", "v": b}),
@@ -141,7 +142,7 @@ fn enc_meta(m: &Option<ArtifactMetadata>) -> Value {
     match m {
         None => Value::Null,
         Some(m) => json!({
-            "schema_version": m.schema_version,
+            "schema_version": m.schema_version.to_string(),
             "id": m.id,
             "type": m.artifact_type,
             "relationships": m
@@ -208,17 +209,33 @@ fn parse_matches_oracle() {
         if let Some(crash) = case["crash"].as_str() {
             // Oracle crashes; the port returns internal-oracle-divergence
             // with the mirrored exception string (PORT-CONTRACT decision 3).
+            // crash_stage "validate" = the load succeeded and the crash came
+            // from a field validator (int->str limit on a bignum message),
+            // so only parse_frontmatter carries the marker.
+            let validate_stage = case["crash_stage"].as_str() == Some("validate");
             let (data, issues) = load_frontmatter_mapping(&raw);
-            assert!(data.is_none(), "crash case loaded data: {label:?}");
-            assert_eq!(issues.len(), 1, "crash case issues: {label:?}");
+            if validate_stage {
+                assert!(data.is_some(), "validate-crash case must load: {label:?}");
+                assert!(issues.is_empty(), "validate-crash load issues: {label:?}");
+            } else {
+                assert!(data.is_none(), "crash case loaded data: {label:?}");
+                assert_eq!(issues.len(), 1, "crash case issues: {label:?}");
+                assert_eq!(
+                    issues[0].code, "internal-oracle-divergence",
+                    "crash case code: {label:?} -> {}",
+                    issues[0].message
+                );
+                assert_eq!(issues[0].message, crash, "crash message for {label:?}");
+            }
+            let (meta, issues) = parse_frontmatter(&raw);
+            assert!(meta.is_none(), "crash case metadata: {label:?}");
+            assert_eq!(issues.len(), 1, "crash case parse issues: {label:?}");
             assert_eq!(
                 issues[0].code, "internal-oracle-divergence",
-                "crash case code: {label:?} -> {}",
+                "crash case parse code: {label:?} -> {}",
                 issues[0].message
             );
             assert_eq!(issues[0].message, crash, "crash message for {label:?}");
-            let (meta, _) = parse_frontmatter(&raw);
-            assert!(meta.is_none(), "crash case metadata: {label:?}");
             continue;
         }
         let (data, load_issues) = load_frontmatter_mapping(&raw);
@@ -272,7 +289,10 @@ fn run_file_pipeline(path: &str) -> (Vec<Issue>, Option<ArtifactMetadata>, Vec<I
         return (read_issues, metadata, metadata_issues);
     }
     let text = read.text.unwrap();
-    let cap = max_file_bytes();
+    let cap = match file_cap() {
+        FileCap::Cap(cap) => cap,
+        FileCap::OracleCrash(_) => unreachable!("file cases never set a crash-zone cap"),
+    };
     if exceeds_byte_cap(&text, cap as usize) {
         read_issues.push(oversize_parse_issue(cap));
     } else {
@@ -357,13 +377,37 @@ fn files_and_env_cap_match_oracle() {
             std::env::set_var("RAC_MAX_FILE_BYTES", val);
         }
         assert_eq!(
-            max_file_bytes(),
-            case["expected"].as_u64().unwrap(),
-            "max_file_bytes for {:?}",
+            file_cap(),
+            FileCap::Cap(case["expected"].as_u64().unwrap()),
+            "file_cap for {:?}",
             case["value"]
         );
     }
     std::env::remove_var("RAC_MAX_FILE_BYTES");
+
+    // Oracle read-crash zone (empirical, CPython 3.11; see FileCap docs):
+    // fh.read(cap + 1) raises uncaught for caps at or above 2^63 - 34.
+    let toolarge = FileCap::OracleCrash("OverflowError: byte string is too large");
+    let overflow =
+        FileCap::OracleCrash("OverflowError: cannot fit 'int' into an index-sized integer");
+    for (value, expected) in [
+        ("9223372036854775773", FileCap::Cap(9223372036854775773)), // 2^63 - 35
+        ("9223372036854775774", toolarge),                          // 2^63 - 34
+        ("9223372036854775806", toolarge),                          // 2^63 - 2
+        ("9223372036854775807", overflow),                          // sys.maxsize
+        ("9223372036854775808", overflow),                          // 2^63
+        ("18446744073709551617", overflow),                         // 2^64 + 1
+        ("99999999999999999999", overflow),
+        // beyond i128 (saturating parse still lands in the crash zone)
+        ("199999999999999999999999999999999999999999", overflow),
+        // huge negatives are non-positive: default cap, no crash
+        (
+            "-99999999999999999999",
+            FileCap::Cap(1 << 20),
+        ),
+    ] {
+        assert_eq!(file_cap_from(Some(value)), expected, "file_cap_from({value:?})");
+    }
 
     fs::remove_dir_all(&root).ok();
 }

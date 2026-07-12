@@ -128,6 +128,14 @@ fn write_string(out: &mut String, s: &str, ensure_ascii: bool) {
             '\u{c}' => out.push_str("\\f"),
             '\r' => out.push_str("\\r"),
             c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            // stdin surrogateescape sentinel: json.dumps writes the lone
+            // surrogate itself — `\udcXX` under ensure_ascii, the raw
+            // surrogate char otherwise (which stdout emission then
+            // re-encodes as the original byte; keep the sentinel here).
+            c if ensure_ascii && crate::pycompat::sentinel_surrogate(c).is_some() => {
+                let sur = crate::pycompat::sentinel_surrogate(c).expect("checked");
+                out.push_str(&format!("\\u{sur:04x}"));
+            }
             c if ensure_ascii && (c as u32) > 0x7e => {
                 let cp = c as u32;
                 if cp <= 0xffff {

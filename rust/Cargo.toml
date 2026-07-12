@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["rac-engine", "rac", "parity-harness"]
+members = ["rac-engine", "rac", "parity-harness", "rac-mcp"]
 
 [workspace.package]
 version = "0.0.1"

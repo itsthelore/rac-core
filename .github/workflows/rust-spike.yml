@@ -1,0 +1,154 @@
+# CI for the native-engine spike (rust/): build, unit/vector tests, and the
+# byte-parity gates against the Python oracle built from this same checkout.
+#
+# Not yet a required check (ADR-075 governs promotion to the merge gate);
+# runs only when rust/ or this workflow changes.
+#
+# Version seam: the parity case lists pin RAC_RS_VERSION to the oracle
+# version the cases were authored against; SETUPTOOLS_SCM_PRETEND_VERSION
+# makes the CI-installed oracle report exactly that version so --version
+# and export cases compare real bytes (see rust/PORT-CONTRACT.md, decision 6).
+
+name: rust-spike
+
+on:
+  pull_request:
+    paths:
+      - "rust/**"
+      - ".github/workflows/rust-spike.yml"
+  push:
+    branches: [claude/rac-mcp-http-spike] # PR branches are covered by pull_request
+    paths:
+      - "rust/**"
+      - ".github/workflows/rust-spike.yml"
+
+jobs:
+  build-test-parity:
+    name: cargo test + CLI/MCP parity (mainline oracle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install rust toolchain (pinned by rust/rust-toolchain.toml)
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build the Python oracle (pinned version seam)
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: 0.1.dev50+g21c8be403
+        run: |
+          python -m venv .venv-oracle
+          .venv-oracle/bin/pip install --quiet -e . "mcp==1.28.1" "pydantic==2.13.4"
+          .venv-oracle/bin/rac --version
+
+      - name: cargo build --release
+        working-directory: rust
+        run: cargo build --release --locked
+
+      - name: cargo test (unit + oracle vector suites)
+        working-directory: rust
+        run: cargo test -p rac-engine --release
+
+      - name: clippy (strict on the crates held to that bar)
+        working-directory: rust
+        run: |
+          cargo clippy --release --no-deps -p rac-mcp -p parity-harness -- -D warnings
+          # rac-engine carries pre-existing style lints; clippy cleanup there
+          # is follow-up work, deliberately not folded into parity-pinned
+          # files as a CI side effect. Report, don't fail.
+          cargo clippy --release --no-deps -p rac-engine || true
+
+      - name: CLI byte-parity vs oracle (130 mainline cases, twice)
+        working-directory: rust
+        run: |
+          target/release/parity-harness \
+            --engine-a ../.venv-oracle/bin/rac --engine-b target/release/rac \
+            --cases parity-cases.json --scoreboard-dir parity-out
+          target/release/parity-harness \
+            --engine-a ../.venv-oracle/bin/rac --engine-b target/release/rac \
+            --cases parity-cases.json --scoreboard-dir parity-out-2
+          diff -r parity-out parity-out-2
+
+      - name: MCP wire parity vs oracle (five-tool cases)
+        working-directory: rust
+        run: |
+          python3 tools/mcp_parity.py \
+            --engine-a "$(pwd)/../.venv-oracle/bin/rac mcp" \
+            --engine-b "$(pwd)/target/release/rac-mcp" \
+            --exclude-tags six,list --out mcp-parity-out
+
+      - name: Upload scoreboards on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scoreboards
+          path: |
+            rust/parity-out*/
+            rust/mcp-parity-out/
+
+  retrieve-parity:
+    name: retrieve + six-tool parity (retrieval-branch oracle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Tracks the unmerged grounding-retrieval-surface branch; non-blocking
+    # until that branch merges (then fold these cases into the main job).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install rust toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build the retrieval-branch oracle
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: 0.1.dev55+gf2091befd
+        run: |
+          git fetch origin claude/rac-mcp-retrieval-spec-vmglox
+          git worktree add ../oracle-next FETCH_HEAD
+          python -m venv .venv-oracle-next
+          .venv-oracle-next/bin/pip install --quiet -e ../oracle-next "mcp==1.28.1" "pydantic==2.13.4"
+          .venv-oracle-next/bin/rac --version
+
+      - name: cargo build --release
+        working-directory: rust
+        run: cargo build --release --locked
+
+      - name: retrieve CLI parity (44 cases)
+        working-directory: rust
+        run: |
+          target/release/parity-harness \
+            --engine-a ../.venv-oracle-next/bin/rac --engine-b target/release/rac \
+            --cases parity-cases-retrieve.json --scoreboard-dir retrieve-out
+
+      - name: MCP wire parity (full six-tool basket)
+        working-directory: rust
+        run: |
+          python3 tools/mcp_parity.py \
+            --engine-a "$(pwd)/../.venv-oracle-next/bin/rac mcp" \
+            --engine-b "$(pwd)/target/release/rac-mcp" \
+            --out mcp-next-out
+
+      - name: Upload scoreboards on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieve-scoreboards
+          path: |
+            rust/retrieve-out/
+            rust/mcp-next-out/

@@ -8,8 +8,9 @@ use crate::classify::classify;
 use crate::output;
 use crate::parse::{parse_file, parse_text, Artifact, Issue};
 use crate::relationships::{
-    corpus_items, validate_document_against_corpus, validate_relationships,
-    validate_relationships_file, RelationshipIssue,
+    build_relationship_report, build_relationship_report_file, corpus_items,
+    validate_document_against_corpus, validate_relationships, validate_relationships_file,
+    RelationshipIssue,
 };
 use crate::validate::{
     apply_overrides, check_okf_conformance, has_errors, load_overrides, load_ticketing_provider,
@@ -33,8 +34,12 @@ fn usage_error(message: &str) -> i32 {
 
 fn emit(text: String) {
     use std::io::Write;
+    // stdin surrogateescape sentinels re-materialize as their raw bytes on
+    // stdout (the oracle's stdout encoder uses surrogateescape). No-op —
+    // a borrowed passthrough — unless stdin decoding produced sentinels.
+    let payload = crate::pycompat::encode_stdout_surrogateescape(&text);
     let mut stdout = std::io::stdout().lock();
-    let _ = stdout.write_all(text.as_bytes());
+    let _ = stdout.write_all(&payload);
     let _ = stdout.write_all(b"\n");
     let _ = stdout.flush();
 }
@@ -97,38 +102,44 @@ pub fn validate_directory(directory: &str, recursive: bool) -> DirectoryValidati
     let entries = corpus_items(directory, recursive);
     let overrides = load_overrides(directory);
     let provider = load_ticketing_provider(directory);
-    let mut files: Vec<FileValidation> = Vec::new();
-    for item in &entries {
-        let artifact_type = item
-            .spec
-            .map(|s| s.name.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        if item.spec.is_none() {
-            files.push(FileValidation {
+    // Per-file validation in parallel over the sorted corpus (PORT-CONTRACT
+    // decision 5): an indexed rayon iterator, so `collect` preserves the
+    // sorted order and the worker count is invisible in the output. The
+    // shared inputs (overrides, provider) are read-only.
+    use rayon::prelude::*;
+    let files: Vec<FileValidation> = entries
+        .par_iter()
+        .map(|item| {
+            let artifact_type = item
+                .spec
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| "unknown".to_string());
+            if item.spec.is_none() {
+                return FileValidation {
+                    path: item.path.clone(),
+                    artifact_type,
+                    status: STATUS_SKIPPED,
+                    issues: Vec::new(),
+                };
+            }
+            let issues = apply_overrides(
+                validate(&item.artifact, provider.as_deref(), Some(&artifact_type)),
+                &artifact_type,
+                &overrides,
+            );
+            let status = if has_errors(&issues) {
+                STATUS_INVALID
+            } else {
+                STATUS_VALID
+            };
+            FileValidation {
                 path: item.path.clone(),
                 artifact_type,
-                status: STATUS_SKIPPED,
-                issues: Vec::new(),
-            });
-            continue;
-        }
-        let issues = apply_overrides(
-            validate(&item.artifact, provider.as_deref(), Some(&artifact_type)),
-            &artifact_type,
-            &overrides,
-        );
-        let status = if has_errors(&issues) {
-            STATUS_INVALID
-        } else {
-            STATUS_VALID
-        };
-        files.push(FileValidation {
-            path: item.path.clone(),
-            artifact_type,
-            status,
-            issues,
-        });
-    }
+                status,
+                issues,
+            }
+        })
+        .collect();
     let okf_entries: Vec<OkfEntry> = entries
         .iter()
         .map(|item| OkfEntry {
@@ -218,7 +229,10 @@ fn read_validate_input(target: &str) -> Result<Artifact, i32> {
         use std::io::Read;
         let mut buf = Vec::new();
         let _ = std::io::stdin().lock().read_to_end(&mut buf);
-        let text = String::from_utf8_lossy(&buf).into_owned();
+        // The oracle reads stdin as TEXT with errors="surrogateescape"
+        // (fuzz campaign 2, finding 005) — NOT the errors="replace"
+        // lossy decode used for files.
+        let text = crate::pycompat::decode_stdin_surrogateescape(&buf);
         return Ok(parse_text(&text, "-"));
     }
     read_named_file(target)
@@ -358,10 +372,395 @@ pub fn cmd_relationships(args: &RelationshipsArgs) -> i32 {
         };
     }
 
-    // UNIMPLEMENTED STUB (this phase wires validate + --version only; the
-    // relationships inspection arm has no parity case in the current filters).
-    eprintln!("rac-rs: 'relationships' without --validate is not yet implemented");
+    // Inspection arm (non --validate): always exit 0.
+    let report = if is_dir {
+        build_relationship_report(&args.path, !args.top_level)
+    } else {
+        build_relationship_report_file(&args.path)
+    };
+    if args.json {
+        emit(output::render_relationships_json(&report));
+    } else {
+        emit(output::render_relationships_human(&report));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
+// cmd_stats
+// ---------------------------------------------------------------------------
+
+pub struct StatsArgs {
+    pub directory: String,
+    pub json: bool,
+}
+
+pub fn cmd_stats(args: &StatsArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let stats = crate::stats::collect_stats(&args.directory);
+    if args.json {
+        emit(output::render_stats_json(&stats));
+    } else {
+        emit(output::render_stats_human(&stats));
+    }
+    if stats.has_meaningful_content() || stats.is_empty() {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+// ---------------------------------------------------------------------------
+// cmd_review
+// ---------------------------------------------------------------------------
+
+pub struct ReviewArgs {
+    pub directory: String,
+    pub json: bool,
+    pub sarif: bool,
+    pub top_level: bool,
+    /// `--stale-after`: None when absent; Some(days) when present (const 14).
+    pub stale_after: Option<i64>,
+}
+
+pub fn cmd_review(args: &ReviewArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    if let Some(days) = args.stale_after {
+        if days < 0 {
+            return usage_error("--stale-after must be a non-negative number of days");
+        }
+    }
+    let report = crate::review::build_review(&args.directory, !args.top_level, args.stale_after);
+    if args.sarif {
+        emit(output::render_review_sarif(&report));
+    } else if args.json {
+        emit(output::render_review_json(&report));
+    } else {
+        emit(output::render_review_human(&report));
+    }
+    if report.ok() {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+// ---------------------------------------------------------------------------
+// cmd_export
+// ---------------------------------------------------------------------------
+
+pub struct ExportArgs {
+    pub directory: String,
+    pub json: bool,
+    pub graph: bool,
+    pub documents: bool,
+    pub html: bool,
+    pub okf: bool,
+    pub agent_rules: bool,
+    pub check: bool,
+    pub client: Vec<String>,
+    pub out: Option<String>,
+}
+
+pub fn cmd_export(args: &ExportArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    if args.agent_rules {
+        // Agent-rules is a distinct, drift-guarded projection mode; not part of
+        // the export-payload parity surface (named gap for this stage).
+        eprintln!("rac-rs: export --agent-rules is not implemented in this stage");
+        return EXIT_USAGE;
+    }
+    if args.check {
+        return usage_error("--check requires --agent-rules");
+    }
+    if !args.client.is_empty() {
+        return usage_error("--client requires --agent-rules");
+    }
+    if args.json && (args.html || args.okf) {
+        return usage_error("--json cannot combine with --html or --okf");
+    }
+    if args.out.is_some() && !(args.html || args.okf) {
+        return usage_error("--out requires --html or --okf (--json writes to stdout)");
+    }
+    if args.documents {
+        emit(output::render_documents_jsonl(
+            &crate::export::build_documents_export(&args.directory),
+        ));
+        return EXIT_OK;
+    }
+    if args.graph {
+        emit(output::render_graph_json(&crate::export::build_graph_export(
+            &args.directory,
+        )));
+        return EXIT_OK;
+    }
+    let export = crate::export::build_corpus_export(&args.directory, output::rac_version());
+    if args.okf {
+        // OKF bundle writing is another workstream's scope (named gap).
+        eprintln!("rac-rs: export --okf is not implemented in this stage");
+        return EXIT_USAGE;
+    }
+    if !args.html {
+        emit(output::render_export_json(&export));
+        return EXIT_OK;
+    }
+    // HTML portal writing is out of the export-payload parity surface (named gap).
+    eprintln!("rac-rs: export --html is not implemented in this stage");
     EXIT_USAGE
+}
+
+// ---------------------------------------------------------------------------
+// cmd_schema / cmd_templates
+// ---------------------------------------------------------------------------
+
+pub struct SchemaArgs {
+    pub schema: Option<String>,
+    pub list: bool,
+    pub json: bool,
+    pub template: bool,
+}
+
+pub fn cmd_schema(args: &SchemaArgs) -> i32 {
+    let names = crate::spec::available_schemas();
+    if args.list {
+        if args.template {
+            return usage_error("--template cannot be used with --list");
+        }
+        if args.schema.is_some() {
+            return usage_error("schema name cannot be used with --list");
+        }
+        if args.json {
+            emit(output::render_schema_list_json(&names));
+        } else {
+            emit(output::render_schema_list_human(&names));
+        }
+        return EXIT_OK;
+    }
+
+    let Some(name) = &args.schema else {
+        return usage_error("schema name required unless --list is passed");
+    };
+
+    let Some(spec) = crate::spec::spec_for(name) else {
+        // Unknown schema: multi-line blob to stderr, exit 2 (no `rac:` prefix).
+        eprintln!("{}", output::render_unknown_schema(name, &names));
+        return EXIT_USAGE;
+    };
+
+    if args.json {
+        emit(output::render_schema_json(spec));
+    } else if args.template {
+        emit(output::render_schema_template(spec));
+    } else {
+        emit(output::render_schema_human(spec));
+    }
+    EXIT_OK
+}
+
+pub struct TemplatesArgs {
+    pub json: bool,
+}
+
+pub fn cmd_templates(args: &TemplatesArgs) -> i32 {
+    let names = crate::spec::available_schemas();
+    if args.json {
+        emit(output::render_templates_json(&names));
+    } else {
+        emit(output::render_templates_human(&names));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
+// cmd_resolve / cmd_find (PORT-CONTRACT.d/06)
+// ---------------------------------------------------------------------------
+
+pub struct ResolveArgs {
+    pub id: String,
+    pub directory: String,
+    pub json: bool,
+    pub top_level: bool,
+}
+
+pub fn cmd_resolve(args: &ResolveArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let result = crate::resolve::resolve_artifact(&args.directory, &args.id, !args.top_level);
+    if args.json {
+        emit(output::render_resolve_json(&result));
+    } else if result.outcome == crate::resolve::OUTCOME_RESOLVED {
+        emit(output::render_resolve_human(
+            result.artifact.as_ref().expect("resolved implies artifact"),
+        ));
+    } else if result.outcome == crate::resolve::OUTCOME_DUPLICATE {
+        let found: Vec<String> = result
+            .duplicate_paths
+            .iter()
+            .map(|p| format!("- {p}"))
+            .collect();
+        eprintln!(
+            "rac: duplicate artifact ID: {}\n\nFound in:\n{}",
+            args.id,
+            found.join("\n")
+        );
+    } else {
+        eprintln!("rac: artifact not found: {}", args.id);
+    }
+    // Not-found and duplicate identity are both repository findings (exit 1).
+    if result.outcome == crate::resolve::OUTCOME_RESOLVED {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+pub struct FindArgs {
+    pub query: String,
+    pub directory: String,
+    pub artifact_type: Option<String>,
+    pub decisions: bool,
+    pub tags: Vec<String>,
+    pub json: bool,
+    pub explain: bool,
+    pub top_level: bool,
+    /// The live-only facet (ADR-113): drop retired matches of every type.
+    pub live: bool,
+}
+
+/// Python `datetime.fromisoformat(stamp).isoformat()` round-trip of a git
+/// `%cI` stamp: verbatim for the `±HH:MM` form git emits; a trailing `Z`
+/// re-serializes as `+00:00`, a colonless `±HHMM` gains its colon, and a
+/// space separator becomes `T`.
+fn py_isoformat_roundtrip(stamp: &str) -> String {
+    let mut s = stamp.to_string();
+    if s.len() > 10 && s.as_bytes()[10] == b' ' {
+        s.replace_range(10..11, "T");
+    }
+    if s.ends_with('Z') || s.ends_with('z') {
+        s.truncate(s.len() - 1);
+        s.push_str("+00:00");
+        return s;
+    }
+    // ±HHMM (no colon) -> ±HH:MM; ±HH -> ±HH:00. Find the offset sign after
+    // the time part (beyond index 10 to skip the date's hyphens).
+    if let Some(pos) = s.rfind(['+', '-']) {
+        if pos > 10 {
+            let body = &s[pos + 1..];
+            if body.len() == 4 && body.bytes().all(|b| b.is_ascii_digit()) {
+                let fixed = format!("{}:{}", &body[..2], &body[2..]);
+                s.replace_range(pos + 1.., &fixed);
+            } else if body.len() == 2 && body.bytes().all(|b| b.is_ascii_digit()) {
+                let fixed = format!("{body}:00");
+                s.replace_range(pos + 1.., &fixed);
+            }
+        }
+    }
+    s
+}
+
+/// `annotate_search_recency(matches, directory)` — the read-surface join
+/// (ADR-045): git-derived staleness per match, computed AFTER ranking so the
+/// matched set and order are unchanged. All-null outside a git repository.
+fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact], directory: &str) {
+    use crate::gitinfo;
+    if matches.is_empty() {
+        return;
+    }
+    let threshold = crate::validate::load_freshness_threshold(directory);
+    let reference = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let repo_root = gitinfo::repository_root(Path::new(directory));
+    for m in matches.iter_mut() {
+        let last = repo_root
+            .as_ref()
+            .and_then(|root| gitinfo::last_committed(root, Path::new(&m.path)));
+        let st = gitinfo::staleness(last.as_deref(), threshold, reference);
+        m.recency = Some(crate::resolve::Recency {
+            last_committed: st.last_committed.as_deref().map(py_isoformat_roundtrip),
+            age_days: st.age_days,
+            stale: st.stale,
+        });
+    }
+}
+
+pub fn cmd_find(args: &FindArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let mut result = if args.decisions {
+        // The live decision query (ADR-067): decision type filter + the
+        // Accepted/non-retired liveness filter; `--tag` is silently ignored.
+        crate::resolve::find_decisions(&args.directory, &args.query, !args.top_level)
+    } else {
+        crate::resolve::find_artifacts(
+            &args.directory,
+            &args.query,
+            args.artifact_type.as_deref(),
+            !args.top_level,
+            &args.tags,
+            args.live,
+        )
+    };
+    annotate_search_recency(&mut result.matches, &args.directory);
+    if args.json {
+        emit(output::render_find_json(&result, args.explain));
+    } else {
+        emit(output::render_find_human(&result, args.explain));
+    }
+    // An empty result is a valid outcome, not an error.
+    EXIT_OK
+}
+
+pub struct RetrieveArgs {
+    pub task: String,
+    pub directory: String,
+    pub scope: Option<String>,
+    pub top_k: i64,
+    pub budget: i64,
+    pub all: bool,
+    pub json: bool,
+}
+
+/// `cmd_retrieve` — one-call compound grounding retrieval (ADR-113). The
+/// `--json` face emits the budget-capped serialization; the human face renders
+/// the same truncated payload. An empty `items` list is a valid answer.
+pub fn cmd_retrieve(args: &RetrieveArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    if args.top_k < 1 {
+        return usage_error(&format!("--top-k must be at least 1, got {}", args.top_k));
+    }
+    if args.budget < 1 {
+        return usage_error(&format!("--budget must be at least 1, got {}", args.budget));
+    }
+    let payload = crate::retrieve::retrieve_grounding(
+        &args.directory,
+        &args.task,
+        args.scope.as_deref(),
+        args.top_k,
+        args.budget,
+        !args.all,
+    );
+    let serialized = crate::retrieve::serialize(&payload, args.budget);
+    if args.json {
+        emit(serialized);
+    } else {
+        // The oracle renders from json.loads(serialized) — the truncated shape.
+        let truncated: serde_json::Value =
+            serde_json::from_str(&serialized).expect("serialized payload is valid JSON");
+        emit(output::render_retrieve_human(&truncated));
+    }
+    EXIT_OK
 }
 
 // ---------------------------------------------------------------------------

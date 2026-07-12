@@ -13,9 +13,111 @@
 //! never multiply-by-10^n tricks.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 const TABLES_JSON: &str = include_str!("../../spec/pycompat-tables.json");
+
+// ---------------------------------------------------------------------------
+// stdin surrogateescape (PEP 383) — sentinel representation
+//
+// The oracle reads stdin as text with `errors="surrogateescape"` (C locale →
+// UTF-8 mode): each undecodable byte b becomes the lone surrogate U+DC00+b.
+// Rust `String` cannot hold surrogates, so `decode_stdin_surrogateescape`
+// maps each such byte to a plane-16 private-use SENTINEL char U+10FC00+b
+// (U+10FC80..=U+10FCFF) and flips a process-wide flag. While the flag is set,
+// the sinks that can observe the char identity translate the sentinel back
+// to oracle-surrogate behavior:
+//   - YAML `check_printable`  → "unacceptable character #xdcXX" (frontmatter)
+//   - `py_repr_str`           → `\udcXX` escape
+//   - the JSON writer         → `\udcXX` (ensure_ascii)
+//   - stdout emission         → the raw original byte (surrogateescape
+//                                re-encoding on the oracle's stdout)
+//
+// The flag gating means file-based runs (which decode with U+FFFD
+// replacement, matching the oracle's `errors="replace"`) are bit-for-bit
+// unaffected. KNOWN SEAM: input that legitimately contains U+10FC80..=
+// U+10FCFF (4-byte UTF-8 in the plane-16 PUA) in the same run as an
+// undecodable stdin byte would be mis-translated; the oracle treats those
+// as ordinary astral chars. Unobservable short of adversarial input using
+// that exact code-point range together with invalid stdin bytes.
+// ---------------------------------------------------------------------------
+
+/// First sentinel code point; add the raw byte value (0x80..=0xFF).
+pub const SURROGATE_SENTINEL_BASE: u32 = 0x10FC00;
+
+static STDIN_SURROGATES: AtomicBool = AtomicBool::new(false);
+
+/// True once `decode_stdin_surrogateescape` has produced a sentinel.
+pub fn surrogate_sentinels_active() -> bool {
+    STDIN_SURROGATES.load(Ordering::Relaxed)
+}
+
+/// Test hook: reset/force the sentinel flag.
+pub fn set_surrogate_sentinels_active(on: bool) {
+    STDIN_SURROGATES.store(on, Ordering::Relaxed);
+}
+
+/// If `c` is an active sentinel, the surrogate code point (0xDC80..=0xDCFF)
+/// the oracle would hold instead.
+pub fn sentinel_surrogate(c: char) -> Option<u32> {
+    let cp = c as u32;
+    if surrogate_sentinels_active() && (SURROGATE_SENTINEL_BASE + 0x80..=SURROGATE_SENTINEL_BASE + 0xFF).contains(&cp) {
+        Some(0xDC00 + (cp - SURROGATE_SENTINEL_BASE))
+    } else {
+        None
+    }
+}
+
+/// Decode stdin bytes the way the oracle's `sys.stdin.read()` does under the
+/// parity environment: UTF-8 with `surrogateescape` — every undecodable byte
+/// becomes one sentinel char (CPython maps each bad byte individually, which
+/// matches walking Rust's `Utf8Error` with per-byte emission).
+pub fn decode_stdin_surrogateescape(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    let mut rest = bytes;
+    loop {
+        match std::str::from_utf8(rest) {
+            Ok(s) => {
+                out.push_str(s);
+                return out;
+            }
+            Err(e) => {
+                let valid = e.valid_up_to();
+                out.push_str(std::str::from_utf8(&rest[..valid]).expect("valid prefix"));
+                let bad = e.error_len().unwrap_or(rest.len() - valid);
+                for &b in &rest[valid..valid + bad] {
+                    out.push(
+                        char::from_u32(SURROGATE_SENTINEL_BASE + b as u32)
+                            .expect("plane-16 PUA sentinel"),
+                    );
+                    STDIN_SURROGATES.store(true, Ordering::Relaxed);
+                }
+                rest = &rest[valid + bad..];
+            }
+        }
+    }
+}
+
+/// Encode a rendered stdout payload, re-materializing sentinel chars as
+/// their raw original bytes (the oracle's stdout uses `surrogateescape`, so
+/// a lone surrogate prints as the byte that produced it). Borrow when no
+/// translation is needed.
+pub fn encode_stdout_surrogateescape(text: &str) -> std::borrow::Cow<'_, [u8]> {
+    if !surrogate_sentinels_active() || !text.chars().any(|c| sentinel_surrogate(c).is_some()) {
+        return std::borrow::Cow::Borrowed(text.as_bytes());
+    }
+    let mut out = Vec::with_capacity(text.len());
+    for c in text.chars() {
+        if let Some(sur) = sentinel_surrogate(c) {
+            out.push((sur - 0xDC00) as u8);
+        } else {
+            let mut buf = [0u8; 4];
+            out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
 
 struct Tables {
     casefold: HashMap<u32, String>,
@@ -189,6 +291,9 @@ pub fn py_repr_str(s: &str) -> String {
             out.push_str("\\n");
         } else if c == '\r' {
             out.push_str("\\r");
+        } else if let Some(sur) = sentinel_surrogate(c) {
+            // stdin surrogateescape sentinel: repr as the lone surrogate.
+            out.push_str(&format!("\\u{sur:04x}"));
         } else if py_is_printable(c) {
             out.push(c);
         } else {
@@ -618,5 +723,42 @@ mod tests {
         assert_eq!(py_format_1f(0.25), "0.2");
         assert_eq!(py_format_1f(-0.04), "-0.0");
         assert_eq!(py_format_percent0(0.855), "86%");
+    }
+
+    /// stdin surrogateescape decode: each undecodable byte becomes one
+    /// sentinel char, exactly as CPython maps each bad byte to U+DC00+b
+    /// (fuzz campaign 2, finding 005). NOTE: tests only ever turn the
+    /// process-wide sentinel flag ON (never off) so parallel test threads
+    /// cannot race each other; non-sentinel chars are unaffected by it.
+    #[test]
+    fn stdin_surrogateescape_decode_and_reencode() {
+        let cases: &[(&[u8], &[u32])] = &[
+            (b"abc", &[0x61, 0x62, 0x63]),
+            (b"---\n\xcc\n---", &[0x2d, 0x2d, 0x2d, 0x0a, 0x10FCCC, 0x0a, 0x2d, 0x2d, 0x2d]),
+            (b"\xc3\x28", &[0x10FCC3, 0x28]),               // bad continuation
+            (b"\xf0\x9f\x98", &[0x10FCF0, 0x10FC9F, 0x10FC98]), // truncated 4-byte
+            (b"\xed\xa0\x80", &[0x10FCED, 0x10FCA0, 0x10FC80]), // encoded surrogate
+            (b"\xc0\xaf", &[0x10FCC0, 0x10FCAF]),           // overlong
+            (b"\xc3\xa9", &[0xE9]),                         // valid 2-byte passes
+        ];
+        for (bytes, chars) in cases {
+            let s = decode_stdin_surrogateescape(bytes);
+            let got: Vec<u32> = s.chars().map(|c| c as u32).collect();
+            assert_eq!(&got, chars, "decode of {bytes:?}");
+            // round-trip: stdout re-encoding restores the original bytes
+            assert_eq!(
+                encode_stdout_surrogateescape(&s).as_ref(),
+                *bytes,
+                "re-encode of {bytes:?}"
+            );
+        }
+        assert!(surrogate_sentinels_active());
+    }
+
+    #[test]
+    fn sentinel_repr_is_lone_surrogate_escape() {
+        set_surrogate_sentinels_active(true);
+        let s = decode_stdin_surrogateescape(b"a\xccb");
+        assert_eq!(py_repr_str(&s), "'a\\udcccb'"); // Python repr('a\udcccb')
     }
 }

@@ -997,6 +997,26 @@ pub fn load_overrides(start_dir: &str) -> SeverityOverrides {
     }
 }
 
+/// `load_freshness_threshold(start_dir)` (ADR-045): the
+/// `freshness.stale_after_days` from the nearest `.rac/config.yaml`.
+/// Defaults to 180 when there is no config, no `freshness` mapping, or the
+/// value is not a positive int — YAML 1.1 bools are explicitly rejected
+/// (`true`/`false` are not day counts even though `bool` is an `int`
+/// subclass in Python).
+pub fn load_freshness_threshold(start_dir: &str) -> i64 {
+    const DEFAULT: i64 = 180;
+    let Some(pairs) = load_config_mapping(start_dir) else {
+        return DEFAULT;
+    };
+    let Some(Yaml::Map(section)) = yaml_map_get(&pairs, "freshness") else {
+        return DEFAULT;
+    };
+    match yaml_map_get(section, "stale_after_days") {
+        Some(Yaml::Int(v)) if *v > 0 => *v,
+        _ => DEFAULT,
+    }
+}
+
 /// `load_ticketing_provider(start_dir)` (ADR-088).
 pub fn load_ticketing_provider(start_dir: &str) -> Option<String> {
     let pairs = load_config_mapping(start_dir)?;

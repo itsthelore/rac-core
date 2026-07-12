@@ -1,2 +1,4 @@
 target/
 parity-out/
+parity-out*/
+mcp-parity-out*/
