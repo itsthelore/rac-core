@@ -54,7 +54,7 @@ fn nd_digit_value(c: char) -> Option<u32> {
 
 /// Python `int(str)` (decimal): strips the Unicode whitespace set (which,
 /// unlike `str.strip()`, excludes U+001C-U+001F — verified empirically, and
-/// it matches Rust `char::is_whitespace`), accepts an optional sign, Unicode
+/// it matches Rust `str::trim`), accepts an optional sign, Unicode
 /// Nd digits, and single underscores strictly between digits.
 ///
 /// Python ints are unbounded; magnitudes beyond i128 SATURATE to i128::MAX
@@ -62,7 +62,7 @@ fn nd_digit_value(c: char) -> Option<u32> {
 /// at least N" thresholds far below the saturation point, so the clamp is
 /// unobservable.
 pub fn py_parse_int(raw: &str) -> Option<i128> {
-    let s = raw.trim_matches(|c: char| c.is_whitespace());
+    let s = raw.trim();
     let mut chars = s.chars().peekable();
     let mut neg = false;
     match chars.peek() {
@@ -249,11 +249,6 @@ const MAX_NESTING: i32 = 20; // commonmark preset options.maxNesting
 #[inline]
 fn is_str_space(c: char) -> bool {
     c == ' ' || c == '\t'
-}
-
-#[inline]
-fn is_space_09_20(c: char) -> bool {
-    c == '\t' || c == ' '
 }
 
 struct State<'s> {
@@ -1588,7 +1583,7 @@ fn rule_reference(state: &mut State, start_line: usize, _end_line: usize, silent
                 maximum = string.len();
                 next_line += 1;
             }
-        } else if is_space_09_20(ch) {
+        } else if is_str_space(ch) {
         } else {
             break;
         }
@@ -1618,7 +1613,7 @@ fn rule_reference(state: &mut State, start_line: usize, _end_line: usize, silent
                 maximum = string.len();
                 next_line += 1;
             }
-        } else if is_space_09_20(ch) {
+        } else if is_str_space(ch) {
         } else {
             break;
         }
@@ -1650,7 +1645,7 @@ fn rule_reference(state: &mut State, start_line: usize, _end_line: usize, silent
     }
 
     while pos < maximum {
-        if !is_space_09_20(string[pos]) {
+        if !is_str_space(string[pos]) {
             break;
         }
         pos += 1;
@@ -1661,7 +1656,7 @@ fn rule_reference(state: &mut State, start_line: usize, _end_line: usize, silent
         pos = dest_end_pos;
         next_line = dest_end_line_no;
         while pos < maximum {
-            if !is_space_09_20(string[pos]) {
+            if !is_str_space(string[pos]) {
                 break;
             }
             pos += 1;

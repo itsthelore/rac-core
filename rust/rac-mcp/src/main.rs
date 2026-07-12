@@ -185,13 +185,18 @@ fn tools_call_frame(root: &str, id_json: &str, message: &Value) -> String {
 fn a_str(args: &[Arg], i: usize, default: &str) -> String {
     match &args[i] {
         Arg::Str(s) => s.clone(),
-        Arg::Missing => default.to_string(),
         _ => default.to_string(),
     }
 }
 fn a_opt_str(args: &[Arg], i: usize) -> Option<String> {
     match &args[i] {
         Arg::OptStr(v) => v.clone(),
+        _ => None,
+    }
+}
+fn a_opt_list_str(args: &[Arg], i: usize) -> Option<Vec<String>> {
+    match &args[i] {
+        Arg::OptListStr(v) => v.clone(),
         _ => None,
     }
 }
@@ -234,10 +239,7 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             let a = args::validate(name, "search_artifactsArguments", &params, arguments)?;
             let query = a_str(&a, 0, "");
             let artifact_type = a_opt_str(&a, 1);
-            let tags = match &a[2] {
-                Arg::OptListStr(Some(v)) => v.clone(),
-                _ => Vec::new(),
-            };
+            let tags = a_opt_list_str(&a, 2).unwrap_or_default();
             let live_only = a_bool(&a, 3, false);
             Ok(sidecar::observe(name, || {
                 tools::search_artifacts(

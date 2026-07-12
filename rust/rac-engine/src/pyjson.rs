@@ -21,6 +21,7 @@
 
 use crate::pycompat::py_float_repr;
 use serde_json::Value;
+use std::fmt::Write;
 
 /// Build a `Value` that always serializes in Python float form (`2.0`),
 /// never as an int. Panics on NaN/infinity, which `json.dumps` cannot
@@ -127,24 +128,22 @@ fn write_string(out: &mut String, s: &str, ensure_ascii: bool) {
             '\n' => out.push_str("\\n"),
             '\u{c}' => out.push_str("\\f"),
             '\r' => out.push_str("\\r"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            // stdin surrogateescape sentinel: json.dumps writes the lone
-            // surrogate itself — `\udcXX` under ensure_ascii, the raw
-            // surrogate char otherwise (which stdout emission then
-            // re-encodes as the original byte; keep the sentinel here).
-            c if ensure_ascii && crate::pycompat::sentinel_surrogate(c).is_some() => {
-                let sur = crate::pycompat::sentinel_surrogate(c).expect("checked");
-                out.push_str(&format!("\\u{sur:04x}"));
-            }
+            c if (c as u32) < 0x20 => write!(out, "\\u{:04x}", c as u32).unwrap(),
             c if ensure_ascii && (c as u32) > 0x7e => {
+                // stdin surrogateescape sentinel: json.dumps writes the lone
+                // surrogate itself — `\udcXX` under ensure_ascii, the raw
+                // surrogate char otherwise (which stdout emission then
+                // re-encodes as the original byte; keep the sentinel here).
                 let cp = c as u32;
-                if cp <= 0xffff {
-                    out.push_str(&format!("\\u{cp:04x}"));
+                if let Some(sur) = crate::pycompat::sentinel_surrogate(c) {
+                    write!(out, "\\u{sur:04x}").unwrap();
+                } else if cp <= 0xffff {
+                    write!(out, "\\u{cp:04x}").unwrap();
                 } else {
                     let v = cp - 0x10000;
                     let hi = 0xd800 + (v >> 10);
                     let lo = 0xdc00 + (v & 0x3ff);
-                    out.push_str(&format!("\\u{hi:04x}\\u{lo:04x}"));
+                    write!(out, "\\u{hi:04x}\\u{lo:04x}").unwrap();
                 }
             }
             c => out.push(c),
