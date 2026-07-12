@@ -1,6 +1,5 @@
-//! Command orchestration (`rac.cli.cmd_validate` / `cmd_relationships` and
-//! the `rac.services.validate` composition layer): walk -> parse -> classify
-//! -> validate -> render. Sequential; output is order-deterministic.
+//! Command orchestration: walk -> parse -> classify -> validate -> render.
+//! Output is order-deterministic.
 
 use std::path::Path;
 
@@ -229,9 +228,8 @@ fn read_validate_input(target: &str) -> Result<Artifact, i32> {
         use std::io::Read;
         let mut buf = Vec::new();
         let _ = std::io::stdin().lock().read_to_end(&mut buf);
-        // The oracle reads stdin as TEXT with errors="surrogateescape"
-        // (fuzz campaign 2, finding 005) — NOT the errors="replace"
-        // lossy decode used for files.
+        // The oracle reads stdin as TEXT with errors="surrogateescape" —
+        // NOT the errors="replace" lossy decode used for files.
         let text = crate::pycompat::decode_stdin_surrogateescape(&buf);
         return Ok(parse_text(&text, "-"));
     }
@@ -471,8 +469,6 @@ pub fn cmd_export(args: &ExportArgs) -> i32 {
         return usage_error(&format!("not a directory: {}", args.directory));
     }
     if args.agent_rules {
-        // Agent-rules is a distinct, drift-guarded projection mode; not part of
-        // the export-payload parity surface (named gap for this stage).
         eprintln!("rac-rs: export --agent-rules is not implemented in this stage");
         return EXIT_USAGE;
     }
@@ -502,7 +498,6 @@ pub fn cmd_export(args: &ExportArgs) -> i32 {
     }
     let export = crate::export::build_corpus_export(&args.directory, output::rac_version());
     if args.okf {
-        // OKF bundle writing is another workstream's scope (named gap).
         eprintln!("rac-rs: export --okf is not implemented in this stage");
         return EXIT_USAGE;
     }
@@ -510,7 +505,6 @@ pub fn cmd_export(args: &ExportArgs) -> i32 {
         emit(output::render_export_json(&export));
         return EXIT_OK;
     }
-    // HTML portal writing is out of the export-payload parity surface (named gap).
     eprintln!("rac-rs: export --html is not implemented in this stage");
     EXIT_USAGE
 }

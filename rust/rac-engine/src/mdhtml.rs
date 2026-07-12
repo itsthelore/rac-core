@@ -25,16 +25,15 @@ use markdown_it::{MarkdownIt, Node};
 /// `<lines>.strip()` — CPython `str.strip()`, whose whitespace set includes
 /// `\x0b \x0c \x1c-\x1f \x85 \xa0` and more — while the markdown-it crate
 /// only trims spaces/tabs around inline content. Re-strip those blocks'
-/// pending inline content with Python semantics BEFORE inline parsing runs
-/// (fuzz campaign 2, finding 009). Trimming shifts inline srcmaps by the
+/// pending inline content with Python semantics BEFORE inline parsing runs.
+/// Trimming shifts inline srcmaps by the
 /// leading cut; nothing in the export renderer consumes inline srcmaps.
 ///
 /// Tight lists need the same treatment via `ListItem`: markdown-it-py keeps
 /// the paragraph tokens (merely hidden), so their content is still
 /// `str.strip()`-ed, while the markdown-it crate SPLICES tight paragraphs'
 /// children directly into the list item (`mark_tight_paragraphs`), leaving
-/// `InlineRoot` nodes whose parent is the `ListItem` itself (fuzz campaign 2,
-/// finding 039).
+/// `InlineRoot` nodes whose parent is the `ListItem` itself.
 struct PyStripInlineRule;
 
 impl CoreRule for PyStripInlineRule {
@@ -86,7 +85,7 @@ pub fn render(body: &str) -> String {
 /// last content line is the document's final line — in a document with no
 /// trailing newline — has NO trailing `\n` in its content. The markdown-it
 /// crate's `get_lines` appends `\n` unconditionally. Strip that synthetic
-/// newline to match (fuzz campaign 2, finding 007).
+/// newline to match.
 ///
 /// Unclosed-at-EOF is detected structurally: the fence's source span ends at
 /// EOF and holds exactly `1 + content lines` source lines (a CLOSED fence

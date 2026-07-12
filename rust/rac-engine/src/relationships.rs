@@ -262,7 +262,6 @@ pub struct ValidationRow {
     pub edges: Vec<(String, Vec<String>)>,
 }
 
-/// `validation_row(path, product, spec)`.
 pub fn validation_row(
     path: &str,
     artifact: &Artifact,
@@ -325,7 +324,6 @@ impl ResolutionIndex {
     }
 }
 
-/// `resolution_index_from_rows(rows)`.
 pub fn resolution_index_from_rows(rows: &[ValidationRow]) -> ResolutionIndex {
     let mut index = ResolutionIndex::new();
     for row in rows {
@@ -891,12 +889,10 @@ fn build_report(directory: &str, items: Vec<CorpusItem>, recursive: bool) -> Rel
     }
 }
 
-/// `build_relationship_report(directory, recursive)`.
 pub fn build_relationship_report(directory: &str, recursive: bool) -> RelationshipReport {
     build_report(directory, corpus_items(directory, recursive), recursive)
 }
 
-/// `build_relationship_report_file(path)`.
 pub fn build_relationship_report_file(path: &str) -> RelationshipReport {
     let artifact = parse_file(path);
     let spec = spec_for(&classify(&artifact).artifact_type);
@@ -950,13 +946,11 @@ fn rows_from_items(items: &[CorpusItem]) -> Vec<ValidationRow> {
         .collect()
 }
 
-/// `validate_relationships(directory, recursive)`.
 pub fn validate_relationships(directory: &str, recursive: bool) -> RelationshipValidation {
     let items = corpus_items(directory, recursive);
     validation_from_rows(directory, &rows_from_items(&items), recursive)
 }
 
-/// `validate_relationships_file(path)`.
 pub fn validate_relationships_file(path: &str) -> RelationshipValidation {
     let artifact = parse_file(path);
     let spec = spec_for(&classify(&artifact).artifact_type);

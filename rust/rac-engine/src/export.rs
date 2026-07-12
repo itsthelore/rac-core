@@ -71,7 +71,7 @@ fn status(artifact: &Artifact, spec: &ArtifactSpec) -> String {
 ///
 /// The oracle re-reads in TEXT mode (`open(path, encoding="utf-8")`), which
 /// applies universal newlines — `\r\n` and lone `\r` become `\n` — before
-/// `split_frontmatter` (fuzz campaign 2, finding 006). Mirror that here.
+/// `split_frontmatter`. Mirror that here.
 ///
 /// The oracle's text-mode read is also STRICT utf-8: a file with invalid
 /// bytes CRASHES the oracle uncaught (`UnicodeDecodeError`) even though the

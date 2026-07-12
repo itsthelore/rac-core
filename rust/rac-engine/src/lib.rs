@@ -2,7 +2,7 @@
 //! (roadmap:native-engine-spike). The Python tree at `src/` is the frozen
 //! oracle; the binding behavior contract is `rust/PORT-CONTRACT.md`.
 //!
-//! Module map (one workstream each; keep cross-module surface minimal):
+//! Module map (keep cross-module surface minimal):
 //! - `pycompat`: CPython string/float/round/repr semantics, table-driven
 //!   from `rust/spec/pycompat-tables.json`.
 //! - `pyjson`: the Python `json.dumps`-shaped writer (indent=2 and JSONL).

@@ -12,22 +12,17 @@
 //! Known oracle crashes (PORT-CONTRACT decision 3): several inputs crash the
 //! oracle with uncaught non-YAML exceptions (unhashable mapping keys,
 //! explicit-tag/value mismatches like `!!int ''`, out-of-range dates such as
-//! `2026-13-01`, `!!map` on a non-empty scalar/sequence — fuzz finding 002 —
-//! and CPython's 4300-digit int<->str conversion limit). This port does NOT
+//! `2026-13-01`, `!!map` on a non-empty scalar/sequence, and CPython's
+//! 4300-digit int<->str conversion limit). This port does NOT
 //! crash: every such path returns a distinguishable internal issue (code
 //! `internal-oracle-divergence`) whose message mirrors the Python exception
-//! (`"TypeError: unhashable type: 'list'"`, ...). Phase 3 (fuzz campaign 1)
-//! settled this as the observable behavior: the marker is intentional and the
-//! parity harness treats it as the documented divergence class.
+//! (`"TypeError: unhashable type: 'list'"`, ...). The marker is intentional
+//! and the parity harness treats it as the documented divergence class.
 //!
-//! Integers are unbounded like Python's `int` (fuzz finding 003): values
+//! Integers are unbounded like Python's `int`: values
 //! beyond i64 construct `Yaml::BigInt` (sign + decimal digits) instead of
 //! overflowing, and duplicate-key equality / `repr()` / validator messages
 //! follow CPython semantics for them exactly.
-//!
-//! SEAM(phase3): the malformed-YAML message catalog below covers every
-//! failure class the contract lists plus the full ported PyYAML message set;
-//! fuzz findings that surface unported message forms land here.
 
 use std::collections::HashMap;
 
@@ -51,7 +46,7 @@ pub fn exceeds_byte_cap(text: &str, cap: usize) -> bool {
     text.len() > cap
 }
 
-/// The per-file byte cap at the READ stage (fuzz campaign 2, finding 004).
+/// The per-file byte cap at the READ stage.
 ///
 /// The oracle's `parse_file` runs `fh.read(cap + 1)`, which CRASHES the
 /// oracle uncaught for huge caps (PORT-CONTRACT decision-3 marker class),
@@ -204,7 +199,7 @@ pub fn is_valid_id(value: &str) -> bool {
 
 /// Arbitrary-precision integer (sign + decimal digits), mirroring Python's
 /// unbounded `int` for values outside i64 (PORT-CONTRACT 02 §4: the YAML 1.1
-/// int constructor never overflows — fuzz finding 003).
+/// int constructor never overflows).
 ///
 /// Invariant: the magnitude never fits i64 (smaller values construct
 /// `Yaml::Int`), and `digits` has no leading zeros, so cross-class equality
@@ -2064,7 +2059,7 @@ impl Scanner {
             Ok(s) => Ok(s),
             Err(e) => {
                 // Python embeds str(UnicodeDecodeError). Reproduce the common
-                // single-byte form; SEAM(phase3) for exotic sequences.
+                // single-byte form.
                 let pos = e.utf8_error().valid_up_to();
                 let byte = codes.get(pos).copied().unwrap_or(0);
                 let reason = if pos + 1 >= codes.len() && e.utf8_error().error_len().is_none() {
@@ -2335,7 +2330,7 @@ impl Scanner {
                                 ));
                             }
                             // Lone surrogate: representable in a Python str,
-                            // not in Rust. ORACLE DIVERGENCE seam (phase 3).
+                            // not in Rust. ORACLE DIVERGENCE.
                             return Err(YErr::Internal(format!(
                                 "surrogate escape \\u{code:04x} not representable"
                             )));
@@ -3244,7 +3239,7 @@ fn construct_yaml_bool(node: &Node) -> Result<Yaml, YErr> {
 /// order: `int('9'*4301 + 'z')` reports the limit, not the literal).
 /// Returns (negative, magnitude). Invalid input mirrors the oracle's uncaught
 /// `ValueError` (decision 3).
-/// SEAM(phase3): CPython also accepts non-ASCII `Nd` decimal digits
+/// CPython also accepts non-ASCII `Nd` decimal digits
 /// (`int('٥') == 5`); those still report invalid-literal here.
 fn py_int_parse(s: &str, base: u32) -> Result<(bool, Mag), YErr> {
     let invalid = || {
@@ -3470,7 +3465,7 @@ fn construct_yaml_binary(node: &Node) -> Result<Yaml, YErr> {
 
 /// `base64.decodebytes` (binascii a2b_base64, non-strict): non-alphabet
 /// characters are skipped; padding after >=2 quad chars terminates decode.
-/// SEAM(phase3): error-message coverage limited to the common forms.
+/// Error-message coverage is limited to the common forms.
 fn decode_base64_lenient(data: &[u8]) -> Result<Vec<u8>, String> {
     fn val(b: u8) -> Option<u32> {
         match b {
@@ -3858,8 +3853,8 @@ fn construct_strict_map(node: &Node) -> Result<Yaml, YErr> {
     let Node::Map { pairs, .. } = node else {
         // The oracle's `_no_duplicates` iterates `node.value` directly with
         // no mapping type check, so an explicit `!!map` on a non-mapping node
-        // crashes it before the base constructor's ConstructorError can fire
-        // (fuzz finding 002). ORACLE DIVERGENCE (PORT-CONTRACT decision 3):
+        // crashes it before the base constructor's ConstructorError can fire.
+        // ORACLE DIVERGENCE (PORT-CONTRACT decision 3):
         // mirror those crashes as internal markers, same as every other
         // oracle-crash class. Only *empty* scalars/sequences skip the loop
         // and reach the caught "expected a mapping node" ConstructorError.
@@ -3887,8 +3882,7 @@ fn construct_strict_map(node: &Node) -> Result<Yaml, YErr> {
             // ORACLE DIVERGENCE (PORT-CONTRACT decision 3): CPython raises an
             // uncaught TypeError out of parse_frontmatter at the `key in seen`
             // test. We return a distinguishable internal error instead of
-            // crashing; Phase 3 decides whether the crash is observable from
-            // covered commands.
+            // crashing.
             return Err(YErr::Internal(format!(
                 "TypeError: unhashable type: '{name}'"
             )));
@@ -4417,8 +4411,7 @@ pub fn read_artifact_text(path: &str) -> ArtifactRead {
         FileCap::Cap(cap) => cap,
         // ORACLE DIVERGENCE (PORT-CONTRACT decision 3): a cap >= 2^63 - 1
         // makes the oracle's `fh.read(cap + 1)` crash uncaught on EVERY
-        // successfully opened file (fuzz campaign 2, finding 004). Mirror it
-        // as the marker. The oracle stats the path and opens the file first,
+        // successfully opened file. Mirror it as the marker. The oracle stats the path and opens the file first,
         // so an unreadable path still reports unreadable-artifact.
         FileCap::OracleCrash(msg) => {
             return match std::fs::File::open(path) {
