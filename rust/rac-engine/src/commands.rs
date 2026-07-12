@@ -627,41 +627,12 @@ pub struct FindArgs {
     pub live: bool,
 }
 
-/// Python `datetime.fromisoformat(stamp).isoformat()` round-trip of a git
-/// `%cI` stamp: verbatim for the `±HH:MM` form git emits; a trailing `Z`
-/// re-serializes as `+00:00`, a colonless `±HHMM` gains its colon, and a
-/// space separator becomes `T`.
-fn py_isoformat_roundtrip(stamp: &str) -> String {
-    let mut s = stamp.to_string();
-    if s.len() > 10 && s.as_bytes()[10] == b' ' {
-        s.replace_range(10..11, "T");
-    }
-    if s.ends_with('Z') || s.ends_with('z') {
-        s.truncate(s.len() - 1);
-        s.push_str("+00:00");
-        return s;
-    }
-    // ±HHMM (no colon) -> ±HH:MM; ±HH -> ±HH:00. Find the offset sign after
-    // the time part (beyond index 10 to skip the date's hyphens).
-    if let Some(pos) = s.rfind(['+', '-']) {
-        if pos > 10 {
-            let body = &s[pos + 1..];
-            if body.len() == 4 && body.bytes().all(|b| b.is_ascii_digit()) {
-                let fixed = format!("{}:{}", &body[..2], &body[2..]);
-                s.replace_range(pos + 1.., &fixed);
-            } else if body.len() == 2 && body.bytes().all(|b| b.is_ascii_digit()) {
-                let fixed = format!("{body}:00");
-                s.replace_range(pos + 1.., &fixed);
-            }
-        }
-    }
-    s
-}
-
 /// `annotate_search_recency(matches, directory)` — the read-surface join
 /// (ADR-045): git-derived staleness per match, computed AFTER ranking so the
 /// matched set and order are unchanged. All-null outside a git repository.
-fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact], directory: &str) {
+/// Shared by `cmd_find` and the MCP `search_artifacts` tool (both surfaces
+/// are byte-identical on this join).
+pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact], directory: &str) {
     use crate::gitinfo;
     if matches.is_empty() {
         return;
@@ -678,7 +649,7 @@ fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact], dir
             .and_then(|root| gitinfo::last_committed(root, Path::new(&m.path)));
         let st = gitinfo::staleness(last.as_deref(), threshold, reference);
         m.recency = Some(crate::resolve::Recency {
-            last_committed: st.last_committed.as_deref().map(py_isoformat_roundtrip),
+            last_committed: st.last_committed.as_deref().map(gitinfo::isoformat_roundtrip),
             age_days: st.age_days,
             stale: st.stale,
         });
@@ -744,7 +715,7 @@ pub fn cmd_retrieve(args: &RetrieveArgs) -> i32 {
         args.budget,
         !args.all,
     );
-    let serialized = crate::retrieve::serialize(&payload, args.budget);
+    let serialized = crate::budget::serialize(&payload, args.budget);
     if args.json {
         emit(serialized);
     } else {

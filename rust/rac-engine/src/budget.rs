@@ -1,5 +1,6 @@
 //! Per-response character budget (ADR-033) — a port of `src/rac/mcp/budget.py`
-//! (ORACLE-NEXT revision, which adds the `items` rule).
+//! (ORACLE-NEXT revision, which adds the `items` rule). Shared by the CLI
+//! retrieve surface (`commands::cmd_retrieve`) and the rac-mcp server.
 //!
 //! The budget unit is CHARACTERS (Python `len` of the serialized string —
 //! Unicode code points, not bytes) of the payload serialized as
@@ -19,7 +20,7 @@
 //!   is not truncatable, so the response can massively exceed the budget
 //!   while carrying the marker.
 
-use rac_engine::pyjson::dumps_compact;
+use crate::pyjson::dumps_compact;
 use serde_json::{json, Map, Value};
 
 pub const DEFAULT_BUDGET: i64 = 10_000;
@@ -36,15 +37,18 @@ pub const HINT_SUMMARY: &str = "The repository summary exceeds the response budg
 server budget to see the full overview.";
 pub const HINT_RETRIEVE: &str = "Lower top_k, raise the budget, or narrow the task.";
 
-/// `len(text)` in Python — code points.
+/// `len(text)` in Python — code points, not bytes.
 pub fn char_len(s: &str) -> i64 {
     s.chars().count() as i64
 }
 
-/// `text[:stop]` for non-negative `stop` (the only form the budget uses).
-fn py_slice_to(s: &str, stop: i64) -> String {
-    let stop = stop.max(0) as usize;
-    s.chars().take(stop).collect()
+/// `text[:stop]` with Python slice semantics (negative stop trims the tail;
+/// the truncators only pass non-negative stops, but the retrieve excerpt
+/// share can go negative).
+pub fn py_slice_to(s: &str, stop: i64) -> String {
+    let n = char_len(s);
+    let stop = if stop < 0 { (n + stop).max(0) } else { stop.min(n) };
+    s.chars().take(stop as usize).collect()
 }
 
 fn length(payload: &Value) -> i64 {

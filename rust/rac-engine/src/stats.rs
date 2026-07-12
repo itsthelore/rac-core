@@ -256,22 +256,11 @@ fn bucket<T>(
     ordered
 }
 
-/// `Path(path).stem` — filename without its final suffix.
-fn path_stem(path: &str) -> String {
-    let name = path.rsplit('/').next().unwrap_or(path);
-    match name.rfind('.') {
-        // Python `.stem`: a leading-dot-only name has no suffix.
-        Some(0) => name.to_string(),
-        Some(i) => name[..i].to_string(),
-        None => name.to_string(),
-    }
-}
-
 /// `product.title or path.stem`.
 fn artifact_name(artifact: &Artifact, path: &str) -> String {
     match &artifact.product.title {
         Some(t) if !t.is_empty() => t.clone(),
-        _ => path_stem(path),
+        _ => crate::identity::path_stem(path),
     }
 }
 

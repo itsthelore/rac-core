@@ -80,8 +80,7 @@ fn status(artifact: &Artifact, spec: &ArtifactSpec) -> String {
 /// channel, so the divergence-by-design here is "the Rust export simply
 /// succeeds" (catalogued in rust/fuzz/pinned/oracle-crashes/).
 fn body_markdown(path: &str) -> String {
-    let text = std::fs::read_to_string(path).unwrap_or_default();
-    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let text = crate::pycompat::read_text_universal(path).unwrap_or_default();
     split_frontmatter(&text).body
 }
 
