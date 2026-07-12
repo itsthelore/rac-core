@@ -4,7 +4,7 @@
 use crate::identity::{artifact_identifier, artifact_identifiers};
 use crate::markdown::split_frontmatter;
 use crate::parse::Artifact;
-use crate::pycompat::{py_casefold, py_strip};
+use crate::pycompat::py_strip;
 use crate::relationships::{
     corpus_items, edge_spec, relationships_from_corpus, CorpusItem,
 };
@@ -35,16 +35,9 @@ fn first_line(raw: &str) -> String {
     String::new()
 }
 
-/// `canonical_value(raw, allowed)`.
+/// `canonical_value(raw, allowed)`, on this module's `first_line`.
 fn canonical_value(raw: &str, allowed: &[String]) -> String {
-    let candidate = first_line(raw);
-    let folded = py_casefold(&candidate);
-    for value in allowed {
-        if py_casefold(value) == folded {
-            return value.clone();
-        }
-    }
-    candidate
+    crate::spec::canonical_value(&first_line(raw), allowed)
 }
 
 /// `_status(product, spec)`.

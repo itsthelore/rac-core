@@ -100,6 +100,19 @@ pub fn snake(section: &str) -> String {
     section.replace(' ', "_")
 }
 
+/// `canonical_value` tail: match `candidate` against the allowed vocabulary by
+/// casefold equality — the canonical allowed spelling wins, otherwise the
+/// candidate passes through. Callers supply their own first-line extraction.
+pub fn canonical_value(candidate: &str, allowed: &[String]) -> String {
+    let folded = crate::pycompat::py_casefold(candidate);
+    for value in allowed {
+        if crate::pycompat::py_casefold(value) == folded {
+            return value.clone();
+        }
+    }
+    candidate.to_string()
+}
+
 // --- JSON extraction helpers -------------------------------------------------
 
 fn as_str(v: &Value) -> String {
