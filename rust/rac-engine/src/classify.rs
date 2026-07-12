@@ -20,7 +20,6 @@ pub const CONFIDENCE_THRESHOLD: f64 = 0.5;
 #[derive(Debug, Clone)]
 pub struct TypeScore {
     pub name: String,
-    pub display: String,
     pub matched_required: Vec<String>,
     pub matched_recommended: Vec<String>,
     pub missing: Vec<String>,
@@ -101,7 +100,6 @@ pub fn score_artifacts(artifact: &Artifact) -> Vec<TypeScore> {
         let fit = if ceiling != 0.0 { points / ceiling } else { 0.0 };
         scores.push(TypeScore {
             name: spec.name.clone(),
-            display: spec.display.clone(),
             matched_required,
             matched_recommended,
             missing,

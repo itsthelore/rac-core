@@ -3,7 +3,6 @@
 
 use std::path::Path;
 
-use crate::classify::classify;
 use crate::output;
 use crate::parse::{parse_file, parse_text, Artifact, Issue};
 use crate::relationships::{
@@ -755,13 +754,4 @@ pub fn cmd_retrieve(args: &RetrieveArgs) -> i32 {
         emit(output::render_retrieve_human(&truncated));
     }
     EXIT_OK
-}
-
-// ---------------------------------------------------------------------------
-// Helpers reused by cli.rs
-// ---------------------------------------------------------------------------
-
-/// Classify a parsed artifact's type name (used by cli-level flows needing it).
-pub fn classified_type(artifact: &Artifact) -> String {
-    classify(artifact).artifact_type
 }

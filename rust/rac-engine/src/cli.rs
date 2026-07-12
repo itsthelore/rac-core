@@ -575,7 +575,6 @@ fn run_retrieve(rest: &[&String]) -> u8 {
                     return code;
                 }
                 live = true;
-                let _ = live; // accepted for clarity; it IS the default
             }
             "--all" => {
                 if let Err(FlagError(code)) = mutex_check(prog, "--all", "--live", live) {
