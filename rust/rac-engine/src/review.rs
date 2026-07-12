@@ -106,7 +106,7 @@ fn sort_issues(issues: &mut [ReviewIssue]) {
     });
 }
 
-fn review_from_portfolio(
+pub fn review_from_portfolio(
     directory: &str,
     portfolio: PortfolioSummary,
     recursive: bool,
@@ -189,18 +189,18 @@ pub fn build_review(
 
 // --- git-native drift --------------------------------------------------------
 
-struct DriftRecord {
-    source_path: String,
-    target_path: String,
-    target_ref: String,
-    source_committed: String,
-    target_committed: String,
+pub(crate) struct DriftRecord {
+    pub(crate) source_path: String,
+    pub(crate) target_path: String,
+    pub(crate) target_ref: String,
+    pub(crate) source_committed: String,
+    pub(crate) target_committed: String,
 }
 
 /// `suspect_drift(directory, entries)` — resolved edges whose target was
 /// committed strictly after the referrer. Deduped per `(source, target)`,
 /// sorted by `(source_path, target_path)`.
-fn suspect_drift(directory: &str, items: &[CorpusItem]) -> Vec<DriftRecord> {
+pub(crate) fn suspect_drift(directory: &str, items: &[CorpusItem]) -> Vec<DriftRecord> {
     let resolved: Vec<crate::relationships::Relationship> = relationships_from_corpus(items)
         .into_iter()
         .filter(|r| r.resolved_path.is_some())
@@ -277,7 +277,7 @@ fn drift_findings(directory: &str, items: &[CorpusItem]) -> Vec<ReviewIssue> {
         .collect()
 }
 
-fn drift_problem(record: &DriftRecord) -> String {
+pub(crate) fn drift_problem(record: &DriftRecord) -> String {
     format!(
         "references {} which changed more recently (target last committed {}, this artifact {}) — review recommended",
         record.target_ref,

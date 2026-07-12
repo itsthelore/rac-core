@@ -5,11 +5,12 @@
 //! (decision 9) — stdout stays byte-identical (empty on errors).
 
 use crate::commands::{
-    cmd_coverage, cmd_decisions_for, cmd_diff, cmd_export, cmd_find, cmd_improve, cmd_inspect,
-    cmd_portfolio, cmd_relationships, cmd_resolve, cmd_retrieve, cmd_review, cmd_schema,
-    cmd_stats, cmd_templates, cmd_validate, CoverageArgs, DecisionsForArgs, DiffArgs, ExportArgs,
-    FindArgs, ImproveArgs, InspectArgs, PortfolioArgs, RelationshipsArgs, ResolveArgs,
-    RetrieveArgs, ReviewArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+    cmd_coverage, cmd_decisions_for, cmd_diff, cmd_doctor, cmd_export, cmd_find, cmd_gate,
+    cmd_improve, cmd_inspect, cmd_portfolio, cmd_relationships, cmd_resolve, cmd_retrieve,
+    cmd_review, cmd_schema, cmd_stats, cmd_templates, cmd_validate, CoverageArgs,
+    DecisionsForArgs, DiffArgs, DoctorArgs, ExportArgs, FindArgs, GateArgs, ImproveArgs,
+    InspectArgs, PortfolioArgs, RelationshipsArgs, ResolveArgs, RetrieveArgs, ReviewArgs,
+    SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -146,6 +147,8 @@ pub fn run(args: &[String]) -> u8 {
         "portfolio" => run_portfolio(&rest),
         "coverage" => run_coverage(&rest),
         "decisions-for" => run_decisions_for(&rest),
+        "gate" => run_gate(&rest),
+        "doctor" => run_doctor(&rest),
         other => {
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
             2
@@ -598,6 +601,148 @@ fn run_decisions_for(rest: &[&String]) -> u8 {
         directory: directory.unwrap_or_else(|| ".".to_string()),
         json,
         top_level,
+    }) as u8
+}
+
+fn run_gate(rest: &[&String]) -> u8 {
+    let prog = "rac gate";
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut sarif = false;
+    let mut top_level = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            // `--json | --sarif` is a mutually-exclusive group (like validate).
+            "--json" => {
+                if let Some(code) = mutex_check(prog, "--json", "--sarif", sarif) {
+                    return code;
+                }
+                json = true;
+            }
+            "--sarif" => {
+                if let Some(code) = mutex_check(prog, "--sarif", "--json", json) {
+                    return code;
+                }
+                sarif = true;
+            }
+            "--top-level" => top_level = true,
+            // NO --recursive here (gate declares --top-level inline, not
+            // scope_parent) — it bubbles to the top-level parser's error.
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    // `directory` is a REQUIRED positional — unlike doctor/coverage.
+    let Some(directory) = directory else {
+        return argparse_error(prog, "the following arguments are required: directory");
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_gate(&GateArgs {
+        directory,
+        json,
+        sarif,
+        top_level,
+    }) as u8
+}
+
+fn run_doctor(rest: &[&String]) -> u8 {
+    let prog = "rac doctor";
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut top_level = false;
+    let mut hub_threshold: i64 = 20; // doctor.DEFAULT_HUB_THRESHOLD
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') || looks_like_negative_number(arg)
+        {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {} // affirmation of the default (scope_parent)
+            "--hub-threshold" => {
+                // type=int: the next token is a value when it does not look
+                // like an option (bare `-` and negative numbers count).
+                i += 1;
+                let raw = match rest.get(i) {
+                    Some(v)
+                        if !v.starts_with('-')
+                            || v.as_str() == "-"
+                            || looks_like_negative_number(v) =>
+                    {
+                        v.as_str()
+                    }
+                    _ => {
+                        return argparse_error(
+                            prog,
+                            "argument --hub-threshold: expected one argument",
+                        )
+                    }
+                };
+                match py_parse_int(raw) {
+                    Some(v) => hub_threshold = v,
+                    None => {
+                        return argparse_error(
+                            prog,
+                            &format!("argument --hub-threshold: invalid int value: '{raw}'"),
+                        )
+                    }
+                }
+            }
+            other if other.starts_with("--hub-threshold=") => {
+                let raw = &other["--hub-threshold=".len()..];
+                match py_parse_int(raw) {
+                    Some(v) => hub_threshold = v,
+                    None => {
+                        return argparse_error(
+                            prog,
+                            &format!("argument --hub-threshold: invalid int value: '{raw}'"),
+                        )
+                    }
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_doctor(&DoctorArgs {
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        json,
+        top_level,
+        hub_threshold,
     }) as u8
 }
 

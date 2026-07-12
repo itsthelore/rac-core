@@ -628,6 +628,79 @@ pub fn cmd_decisions_for(args: &DecisionsForArgs) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// cmd_gate
+// ---------------------------------------------------------------------------
+
+pub struct GateArgs {
+    pub directory: String,
+    pub json: bool,
+    pub sarif: bool,
+    pub top_level: bool,
+}
+
+/// One enforcement entry point: validation + relationships + review under
+/// the corpus policy. Blocking findings fail (exit 1); a malformed
+/// `.rac/config.yaml` is an operational error — `rac: <message>`, exit 1
+/// (NOT the exit-2 usage class). The not-a-directory check runs BEFORE the
+/// config load, so a bad path wins exit 2 even beside a malformed config.
+pub fn cmd_gate(args: &GateArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let report = match crate::gate::build_gate(&args.directory, !args.top_level) {
+        Ok(report) => report,
+        Err(exc) => {
+            eprintln!("rac: {}", exc.message());
+            return EXIT_VALIDATION_FAILED;
+        }
+    };
+    if args.sarif {
+        emit(output::render_gate_sarif(&report));
+    } else if args.json {
+        emit(output::render_gate_json(&report));
+    } else {
+        emit(output::render_gate_human(&report));
+    }
+    if report.ok() {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+// ---------------------------------------------------------------------------
+// cmd_doctor
+// ---------------------------------------------------------------------------
+
+pub struct DoctorArgs {
+    pub directory: String,
+    pub json: bool,
+    pub top_level: bool,
+    pub hub_threshold: i64,
+}
+
+/// Corpus health in one pass. Exits non-zero only on a validation or
+/// relationship-integrity ERROR; orphan/hub/injection/unlinked/suspect
+/// warnings exit 0 (REQ-007).
+pub fn cmd_doctor(args: &DoctorArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let report =
+        crate::doctor::diagnose(&args.directory, !args.top_level, args.hub_threshold);
+    if args.json {
+        emit(output::render_doctor_json(&report));
+    } else {
+        emit(output::render_doctor_human(&report));
+    }
+    if report.ok() {
+        EXIT_OK
+    } else {
+        EXIT_VALIDATION_FAILED
+    }
+}
+
+// ---------------------------------------------------------------------------
 // cmd_review
 // ---------------------------------------------------------------------------
 

@@ -1,0 +1,5 @@
+repository_key: RAC
+enforcement:
+  off:
+    - relationship-target-not-found
+    - missing-recommended-sections

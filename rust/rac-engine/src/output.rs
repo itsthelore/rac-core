@@ -11,7 +11,9 @@ use serde_json::{json, Map, Value};
 use crate::classify::{TypeScore, CONFIDENCE_THRESHOLD};
 use crate::commands::{DirectoryValidation, StdinCorpusValidation, STATUS_INVALID};
 use crate::diff::Diff;
+use crate::doctor::{DoctorFinding, DoctorReport};
 use crate::export::{CorpusExport, DocumentsExport, GraphExport};
+use crate::gate::{GateFinding, GateReport};
 use crate::improve::ImprovementResult;
 use crate::inspect::{DirectoryInspection, InspectionResult};
 use crate::markdown::Requirement;
@@ -582,50 +584,60 @@ fn sarif_relationship_reason(code: &str) -> &str {
     }
 }
 
+/// The SARIF result's `(message text, percent-encoded uri)` for one
+/// relationship-validation finding — the oracle's `_relationship_result`.
+/// Shared with `rac gate`, which reads the SAME builder so the gate finding's
+/// message and path can never drift from `rac relationships --sarif`
+/// (the gate's relationship paths are therefore the ENCODED uri form).
+pub(crate) fn relationship_sarif_parts(issue: &RelationshipIssue) -> (String, String) {
+    let label = issue.relationship.as_deref().unwrap_or("").replace('_', " ");
+    let (message, uri) = if issue.code == ISSUE_DUPLICATE_IDENTIFIER {
+        let paths = issue.paths.clone().unwrap_or_default();
+        let message = format!(
+            "Duplicate artifact identifier '{}' in: {}",
+            issue.identifier.as_deref().unwrap_or(""),
+            paths.join(", ")
+        );
+        let uri = paths
+            .first()
+            .cloned()
+            .unwrap_or_else(|| issue.identifier.clone().unwrap_or_default());
+        (message, uri)
+    } else if issue.code == ISSUE_RELATIONSHIP_CYCLE {
+        let paths = issue.paths.clone().unwrap_or_default();
+        (
+            format!("{label} relationship cycle: {}", paths.join(" -> ")),
+            paths.first().cloned().unwrap_or_default(),
+        )
+    } else if issue.code == ISSUE_EDGE_UNSUPPORTED {
+        (
+            format!("{label} not supported for this artifact type"),
+            issue.source_path.clone().unwrap_or_default(),
+        )
+    } else {
+        let reason = sarif_relationship_reason(&issue.code);
+        (
+            format!(
+                "{label}: {} \u{2014} {reason}",
+                issue.target.as_deref().unwrap_or("")
+            ),
+            issue.source_path.clone().unwrap_or_default(),
+        )
+    };
+    (message, quote_uri(&uri))
+}
+
 pub fn render_relationships_sarif(validation: &RelationshipValidation) -> String {
     let results: Vec<SarifResult> = validation
         .issues
         .iter()
         .map(|issue| {
-            let label = issue.relationship.as_deref().unwrap_or("").replace('_', " ");
-            let (message, uri) = if issue.code == ISSUE_DUPLICATE_IDENTIFIER {
-                let paths = issue.paths.clone().unwrap_or_default();
-                let message = format!(
-                    "Duplicate artifact identifier '{}' in: {}",
-                    issue.identifier.as_deref().unwrap_or(""),
-                    paths.join(", ")
-                );
-                let uri = paths
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| issue.identifier.clone().unwrap_or_default());
-                (message, uri)
-            } else if issue.code == ISSUE_RELATIONSHIP_CYCLE {
-                let paths = issue.paths.clone().unwrap_or_default();
-                (
-                    format!("{label} relationship cycle: {}", paths.join(" -> ")),
-                    paths.first().cloned().unwrap_or_default(),
-                )
-            } else if issue.code == ISSUE_EDGE_UNSUPPORTED {
-                (
-                    format!("{label} not supported for this artifact type"),
-                    issue.source_path.clone().unwrap_or_default(),
-                )
-            } else {
-                let reason = sarif_relationship_reason(&issue.code);
-                (
-                    format!(
-                        "{label}: {} \u{2014} {reason}",
-                        issue.target.as_deref().unwrap_or("")
-                    ),
-                    issue.source_path.clone().unwrap_or_default(),
-                )
-            };
+            let (message, uri) = relationship_sarif_parts(issue);
             SarifResult {
                 rule_id: issue.code.clone(),
                 level: sarif_level(crate::relationships::relationship_severity(&issue.code)),
                 message,
-                uri: quote_uri(&uri),
+                uri,
                 line: None,
             }
         })
@@ -2310,6 +2322,164 @@ pub fn render_review_sarif(r: &ReviewReport) -> String {
         })
         .collect();
     sarif_document(results)
+}
+
+// --- gate --------------------------------------------------------------------
+
+pub fn render_gate_human(report: &GateReport) -> String {
+    let blocking = report.blocking();
+    let advisory = report.advisory();
+    let mut lines: Vec<String> = vec![
+        bold("Corpus Gate"),
+        "===========".to_string(),
+        String::new(),
+        format!("Directory:  {}", report.directory),
+        format!("Blocking:   {}", blocking.len()),
+        format!("Advisory:   {}", advisory.len()),
+    ];
+
+    let mut emit_group = |group: &[&GateFinding], title: &str, icon: &str| {
+        if group.is_empty() {
+            return;
+        }
+        let header = format!("{title} ({})", group.len());
+        lines.push(String::new());
+        lines.push(bold(&header));
+        lines.push("-".repeat(header.chars().count()));
+        for f in group {
+            lines.push(format!("  {icon} {}", loc(&f.path, f.line)));
+            lines.push(format!("      [{}] {}: {}", f.source, f.code, f.message));
+        }
+    };
+
+    emit_group(&blocking, "Blocking", &red("\u{2717}"));
+    emit_group(&advisory, "Advisory", &yellow("!"));
+
+    lines.push(String::new());
+    if report.ok() {
+        lines.push(green("\u{2713} Gate passed \u{2014} nothing blocking."));
+    } else {
+        lines.push(red(&format!(
+            "\u{2717} Gate failed \u{2014} {} blocking finding(s).",
+            blocking.len()
+        )));
+    }
+    lines.join("\n")
+}
+
+fn gate_finding_value(f: &GateFinding) -> Value {
+    let mut m = Map::new();
+    m.insert("source".into(), json!(f.source));
+    m.insert("code".into(), json!(f.code));
+    m.insert("severity".into(), json!(f.severity));
+    m.insert("enforcement".into(), json!(f.enforcement));
+    m.insert("path".into(), json!(f.path));
+    m.insert("line".into(), json!(f.line));
+    m.insert("message".into(), json!(f.message));
+    Value::Object(m)
+}
+
+pub fn render_gate_json(report: &GateReport) -> String {
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("directory".into(), json!(report.directory));
+    payload.insert("recursive".into(), json!(report.recursive));
+    payload.insert("ok".into(), json!(report.ok()));
+    payload.insert("blocking_count".into(), json!(report.blocking().len()));
+    payload.insert("advisory_count".into(), json!(report.advisory().len()));
+    payload.insert(
+        "findings".into(),
+        Value::Array(report.findings.iter().map(gate_finding_value).collect()),
+    );
+    dumps_indent2(&Value::Object(payload))
+}
+
+/// One combined SARIF run over ALL gate findings, blocking and advisory
+/// alike; the intrinsic severity drives the level, the enforcement class
+/// lives only in the exit code. A relationship finding's path is already
+/// the percent-encoded uri (shared builder), so it is quoted AGAIN here —
+/// exactly the oracle's double `quote()` on that source.
+pub fn render_gate_sarif(report: &GateReport) -> String {
+    let results: Vec<SarifResult> = report
+        .findings
+        .iter()
+        .map(|f| SarifResult {
+            rule_id: f.code.clone(),
+            level: sarif_level(&f.severity),
+            message: f.message.clone(),
+            uri: quote_uri(&f.path),
+            line: f.line,
+        })
+        .collect();
+    sarif_document(results)
+}
+
+// --- doctor ------------------------------------------------------------------
+
+pub fn render_doctor_human(report: &DoctorReport) -> String {
+    // Plain strings throughout — the oracle's doctor renderer uses no color.
+    let mut lines: Vec<String> = vec![
+        format!("Repository health: {}", report.directory),
+        String::new(),
+    ];
+    if report.findings.is_empty() {
+        lines.push("\u{2713} No issues found.".to_string());
+        return lines.join("\n");
+    }
+    lines.push(format!(
+        "{} error(s), {} warning(s)",
+        report.error_count(),
+        report.warning_count()
+    ));
+    lines.push(String::new());
+    for finding in &report.findings {
+        // "ERROR  " is padded to WARNING's width (7), then the shared
+        // two-space gap — so ERROR carries four spaces before the path.
+        let label = if finding.severity == "error" {
+            "ERROR  "
+        } else {
+            "WARNING"
+        };
+        lines.push(format!("{label}  {}", finding.path));
+        lines.push(format!("  [{}] {}", finding.code, finding.problem));
+        lines.push(format!("  fix: {}", finding.fix));
+        lines.push(String::new());
+    }
+    lines.push(if report.ok() {
+        "\u{2713} No errors (warnings are advisory).".to_string()
+    } else {
+        "\u{2717} Errors present.".to_string()
+    });
+    lines.join("\n")
+}
+
+fn doctor_finding_value(f: &DoctorFinding) -> Value {
+    let mut m = Map::new();
+    m.insert("path".into(), json!(f.path));
+    m.insert("code".into(), json!(f.code));
+    m.insert("severity".into(), json!(f.severity));
+    m.insert("problem".into(), json!(f.problem));
+    m.insert("fix".into(), json!(f.fix));
+    Value::Object(m)
+}
+
+/// `json.dumps(..., indent=2, ensure_ascii=False)` — raw UTF-8, unlike
+/// gate's default-ASCII dump.
+pub fn render_doctor_json(report: &DoctorReport) -> String {
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("directory".into(), json!(report.directory));
+    payload.insert("hub_threshold".into(), json!(report.hub_threshold));
+    payload.insert("ok".into(), json!(report.ok()));
+    let mut summary = Map::new();
+    summary.insert("errors".into(), json!(report.error_count()));
+    summary.insert("warnings".into(), json!(report.warning_count()));
+    payload.insert("summary".into(), Value::Object(summary));
+    payload.insert(
+        "findings".into(),
+        Value::Array(report.findings.iter().map(doctor_finding_value).collect()),
+    );
+    dumps_indent2_no_ascii(&Value::Object(payload))
 }
 
 // --- export ------------------------------------------------------------------
