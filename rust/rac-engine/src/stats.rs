@@ -28,8 +28,6 @@ pub struct DecisionStat {
     pub name: String,
     pub status: Option<String>,
     pub category: Option<String>,
-    #[allow(dead_code)]
-    pub supersedes: Option<String>,
 }
 
 /// Lightweight validity stat for roadmap/prompt/design.
@@ -327,11 +325,11 @@ fn present_relationship_sections(artifact: &Artifact, spec: &ArtifactSpec) -> Ve
     present
 }
 
-/// `_attach_decision_metadata` → (status, category, supersedes).
+/// `_attach_decision_metadata` → (status, category).
 fn decision_metadata(
     artifact: &Artifact,
     spec: &ArtifactSpec,
-) -> (Option<String>, Option<String>, Option<String>) {
+) -> (Option<String>, Option<String>) {
     let mut status = None;
     let mut category = None;
     for (field_name, allowed) in &spec.metadata {
@@ -346,11 +344,7 @@ fn decision_metadata(
             }
         }
     }
-    let supersedes = artifact
-        .section("supersedes")
-        .filter(|b| !b.is_empty())
-        .map(first_line);
-    (status, category, supersedes)
+    (status, category)
 }
 
 /// `collect_stats(directory)`.
@@ -388,14 +382,13 @@ pub fn collect_stats(directory: &str) -> PortfolioStats {
 
         match type_name {
             "decision" => {
-                let (status, category, supersedes) =
+                let (status, category) =
                     decision_metadata(artifact, spec.expect("decision spec"));
                 stats.decisions.push(DecisionStat {
                     path: path.clone(),
                     name,
                     status,
                     category,
-                    supersedes,
                 });
             }
             "roadmap" => {

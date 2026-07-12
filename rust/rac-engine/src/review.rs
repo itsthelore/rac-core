@@ -185,7 +185,7 @@ pub fn build_review(
 
     let mut advisories: Vec<ReviewIssue> = drift_findings(directory, &items);
     if let Some(window) = stale_after_days {
-        if let Some(finding) = cadence_finding(directory, &items, window, recursive) {
+        if let Some(finding) = cadence_finding(directory, &items, window) {
             advisories.push(finding);
         }
     }
@@ -329,7 +329,6 @@ fn cadence_finding(
     directory: &str,
     items: &[CorpusItem],
     window_days: i64,
-    _recursive: bool,
 ) -> Option<ReviewIssue> {
     // most_recent = newest last-committed across recognised (non-unknown) artifacts.
     let recognised: Vec<PathBuf> = items

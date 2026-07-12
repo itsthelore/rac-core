@@ -1894,7 +1894,6 @@ impl Scanner {
     }
 
     fn scan_anchor(&mut self, kind: TK) -> Result<Tok, YErr> {
-        let name = if self.peek(0) == '*' { "alias" } else { "anchor" };
         self.forward(1);
         let mut length = 0;
         let mut ch = self.peek(length);
@@ -1908,7 +1907,6 @@ impl Scanner {
                 py_repr_str(&ch.to_string())
             )));
         }
-        let _ = name;
         let value = self.prefix(length);
         self.forward(length);
         let ch = self.peek(0);
@@ -2709,8 +2707,7 @@ impl Parser {
             }
             St::FlowSequenceEntry { first } => self.flow_sequence_entry(first),
             St::FlowSequenceEntryMappingKey => {
-                let tok = self.sc.get_token()?;
-                let _ = tok;
+                self.sc.get_token()?;
                 if !self
                     .sc
                     .check_token(&[TK::Value, TK::FlowEntry, TK::FlowSequenceEnd])?
