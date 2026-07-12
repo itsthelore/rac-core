@@ -13,7 +13,7 @@ use crate::classify::classify;
 use crate::identity::{artifact_identifier, artifact_identifiers, strip_list_marker};
 use crate::parse::{parse_file, Artifact};
 use crate::pycompat::{py_casefold, py_splitlines, py_strip};
-use crate::spec::{spec_for, ArtifactSpec, RELATIONSHIP_SECTIONS};
+use crate::spec::{snake, spec_for, ArtifactSpec, RELATIONSHIP_SECTIONS};
 use crate::validate::repository_root;
 use crate::walk::find_markdown_files;
 
@@ -157,10 +157,6 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
         },
     ];
     REGISTRY.iter().find(|e| e.name == name)
-}
-
-fn snake(section: &str) -> String {
-    section.replace(' ', "_")
 }
 
 // ---------------------------------------------------------------------------
@@ -429,39 +425,39 @@ fn resolved_unique<'a>(
     Some(&targets[0].0)
 }
 
+/// Outcome of resolving one internal reference against the index: checked
+/// empty -> not found, then multiple -> ambiguous, then same-path -> self,
+/// else uniquely resolved. Shared by the issue and `Relationship` loops.
+enum ReferenceResolution<'a> {
+    Resolved(&'a str),
+    NotFound,
+    Ambiguous,
+    SelfRef,
+}
+
+fn classify_reference<'a>(
+    index: &'a ResolutionIndex,
+    reference: &str,
+    source_path: &str,
+) -> ReferenceResolution<'a> {
+    let targets = index.get(&py_casefold(reference));
+    if targets.is_empty() {
+        ReferenceResolution::NotFound
+    } else if targets.len() > 1 {
+        ReferenceResolution::Ambiguous
+    } else if targets[0].0 == source_path {
+        ReferenceResolution::SelfRef
+    } else {
+        ReferenceResolution::Resolved(&targets[0].0)
+    }
+}
+
 /// `_resolve_references(rows, index)` -> `(checked, issues)`.
 fn resolve_references(
     rows: &[ValidationRow],
     index: &ResolutionIndex,
 ) -> (usize, Vec<RelationshipIssue>) {
-    let mut issues = Vec::new();
-    let mut checked = 0usize;
-    for row in rows {
-        if row.spec_name.is_none() {
-            continue;
-        }
-        for (section, refs) in &row.edges {
-            if edge_spec(section).is_some_and(|e| e.external) {
-                continue;
-            }
-            for reference in refs {
-                checked += 1;
-                let targets = index.get(&py_casefold(reference));
-                let code = if targets.is_empty() {
-                    ISSUE_TARGET_NOT_FOUND
-                } else if targets.len() > 1 {
-                    ISSUE_TARGET_AMBIGUOUS
-                } else if targets[0].0 == row.path {
-                    ISSUE_SELF_REFERENCE
-                } else {
-                    continue;
-                };
-                issues.push(RelationshipIssue::reference(
-                    code, &row.path, section, reference,
-                ));
-            }
-        }
-    }
+    let (checked, issues, _) = resolve_references_full(rows, index);
     (checked, issues)
 }
 
@@ -1029,15 +1025,17 @@ pub fn resolve_relationships(
                     });
                     continue;
                 }
-                let targets = index.get(&py_casefold(reference));
-                let (resolved, issue) = if targets.is_empty() {
-                    (None, Some(ISSUE_TARGET_NOT_FOUND.to_string()))
-                } else if targets.len() > 1 {
-                    (None, Some(ISSUE_TARGET_AMBIGUOUS.to_string()))
-                } else if targets[0].0 == row.path {
-                    (None, Some(ISSUE_SELF_REFERENCE.to_string()))
-                } else {
-                    (Some(targets[0].0.clone()), None)
+                let (resolved, issue) = match classify_reference(index, reference, &row.path) {
+                    ReferenceResolution::Resolved(target) => (Some(target.to_string()), None),
+                    ReferenceResolution::NotFound => {
+                        (None, Some(ISSUE_TARGET_NOT_FOUND.to_string()))
+                    }
+                    ReferenceResolution::Ambiguous => {
+                        (None, Some(ISSUE_TARGET_AMBIGUOUS.to_string()))
+                    }
+                    ReferenceResolution::SelfRef => {
+                        (None, Some(ISSUE_SELF_REFERENCE.to_string()))
+                    }
                 };
                 out.push(Relationship {
                     source_path: row.path.clone(),
@@ -1093,16 +1091,14 @@ fn resolve_references_full(
             }
             for reference in refs {
                 checked += 1;
-                let targets = index.get(&py_casefold(reference));
-                let code = if targets.is_empty() {
-                    ISSUE_TARGET_NOT_FOUND
-                } else if targets.len() > 1 {
-                    ISSUE_TARGET_AMBIGUOUS
-                } else if targets[0].0 == row.path {
-                    ISSUE_SELF_REFERENCE
-                } else {
-                    resolved_targets.insert(targets[0].0.clone());
-                    continue;
+                let code = match classify_reference(index, reference, &row.path) {
+                    ReferenceResolution::Resolved(target) => {
+                        resolved_targets.insert(target.to_string());
+                        continue;
+                    }
+                    ReferenceResolution::NotFound => ISSUE_TARGET_NOT_FOUND,
+                    ReferenceResolution::Ambiguous => ISSUE_TARGET_AMBIGUOUS,
+                    ReferenceResolution::SelfRef => ISSUE_SELF_REFERENCE,
                 };
                 issues.push(RelationshipIssue::reference(code, &row.path, section, reference));
             }
