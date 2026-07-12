@@ -36,7 +36,21 @@ the Rust engine handles gracefully and the Python engine dies on.
 - [REQ-001] Parsing a Markdown file with malformed frontmatter — including YAML constructs outside the bounded subset, unhashable mapping keys, and every input in the fuzz oracle-crash catalog — never raises an unhandled exception; it yields a parse/validation issue attributed to that file.
 - [REQ-002] `rac new <type> <path>` succeeds whenever the target path is writable and the id can be minted, regardless of unparseable Markdown elsewhere in the repository; encountered unparseable files are skipped for id-collision purposes (or surfaced as warnings), never fatal.
 - [REQ-003] Corpus-walking commands (`validate`, `stats`, `relationships`, `review`, `find`, `resolve`, `export`, `new`) report a malformed file as a per-file finding with a non-zero exit where the command's contract requires it, and continue processing the remaining files.
-- [REQ-004] The fuzz oracle-crash catalog (`rust/fuzz/findings2/` classes, pinned in the campaign reports) is convertible into regression fixtures for the Python engine once this capability lands, closing the oracle-crash divergence class from both sides.
+- [REQ-004] The fuzz oracle-crash catalog (`rust/fuzz/findings2/` classes, pinned in the campaign reports) is converted into pinned regression fixtures for the native engine's graceful handling, so the class stays closed as the native CLI surface grows.
+
+## Delivery Path
+
+Recorded maintainer direction (2026-07-12): this capability is
+delivered from the **native (Rust) engine side**, not by hardening the
+Python engine. The Rust engine already satisfies REQ-001 and REQ-003
+by construction — differential fuzzing catalogued every crash input as
+an oracle-crash divergence the Rust engine handles gracefully — and
+REQ-002 lands with the native `new` command as part of closing the CLI
+parity gap. The Python engine is not modified: it remains the frozen
+parity oracle, and the shipped Python CLI knowingly retains the crash
+until ADR-063 is flipped (itself gated on the native derived-index
+roadmap item). Consequence: no oracle bytes change, so no port-contract
+spec revision is required for this capability.
 
 ## Success Metrics
 
@@ -52,10 +66,13 @@ the Rust engine handles gracefully and the Python engine dies on.
 - Swallowing parse crashes too broadly could mask genuine engine bugs;
   the issue objects must preserve the underlying error class and file
   path so nothing is silently dropped.
-- Changing the Python engine's crash behavior changes bytes on inputs
-  the byte-parity harness currently classifies as oracle-crash; the
-  parity spec and pinned cases must be updated in the same change (this
-  is a wants-spec-change item for the native-engine port contract).
+- The shipped Python CLI keeps the crash until ADR-063 flips; if a
+  user-facing report arrives before then, the decision to leave the
+  Python engine untouched may need revisiting.
+- The native `new` command mints a fresh id per invocation, so its
+  output is not naturally byte-comparable; the parity harness needs an
+  id-injection seam (as with `RAC_RS_VERSION`) before REQ-002 can be
+  refereed.
 
 ## Assumptions
 
