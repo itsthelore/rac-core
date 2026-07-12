@@ -31,7 +31,8 @@ use crate::identity::artifact_identifier;
 use crate::pycompat::{py_casefold, py_strip};
 use crate::pyjson::dumps_compact;
 use crate::relationships::{
-    corpus_items, extract_relationships_full, relationships_from_corpus, CorpusItem, Relationship,
+    classify_scope_entry, corpus_items, extract_relationships_full, normalized_scope_path,
+    relationships_from_corpus, CorpusItem, Relationship,
 };
 use crate::resolve::{
     artifact_status, index_from_items, is_live_decision, is_retired_status, search_index,
@@ -81,19 +82,10 @@ fn read_text_universal(path: &str) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// scope_paths.py — entry classification, path normalisation, repository root
+// scope_paths.py — path normalisation, repository root (entry classification
+// is shared with relationships.rs: `classify_scope_entry` /
+// `normalized_scope_path`)
 // ---------------------------------------------------------------------------
-
-/// `classify_scope_entry(entry)`: `glob` | `path` | `component`.
-fn classify_scope_entry(entry: &str) -> &'static str {
-    if entry.contains(['*', '?', '[']) {
-        return "glob";
-    }
-    if entry.contains('/') {
-        return "path";
-    }
-    "component"
-}
 
 /// `PurePosixPath(text).parts` minus any root marker: empty and `.` segments
 /// collapse; the root marker (when the text is absolute) is returned apart.
@@ -115,27 +107,6 @@ fn pure_posix_parts(text: &str) -> (Option<&'static str>, Vec<String>) {
         .map(str::to_string)
         .collect();
     (root, parts)
-}
-
-/// `normalized_scope_path(entry)`.
-fn normalized_scope_path(entry: &str) -> Option<String> {
-    let text = py_strip(entry);
-    if text.is_empty() || text.starts_with('/') {
-        return None;
-    }
-    let (_, raw_parts) = pure_posix_parts(text);
-    let mut parts: Vec<String> = Vec::new();
-    for part in raw_parts {
-        if part == ".." {
-            return None;
-        }
-        parts.push(part);
-    }
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join("/"))
-    }
 }
 
 /// `repository_root(directory)` — nearest ancestor holding `.rac/config.yaml`,
@@ -494,25 +465,7 @@ pub fn find_decisions_path_payload(directory: &str, path: &str) -> Value {
         Some(query) => {
             let items = corpus_items(directory, true);
             let rows = scope_rows_from_items(&items);
-            let mut matches: Vec<Governing> = Vec::new();
-            for row in &rows {
-                for declared in &row.scope_entries {
-                    if entry_covers(declared, &query) {
-                        matches.push(Governing {
-                            id: row.id.clone(),
-                            title: row.title.clone(),
-                            status: row.status.clone(),
-                            path: row.path.clone(),
-                            matching_entry: declared.clone(),
-                        });
-                        break;
-                    }
-                }
-            }
-            matches.sort_by(|a, b| {
-                (py_casefold(&a.id), &a.path).cmp(&(py_casefold(&b.id), &b.path))
-            });
-            let decisions: Vec<Value> = matches
+            let decisions: Vec<Value> = governing_decisions(&rows, directory, path)
                 .into_iter()
                 .map(|d| {
                     let mut m = Map::new();
@@ -521,9 +474,8 @@ pub fn find_decisions_path_payload(directory: &str, path: &str) -> Value {
                     m.insert("status".to_string(), json!(d.status));
                     m.insert("path".to_string(), json!(d.path));
                     m.insert("matching_entry".to_string(), json!(d.matching_entry));
-                    m
+                    Value::Object(m)
                 })
-                .map(Value::Object)
                 .collect();
             payload.insert("query".to_string(), json!(query));
             payload.insert("in_repository".to_string(), json!(true));

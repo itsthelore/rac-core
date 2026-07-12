@@ -251,6 +251,16 @@ pub fn py_splitlines(s: &str) -> Vec<&str> {
     out
 }
 
+/// The first non-empty `py_strip`'d line of `s` (`str.splitlines()`
+/// boundaries), or `""` when every line is blank.
+pub fn first_nonempty_line(s: &str) -> &str {
+    py_splitlines(s)
+        .into_iter()
+        .map(py_strip)
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+}
+
 /// Python `str.isprintable()` for a single character.
 pub fn py_is_printable(c: char) -> bool {
     in_ranges(&tables().isprintable, c as u32)

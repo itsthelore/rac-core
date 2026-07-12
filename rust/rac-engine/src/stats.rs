@@ -6,7 +6,7 @@
 
 use crate::classify::classify;
 use crate::parse::Artifact;
-use crate::pycompat::{py_casefold, py_splitlines, py_strip};
+use crate::pycompat::{first_nonempty_line, py_casefold};
 use crate::relationships::corpus_items;
 use crate::spec::{spec_for, ArtifactSpec, RELATIONSHIP_SECTIONS};
 use crate::validate::validate;
@@ -275,27 +275,17 @@ fn artifact_name(artifact: &Artifact, path: &str) -> String {
     }
 }
 
-/// `_first_line(body)`.
-fn first_line(body: &str) -> String {
-    for line in py_splitlines(body) {
-        let stripped = py_strip(line);
-        if !stripped.is_empty() {
-            return stripped.to_string();
-        }
-    }
-    String::new()
-}
-
-/// `canonical_value(raw, allowed)`.
+/// `canonical_value(raw, allowed)` — `_first_line(raw)` matched against the
+/// allowed values, casefolded.
 fn canonical_value(raw: &str, allowed: &[String]) -> String {
-    let candidate = first_line(raw);
-    let folded = py_casefold(&candidate);
+    let candidate = first_nonempty_line(raw);
+    let folded = py_casefold(candidate);
     for value in allowed {
         if py_casefold(value) == folded {
             return value.clone();
         }
     }
-    candidate
+    candidate.to_string()
 }
 
 /// Error-severity issue codes (`_error_codes`); no ticketing provider,
