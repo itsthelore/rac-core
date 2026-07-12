@@ -9,15 +9,20 @@ use std::sync::OnceLock;
 use serde_json::{json, Map, Value};
 
 use crate::commands::{DirectoryValidation, StdinCorpusValidation, STATUS_INVALID};
+use crate::export::{CorpusExport, DocumentsExport, GraphExport};
 use crate::parse::Issue;
-use crate::pyjson::dumps_indent2;
+use crate::pycompat::{py_float_repr, py_format_1f, py_repr_str, py_round};
+use crate::pyjson::{dumps_compact, dumps_indent2, py_float};
 use crate::relationships::{
     RelationshipIssue, RelationshipReport, RelationshipValidation, ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_EDGE_UNSUPPORTED, ISSUE_RELATIONSHIP_CYCLE, ISSUE_SCOPE_TARGET_NOT_FOUND,
     ISSUE_SELF_REFERENCE, ISSUE_TARGET_AMBIGUOUS, ISSUE_TARGET_NOT_FOUND, ISSUE_TARGET_SUPERSEDED,
     ISSUE_TARGET_TYPE_MISMATCH,
 };
-use crate::spec::spec_for;
+use crate::resolve::{Recency, ResolutionResult, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED};
+use crate::review::{ReviewIssue, ReviewReport};
+use crate::spec::{snake as spec_snake, spec_for, ArtifactSpec};
+use crate::stats::PortfolioStats;
 use crate::validate::py_title;
 
 /// The injectable version string (PORT-CONTRACT decision 6): `RAC_RS_VERSION`
@@ -64,6 +69,37 @@ fn loc(file: &str, line: Option<i64>) -> String {
     }
 }
 
+/// Code-point left-justify (Python `str.ljust`).
+fn ljust(s: &str, w: usize) -> String {
+    let n = s.chars().count();
+    if n >= w {
+        s.to_string()
+    } else {
+        format!("{}{}", s, " ".repeat(w - n))
+    }
+}
+
+/// `PASS  <file>` / `FAIL  <file>` bold header line.
+fn pass_fail_header(ok: bool, file: &str) -> String {
+    if ok {
+        green(&bold(&format!("PASS  {file}")))
+    } else {
+        red(&bold(&format!("FAIL  {file}")))
+    }
+}
+
+/// One issue as its two human lines: the severity line (`error` padded with
+/// three trailing spaces, `warning` with one, so the `[code]` column aligns)
+/// followed by the indented message line.
+fn push_issue_lines(lines: &mut Vec<String>, severity: &str, code: &str, location: &str, message: &str) {
+    if severity == "error" {
+        lines.push(format!("  {}   [{}] {}", red("error"), code, location));
+    } else {
+        lines.push(format!("  {} [{}] {}", yellow("warning"), code, location));
+    }
+    lines.push(format!("          {message}"));
+}
+
 // --- validate (single file) --------------------------------------------------
 
 fn issue_value(i: &Issue) -> Value {
@@ -71,13 +107,7 @@ fn issue_value(i: &Issue) -> Value {
     m.insert("severity".into(), json!(i.severity));
     m.insert("code".into(), json!(i.code));
     m.insert("message".into(), json!(i.message));
-    m.insert(
-        "line".into(),
-        match i.line {
-            Some(l) => json!(l),
-            None => Value::Null,
-        },
-    );
+    m.insert("line".into(), json!(i.line));
     Value::Object(m)
 }
 
@@ -91,29 +121,16 @@ pub fn render_validation_human(source_path: &str, issues: &[Issue]) -> String {
     };
 
     let mut lines: Vec<String> = Vec::new();
-    if !errors.is_empty() {
-        lines.push(red(&bold(&format!("FAIL  {file}"))));
-    } else {
-        lines.push(green(&bold(&format!("PASS  {file}"))));
-    }
+    lines.push(pass_fail_header(errors.is_empty(), file));
 
-    for issue in &errors {
-        lines.push(format!(
-            "  {}   [{}] {}",
-            red("error"),
-            issue.code,
-            loc(file, issue.line)
-        ));
-        lines.push(format!("          {}", issue.message));
-    }
-    for issue in &warnings {
-        lines.push(format!(
-            "  {} [{}] {}",
-            yellow("warning"),
-            issue.code,
-            loc(file, issue.line)
-        ));
-        lines.push(format!("          {}", issue.message));
+    for issue in errors.iter().chain(&warnings) {
+        push_issue_lines(
+            &mut lines,
+            issue.severity,
+            &issue.code,
+            &loc(file, issue.line),
+            &issue.message,
+        );
     }
 
     lines.push(String::new());
@@ -190,29 +207,16 @@ pub fn render_stdin_corpus_human(result: &StdinCorpusValidation) -> String {
     let rels = &result.relationship_issues;
 
     let mut lines: Vec<String> = Vec::new();
-    if result.ok() {
-        lines.push(green(&bold(&format!("PASS  {file}"))));
-    } else {
-        lines.push(red(&bold(&format!("FAIL  {file}"))));
-    }
+    lines.push(pass_fail_header(result.ok(), file));
 
-    for issue in &errors {
-        lines.push(format!(
-            "  {}   [{}] {}",
-            red("error"),
-            issue.code,
-            loc(file, issue.line)
-        ));
-        lines.push(format!("          {}", issue.message));
-    }
-    for issue in &warnings {
-        lines.push(format!(
-            "  {} [{}] {}",
-            yellow("warning"),
-            issue.code,
-            loc(file, issue.line)
-        ));
-        lines.push(format!("          {}", issue.message));
+    for issue in errors.iter().chain(&warnings) {
+        push_issue_lines(
+            &mut lines,
+            issue.severity,
+            &issue.code,
+            &loc(file, issue.line),
+            &issue.message,
+        );
     }
 
     if !rels.is_empty() {
@@ -295,21 +299,18 @@ pub fn render_validate_dir_human(result: &DirectoryValidation) -> String {
             Some(spec) => spec.display.clone(),
             None => f.artifact_type.clone(),
         };
-        lines.push(format!(
-            "{}  ({display})",
-            red(&bold(&format!("FAIL  {}", f.path)))
-        ));
+        lines.push(format!("{}  ({display})", pass_fail_header(false, &f.path)));
         for issue in &f.issues {
             if issue.severity != "error" {
                 continue;
             }
-            lines.push(format!(
-                "  {}   [{}] {}",
-                red("error"),
-                issue.code,
-                loc(&f.path, issue.line)
-            ));
-            lines.push(format!("          {}", issue.message));
+            push_issue_lines(
+                &mut lines,
+                issue.severity,
+                &issue.code,
+                &loc(&f.path, issue.line),
+                &issue.message,
+            );
         }
         lines.push(String::new());
     }
@@ -319,15 +320,15 @@ pub fn render_validate_dir_human(result: &DirectoryValidation) -> String {
             for finding in &okf.findings {
                 lines.push(format!(
                     "{}  (OKF conformance)",
-                    red(&bold(&format!("FAIL  {}", finding.path)))
+                    pass_fail_header(false, &finding.path)
                 ));
-                lines.push(format!(
-                    "  {}   [{}] {}",
-                    red("error"),
-                    finding.code,
-                    finding.path
-                ));
-                lines.push(format!("          {}", finding.message));
+                push_issue_lines(
+                    &mut lines,
+                    "error",
+                    &finding.code,
+                    &finding.path,
+                    &finding.message,
+                );
                 lines.push(String::new());
             }
         }
@@ -701,38 +702,22 @@ pub fn render_relationships_human(report: &RelationshipReport) -> String {
 
 fn relationship_issue_value(issue: &RelationshipIssue) -> Value {
     let mut m = Map::new();
-    let opt = |v: &Option<String>| match v {
-        Some(s) => json!(s),
-        None => Value::Null,
-    };
     if issue.code == ISSUE_DUPLICATE_IDENTIFIER {
-        m.insert("identifier".into(), opt(&issue.identifier));
-        m.insert(
-            "paths".into(),
-            match &issue.paths {
-                Some(p) => json!(p),
-                None => Value::Null,
-            },
-        );
+        m.insert("identifier".into(), json!(issue.identifier));
+        m.insert("paths".into(), json!(issue.paths));
         m.insert("code".into(), json!(issue.code));
     } else if issue.code == ISSUE_EDGE_UNSUPPORTED {
-        m.insert("source_path".into(), opt(&issue.source_path));
-        m.insert("relationship".into(), opt(&issue.relationship));
+        m.insert("source_path".into(), json!(issue.source_path));
+        m.insert("relationship".into(), json!(issue.relationship));
         m.insert("code".into(), json!(issue.code));
     } else if issue.code == ISSUE_RELATIONSHIP_CYCLE {
-        m.insert("relationship".into(), opt(&issue.relationship));
-        m.insert(
-            "paths".into(),
-            match &issue.paths {
-                Some(p) => json!(p),
-                None => Value::Null,
-            },
-        );
+        m.insert("relationship".into(), json!(issue.relationship));
+        m.insert("paths".into(), json!(issue.paths));
         m.insert("code".into(), json!(issue.code));
     } else {
-        m.insert("source_path".into(), opt(&issue.source_path));
-        m.insert("relationship".into(), opt(&issue.relationship));
-        m.insert("target".into(), opt(&issue.target));
+        m.insert("source_path".into(), json!(issue.source_path));
+        m.insert("relationship".into(), json!(issue.relationship));
+        m.insert("target".into(), json!(issue.target));
         m.insert("code".into(), json!(issue.code));
     }
     Value::Object(m)
@@ -870,8 +855,6 @@ pub fn render_relationship_validation_human(report: &RelationshipValidation) -> 
 }
 
 // --- schema / templates ------------------------------------------------------
-
-use crate::spec::{snake as spec_snake, ArtifactSpec};
 
 pub fn render_schema_list_human(names: &[&str]) -> String {
     let mut lines = vec![bold("Available Schemas:")];
@@ -1057,9 +1040,6 @@ pub fn render_templates_json(names: &[&str]) -> String {
 
 // --- stats -------------------------------------------------------------------
 
-use crate::pycompat::{py_format_1f, py_round};
-use crate::stats::PortfolioStats;
-
 const EMPTY_CORPUS_HINT: &str = "No artifacts yet — create your first with: rac quickstart";
 
 fn invalid_files_json(items: &[(&str, &[String])]) -> Value {
@@ -1214,6 +1194,16 @@ pub fn render_stats_json(s: &PortfolioStats) -> String {
     dumps_indent2(&Value::Object(payload))
 }
 
+/// `  <red path> — <error codes | "unknown">` invalid-list line.
+fn invalid_reason_line(path: &str, error_codes: &[String]) -> String {
+    let reasons = if error_codes.is_empty() {
+        "unknown".to_string()
+    } else {
+        error_codes.join(", ")
+    };
+    format!("  {} \u{2014} {reasons}", red(path))
+}
+
 pub fn render_stats_human(s: &PortfolioStats) -> String {
     let mut lines: Vec<String> = vec![
         bold("Portfolio Overview"),
@@ -1258,8 +1248,7 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
     if !by_feature.is_empty() {
         let width = by_feature.iter().map(|f| f.name.chars().count()).max().unwrap_or(0) + 4;
         for f in &by_feature {
-            let pad = width.saturating_sub(f.name.chars().count());
-            lines.push(format!("{}{}{}", f.name, " ".repeat(pad), f.requirements));
+            lines.push(format!("{}{}", ljust(&f.name, width), f.requirements));
         }
     } else {
         lines.push("(none)".to_string());
@@ -1270,12 +1259,7 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
         lines.push(String::new());
         lines.push(bold(&format!("Invalid Features ({})", invalid.len())));
         for f in &invalid {
-            let reasons = if f.error_codes.is_empty() {
-                "unknown".to_string()
-            } else {
-                f.error_codes.join(", ")
-            };
-            lines.push(format!("  {} \u{2014} {reasons}", red(&f.path)));
+            lines.push(invalid_reason_line(&f.path, &f.error_codes));
         }
     }
 
@@ -1311,12 +1295,7 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
             lines.push(String::new());
             lines.push(bold(&format!("{invalid_label} ({})", invalid.len())));
             for r in invalid {
-                let reasons = if r.error_codes.is_empty() {
-                    "unknown".to_string()
-                } else {
-                    r.error_codes.join(", ")
-                };
-                lines.push(format!("  {} \u{2014} {reasons}", red(&r.path)));
+                lines.push(invalid_reason_line(&r.path, &r.error_codes));
             }
         }
     };
@@ -1365,9 +1344,6 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
 }
 
 // --- review ------------------------------------------------------------------
-
-use crate::pyjson::dumps_compact;
-use crate::review::{ReviewIssue, ReviewReport};
 
 fn priority_label(priority: i64) -> &'static str {
     match priority {
@@ -1554,8 +1530,6 @@ pub fn render_review_sarif(r: &ReviewReport) -> String {
 
 // --- export ------------------------------------------------------------------
 
-use crate::export::{CorpusExport, DocumentsExport, GraphExport};
-
 pub fn render_export_json(export: &CorpusExport) -> String {
     let mut corpus = Map::new();
     corpus.insert("name".into(), json!(export.corpus_name));
@@ -1646,13 +1620,7 @@ pub fn render_graph_json(export: &GraphExport) -> String {
             m.insert("directed".into(), json!(e.directed));
             m.insert("resolved".into(), json!(e.resolved));
             m.insert("external".into(), json!(e.external));
-            m.insert(
-                "provider".into(),
-                match &e.provider {
-                    Some(p) => json!(p),
-                    None => Value::Null,
-                },
-            );
+            m.insert("provider".into(), json!(e.provider));
             Value::Object(m)
         })
         .collect();
@@ -1665,12 +1633,6 @@ pub fn render_graph_json(export: &GraphExport) -> String {
 }
 
 // --- resolve / find (PORT-CONTRACT.d/06 §3.1, §11–13) -------------------------
-
-use crate::pycompat::{py_float_repr, py_repr_str};
-use crate::pyjson::py_float;
-use crate::resolve::{
-    Recency, ResolutionResult, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
-};
 
 /// `render_resolve_human`: the resolved-artifact card. Missing title renders
 /// `—` (U+2014); the id is bold only on a tty.
@@ -1692,13 +1654,7 @@ pub fn render_resolve_json(result: &ResolutionResult) -> String {
         let artifact = result.artifact.as_ref().expect("resolved implies artifact");
         m.insert("id".into(), json!(artifact.id));
         m.insert("type".into(), json!(artifact.artifact_type));
-        m.insert(
-            "title".into(),
-            match &artifact.title {
-                Some(t) => json!(t),
-                None => Value::Null,
-            },
-        );
+        m.insert("title".into(), json!(artifact.title));
         m.insert("path".into(), json!(artifact.path));
         // section/snippet/evidence/recency/tags are never set on the
         // resolution path — the keys stay absent.
@@ -1714,27 +1670,9 @@ pub fn render_resolve_json(result: &ResolutionResult) -> String {
 
 fn recency_value(recency: &Recency) -> Value {
     let mut m = Map::new();
-    m.insert(
-        "last_committed".into(),
-        match &recency.last_committed {
-            Some(s) => json!(s),
-            None => Value::Null,
-        },
-    );
-    m.insert(
-        "age_days".into(),
-        match recency.age_days {
-            Some(d) => json!(d),
-            None => Value::Null,
-        },
-    );
-    m.insert(
-        "stale".into(),
-        match recency.stale {
-            Some(b) => json!(b),
-            None => Value::Null,
-        },
-    );
+    m.insert("last_committed".into(), json!(recency.last_committed));
+    m.insert("age_days".into(), json!(recency.age_days));
+    m.insert("stale".into(), json!(recency.stale));
     Value::Object(m)
 }
 
@@ -1742,13 +1680,7 @@ fn find_match_value(m: &ResolvedArtifact, explain: bool) -> Value {
     let mut obj = Map::new();
     obj.insert("id".into(), json!(m.id));
     obj.insert("type".into(), json!(m.artifact_type));
-    obj.insert(
-        "title".into(),
-        match &m.title {
-            Some(t) => json!(t),
-            None => Value::Null,
-        },
-    );
+    obj.insert("title".into(), json!(m.title));
     obj.insert("path".into(), json!(m.path));
     if let Some(section) = &m.section {
         obj.insert("section".into(), json!(section));
@@ -1801,20 +1733,15 @@ pub fn render_retrieve_human(payload: &Value) -> String {
             _ => "\u{2014}".to_string(),
         }
     };
-    let width = |s: &str| s.chars().count();
-    let pad = |s: &str, w: usize| {
-        let n = width(s);
-        if n >= w {
-            s.to_string()
-        } else {
-            format!("{}{}", s, " ".repeat(w - n))
-        }
-    };
     let id_of = |item: &Value| item["id"].as_str().unwrap_or("").to_string();
-    let id_w = items.iter().map(|i| width(&id_of(i))).max().unwrap_or(0);
+    let id_w = items
+        .iter()
+        .map(|i| id_of(i).chars().count())
+        .max()
+        .unwrap_or(0);
     let status_w = items
         .iter()
-        .map(|i| width(&disp(i, "status")))
+        .map(|i| disp(i, "status").chars().count())
         .max()
         .unwrap_or(0);
     let indent = format!("{}  {}  ", " ".repeat(id_w), " ".repeat(status_w));
@@ -1822,8 +1749,8 @@ pub fn render_retrieve_human(payload: &Value) -> String {
     for item in items {
         lines.push(format!(
             "{}  {}  {}",
-            pad(&id_of(item), id_w),
-            pad(&disp(item, "status"), status_w),
+            ljust(&id_of(item), id_w),
+            ljust(&disp(item, "status"), status_w),
             disp(item, "title"),
         ));
         let empty_map = Map::new();
@@ -1884,13 +1811,7 @@ pub fn render_find_json(result: &SearchResult, explain: bool) -> String {
     let mut m = Map::new();
     m.insert("schema_version".into(), json!("1"));
     m.insert("query".into(), json!(result.query));
-    m.insert(
-        "type".into(),
-        match &result.artifact_type {
-            Some(t) => json!(t),
-            None => Value::Null,
-        },
-    );
+    m.insert("type".into(), json!(result.artifact_type));
     m.insert("match_count".into(), json!(result.matches.len()));
     m.insert(
         "matches".into(),
@@ -1924,20 +1845,12 @@ pub fn render_find_human(result: &SearchResult, explain: bool) -> String {
         .max()
         .unwrap_or(0);
     let indent = format!("{}  {}  ", " ".repeat(id_w), " ".repeat(type_w));
-    let pad = |value: &str, width: usize| {
-        let len = value.chars().count();
-        if len >= width {
-            value.to_string()
-        } else {
-            format!("{}{}", value, " ".repeat(width - len))
-        }
-    };
     let mut lines: Vec<String> = Vec::new();
     for m in &result.matches {
         let mut row = format!(
             "{}  {}  {}",
-            pad(&m.id, id_w),
-            pad(&m.artifact_type, type_w),
+            ljust(&m.id, id_w),
+            ljust(&m.artifact_type, type_w),
             m.title.as_deref().filter(|t| !t.is_empty()).unwrap_or("\u{2014}")
         );
         if let Some(recency) = &m.recency {
