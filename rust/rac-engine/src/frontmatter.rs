@@ -1299,6 +1299,10 @@ fn is_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '-' || c == '_'
 }
 
+fn repr_char(c: char) -> String {
+    py_repr_str(&c.to_string())
+}
+
 impl Scanner {
     fn new(data: &str) -> Scanner {
         let mut buf: Vec<char> = data.chars().collect();
@@ -1345,6 +1349,12 @@ impl Scanner {
             } else if ch != '\u{feff}' {
                 self.column += 1;
             }
+        }
+    }
+
+    fn skip_spaces(&mut self) {
+        while self.peek(0) == ' ' {
+            self.forward(1);
         }
     }
 
@@ -1537,7 +1547,7 @@ impl Scanner {
         }
         Err(YErr::Marked(format!(
             "found character {} that cannot start any token",
-            py_repr_str(&ch.to_string())
+            repr_char(ch)
         )))
     }
 
@@ -1723,9 +1733,7 @@ impl Scanner {
         }
         let mut found = false;
         while !found {
-            while self.peek(0) == ' ' {
-                self.forward(1);
-            }
+            self.skip_spaces();
             if self.peek(0) == '#' {
                 while !is_z_break(self.peek(0)) {
                     self.forward(1);
@@ -1772,7 +1780,7 @@ impl Scanner {
             }
             Some(DirectiveVal::Other)
         };
-        self.scan_directive_ignored_line("while scanning a directive")?;
+        self.scan_ignored_line()?;
         Ok(Tok {
             kind: TK::Directive,
             value: name,
@@ -1792,7 +1800,7 @@ impl Scanner {
         if length == 0 {
             return Err(YErr::Marked(format!(
                 "expected alphabetic or numeric character, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         let value = self.prefix(length);
@@ -1801,21 +1809,19 @@ impl Scanner {
         if !(ch == '\0' || ch == ' ' || is_break(ch)) {
             return Err(YErr::Marked(format!(
                 "expected alphabetic or numeric character, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         Ok(value)
     }
 
     fn scan_yaml_directive_value(&mut self) -> Result<bool, YErr> {
-        while self.peek(0) == ' ' {
-            self.forward(1);
-        }
+        self.skip_spaces();
         let major = self.scan_yaml_directive_number()?;
         if self.peek(0) != '.' {
             return Err(YErr::Marked(format!(
                 "expected a digit or '.', but found {}",
-                py_repr_str(&self.peek(0).to_string())
+                repr_char(self.peek(0))
             )));
         }
         self.forward(1);
@@ -1824,7 +1830,7 @@ impl Scanner {
         if !(ch == '\0' || ch == ' ' || is_break(ch)) {
             return Err(YErr::Marked(format!(
                 "expected a digit or ' ', but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         Ok(major == Some(1))
@@ -1835,7 +1841,7 @@ impl Scanner {
         if !ch.is_ascii_digit() {
             return Err(YErr::Marked(format!(
                 "expected a digit, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         let mut length = 0;
@@ -1848,35 +1854,29 @@ impl Scanner {
     }
 
     fn scan_tag_directive_value(&mut self) -> Result<(String, String), YErr> {
-        while self.peek(0) == ' ' {
-            self.forward(1);
-        }
+        self.skip_spaces();
         let handle = self.scan_tag_handle("directive")?;
         let ch = self.peek(0);
         if ch != ' ' {
             return Err(YErr::Marked(format!(
                 "expected ' ', but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
-        while self.peek(0) == ' ' {
-            self.forward(1);
-        }
+        self.skip_spaces();
         let prefix = self.scan_tag_uri("directive")?;
         let ch = self.peek(0);
         if !(ch == '\0' || ch == ' ' || is_break(ch)) {
             return Err(YErr::Marked(format!(
                 "expected ' ', but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         Ok((handle, prefix))
     }
 
-    fn scan_directive_ignored_line(&mut self, _ctx: &str) -> Result<(), YErr> {
-        while self.peek(0) == ' ' {
-            self.forward(1);
-        }
+    fn scan_ignored_line(&mut self) -> Result<(), YErr> {
+        self.skip_spaces();
         if self.peek(0) == '#' {
             while !is_z_break(self.peek(0)) {
                 self.forward(1);
@@ -1886,7 +1886,7 @@ impl Scanner {
         if !is_z_break(ch) {
             return Err(YErr::Marked(format!(
                 "expected a comment or a line break, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         self.scan_line_break();
@@ -1904,7 +1904,7 @@ impl Scanner {
         if length == 0 {
             return Err(YErr::Marked(format!(
                 "expected alphabetic or numeric character, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         let value = self.prefix(length);
@@ -1913,7 +1913,7 @@ impl Scanner {
         if !(is_z_ws_break(ch) || "?:,]}%@`".contains(ch)) {
             return Err(YErr::Marked(format!(
                 "expected alphabetic or numeric character, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         Ok(Tok {
@@ -1934,7 +1934,7 @@ impl Scanner {
             if self.peek(0) != '>' {
                 return Err(YErr::Marked(format!(
                     "expected '>', but found {}",
-                    py_repr_str(&self.peek(0).to_string())
+                    repr_char(self.peek(0))
                 )));
             }
             self.forward(1);
@@ -1968,7 +1968,7 @@ impl Scanner {
         if !(ch == '\0' || ch == ' ' || is_break(ch)) {
             return Err(YErr::Marked(format!(
                 "expected ' ', but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         Ok(Tok {
@@ -1985,7 +1985,7 @@ impl Scanner {
         if ch != '!' {
             return Err(YErr::Marked(format!(
                 "expected '!', but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         let mut length = 1;
@@ -1999,7 +1999,7 @@ impl Scanner {
                 self.forward(length);
                 return Err(YErr::Marked(format!(
                     "expected '!', but found {}",
-                    py_repr_str(&c.to_string())
+                    repr_char(c)
                 )));
             }
             length += 1;
@@ -2031,7 +2031,7 @@ impl Scanner {
         if chunks.is_empty() {
             return Err(YErr::Marked(format!(
                 "expected URI, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         Ok(chunks)
@@ -2045,7 +2045,7 @@ impl Scanner {
                 if !self.peek(k).is_ascii_hexdigit() {
                     return Err(YErr::Marked(format!(
                         "expected URI escape sequence of 2 hexadecimal numbers, but found {}",
-                        py_repr_str(&self.peek(k).to_string())
+                        repr_char(self.peek(k))
                     )));
                 }
             }
@@ -2079,7 +2079,7 @@ impl Scanner {
         let mut chunks = String::new();
         self.forward(1);
         let (chomping, increment) = self.scan_block_scalar_indicators()?;
-        self.scan_block_scalar_ignored_line()?;
+        self.scan_ignored_line()?;
 
         let mut min_indent = self.indent + 1;
         if min_indent < 1 {
@@ -2175,30 +2175,10 @@ impl Scanner {
         if !(ch == '\0' || ch == ' ' || is_break(ch)) {
             return Err(YErr::Marked(format!(
                 "expected chomping or indentation indicators, but found {}",
-                py_repr_str(&ch.to_string())
+                repr_char(ch)
             )));
         }
         Ok((chomping, increment))
-    }
-
-    fn scan_block_scalar_ignored_line(&mut self) -> Result<(), YErr> {
-        while self.peek(0) == ' ' {
-            self.forward(1);
-        }
-        if self.peek(0) == '#' {
-            while !is_z_break(self.peek(0)) {
-                self.forward(1);
-            }
-        }
-        let ch = self.peek(0);
-        if !is_z_break(ch) {
-            return Err(YErr::Marked(format!(
-                "expected a comment or a line break, but found {}",
-                py_repr_str(&ch.to_string())
-            )));
-        }
-        self.scan_line_break();
-        Ok(())
     }
 
     fn scan_block_scalar_indentation(&mut self) -> (String, i64) {
@@ -2313,7 +2293,7 @@ impl Scanner {
                             return Err(YErr::Marked(format!(
                                 "expected escape sequence of {} hexadecimal numbers, but found {}",
                                 length,
-                                py_repr_str(&self.peek(k).to_string())
+                                repr_char(self.peek(k))
                             )));
                         }
                     }
@@ -2341,7 +2321,7 @@ impl Scanner {
                 } else {
                     return Err(YErr::Marked(format!(
                         "found unknown escape character {}",
-                        py_repr_str(&ch.to_string())
+                        repr_char(ch)
                     )));
                 }
             } else {
