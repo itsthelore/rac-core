@@ -69,13 +69,16 @@ fn scratch_repo() -> PathBuf {
     );
 
     // future.md: committed after REFERENCE_EPOCH -> negative age (floor
-    // toward negative infinity, timedelta.days semantics).
+    // toward negative infinity, timedelta.days semantics). Non-UTC offset
+    // deliberately: git >= 2.45 renders +00:00 as "Z" in %cI while older
+    // git prints "+00:00" — both engines pass the same git's bytes through,
+    // so parity holds either way, but a pinned literal must avoid UTC.
     fs::write(dir.join("future.md"), "# Future\n").unwrap();
     git(&dir, &["add", "future.md"], None);
     git(
         &dir,
         &["commit", "-q", "-m", "future"],
-        Some("2027-01-03T06:00:00+00:00"),
+        Some("2027-01-03T06:00:00+02:00"),
     );
 
     // untracked.md: present on disk, never committed.
@@ -110,9 +113,9 @@ fn recency_matches_pinned_semantics() {
     assert_eq!(stw.age_days, Some(-1));
     assert_eq!(stw.stale, Some(false));
 
-    // Future commit: -2d6h exact -> floors toward -inf to -3.
+    // Future commit: 06:00+02:00 = 04:00Z -> -2d4h exact -> floors to -3.
     let fut = last_committed(&root, &repo.join("future.md"));
-    assert_eq!(fut.as_deref(), Some("2027-01-03T06:00:00+00:00"));
+    assert_eq!(fut.as_deref(), Some("2027-01-03T06:00:00+02:00"));
     let stf = staleness(fut.as_deref(), DEFAULT_STALE_AFTER_DAYS, REFERENCE_EPOCH);
     assert_eq!(stf.age_days, Some(-3));
     assert_eq!(stf.stale, Some(false));
