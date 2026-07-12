@@ -45,6 +45,8 @@ pub mod budget;
 pub mod portfolio;
 pub mod coverage;
 pub mod review;
+pub mod gate;
+pub mod doctor;
 pub mod mdhtml;
 pub mod export;
 pub mod output;

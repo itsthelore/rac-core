@@ -1,0 +1,5 @@
+repository_key: RAC
+enforcement:
+  advisory:
+    - relationship-target-not-found
+    - broken-relationship

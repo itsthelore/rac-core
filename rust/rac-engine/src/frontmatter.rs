@@ -4040,6 +4040,18 @@ pub fn load_frontmatter_mapping(raw: &str) -> (Option<Vec<(Yaml, Yaml)>>, Vec<Is
     }
 }
 
+/// Full-document YAML load for the strict `.rac/config.yaml` readers
+/// (`rac gate`, `rac.services.init._parse_config_yaml`): `Ok(root)` on a
+/// clean parse, `Err(problem text)` otherwise. The oracle embeds PyYAML's
+/// exact multi-line exception prose in its `invalid YAML: <exc>` message;
+/// that prose is not byte-reproducible here (stderr is out of parity
+/// scope), so the error text is the engine's own parse problem.
+pub fn yaml_load_config(raw: &str) -> Result<Yaml, String> {
+    yaml_load(raw).map_err(|e| match e {
+        YErr::Marked(p) | YErr::Reader(p) | YErr::Internal(p) => p,
+    })
+}
+
 fn check_unknown_fields(pairs: &[(Yaml, Yaml)], issues: &mut Vec<Issue>) -> Result<(), YErr> {
     for (key, _) in pairs {
         let known = matches!(key, Yaml::Str(s) if SUPPORTED_FIELDS.contains(&s.as_str()));
