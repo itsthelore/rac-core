@@ -1,0 +1,4 @@
+{"schema_version": "1", "ts": "2026-07-10T08:12:01.512Z", "session": "a3f29c1b", "tool": "search_artifacts", "outcome": "ok", "duration_ms": 12, "truncated": false}
+{"schema_version": "1", "ts": "2026-07-10T08:13:44.100Z", "session": "a3f29c1b", "tool": "get_artifact", "outcome": "error", "error": "not_found", "duration_ms": 5, "truncated": false}
+garbage line
+{"schema_version": "1", "ts": "2026-07-11T09:00:00.000Z", "session": "c4d55e6f", "tool": "search_artifacts", "outcome": "ok", "duration_ms": 8, "truncated": true}

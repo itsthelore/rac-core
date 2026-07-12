@@ -1017,3 +1017,180 @@ pub fn cmd_retrieve(args: &RetrieveArgs) -> i32 {
     }
     EXIT_OK
 }
+
+// ---------------------------------------------------------------------------
+// cmd_mcp_stats / cmd_usage / cmd_telemetry (local-state reporting,
+// ADR-040/041/046, ADR-086 — PORT-CONTRACT.d/14)
+// ---------------------------------------------------------------------------
+
+/// The oracle CRASHES on a non-UTF-8 state log (`read_text` raises
+/// `UnicodeDecodeError`; the readers catch only `OSError`): traceback to
+/// stderr, EMPTY stdout, exit 1. Bug-for-bug mirror; the stderr text is
+/// out of parity scope.
+fn state_log_crash() -> i32 {
+    eprintln!("rac-rs: state log is not valid UTF-8");
+    EXIT_VALIDATION_FAILED
+}
+
+pub struct McpStatsArgs {
+    pub json: bool,
+    pub share: bool,
+}
+
+/// `rac mcp-stats` — Guide-only read-back. An empty or missing log is a
+/// valid answer (telemetry is off by default), like `find` with no
+/// matches: exit 0 for every log state.
+pub fn cmd_mcp_stats(args: &McpStatsArgs) -> i32 {
+    let summary = match crate::telemetry::summarize() {
+        Ok(summary) => summary,
+        Err(_) => return state_log_crash(),
+    };
+    if args.share {
+        emit(crate::telemetry::share_url(&summary));
+    } else if args.json {
+        emit(output::render_mcp_stats_json(&summary));
+    } else {
+        emit(output::render_mcp_stats_human(&summary));
+    }
+    EXIT_OK
+}
+
+pub struct UsageArgs {
+    pub json: bool,
+    pub share: bool,
+}
+
+/// `rac usage` — unified read-back over the CLI-usage log and the Guide
+/// log (ADR-046). No consent gate on reads; exit 0 for every log state.
+/// The CLI log is read FIRST (a bad usage log crashes before the Guide
+/// log is touched, like the oracle's statement order).
+pub fn cmd_usage(args: &UsageArgs) -> i32 {
+    let summary = match crate::usage::summarize_usage() {
+        Ok(summary) => summary,
+        Err(_) => return state_log_crash(),
+    };
+    let guide = match crate::telemetry::summarize() {
+        Ok(guide) => guide,
+        Err(_) => return state_log_crash(),
+    };
+    if args.share {
+        emit(crate::usage::share_url(&summary, &guide));
+    } else if args.json {
+        emit(output::render_usage_json(&summary, &guide));
+    } else {
+        emit(output::render_usage_human(&summary, &guide));
+    }
+    EXIT_OK
+}
+
+pub struct TelemetryArgs {
+    /// Validated positional choice; argparse default is `status`.
+    pub action: String,
+    pub enterprise: bool,
+    pub unlock: bool,
+}
+
+/// `rac telemetry [on|off|status] [--enterprise] [--unlock]` — show or
+/// change sharing consent (ADR-041) and the enterprise hard-lock
+/// (ADR-086). Flag validation order is pinned: enterprise/unlock with a
+/// non-`off` action first, then unlock-without-enterprise, then the
+/// opt-in-while-locked refusal — three distinct exit-2 usage errors.
+pub fn cmd_telemetry(args: &TelemetryArgs) -> i32 {
+    if (args.enterprise || args.unlock) && args.action != "off" {
+        return usage_error("--enterprise/--unlock are only valid with 'rac telemetry off'");
+    }
+    if args.unlock && !args.enterprise {
+        return usage_error(
+            "--unlock requires --enterprise (use 'rac telemetry off --enterprise --unlock')",
+        );
+    }
+
+    if args.action == "on" {
+        if crate::consent::load_consent().enterprise_locked {
+            return usage_error(
+                "cannot opt in while the enterprise telemetry lock is set; remove it with \
+                 'rac telemetry off --enterprise --unlock' first (ADR-086).",
+            );
+        }
+        let record = crate::consent::opt_in();
+        emit(format!("Sharing on. Install id: {}", record.install_id));
+        emit(
+            "One anonymous daily ping: install id, rac version, active-repo count. \
+             Never paths, queries, or content (ADR-041)."
+                .to_string(),
+        );
+        // `if not consent.POSTHOG_API_KEY:` — the compiled-in key is the
+        // kill switch; the reference build's key is non-empty, so this
+        // line is absent from every captured run.
+        #[allow(clippy::const_is_empty)]
+        if crate::consent::POSTHOG_API_KEY.is_empty() {
+            emit("Note: this build has no PostHog key configured; nothing will be sent.".to_string());
+        }
+    } else if args.action == "off" {
+        if args.enterprise && args.unlock {
+            crate::consent::enterprise_unlock();
+            emit(
+                "Enterprise lock removed. Sharing stays off; re-enable with \
+                 'rac telemetry on' (ADR-086)."
+                    .to_string(),
+            );
+        } else if args.enterprise {
+            crate::consent::enterprise_lock();
+            emit(
+                "Sharing off and enterprise-locked. The daily ping is forced off \
+                 and cannot be re-enabled until unlocked with \
+                 'rac telemetry off --enterprise --unlock' (ADR-086)."
+                    .to_string(),
+            );
+        } else {
+            crate::consent::opt_out();
+            emit("Sharing off. Nothing will be sent.".to_string());
+        }
+    } else {
+        // status — `Sharing:` tri-state precedence: the enterprise lock
+        // wins over sharing; the 5th line is locked-note XOR sharing-note.
+        let status = crate::consent::consent_status();
+        let sharing = if status.enterprise_locked {
+            "locked (enterprise)"
+        } else if status.sharing {
+            "on"
+        } else {
+            "off"
+        };
+        emit(format!("Sharing: {sharing}"));
+        emit(format!(
+            "Install id: {}",
+            if status.install_id.is_empty() {
+                "(none)"
+            } else {
+                &status.install_id
+            }
+        ));
+        emit(format!(
+            "Consented at: {}",
+            if status.consented_at.is_empty() {
+                "(never)"
+            } else {
+                &status.consented_at
+            }
+        ));
+        emit(format!("Consent file: {}", status.path));
+        if status.enterprise_locked {
+            emit(
+                "Enterprise lock: on \u{2014} the daily ping is forced off. Remove with \
+                 'rac telemetry off --enterprise --unlock' (ADR-086)."
+                    .to_string(),
+            );
+        } else if status.sharing {
+            emit(
+                "Shared daily: install id, rac version, active-repo count. \
+                 Never paths, queries, or content (ADR-041)."
+                    .to_string(),
+            );
+        }
+        if !status.endpoint_configured {
+            emit("Endpoint key: not configured \u{2014} nothing is sent.".to_string());
+        }
+    }
+    EXIT_OK
+}

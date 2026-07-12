@@ -2885,3 +2885,126 @@ pub fn render_find_human(result: &SearchResult, explain: bool) -> String {
     ));
     lines.join("\n")
 }
+
+// --- mcp-stats / usage (state read-back, ADR-040/ADR-046) --------------------
+
+/// Human `rac mcp-stats` output — what the local telemetry log says. An
+/// empty or missing log is a valid answer, rendered as guidance. Note
+/// `First Event:`/`Last Event:` print the Python value directly, so a
+/// populated log whose events all lack a string `ts` prints `None`.
+pub fn render_mcp_stats_human(summary: &crate::telemetry::TelemetrySummary) -> String {
+    let mut lines = vec![
+        bold("Guide Telemetry"),
+        "===============".to_string(),
+        String::new(),
+        format!("Log: {}", summary.path),
+    ];
+    if summary.event_count == 0 {
+        lines.push(String::new());
+        lines.push("No telemetry recorded.".to_string());
+        lines.push("Telemetry is off by default; enable it with: rac mcp --telemetry".to_string());
+        if summary.skipped_lines != 0 {
+            lines.push(String::new());
+            lines.push(format!("Skipped Unreadable Lines: {}", summary.skipped_lines));
+        }
+        return lines.join("\n");
+    }
+    lines.push(format!("Events: {}", summary.event_count));
+    lines.push(format!("Sessions: {}", summary.session_count));
+    lines.push(format!(
+        "First Event: {}",
+        summary.first_ts.as_deref().unwrap_or("None")
+    ));
+    lines.push(format!(
+        "Last Event: {}",
+        summary.last_ts.as_deref().unwrap_or("None")
+    ));
+    lines.push(String::new());
+    lines.push(bold("Tool Usage"));
+    lines.push("==========".to_string());
+    lines.push(String::new());
+    for tool in &summary.tools {
+        lines.push(format!(
+            "  {}: {} call(s), {} error(s), {} truncated, avg {} ms",
+            tool.tool, tool.calls, tool.errors, tool.truncated, tool.avg_duration_ms
+        ));
+    }
+    if summary.skipped_lines != 0 {
+        lines.push(String::new());
+        lines.push(format!("Skipped Unreadable Lines: {}", summary.skipped_lines));
+    }
+    lines.join("\n")
+}
+
+/// JSON `rac mcp-stats` output — `json.dumps(to_dict(), indent=2)`, which
+/// is `ensure_ascii=True` (the ONLY ascii-escaped payload of the three
+/// state surfaces; `usage --json` and both share URLs use
+/// `ensure_ascii=False`).
+pub fn render_mcp_stats_json(summary: &crate::telemetry::TelemetrySummary) -> String {
+    dumps_indent2(&crate::telemetry::summary_value(summary))
+}
+
+/// Human `rac usage` output — the unified CLI + Guide read-back (ADR-046).
+/// Two DIFFERENT error pluralizations by design: CLI rows use
+/// `error`/`errors` (`'s' if errors != 1`), Guide rows always `error(s)`;
+/// both suffixes appear only when the count is nonzero, with the
+/// tool/command column left-justified to 16 code points.
+pub fn render_usage_human(
+    cli: &crate::usage::UsageSummary,
+    guide: &crate::telemetry::TelemetrySummary,
+) -> String {
+    let mut lines = vec!["RAC usage".to_string(), String::new()];
+    if cli.total == 0 {
+        lines.push(
+            "No CLI usage recorded \u{2014} telemetry is off (enable with `rac telemetry on`)."
+                .to_string(),
+        );
+    } else {
+        lines.push(format!(
+            "CLI commands: {} calls across {} session(s)",
+            cli.total, cli.sessions
+        ));
+        for c in &cli.commands {
+            let errs = if c.errors != 0 {
+                format!(
+                    "  ({} error{})",
+                    c.errors,
+                    if c.errors != 1 { "s" } else { "" }
+                )
+            } else {
+                String::new()
+            };
+            lines.push(format!("  {} {}{}", ljust(&c.command, 16), c.calls, errs));
+        }
+        if !cli.recent.is_empty() {
+            let trend: Vec<String> = cli
+                .recent
+                .iter()
+                .map(|(day, n)| format!("{day}: {n}"))
+                .collect();
+            lines.push(format!("  recent: {}", trend.join(", ")));
+        }
+    }
+    if !guide.tools.is_empty() {
+        lines.push(String::new());
+        lines.push("Guide MCP tools:".to_string());
+        for tool in &guide.tools {
+            let errs = if tool.errors != 0 {
+                format!("  ({} error(s))", tool.errors)
+            } else {
+                String::new()
+            };
+            lines.push(format!("  {} {}{}", ljust(&tool.tool, 16), tool.calls, errs));
+        }
+    }
+    lines.join("\n")
+}
+
+/// JSON `rac usage` output — the combined payload with
+/// `ensure_ascii=False, indent=2` (raw UTF-8, unlike mcp-stats).
+pub fn render_usage_json(
+    cli: &crate::usage::UsageSummary,
+    guide: &crate::telemetry::TelemetrySummary,
+) -> String {
+    dumps_indent2_no_ascii(&crate::usage::combined_value(cli, guide))
+}
