@@ -185,7 +185,9 @@ def load_cases(path: Path, exclude_tags: set[str], name_filter: str | None):
 def resolve_root(roots: dict[str, str], key: str, out_dir: Path) -> str:
     raw = roots[key]
     if raw == "<EMPTY>":
-        d = out_dir / "empty-root"
+        # Must be absolute: the harness may run with a relative --out, but
+        # servers run with cwd=REPO_ROOT and would resolve it elsewhere.
+        d = (out_dir / "empty-root").resolve()
         d.mkdir(parents=True, exist_ok=True)
         return str(d)
     return str((REPO_ROOT / raw).resolve())
