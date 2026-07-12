@@ -332,6 +332,39 @@ pub fn py_repr_str(s: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// urllib.parse — quote_plus / urlencode (share-URL formatting)
+// ---------------------------------------------------------------------------
+
+/// `urllib.parse.quote_plus(s, safe='')` over the string's UTF-8 bytes:
+/// the ALWAYS-SAFE set (ASCII alphanumerics plus `_.-~`) stays literal,
+/// a space becomes `+`, and every other byte becomes uppercase `%XX`.
+pub fn quote_plus(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' | b'-' | b'~' => {
+                out.push(b as char)
+            }
+            b' ' => out.push('+'),
+            _ => {
+                write!(out, "%{b:02X}").unwrap();
+            }
+        }
+    }
+    out
+}
+
+/// `urllib.parse.urlencode(mapping)` over string pairs — `quote_plus` on
+/// each key and value, pairs joined with `&` in the given order.
+pub fn quote_plus_urlencode(pairs: &[(&str, &str)]) -> String {
+    pairs
+        .iter()
+        .map(|(k, v)| format!("{}={}", quote_plus(k), quote_plus(v)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
+// ---------------------------------------------------------------------------
 // repr(float)
 // ---------------------------------------------------------------------------
 

@@ -373,6 +373,67 @@ fn mask_json_field(stdout: &[u8], dotted: &str) -> Result<Vec<u8>, String> {
     serialize_json(&value)
 }
 
+/// "mask-consent-mint" — `telemetry on` mints install_id/salt
+/// (`secrets.token_hex(16)` -> 32 lowercase hex) and re-mints consented_at
+/// (`isoformat(timespec="seconds")` with `+00:00` -> `Z`) on every opt-in,
+/// and the oracle exposes NO seam to pin any of them (unlike the
+/// `RAC_RS_VERSION` build seam), so the referee masks exactly those two
+/// minted shapes instead: a maximal 32-char lowercase-hex run at word
+/// boundaries becomes `<MASKED-HEX32>`, and a `dddd-dd-ddTdd:dd:ddZ`
+/// timestamp at digit/word boundaries becomes `<MASKED-UTC-TS>`. Applied
+/// to stdout AND captured files (the written telemetry.json), like every
+/// normalization. Cases that must referee id PRESERVATION seed ids that do
+/// not match the hex32 shape, so a wrongly re-minted id stays visible.
+fn mask_consent_mint(stdout: &[u8]) -> Result<Vec<u8>, String> {
+    fn word(b: u8) -> bool {
+        b.is_ascii_alphanumeric() || b == b'_'
+    }
+    fn hex(b: u8) -> bool {
+        b.is_ascii_digit() || (b'a'..=b'f').contains(&b)
+    }
+    /// `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z` starting at `i`.
+    fn ts_at(s: &[u8], i: usize) -> bool {
+        const SHAPE: &[u8] = b"dddd-dd-ddTdd:dd:ddZ";
+        if i + SHAPE.len() > s.len() {
+            return false;
+        }
+        SHAPE.iter().enumerate().all(|(k, &c)| match c {
+            b'd' => s[i + k].is_ascii_digit(),
+            lit => s[i + k] == lit,
+        })
+    }
+    const TS_LEN: usize = 20;
+    const HEX_LEN: usize = 32;
+    let n = stdout.len();
+    let mut out = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        let prev_word = i > 0 && word(stdout[i - 1]);
+        if !prev_word
+            && ts_at(stdout, i)
+            && (i + TS_LEN == n || !word(stdout[i + TS_LEN]))
+        {
+            out.extend_from_slice(b"<MASKED-UTC-TS>");
+            i += TS_LEN;
+            continue;
+        }
+        if !prev_word && hex(stdout[i]) {
+            let mut k = i;
+            while k < n && hex(stdout[k]) {
+                k += 1;
+            }
+            if k - i == HEX_LEN && (k == n || !word(stdout[k])) {
+                out.extend_from_slice(b"<MASKED-HEX32>");
+                i = k;
+                continue;
+            }
+        }
+        out.push(stdout[i]);
+        i += 1;
+    }
+    Ok(out)
+}
+
 /// "mask-sandbox-path" — sandboxed runs give each engine its OWN root, so
 /// output embedding the root (argv echoes, absolute-path listings) differs
 /// across engines by construction. Replace every occurrence of the
@@ -426,6 +487,7 @@ fn apply_normalizations(names: &[String], stdout: &[u8], ctx: &NormCtx) -> Resul
                 "strip-stale-human" => strip_stale_human(&cur),
                 "mask-version" => mask_version(&cur),
                 "mask-ids" => mask_ids(&cur),
+                "mask-consent-mint" => mask_consent_mint(&cur),
                 "mask-sandbox-path" => mask_sandbox_path(&cur, ctx),
                 other => Err(format!("unknown normalization: {other}")),
             }

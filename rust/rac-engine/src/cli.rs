@@ -6,11 +6,12 @@
 
 use crate::commands::{
     cmd_coverage, cmd_decisions_for, cmd_diff, cmd_doctor, cmd_export, cmd_find, cmd_gate,
-    cmd_improve, cmd_inspect, cmd_portfolio, cmd_relationships, cmd_resolve, cmd_retrieve,
-    cmd_review, cmd_schema, cmd_stats, cmd_templates, cmd_validate, CoverageArgs,
-    DecisionsForArgs, DiffArgs, DoctorArgs, ExportArgs, FindArgs, GateArgs, ImproveArgs,
-    InspectArgs, PortfolioArgs, RelationshipsArgs, ResolveArgs, RetrieveArgs, ReviewArgs,
-    SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+    cmd_improve, cmd_inspect, cmd_mcp_stats, cmd_portfolio, cmd_relationships, cmd_resolve,
+    cmd_retrieve, cmd_review, cmd_schema, cmd_stats, cmd_telemetry, cmd_templates, cmd_usage,
+    cmd_validate, CoverageArgs, DecisionsForArgs, DiffArgs, DoctorArgs, ExportArgs, FindArgs,
+    GateArgs, ImproveArgs, InspectArgs, McpStatsArgs, PortfolioArgs, RelationshipsArgs,
+    ResolveArgs, RetrieveArgs, ReviewArgs, SchemaArgs, StatsArgs, TelemetryArgs, TemplatesArgs,
+    UsageArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -64,10 +65,23 @@ fn print_stdout(text: &str) {
     let _ = out.flush();
 }
 
+/// The ADR-046 recorder gate: the oracle's `cli.main` computes the command
+/// name only AFTER `parse_args` returns, so argparse-level exits (parse
+/// errors, `--version`/`-h` actions) never record a usage event, while
+/// dispatched commands record `ok`/`error` from the exit code. Every
+/// parse-level early return in this module raises this flag.
+static PARSE_LEVEL_EXIT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn skip_usage_record() {
+    PARSE_LEVEL_EXIT.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// argparse-style error: usage to stderr, final `<prog>: error: <msg>` line,
 /// exit 2. The usage body is out of parity scope; only the last line is
 /// contract-shaped.
 fn argparse_error(prog: &str, message: &str) -> u8 {
+    skip_usage_record();
     eprintln!("usage: {prog} ...");
     eprintln!("{prog}: error: {message}");
     2
@@ -91,16 +105,42 @@ fn invalid_choice_message(token: &str) -> String {
     format!("argument command: invalid choice: '{token}' (choose from {choices})")
 }
 
+/// Dispatch plus the ADR-046 usage recorder: one content-free event per
+/// dispatched command, gated by recorded consent, silent-fail, after the
+/// command completes (never before, so `telemetry on` records itself under
+/// its own freshly-written consent, exactly like the oracle).
 pub fn run(args: &[String]) -> u8 {
+    let start = std::time::Instant::now();
+    let code = run_dispatch(args);
+    if !PARSE_LEVEL_EXIT.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Some(command) = args.first().filter(|a| !a.starts_with('-')) {
+            let outcome = if code == 0 {
+                crate::usage::OUTCOME_OK
+            } else {
+                crate::usage::OUTCOME_ERROR
+            };
+            crate::usage::record_command(
+                command,
+                outcome,
+                start.elapsed().as_millis() as i64,
+            );
+        }
+    }
+    code
+}
+
+fn run_dispatch(args: &[String]) -> u8 {
     let mut it = args.iter();
     let first = match it.next() {
         None => return argparse_error("rac", "the following arguments are required: command"),
         Some(a) if a == "--version" => {
+            skip_usage_record();
             print_stdout(&version_line());
             return 0;
         }
         Some(a) if a == "-h" || a == "--help" => {
             // Help body is out of parity scope; emit a stub to stdout.
+            skip_usage_record();
             print_stdout("usage: rac [-h] [--version] <command> ...");
             return 0;
         }
@@ -120,14 +160,23 @@ pub fn run(args: &[String]) -> u8 {
 
     let rest: Vec<&String> = it.collect();
 
-    // `--version` short-circuits on every subcommand (version_parent).
-    if rest.iter().any(|a| a.as_str() == "--version") {
-        print_stdout(&version_line());
-        return 0;
-    }
-    if rest.iter().any(|a| a.as_str() == "-h" || a.as_str() == "--help") {
-        print_stdout(&format!("usage: rac {first} ..."));
-        return 0;
+    // `--version` short-circuits on every subcommand (version_parent) —
+    // EXCEPT where an earlier argv token can error first at its own
+    // position: telemetry's choice-validated positional and the
+    // usage/mcp-stats immediate mutex. Those three parse order-aware and
+    // fire version/help themselves at the encounter point, like argparse.
+    let order_aware = matches!(first.as_str(), "mcp-stats" | "telemetry" | "usage");
+    if !order_aware {
+        if rest.iter().any(|a| a.as_str() == "--version") {
+            skip_usage_record();
+            print_stdout(&version_line());
+            return 0;
+        }
+        if rest.iter().any(|a| a.as_str() == "-h" || a.as_str() == "--help") {
+            skip_usage_record();
+            print_stdout(&format!("usage: rac {first} ..."));
+            return 0;
+        }
     }
 
     match first.as_str() {
@@ -149,6 +198,9 @@ pub fn run(args: &[String]) -> u8 {
         "decisions-for" => run_decisions_for(&rest),
         "gate" => run_gate(&rest),
         "doctor" => run_doctor(&rest),
+        "mcp-stats" => run_mcp_stats(&rest),
+        "usage" => run_usage(&rest),
+        "telemetry" => run_telemetry(&rest),
         other => {
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
             2
@@ -743,6 +795,133 @@ fn run_doctor(rest: &[&String]) -> u8 {
         json,
         top_level,
         hub_threshold,
+    }) as u8
+}
+
+/// The shared `[--json | --share]` parser of `mcp-stats` and `usage`
+/// (identical argparse shapes, no positional). Order-aware: the mutex
+/// error fires at the ENCOUNTER of the conflicting flag (so it beats a
+/// later `--version`), unknown tokens defer to the root parser's
+/// `unrecognized arguments` at end-of-parse (so an earlier `--version`
+/// beats them), exactly like argparse.
+fn parse_json_share_group(prog: &str, rest: &[&String]) -> Result<(bool, bool), u8> {
+    let mut json = false;
+    let mut share = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only {
+            extras.push(arg.to_string());
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return Err(0);
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return Err(0);
+            }
+            "--json" => {
+                if let Some(code) = mutex_check(prog, "--json", "--share", share) {
+                    return Err(code);
+                }
+                json = true;
+            }
+            "--share" => {
+                if let Some(code) = mutex_check(prog, "--share", "--json", json) {
+                    return Err(code);
+                }
+                share = true;
+            }
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    if !extras.is_empty() {
+        return Err(unrecognized(&extras));
+    }
+    Ok((json, share))
+}
+
+fn run_mcp_stats(rest: &[&String]) -> u8 {
+    match parse_json_share_group("rac mcp-stats", rest) {
+        Ok((json, share)) => cmd_mcp_stats(&McpStatsArgs { json, share }) as u8,
+        Err(code) => code,
+    }
+}
+
+fn run_usage(rest: &[&String]) -> u8 {
+    match parse_json_share_group("rac usage", rest) {
+        Ok((json, share)) => cmd_usage(&UsageArgs { json, share }) as u8,
+        Err(code) => code,
+    }
+}
+
+fn run_telemetry(rest: &[&String]) -> u8 {
+    let prog = "rac telemetry";
+    let mut action: Option<String> = None;
+    let mut enterprise = false;
+    let mut unlock = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if action.is_none() {
+                // The positional's choice set is validated when the token
+                // is CONSUMED, so an invalid choice beats a later
+                // `--version` (measured: `telemetry bogus --version` exits
+                // 2, `telemetry --version bogus` prints the version).
+                if !matches!(arg, "on" | "off" | "status") {
+                    return argparse_error(
+                        prog,
+                        &format!(
+                            "argument action: invalid choice: '{arg}' (choose from 'on', 'off', 'status')"
+                        ),
+                    );
+                }
+                action = Some(arg.to_string());
+            } else {
+                // A second positional is an end-of-parse `unrecognized
+                // arguments` — deferred, so a later `--version` wins.
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--enterprise" => enterprise = true,
+            "--unlock" => unlock = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_telemetry(&TelemetryArgs {
+        action: action.unwrap_or_else(|| "status".to_string()),
+        enterprise,
+        unlock,
     }) as u8
 }
 

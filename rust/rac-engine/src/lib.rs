@@ -18,6 +18,9 @@
 //! - `resolve`: BM25F + RRF search with pinned f64 operation order.
 //! - `gitinfo`: git-derived recency/staleness via the real git CLI.
 //! - `budget`: the ADR-033 per-response character budget and truncation.
+//! - `consent`: the ADR-041/086 sharing-consent record (telemetry.json).
+//! - `telemetry`: Guide telemetry log read-back (ADR-040, mcp-stats).
+//! - `usage`: CLI usage log read-back + consent-gated recorder (ADR-046).
 //! - `output`: human/JSON/SARIF renderers per command.
 //! - `commands`: CLI command entry points (argv already parsed).
 //! - `cli`: argv parsing and exit codes matching the oracle's argparse
@@ -49,6 +52,9 @@ pub mod gate;
 pub mod doctor;
 pub mod mdhtml;
 pub mod export;
+pub mod consent;
+pub mod telemetry;
+pub mod usage;
 pub mod output;
 pub mod commands;
 pub mod cli;
