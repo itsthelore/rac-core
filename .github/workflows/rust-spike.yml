@@ -60,11 +60,11 @@ jobs:
       - name: clippy (strict on the crates held to that bar)
         working-directory: rust
         run: |
-          cargo clippy --release -p rac-mcp -p parity-harness -- -D warnings
+          cargo clippy --release --no-deps -p rac-mcp -p parity-harness -- -D warnings
           # rac-engine carries pre-existing style lints; clippy cleanup there
           # is follow-up work, deliberately not folded into parity-pinned
           # files as a CI side effect. Report, don't fail.
-          cargo clippy --release -p rac-engine || true
+          cargo clippy --release --no-deps -p rac-engine || true
 
       - name: CLI byte-parity vs oracle (130 mainline cases, twice)
         working-directory: rust
