@@ -116,12 +116,16 @@ pub fn incoming_references(
             });
         }
     }
-    incoming.sort_by(|a, b| {
-        (relationship_order(&a.section), &a.id, &a.path)
-            .cmp(&(relationship_order(&b.section), &b.id, &b.path))
-    });
+    // Decorate with the precomputed rank so the sort comparator does not
+    // re-scan RELATIONSHIP_SECTIONS on every comparison; same stable sort,
+    // same (rank, id, path) key.
+    let mut decorated: Vec<(usize, IncomingReference)> = incoming
+        .into_iter()
+        .map(|r| (relationship_order(&r.section), r))
+        .collect();
+    decorated.sort_by(|a, b| (a.0, &a.1.id, &a.1.path).cmp(&(b.0, &b.1.id, &b.1.path)));
     IncomingReferences {
-        items: incoming,
+        items: decorated.into_iter().map(|(_, r)| r).collect(),
         total,
     }
 }

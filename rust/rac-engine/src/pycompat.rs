@@ -13,6 +13,7 @@
 //! never multiply-by-10^n tricks.
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
@@ -293,17 +294,17 @@ pub fn py_repr_str(s: &str) -> String {
             out.push_str("\\r");
         } else if let Some(sur) = sentinel_surrogate(c) {
             // stdin surrogateescape sentinel: repr as the lone surrogate.
-            out.push_str(&format!("\\u{sur:04x}"));
+            write!(out, "\\u{sur:04x}").unwrap();
         } else if py_is_printable(c) {
             out.push(c);
         } else {
             let cp = c as u32;
             if cp < 0x100 {
-                out.push_str(&format!("\\x{cp:02x}"));
+                write!(out, "\\x{cp:02x}").unwrap();
             } else if cp < 0x10000 {
-                out.push_str(&format!("\\u{cp:04x}"));
+                write!(out, "\\u{cp:04x}").unwrap();
             } else {
-                out.push_str(&format!("\\U{cp:08x}"));
+                write!(out, "\\U{cp:08x}").unwrap();
             }
         }
     }

@@ -47,7 +47,6 @@ pub struct ArtifactSpec {
 
 impl ArtifactSpec {
     /// `expected` (Python property) = `required + recommended`, in that order.
-    /// Used for `missing` in classification scoring.
     pub fn expected(&self) -> Vec<String> {
         let mut out = Vec::with_capacity(self.required.len() + self.recommended.len());
         out.extend(self.required.iter().cloned());

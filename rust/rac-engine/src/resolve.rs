@@ -501,20 +501,16 @@ fn match_entry(entry_tokens: &EntryTokens, terms: &[String]) -> Option<TierMatch
         RANK_BODY => body_snippet,
         _ => None,
     };
-    match snippet {
-        Some((section, line)) => Some(TierMatch {
-            rank: best_rank,
-            section: Some(section),
-            snippet: Some(line),
-            terms: ordered,
-        }),
-        None => Some(TierMatch {
-            rank: best_rank,
-            section: None,
-            snippet: None,
-            terms: ordered,
-        }),
-    }
+    let (section, snippet) = match snippet {
+        Some((section, line)) => (Some(section), Some(line)),
+        None => (None, None),
+    };
+    Some(TierMatch {
+        rank: best_rank,
+        section,
+        snippet,
+        terms: ordered,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -619,7 +615,7 @@ fn competition_ranks(scores: &[(String, f64)]) -> HashMap<String, i64> {
     let mut rank = 0i64;
     for (position, (path, score)) in ordered.iter().enumerate() {
         let position = position as i64 + 1;
-        if previous.is_none() || Some(*score) != previous {
+        if Some(*score) != previous {
             rank = position;
             previous = Some(*score);
         }

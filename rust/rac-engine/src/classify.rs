@@ -90,10 +90,13 @@ pub fn score_artifacts(artifact: &Artifact) -> Vec<TypeScore> {
             .filter(|s| m.contains(&s.as_str()))
             .cloned()
             .collect();
+        // `expected` (Python property) = `required + recommended`, in that order.
         let missing: Vec<String> = spec
-            .expected()
-            .into_iter()
+            .required
+            .iter()
+            .chain(spec.recommended.iter())
             .filter(|s| !m.contains(&s.as_str()))
+            .cloned()
             .collect();
         let points = matched_required.len() as f64 + 0.5 * matched_recommended.len() as f64;
         let ceiling = spec.required.len() as f64 + 0.5 * spec.recommended.len() as f64;

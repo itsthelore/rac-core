@@ -2,6 +2,7 @@
 //! PORT-CONTRACT.d/07: human text (code-point padding, TTY-gated ANSI),
 //! `--json` via `pyjson::dumps_indent2`, and SARIF 2.1.0.
 
+use std::fmt::Write;
 use std::io::IsTerminal;
 use std::sync::OnceLock;
 
@@ -429,7 +430,7 @@ fn quote_uri(uri: &str) -> String {
         if b.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-' | '~' | '/') {
             out.push(ch);
         } else {
-            out.push_str(&format!("%{b:02X}"));
+            write!(out, "%{b:02X}").unwrap();
         }
     }
     out

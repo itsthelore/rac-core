@@ -3999,10 +3999,6 @@ fn map_get<'a>(pairs: &'a [(Yaml, Yaml)], name: &str) -> Option<&'a Yaml> {
     })
 }
 
-fn map_contains(pairs: &[(Yaml, Yaml)], name: &str) -> bool {
-    map_get(pairs, name).is_some()
-}
-
 /// The envelope load (`_load_frontmatter_mapping`): oversize gate, bounded
 /// YAML load, exception→issue mapping, non-mapping rejection. Public so the
 /// conformance vectors can compare the loaded value model directly.
@@ -4085,14 +4081,13 @@ fn validate_schema_version(
     pairs: &[(Yaml, Yaml)],
     issues: &mut Vec<Issue>,
 ) -> Result<Option<SchemaVersion>, YErr> {
-    if !map_contains(pairs, "schema_version") {
+    let Some(value) = map_get(pairs, "schema_version") else {
         issues.push(Issue::error(
             "invalid-metadata-field",
             "frontmatter is missing required field 'schema_version'".to_string(),
         ));
         return Ok(None); // data.get() is None here
-    }
-    let value = map_get(pairs, "schema_version").unwrap();
+    };
     // Python: isinstance(v, int) and not isinstance(v, bool) — bignums pass.
     let (supported, sv) = match value {
         Yaml::Int(v) => (SUPPORTED_SCHEMA_VERSIONS.contains(v), SchemaVersion::Int(*v)),
