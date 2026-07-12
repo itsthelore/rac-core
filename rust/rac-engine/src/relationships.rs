@@ -183,9 +183,33 @@ pub fn extract_relationships_full(
     artifact: &Artifact,
     spec: &ArtifactSpec,
 ) -> Vec<(String, Vec<String>)> {
+    collect_relationships(artifact, spec, true)
+}
+
+/// `extract_relationships(product, spec)` — the `rac inspect` extractor:
+/// identical to the full variant except `supersedes` is excluded (it stays a
+/// top-level scalar in inspect output, ADR-007).
+pub fn extract_relationships(
+    artifact: &Artifact,
+    spec: &ArtifactSpec,
+) -> Vec<(String, Vec<String>)> {
+    collect_relationships(artifact, spec, false)
+}
+
+/// `_collect(product, spec, allowed)` — the single core behind the two
+/// extractors: `{snake_section -> refs}` in `spec.optional` order, only
+/// sections present with at least one parsed reference.
+fn collect_relationships(
+    artifact: &Artifact,
+    spec: &ArtifactSpec,
+    include_supersedes: bool,
+) -> Vec<(String, Vec<String>)> {
     let mut out = Vec::new();
     for section in &spec.optional {
         if !RELATIONSHIP_SECTIONS.iter().any(|(name, _)| name == section) {
+            continue;
+        }
+        if !include_supersedes && section == "supersedes" {
             continue;
         }
         let Some(body) = artifact.section(section) else {

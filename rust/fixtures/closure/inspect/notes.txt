@@ -1,0 +1,5 @@
+# Not Markdown By Extension
+
+## Requirements
+
+[REQ-001] This file exists to exercise the extension guard.
