@@ -70,6 +70,15 @@ fn argparse_error(prog: &str, message: &str) -> u8 {
     2
 }
 
+/// Leftover-token rejection; argparse reports these against the root prog
+/// (`rac`), not the subcommand.
+fn unrecognized(extras: &[String]) -> u8 {
+    argparse_error(
+        "rac",
+        &format!("unrecognized arguments: {}", extras.join(" ")),
+    )
+}
+
 fn invalid_choice_message(token: &str) -> String {
     let choices = SUBCOMMANDS
         .iter()
@@ -139,20 +148,39 @@ pub fn run(args: &[String]) -> u8 {
 struct FlagError(u8);
 
 /// Track the last-seen member of an argparse mutually-exclusive group and
-/// error like argparse does on a conflict.
-fn mutex_check(
-    prog: &str,
-    new_flag: &str,
-    other_flag: &str,
-    other_set: bool,
-) -> Result<(), FlagError> {
+/// error like argparse does on a conflict. Returns the exit code on conflict.
+fn mutex_check(prog: &str, new_flag: &str, other_flag: &str, other_set: bool) -> Option<u8> {
     if other_set {
-        Err(FlagError(argparse_error(
+        Some(argparse_error(
             prog,
             &format!("argument {new_flag}: not allowed with argument {other_flag}"),
-        )))
+        ))
     } else {
-        Ok(())
+        None
+    }
+}
+
+/// Consume a single-argument option's value: the inline `--flag=VALUE` form,
+/// or the next token when it reads as a value (bare `-` counts; other
+/// `-`-leading tokens do not). A missing value errors immediately at this
+/// argv position with `argument <flag>: expected one argument`.
+fn take_opt_value(
+    prog: &str,
+    flag: &str,
+    arg: &str,
+    rest: &[&String],
+    i: &mut usize,
+) -> Result<String, u8> {
+    if let Some(inline) = arg.strip_prefix(flag).and_then(|r| r.strip_prefix('=')) {
+        return Ok(inline.to_string());
+    }
+    *i += 1;
+    match rest.get(*i) {
+        Some(v) if !v.starts_with('-') || v.as_str() == "-" => Ok(v.to_string()),
+        _ => Err(argparse_error(
+            prog,
+            &format!("argument {flag}: expected one argument"),
+        )),
     }
 }
 
@@ -181,13 +209,13 @@ fn run_validate(rest: &[&String]) -> u8 {
         match arg {
             "--" => positional_only = true,
             "--json" => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--json", "--sarif", sarif) {
+                if let Some(code) = mutex_check(prog, "--json", "--sarif", sarif) {
                     return code;
                 }
                 json = true;
             }
             "--sarif" => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--sarif", "--json", json) {
+                if let Some(code) = mutex_check(prog, "--sarif", "--json", json) {
                     return code;
                 }
                 sarif = true;
@@ -195,19 +223,11 @@ fn run_validate(rest: &[&String]) -> u8 {
             "--top-level" => top_level = true,
             "--recursive" => {} // affirmation of the default
             "--cache" | "--no-cache" | "--verify" => {} // output-neutral (§6)
-            "--corpus" => {
-                i += 1;
-                match rest.get(i) {
-                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => {
-                        corpus = Some(v.to_string());
-                    }
-                    _ => {
-                        return argparse_error(prog, "argument --corpus: expected one argument")
-                    }
+            other if other == "--corpus" || other.starts_with("--corpus=") => {
+                match take_opt_value(prog, "--corpus", other, rest, &mut i) {
+                    Ok(v) => corpus = Some(v),
+                    Err(code) => return code,
                 }
-            }
-            other if other.starts_with("--corpus=") => {
-                corpus = Some(other["--corpus=".len()..].to_string());
             }
             other => extras.push(other.to_string()),
         }
@@ -218,10 +238,7 @@ fn run_validate(rest: &[&String]) -> u8 {
         return argparse_error(prog, "the following arguments are required: file");
     };
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_validate(&ValidateArgs {
@@ -268,10 +285,7 @@ fn run_relationships(rest: &[&String]) -> u8 {
         return argparse_error(prog, "the following arguments are required: path");
     };
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_relationships(&RelationshipsArgs {
@@ -311,10 +325,7 @@ fn run_stats(rest: &[&String]) -> u8 {
         return argparse_error(prog, "the following arguments are required: directory");
     };
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_stats(&StatsArgs { directory, json }) as u8
@@ -354,10 +365,7 @@ fn run_resolve(rest: &[&String]) -> u8 {
         return argparse_error(prog, "the following arguments are required: id");
     };
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_resolve(&ResolveArgs {
@@ -406,44 +414,27 @@ fn run_find(rest: &[&String]) -> u8 {
             "--cache" | "--no-cache" | "--verify" => {} // output-neutral (ADR-112)
             "--decisions" => {
                 // Mutually exclusive with --type (argparse group).
-                if let Err(FlagError(code)) =
+                if let Some(code) =
                     mutex_check(prog, "--decisions", "--type", artifact_type.is_some())
                 {
                     return code;
                 }
                 decisions = true;
             }
-            "--type" => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--type", "--decisions", decisions)
-                {
+            other if other == "--type" || other.starts_with("--type=") => {
+                if let Some(code) = mutex_check(prog, "--type", "--decisions", decisions) {
                     return code;
                 }
-                i += 1;
-                match rest.get(i) {
-                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => {
-                        artifact_type = Some(v.to_string());
-                    }
-                    _ => return argparse_error(prog, "argument --type: expected one argument"),
+                match take_opt_value(prog, "--type", other, rest, &mut i) {
+                    Ok(v) => artifact_type = Some(v),
+                    Err(code) => return code,
                 }
             }
-            other if other.starts_with("--type=") => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--type", "--decisions", decisions)
-                {
-                    return code;
+            other if other == "--tag" || other.starts_with("--tag=") => {
+                match take_opt_value(prog, "--tag", other, rest, &mut i) {
+                    Ok(v) => tags.push(v),
+                    Err(code) => return code,
                 }
-                artifact_type = Some(other["--type=".len()..].to_string());
-            }
-            "--tag" => {
-                i += 1;
-                match rest.get(i) {
-                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => {
-                        tags.push(v.to_string());
-                    }
-                    _ => return argparse_error(prog, "argument --tag: expected one argument"),
-                }
-            }
-            other if other.starts_with("--tag=") => {
-                tags.push(other["--tag=".len()..].to_string());
             }
             other => extras.push(other.to_string()),
         }
@@ -454,10 +445,7 @@ fn run_find(rest: &[&String]) -> u8 {
         return argparse_error(prog, "the following arguments are required: query");
     };
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_find(&FindArgs {
@@ -571,28 +559,22 @@ fn run_retrieve(rest: &[&String]) -> u8 {
             "--" => positional_only = true,
             "--json" => json = true,
             "--live" => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--live", "--all", all) {
+                if let Some(code) = mutex_check(prog, "--live", "--all", all) {
                     return code;
                 }
                 live = true;
             }
             "--all" => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--all", "--live", live) {
+                if let Some(code) = mutex_check(prog, "--all", "--live", live) {
                     return code;
                 }
                 all = true;
             }
-            "--scope" => {
-                i += 1;
-                match rest.get(i) {
-                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => {
-                        scope = Some(v.to_string());
-                    }
-                    _ => return argparse_error(prog, "argument --scope: expected one argument"),
+            other if other == "--scope" || other.starts_with("--scope=") => {
+                match take_opt_value(prog, "--scope", other, rest, &mut i) {
+                    Ok(v) => scope = Some(v),
+                    Err(code) => return code,
                 }
-            }
-            other if other.starts_with("--scope=") => {
-                scope = Some(other["--scope=".len()..].to_string());
             }
             "--top-k" => {
                 i += 1;
@@ -631,10 +613,7 @@ fn run_retrieve(rest: &[&String]) -> u8 {
         return argparse_error(prog, "the following arguments are required: task");
     };
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_retrieve(&RetrieveArgs {
@@ -746,7 +725,7 @@ fn run_review(rest: &[&String]) -> u8 {
         return argparse_error(prog, "the following arguments are required: directory");
     };
     if !extras.is_empty() {
-        return argparse_error("rac", &format!("unrecognized arguments: {}", extras.join(" ")));
+        return unrecognized(&extras);
     }
 
     cmd_review(&ReviewArgs {
@@ -863,15 +842,11 @@ fn run_export(rest: &[&String]) -> u8 {
                     );
                 }
             }
-            "--out" => {
-                i += 1;
-                match rest.get(i) {
-                    Some(v) if !v.starts_with('-') || v.as_str() == "-" => out = Some(v.to_string()),
-                    _ => return argparse_error(prog, "argument --out: expected one argument"),
+            other if other == "--out" || other.starts_with("--out=") => {
+                match take_opt_value(prog, "--out", other, rest, &mut i) {
+                    Ok(v) => out = Some(v),
+                    Err(code) => return code,
                 }
-            }
-            other if other.starts_with("--out=") => {
-                out = Some(other["--out=".len()..].to_string());
             }
             other => extras.push(other.to_string()),
         }
@@ -879,7 +854,7 @@ fn run_export(rest: &[&String]) -> u8 {
     }
 
     if !extras.is_empty() {
-        return argparse_error("rac", &format!("unrecognized arguments: {}", extras.join(" ")));
+        return unrecognized(&extras);
     }
 
     cmd_export(&ExportArgs {
@@ -923,13 +898,13 @@ fn run_schema(rest: &[&String]) -> u8 {
             "--" => positional_only = true,
             "--list" => list = true,
             "--json" => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--json", "--template", template) {
+                if let Some(code) = mutex_check(prog, "--json", "--template", template) {
                     return code;
                 }
                 json = true;
             }
             "--template" => {
-                if let Err(FlagError(code)) = mutex_check(prog, "--template", "--json", json) {
+                if let Some(code) = mutex_check(prog, "--template", "--json", json) {
                     return code;
                 }
                 template = true;
@@ -939,10 +914,7 @@ fn run_schema(rest: &[&String]) -> u8 {
     }
 
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_schema(&SchemaArgs {
@@ -972,10 +944,7 @@ fn run_templates(rest: &[&String]) -> u8 {
     }
 
     if !extras.is_empty() {
-        return argparse_error(
-            "rac",
-            &format!("unrecognized arguments: {}", extras.join(" ")),
-        );
+        return unrecognized(&extras);
     }
 
     cmd_templates(&TemplatesArgs { json }) as u8
