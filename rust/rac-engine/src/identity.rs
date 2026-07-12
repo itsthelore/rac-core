@@ -68,8 +68,7 @@ pub fn first_value_list_stripped(body: Option<&str>) -> String {
 pub fn path_stem(path: &str) -> String {
     let name = path
         .split('/')
-        .filter(|p| !p.is_empty() && *p != ".")
-        .next_back()
+        .rfind(|p| !p.is_empty() && *p != ".")
         .unwrap_or("");
     match name.rfind('.') {
         Some(i) if i > 0 && i < name.len() - 1 => name[..i].to_string(),

@@ -296,8 +296,7 @@ impl<'s> State<'s> {
         let mut start = 0usize;
         let mut indent = 0usize;
         let mut offset = 0i32;
-        for pos in 0..length {
-            let ch = src[pos];
+        for (pos, &ch) in src.iter().enumerate() {
             if !indent_found {
                 if is_str_space(ch) {
                     indent += 1;
@@ -676,7 +675,7 @@ fn rule_heading(state: &mut State, start_line: usize, _end_line: usize, silent: 
         pos += 1;
         ch = state.src.get(pos).copied();
     }
-    if level > 6 || (pos < maximum && !ch.map_or(false, is_str_space)) {
+    if level > 6 || (pos < maximum && !ch.is_some_and(is_str_space)) {
         return false;
     }
     if silent {
