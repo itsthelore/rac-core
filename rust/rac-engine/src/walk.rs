@@ -1,18 +1,7 @@
 //! Corpus file discovery — a byte-exact port of `find_markdown_files`
 //! (`src/rac/core/fs.py`) and the walk seam, per PORT-CONTRACT.d/09 §1.
 //!
-//! The Python original:
-//! ```python
-//! def find_markdown_files(directory, recursive=True):
-//!     root = Path(directory)
-//!     glob = root.rglob if recursive else root.glob
-//!     found = [p for p in glob("*.md")
-//!              if not any(part.startswith(".")
-//!                         for part in p.relative_to(root).parts)]
-//!     return sorted(found)
-//! ```
-//!
-//! Landmines reproduced here (all empirically verified against the oracle):
+//! Landmines reproduced here:
 //! - Extension filter is the literal glob `*.md`, **case-sensitive** on Linux:
 //!   `upper.MD`, `x.Md`, `x.markdown` do not match.
 //! - Hidden exclusion: any component of the path **relative to root** that

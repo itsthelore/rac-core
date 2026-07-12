@@ -462,7 +462,7 @@ impl<'s> State<'s> {
 
 type Rule = fn(&mut State, usize, usize, bool) -> bool;
 
-// Terminator chains for the commonmark preset (verified against the oracle):
+// Terminator chains for the commonmark preset:
 // getRules("paragraph"|"reference"|"blockquote") = fence, blockquote, hr,
 // list, html_block, heading; getRules("list") = fence, blockquote, hr.
 const TERM_PARAGRAPH: &[Rule] = &[
@@ -522,7 +522,7 @@ fn tokenize(state: &mut State, start_line: usize, end_line: usize) {
 }
 
 // ---------------------------------------------------------------------------
-// Block rules (ported from markdown_it/rules_block/*, oracle venv 4.2.0)
+// Block rules
 // ---------------------------------------------------------------------------
 
 fn rule_code(state: &mut State, start_line: usize, end_line: usize, _silent: bool) -> bool {

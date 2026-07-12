@@ -3,10 +3,6 @@
 //! Parity scope: exit codes, stdout bytes, and the final
 //! `<prog>: error: <msg>` stderr line. Usage/help BODY text is out of scope
 //! (decision 9) — stdout stays byte-identical (empty on errors).
-//!
-//! Wired for real: `validate`, `relationships` (--validate arm), and
-//! `--version` (root + every subcommand). Every other subcommand is a
-//! clearly-marked unimplemented stub (stderr, exit 2).
 
 use crate::commands::{
     cmd_export, cmd_find, cmd_relationships, cmd_resolve, cmd_retrieve, cmd_review, cmd_schema,
@@ -134,7 +130,6 @@ pub fn run(args: &[String]) -> u8 {
         "review" => run_review(&rest),
         "export" => run_export(&rest),
         other => {
-            // UNIMPLEMENTED STUB — no parity cases run these in this phase.
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
             2
         }

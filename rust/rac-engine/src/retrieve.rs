@@ -748,7 +748,7 @@ pub fn retrieve_grounding(
         }
     }
 
-    // Keyword stratum: the existing tiered match and fused ranking, unchanged.
+    // Keyword stratum.
     let keyword = search_index(&entries, task, None, &[]);
     let by_target = if live_only {
         successor_map(&relationships_from_corpus(&corpus))

@@ -193,7 +193,7 @@ impl PortfolioStats {
 /// (element-wise `-ord`). On a shared prefix Python tuple comparison makes
 /// the SHORTER tuple smaller — so between "Feature" and "Feature With
 /// Broken Ref" the LONGER name has the greater `_neg_name` and wins the
-/// `max()` tie (fuzz campaign 2, finding 008; the prefix rule was inverted).
+/// `max()` tie.
 fn neg_name_gt(a: &str, b: &str) -> bool {
     let mut ai = a.chars();
     let mut bi = b.chars();
@@ -460,9 +460,9 @@ pub fn collect_stats(directory: &str) -> PortfolioStats {
 mod tests {
     use super::neg_name_gt;
 
-    /// Fuzz campaign 2, finding 008: Python compares `tuple(-ord(c) ...)`
-    /// keys, where a strict-prefix tuple is SMALLER — so between tied
-    /// features the longer prefix-sharing name wins `max()`.
+    /// Python compares `tuple(-ord(c) ...)` keys, where a strict-prefix
+    /// tuple is SMALLER — so between tied features the longer
+    /// prefix-sharing name wins `max()`.
     #[test]
     fn neg_name_prefix_tie_prefers_longer() {
         assert!(neg_name_gt("Feature With Broken Ref", "Feature"));
