@@ -34,9 +34,44 @@ rac mcp --root <ROOT>            # stdio, cache on (ADR-112)
   absolute paths as the walker produces them. A parity harness MUST pass the
   identical `--root` string (absolute path recommended) to both servers.
 - Cache: on by default; `--no-cache` or `RAC_NO_CACHE=1` disables. **Verified:
-  cache-on vs `RAC_NO_CACHE=1` runs are frame-for-frame byte-identical** (the
-  ADR-112 guarantee holds on the wire). The cache lives under
-  `$XDG_CACHE_HOME/rac/derived`.
+  cache-on vs `RAC_NO_CACHE=1` runs are frame-for-frame byte-identical EXCEPT
+  for duplicate-token queries** (see §0a — an oracle defect; the ADR-112
+  guarantee holds on the wire for queries whose token list has no repeats).
+  The cache lives under `$XDG_CACHE_HOME/rac/derived`. As a consequence, the
+  parity harness pins `RAC_NO_CACHE=1` in the base environment of BOTH
+  servers, making the no-cache engine path the canonical comparison path —
+  the same path every other parity claim in this spike compares against.
+
+### 0a. Oracle defect found — duplicate-token df divergence (ADR-112 violation)
+
+**The Python oracle's cache-on serving is NOT byte-identical to its own
+no-cache path when a query/task repeats a token** (e.g. `search_artifacts`
+`{"query":"budget budget"}`). Verified on both oracles over the live corpus:
+the cache-on `evidence` bytes differ from the no-cache bytes
+(`components.bm25` 3.928816 cache-on vs 2.62216 no-cache on the top
+`"budget budget"` match).
+
+Root cause (from source): the two serving paths disagree on how a duplicated
+term contributes to document frequency.
+
+- No-cache (`src/rac/services/resolve.py`, `_corpus_stats`, ~lines 730-738):
+  `df = dict.fromkeys(terms, 0)` then `for term in terms: ... df[term] += 1`
+  per matching document — the loop runs once per *occurrence*, so a term
+  listed twice increments its df twice per matching doc (df doubles, idf
+  drops, bm25 drops).
+- Cache-on (`src/rac/services/index_store.py`, ~lines 994 and 1047):
+  `df = {term: self.prefix_df(term) for term in terms}` — a dict
+  comprehension keyed by term, so a duplicated term is counted once from the
+  persisted postings (dedup).
+
+This violates ADR-112's invariant (cache on is byte-identical to the uncached
+path) for this input class. It is an oracle bug, not a port target: **the
+Rust engine matches the no-cache path** (as PORT-CONTRACT.d/06 pinned for the
+CLI search surface), and the parity harness pins `RAC_NO_CACHE=1` on both
+servers (§0 above) so the comparison referees the consistent engine path. The
+duplicate-token cases in `rust/mcp-parity-cases.json`
+(`search-duplicate-token-*`, `decisions-duplicate-token`,
+`retrieve-duplicate-token-task`) hold this pin under test.
 - Neutralization for deterministic runs (same posture as the CLI parity
   harness): point `HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME`,
   `XDG_CACHE_HOME` at scratch dirs. That guarantees: no consent record →

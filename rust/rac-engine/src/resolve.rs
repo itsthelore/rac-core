@@ -180,7 +180,7 @@ pub fn build_index(directory: &str, recursive: bool) -> Vec<IndexEntry> {
     index_from_items(&corpus_items(directory, recursive))
 }
 
-pub(crate) fn index_from_items(items: &[CorpusItem]) -> Vec<IndexEntry> {
+pub fn index_from_items(items: &[CorpusItem]) -> Vec<IndexEntry> {
     let inbound = inbound_counts(items);
     items
         .iter()
@@ -830,7 +830,7 @@ pub fn find_artifacts(
 // ---------------------------------------------------------------------------
 
 /// `agent_rules.artifact_status`: first non-empty stripped line of `## Status`.
-pub(crate) fn artifact_status(artifact: &Artifact) -> String {
+pub fn artifact_status(artifact: &Artifact) -> String {
     let Some(body) = artifact.section("status") else {
         return String::new();
     };

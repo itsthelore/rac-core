@@ -475,6 +475,64 @@ fn governing_decisions(rows: &[ScopeRow], directory: &str, path: &str) -> Vec<Go
     matches
 }
 
+/// `find_decisions` path mode (MCP surface): the `ScopeLookupResult.to_dict()`
+/// payload — `{schema_version, query, in_repository, decisions}` — for the live
+/// decisions whose declared `## Applies To` scope governs `path`. Additive
+/// wrapper over the same scope internals `retrieve_grounding` uses
+/// (`scope_rows_from_items` / `normalize_query` / `entry_covers`), byte-identical
+/// to `rac.services.derived_cache.governing_decisions(...).to_dict()`.
+pub fn find_decisions_path_payload(directory: &str, path: &str) -> Value {
+    let root = repository_root(directory);
+    let mut payload = Map::new();
+    payload.insert("schema_version".to_string(), json!("1"));
+    match normalize_query(path, &root) {
+        None => {
+            payload.insert("query".to_string(), json!(py_strip(path)));
+            payload.insert("in_repository".to_string(), json!(false));
+            payload.insert("decisions".to_string(), json!([]));
+        }
+        Some(query) => {
+            let items = corpus_items(directory, true);
+            let rows = scope_rows_from_items(&items);
+            let mut matches: Vec<Governing> = Vec::new();
+            for row in &rows {
+                for declared in &row.scope_entries {
+                    if entry_covers(declared, &query) {
+                        matches.push(Governing {
+                            id: row.id.clone(),
+                            title: row.title.clone(),
+                            status: row.status.clone(),
+                            path: row.path.clone(),
+                            matching_entry: declared.clone(),
+                        });
+                        break;
+                    }
+                }
+            }
+            matches.sort_by(|a, b| {
+                (py_casefold(&a.id), &a.path).cmp(&(py_casefold(&b.id), &b.path))
+            });
+            let decisions: Vec<Value> = matches
+                .into_iter()
+                .map(|d| {
+                    let mut m = Map::new();
+                    m.insert("id".to_string(), json!(d.id));
+                    m.insert("title".to_string(), json!(d.title));
+                    m.insert("status".to_string(), json!(d.status));
+                    m.insert("path".to_string(), json!(d.path));
+                    m.insert("matching_entry".to_string(), json!(d.matching_entry));
+                    m
+                })
+                .map(Value::Object)
+                .collect();
+            payload.insert("query".to_string(), json!(query));
+            payload.insert("in_repository".to_string(), json!(true));
+            payload.insert("decisions".to_string(), Value::Array(decisions));
+        }
+    }
+    Value::Object(payload)
+}
+
 // ---------------------------------------------------------------------------
 // retrieve.py — the compound grounding payload
 // ---------------------------------------------------------------------------

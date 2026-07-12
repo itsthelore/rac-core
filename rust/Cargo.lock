@@ -314,6 +314,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rac-mcp"
+version = "0.0.1"
+dependencies = [
+ "rac-engine",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rayon"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
