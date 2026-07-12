@@ -14,9 +14,10 @@
 //! no durations — so two runs over identical engine behavior produce
 //! byte-identical scoreboards (the determinism proof the spike requires).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -57,10 +58,110 @@ struct Case {
     /// pinned regressions). Default: null stdin (immediate EOF).
     #[serde(default)]
     stdin_file: Option<String>,
+    /// Optional literal text piped to both engines' stdin — for prompt-fed
+    /// commands (init/quickstart) where the bytes are short and belong in
+    /// the case itself. Mutually exclusive with `stdin_file`.
+    #[serde(default)]
+    stdin_text: Option<String>,
+    /// When present, EACH engine run gets its own fresh sandbox directory
+    /// built from this spec, so write commands cannot collide across
+    /// engines or leak between cases. `{SANDBOX}` in argv, env values, and
+    /// cwd resolves per engine to that engine's sandbox root (absolute).
+    #[serde(default)]
+    sandbox: Option<Sandbox>,
+    /// Post-run capture globs/paths, relative to the sandbox root (`*`/`?`
+    /// within a component, `**` across components; `.git` trees are always
+    /// excluded). After both engines run, the captured file SETS must be
+    /// identical and each common file's bytes must match after the case's
+    /// normalizations — written trees are refereed like stdout.
+    #[serde(default)]
+    capture: Vec<String>,
+    /// Also demand identical executable bits on captured files (hook
+    /// install cases). Default: bytes only.
+    #[serde(default)]
+    compare_file_mode: bool,
+}
+
+/// Per-engine sandbox spec: a fixture tree to copy in, then ordered setup
+/// steps. Deterministic by construction — nothing here reads the wall
+/// clock (git commits carry pinned dates).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Sandbox {
+    /// Directory (relative to the repo root) whose tree is copied into the
+    /// sandbox root before setup runs. Closure fixtures live under
+    /// `rust/fixtures/closure/`; keep them clean — the oracle crashes on
+    /// hostile markdown during corpus walks (`new` brief).
+    #[serde(default)]
+    fixture: Option<String>,
+    /// Setup steps executed in declared order inside the sandbox before
+    /// the engine runs. Working-tree mutations "after a commit" are simply
+    /// `write` steps placed after a `git` step.
+    #[serde(default)]
+    setup: Vec<SetupStep>,
+}
+
+/// One ordered sandbox setup step; `step` selects the variant.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "step", rename_all = "kebab-case", deny_unknown_fields)]
+enum SetupStep {
+    /// Write a file (parents created) with literal content.
+    Write { path: String, content: String },
+    /// Create a directory (and parents) — e.g. an empty template target
+    /// that a copied fixture cannot carry (git drops empty dirs).
+    Mkdir { path: String },
+    /// Set mode 0o755 (executable) on an existing file.
+    ChmodExec { path: String },
+    /// Copy a fixture tree (`from` relative to the repo root) to a
+    /// sandbox-relative destination.
+    CopyTree { from: String, to: String },
+    /// Script a git repository at `path` (default: the sandbox root):
+    /// `git init -b main`, then one commit per entry under a fixed fixture
+    /// identity with GIT_AUTHOR_DATE and GIT_COMMITTER_DATE pinned to the
+    /// entry's `date` (TZ offset preserved). No wall clock anywhere.
+    Git {
+        #[serde(default = "default_cwd")]
+        path: String,
+        commits: Vec<GitCommit>,
+    },
+}
+
+/// One scripted commit: files written first, then `git add -A` + commit.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GitCommit {
+    /// Pinned author+committer date with explicit offset, e.g.
+    /// "2024-03-05T10:00:00+02:00".
+    date: String,
+    message: String,
+    /// Files (git-dir-relative) written before this commit stages.
+    #[serde(default)]
+    write: Vec<GitWrite>,
+}
+
+/// A file written as part of a scripted commit.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GitWrite {
+    path: String,
+    content: String,
 }
 
 fn default_cwd() -> String {
     ".".to_string()
+}
+
+/// Placeholder in argv/env/cwd resolved per engine to its sandbox root.
+const SANDBOX_TOKEN: &str = "{SANDBOX}";
+
+fn resolve_token(s: &str, sandbox_root: Option<&str>, case_id: &str) -> Result<String, String> {
+    if !s.contains(SANDBOX_TOKEN) {
+        return Ok(s.to_string());
+    }
+    let root = sandbox_root.ok_or_else(|| {
+        format!("case {case_id} uses {SANDBOX_TOKEN} but declares no sandbox")
+    })?;
+    Ok(s.replace(SANDBOX_TOKEN, root))
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +303,102 @@ fn mask_version(stdout: &[u8]) -> Result<Vec<u8>, String> {
     serialize_json(&value)
 }
 
+/// "mask-ids" — minted artifact ids are wall-clock+CSPRNG-derived
+/// (`<KEY>-` + 12 Crockford-base32 chars, per the `new` brief) and the
+/// oracle exposes no seam to pin them, so cases mask them instead: every
+/// token matching `[A-Z]{2,8}-[0-9A-HJKMNP-TV-Z]{12}` at word boundaries
+/// has its 12-char tail replaced with the fixed (still-Crockford) token
+/// `MASKEDMASKED`. The key is kept so a key divergence stays visible.
+/// Applied to captured file bytes too, so written frontmatter compares.
+fn mask_ids(stdout: &[u8]) -> Result<Vec<u8>, String> {
+    const TAIL: usize = 12;
+    fn crockford(b: u8) -> bool {
+        // Crockford base32: 0-9 plus A-Z without I, L, O, U.
+        b.is_ascii_digit()
+            || (b.is_ascii_uppercase() && !matches!(b, b'I' | b'L' | b'O' | b'U'))
+    }
+    fn word(b: u8) -> bool {
+        b.is_ascii_alphanumeric() || b == b'_'
+    }
+    let n = stdout.len();
+    let mut out = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        let boundary = i == 0 || (!word(stdout[i - 1]) && stdout[i - 1] != b'-');
+        if boundary && stdout[i].is_ascii_uppercase() {
+            let mut k = i;
+            while k < n && stdout[k].is_ascii_uppercase() {
+                k += 1;
+            }
+            if (2..=8).contains(&(k - i))
+                && k < n
+                && stdout[k] == b'-'
+                && k + 1 + TAIL <= n
+                && stdout[k + 1..k + 1 + TAIL].iter().all(|&c| crockford(c))
+                && (k + 1 + TAIL == n || !word(stdout[k + 1 + TAIL]))
+            {
+                out.extend_from_slice(&stdout[i..=k]); // key + '-'
+                out.extend_from_slice(b"MASKEDMASKED");
+                i = k + 1 + TAIL;
+                continue;
+            }
+        }
+        out.push(stdout[i]);
+        i += 1;
+    }
+    Ok(out)
+}
+
+/// "mask-json-field:<dotted>" — replace the value at a dotted key path
+/// (e.g. `metadata.generated_at`) with "<MASKED-FIELD>" wherever the path
+/// matches under ANY object in the payload. Exists for clock/build-derived
+/// JSON fields (eval `metadata.generated_at` / `metadata.lore_version`,
+/// per the eval brief).
+fn mask_json_field(stdout: &[u8], dotted: &str) -> Result<Vec<u8>, String> {
+    let segs: Vec<&str> = dotted.split('.').collect();
+    if segs.iter().any(|s| s.is_empty()) {
+        return Err(format!("invalid dotted key path: {dotted:?}"));
+    }
+    fn mask_at(map: &mut serde_json::Map<String, Value>, segs: &[&str]) {
+        if segs.len() == 1 {
+            if let Some(slot) = map.get_mut(segs[0]) {
+                *slot = json!("<MASKED-FIELD>");
+            }
+        } else if let Some(Value::Object(child)) = map.get_mut(segs[0]) {
+            mask_at(child, &segs[1..]);
+        }
+    }
+    let mut value = parse_json(stdout)?;
+    for_each_object(&mut value, &mut |map| mask_at(map, &segs));
+    serialize_json(&value)
+}
+
+/// "mask-sandbox-path" — sandboxed runs give each engine its OWN root, so
+/// output embedding the root (argv echoes, absolute-path listings) differs
+/// across engines by construction. Replace every occurrence of the
+/// engine's own root with "<SANDBOX>" before compare.
+fn mask_sandbox_path(stdout: &[u8], ctx: &NormCtx) -> Result<Vec<u8>, String> {
+    let root = ctx
+        .sandbox_root
+        .ok_or("case declares no sandbox, so there is no root to mask")?;
+    Ok(replace_all(stdout, root.as_bytes(), b"<SANDBOX>"))
+}
+
+fn replace_all(haystack: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(haystack.len());
+    let mut i = 0;
+    while i < haystack.len() {
+        if haystack[i..].starts_with(needle) {
+            out.extend_from_slice(replacement);
+            i += needle.len();
+        } else {
+            out.push(haystack[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
 fn parse_json(stdout: &[u8]) -> Result<Value, String> {
     serde_json::from_slice(stdout).map_err(|e| format!("stdout is not valid JSON: {e}"))
 }
@@ -212,18 +409,264 @@ fn serialize_json(value: &Value) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn apply_normalizations(names: &[String], stdout: &[u8]) -> Result<Vec<u8>, String> {
+/// Per-engine context consumed by side-dependent normalizations
+/// ("mask-sandbox-path" masks each side's OWN sandbox root).
+struct NormCtx<'a> {
+    sandbox_root: Option<&'a str>,
+}
+
+fn apply_normalizations(names: &[String], stdout: &[u8], ctx: &NormCtx) -> Result<Vec<u8>, String> {
     let mut cur = stdout.to_vec();
     for name in names {
-        cur = match name.as_str() {
-            "strip-recency-json" => strip_recency_json(&cur),
-            "strip-stale-human" => strip_stale_human(&cur),
-            "mask-version" => mask_version(&cur),
-            other => Err(format!("unknown normalization: {other}")),
+        cur = if let Some(dotted) = name.strip_prefix("mask-json-field:") {
+            mask_json_field(&cur, dotted)
+        } else {
+            match name.as_str() {
+                "strip-recency-json" => strip_recency_json(&cur),
+                "strip-stale-human" => strip_stale_human(&cur),
+                "mask-version" => mask_version(&cur),
+                "mask-ids" => mask_ids(&cur),
+                "mask-sandbox-path" => mask_sandbox_path(&cur, ctx),
+                other => Err(format!("unknown normalization: {other}")),
+            }
         }
         .map_err(|e| format!("normalization {name:?} failed: {e}"))?;
     }
     Ok(cur)
+}
+
+// ---------------------------------------------------------------------------
+// Sandboxes, setup steps, and post-run capture
+//
+// Write commands (new, rename --apply, migrate, init, export --okf, ...)
+// cannot share the repo tree or one common cwd: each engine gets a fresh
+// per-case sandbox, and the written tree is refereed after the run.
+// ---------------------------------------------------------------------------
+
+fn write_file(root: &Path, rel: &str, content: &str) -> Result<(), String> {
+    let path = root.join(rel);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
+    fs::write(&path, content).map_err(|e| format!("cannot write {}: {e}", path.display()))
+}
+
+/// Recursive tree copy; `fs::copy` preserves permission bits, so fixture
+/// executables stay executable.
+fn copy_tree(src: &Path, dst: &Path) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| format!("cannot create {}: {e}", dst.display()))?;
+    let entries =
+        fs::read_dir(src).map_err(|e| format!("cannot read dir {}: {e}", src.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("cannot read dir {}: {e}", src.display()))?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        let ty = entry
+            .file_type()
+            .map_err(|e| format!("cannot stat {}: {e}", from.display()))?;
+        if ty.is_dir() {
+            copy_tree(&from, &to)?;
+        } else {
+            fs::copy(&from, &to)
+                .map_err(|e| format!("cannot copy {} -> {}: {e}", from.display(), to.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Run one git command for a scripted fixture under a pinned, deterministic
+/// environment: fixed fixture identity, per-commit pinned dates (offset
+/// preserved), no user/system config, no wall clock.
+fn run_git(dir: &Path, args: &[&str], date: Option<&str>) -> Result<(), String> {
+    let mut cmd = Command::new("git");
+    cmd.args(args)
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    cmd.env_clear();
+    if let Ok(path) = std::env::var("PATH") {
+        cmd.env("PATH", path);
+    }
+    cmd.env("HOME", dir); // never read the real user's git config
+    cmd.env("GIT_CONFIG_NOSYSTEM", "1");
+    cmd.env("TZ", "UTC");
+    cmd.env("GIT_AUTHOR_NAME", "Parity Fixture");
+    cmd.env("GIT_AUTHOR_EMAIL", "parity@example.invalid");
+    cmd.env("GIT_COMMITTER_NAME", "Parity Fixture");
+    cmd.env("GIT_COMMITTER_EMAIL", "parity@example.invalid");
+    if let Some(d) = date {
+        cmd.env("GIT_AUTHOR_DATE", d);
+        cmd.env("GIT_COMMITTER_DATE", d);
+    }
+    let out = cmd
+        .output()
+        .map_err(|e| format!("failed to spawn git: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git {:?} in {} failed: {}",
+            args,
+            dir.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(())
+}
+
+fn apply_setup_step(step: &SetupStep, root: &Path, repo_root: &Path) -> Result<(), String> {
+    match step {
+        SetupStep::Write { path, content } => write_file(root, path, content),
+        SetupStep::Mkdir { path } => {
+            let dir = root.join(path);
+            fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))
+        }
+        SetupStep::ChmodExec { path } => {
+            let target = root.join(path);
+            fs::set_permissions(&target, fs::Permissions::from_mode(0o755))
+                .map_err(|e| format!("cannot chmod {}: {e}", target.display()))
+        }
+        SetupStep::CopyTree { from, to } => copy_tree(&repo_root.join(from), &root.join(to)),
+        SetupStep::Git { path, commits } => {
+            let dir = root.join(path);
+            fs::create_dir_all(&dir)
+                .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+            run_git(&dir, &["init", "-q", "-b", "main"], None)?;
+            for commit in commits {
+                for w in &commit.write {
+                    write_file(&dir, &w.path, &w.content)?;
+                }
+                run_git(&dir, &["add", "-A"], None)?;
+                run_git(
+                    &dir,
+                    &["commit", "-q", "--allow-empty", "-m", &commit.message],
+                    Some(&commit.date),
+                )?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Build one engine's fresh sandbox for a case under
+/// `<scoreboard-dir>/sandboxes/<case-id>/<side>`: wiped if present, seeded
+/// from the declared fixture tree, then mutated by the ordered setup steps.
+/// Returns the canonicalized root (the exact string `{SANDBOX}` resolves
+/// to and "mask-sandbox-path" masks). Left on disk for post-run forensics.
+fn prepare_sandbox(
+    case: &Case,
+    side: &str,
+    sandbox_area: &Path,
+    repo_root: &Path,
+) -> Result<Option<PathBuf>, String> {
+    let Some(spec) = &case.sandbox else {
+        return Ok(None);
+    };
+    let root = sandbox_area.join(&case.id).join(side);
+    if root.exists() {
+        fs::remove_dir_all(&root)
+            .map_err(|e| format!("cannot clear sandbox {}: {e}", root.display()))?;
+    }
+    fs::create_dir_all(&root).map_err(|e| format!("cannot create {}: {e}", root.display()))?;
+    let root = fs::canonicalize(&root).map_err(|e| e.to_string())?;
+    if let Some(fixture) = &spec.fixture {
+        copy_tree(&repo_root.join(fixture), &root)
+            .map_err(|e| format!("case {} fixture: {e}", case.id))?;
+    }
+    for step in &spec.setup {
+        apply_setup_step(step, &root, repo_root)
+            .map_err(|e| format!("case {} setup: {e}", case.id))?;
+    }
+    Ok(Some(root))
+}
+
+/// One captured post-run file: raw bytes plus the owner-executable bit.
+struct CapturedFile {
+    bytes: Vec<u8>,
+    executable: bool,
+}
+
+/// Minimal glob over '/'-separated relative paths: `**` matches any number
+/// of components (including zero); `*`/`?` match within one component.
+/// Hand-rolled to keep the harness dependency-free; capture sets are small.
+fn glob_match(pattern: &str, path: &str) -> bool {
+    fn match_comps(pat: &[&str], path: &[&str]) -> bool {
+        match pat.first() {
+            None => path.is_empty(),
+            Some(&"**") => (0..=path.len()).any(|k| match_comps(&pat[1..], &path[k..])),
+            Some(head) => {
+                !path.is_empty()
+                    && match_comp(head.as_bytes(), path[0].as_bytes())
+                    && match_comps(&pat[1..], &path[1..])
+            }
+        }
+    }
+    fn match_comp(pat: &[u8], s: &[u8]) -> bool {
+        match pat.first() {
+            None => s.is_empty(),
+            Some(b'*') => match_comp(&pat[1..], s) || (!s.is_empty() && match_comp(pat, &s[1..])),
+            Some(b'?') => !s.is_empty() && match_comp(&pat[1..], &s[1..]),
+            Some(&c) => !s.is_empty() && s[0] == c && match_comp(&pat[1..], &s[1..]),
+        }
+    }
+    let pat: Vec<&str> = pattern.split('/').collect();
+    let comps: Vec<&str> = path.split('/').collect();
+    match_comps(&pat, &comps)
+}
+
+fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let entries =
+        fs::read_dir(dir).map_err(|e| format!("cannot read dir {}: {e}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("cannot read dir {}: {e}", dir.display()))?;
+        if entry.file_name() == ".git" {
+            continue; // git internals (index stat cache) are never comparable
+        }
+        let path = entry.path();
+        let ty = entry
+            .file_type()
+            .map_err(|e| format!("cannot stat {}: {e}", path.display()))?;
+        if ty.is_dir() {
+            walk_files(root, &path, out)?;
+        } else {
+            let rel = path
+                .strip_prefix(root)
+                .expect("walked path is under root")
+                .to_string_lossy()
+                .into_owned();
+            out.push(rel);
+        }
+    }
+    Ok(())
+}
+
+/// Collect the case's post-run capture set from one sandbox: every file
+/// under the sandbox root whose relative path matches any capture glob.
+/// BTreeMap keys give a deterministic comparison order.
+fn capture_files(
+    case: &Case,
+    sandbox: Option<&Path>,
+) -> Result<BTreeMap<String, CapturedFile>, String> {
+    if case.capture.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let root = sandbox
+        .ok_or_else(|| format!("case {} declares capture but no sandbox", case.id))?;
+    let mut files = Vec::new();
+    walk_files(root, root, &mut files)?;
+    let mut captured = BTreeMap::new();
+    for rel in files {
+        if case.capture.iter().any(|pat| glob_match(pat, &rel)) {
+            let path = root.join(&rel);
+            let meta = fs::metadata(&path)
+                .map_err(|e| format!("cannot stat {}: {e}", path.display()))?;
+            let bytes =
+                fs::read(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+            let executable = meta.permissions().mode() & 0o100 != 0;
+            captured.insert(rel, CapturedFile { bytes, executable });
+        }
+    }
+    Ok(captured)
 }
 
 // ---------------------------------------------------------------------------
@@ -273,17 +716,30 @@ fn run_engine(
     case: &Case,
     repo_root: &Path,
     base: &[(String, String)],
+    sandbox_root: Option<&str>,
 ) -> Result<RunOutput, String> {
-    let cwd = repo_root.join(&case.cwd);
-    let stdin_bytes = match &case.stdin_file {
-        Some(rel) => Some(std::fs::read(repo_root.join(rel)).map_err(|e| {
+    let resolve = |s: &str| resolve_token(s, sandbox_root, &case.id);
+    // A `{SANDBOX}` cwd resolves absolute, so `join` uses it verbatim;
+    // otherwise cwd stays repo-root-relative as before.
+    let cwd = repo_root.join(resolve(&case.cwd)?);
+    let stdin_bytes = match (&case.stdin_file, &case.stdin_text) {
+        (Some(_), Some(_)) => {
+            return Err(format!(
+                "case {}: stdin_file and stdin_text are mutually exclusive",
+                case.id
+            ))
+        }
+        (Some(rel), None) => Some(std::fs::read(repo_root.join(rel)).map_err(|e| {
             format!("failed to read stdin_file {rel} for case {}: {e}", case.id)
         })?),
-        None => None,
+        (None, Some(text)) => Some(text.clone().into_bytes()),
+        (None, None) => None,
     };
     let mut cmd = Command::new(engine);
-    cmd.args(&case.argv)
-        .current_dir(&cwd)
+    for arg in &case.argv {
+        cmd.arg(resolve(arg)?);
+    }
+    cmd.current_dir(&cwd)
         // Piped stdin when the case supplies bytes, else immediate EOF.
         // isatty(stdin) is false either way.
         .stdin(if stdin_bytes.is_some() {
@@ -298,7 +754,7 @@ fn run_engine(
         cmd.env(k, v);
     }
     for (k, v) in &case.env {
-        cmd.env(k, v);
+        cmd.env(k, resolve(v)?);
     }
     let out = if let Some(bytes) = stdin_bytes {
         use std::io::Write;
@@ -324,6 +780,36 @@ fn run_engine(
         exit,
         stdout: out.stdout,
         stderr_len: out.stderr.len(),
+    })
+}
+
+/// Everything one engine produced for a case: process output, the sandbox
+/// root it ran against (None for shared-tree cases), and the post-run
+/// captured files.
+struct EngineSide {
+    out: RunOutput,
+    sandbox_root: Option<String>,
+    captured: BTreeMap<String, CapturedFile>,
+}
+
+/// One engine's full case execution: fresh sandbox (when declared), run,
+/// post-run capture.
+fn run_side(
+    engine: &Path,
+    case: &Case,
+    side: &str,
+    repo_root: &Path,
+    base: &[(String, String)],
+    sandbox_area: &Path,
+) -> Result<EngineSide, String> {
+    let sandbox = prepare_sandbox(case, side, sandbox_area, repo_root)?;
+    let sandbox_root = sandbox.map(|p| p.to_string_lossy().into_owned());
+    let out = run_engine(engine, case, repo_root, base, sandbox_root.as_deref())?;
+    let captured = capture_files(case, sandbox_root.as_deref().map(Path::new))?;
+    Ok(EngineSide {
+        out,
+        sandbox_root,
+        captured,
     })
 }
 
@@ -396,7 +882,15 @@ fn hexdump_window(bytes: &[u8], offset: usize) -> String {
     out
 }
 
-fn judge_case(case: &Case, a: &RunOutput, b: &RunOutput) -> CaseResult {
+fn judge_case(case: &Case, side_a: &EngineSide, side_b: &EngineSide) -> CaseResult {
+    let a = &side_a.out;
+    let b = &side_b.out;
+    let ctx_a = NormCtx {
+        sandbox_root: side_a.sandbox_root.as_deref(),
+    };
+    let ctx_b = NormCtx {
+        sandbox_root: side_b.sandbox_root.as_deref(),
+    };
     let mut reasons: Vec<String> = Vec::new();
 
     if a.exit != b.exit {
@@ -415,8 +909,8 @@ fn judge_case(case: &Case, a: &RunOutput, b: &RunOutput) -> CaseResult {
         ));
     }
 
-    let norm_a = apply_normalizations(&case.normalize, &a.stdout);
-    let norm_b = apply_normalizations(&case.normalize, &b.stdout);
+    let norm_a = apply_normalizations(&case.normalize, &a.stdout, &ctx_a);
+    let norm_b = apply_normalizations(&case.normalize, &b.stdout, &ctx_b);
     let mut first_diff_offset = None;
     let mut diff_context = None;
     match (&norm_a, &norm_b) {
@@ -437,6 +931,52 @@ fn judge_case(case: &Case, a: &RunOutput, b: &RunOutput) -> CaseResult {
         }
         (Err(e), _) => reasons.push(format!("engine A: {e}")),
         (_, Err(e)) => reasons.push(format!("engine B: {e}")),
+    }
+
+    // Written-tree comparison: the captured file SETS must be identical,
+    // then each common file's bytes after the case's normalizations (the
+    // same ones applied to stdout), then modes when the case demands.
+    let paths: BTreeSet<&String> = side_a.captured.keys().chain(side_b.captured.keys()).collect();
+    for path in paths {
+        let (fa, fb) = match (side_a.captured.get(path), side_b.captured.get(path)) {
+            (Some(fa), Some(fb)) => (fa, fb),
+            (present_a, _) => {
+                reasons.push(format!(
+                    "captured file {path}: present under engine {} only",
+                    if present_a.is_some() { "A" } else { "B" }
+                ));
+                continue;
+            }
+        };
+        match (
+            apply_normalizations(&case.normalize, &fa.bytes, &ctx_a),
+            apply_normalizations(&case.normalize, &fb.bytes, &ctx_b),
+        ) {
+            (Ok(na), Ok(nb)) => {
+                if let Some(off) = first_diff(&na, &nb) {
+                    reasons.push(format!(
+                        "captured file {path}: mismatch at byte {off} (normalized lengths A={} B={})",
+                        na.len(),
+                        nb.len()
+                    ));
+                    if diff_context.is_none() {
+                        diff_context = Some(format!(
+                            "captured file {path}, engine A (normalized):\n{}\ncaptured file {path}, engine B (normalized):\n{}",
+                            hexdump_window(&na, off),
+                            hexdump_window(&nb, off)
+                        ));
+                    }
+                }
+            }
+            (Err(e), _) => reasons.push(format!("captured file {path}, engine A: {e}")),
+            (_, Err(e)) => reasons.push(format!("captured file {path}, engine B: {e}")),
+        }
+        if case.compare_file_mode && fa.executable != fb.executable {
+            reasons.push(format!(
+                "captured file {path}: executable bit differs (A={} B={})",
+                fa.executable, fb.executable
+            ));
+        }
     }
 
     CaseResult {
@@ -539,12 +1079,14 @@ fn scoreboard_md(args: &Args, results: &[CaseResult]) -> String {
             if let Some(off) = r.first_diff_offset {
                 let _ = writeln!(md);
                 let _ = writeln!(md, "First diff at byte offset {off}:");
+            }
+            // Context also stands alone for captured-file mismatches, where
+            // stdout matched and no stdout offset exists.
+            if let Some(ctx) = &r.diff_context {
                 let _ = writeln!(md);
-                if let Some(ctx) = &r.diff_context {
-                    let _ = writeln!(md, "```");
-                    md.push_str(ctx);
-                    let _ = writeln!(md, "```");
-                }
+                let _ = writeln!(md, "```");
+                md.push_str(ctx);
+                let _ = writeln!(md, "```");
             }
         }
     }
@@ -607,19 +1149,20 @@ fn run() -> Result<i32, String> {
 
     fs::create_dir_all(&args.scoreboard_dir)
         .map_err(|e| format!("cannot create {}: {e}", args.scoreboard_dir.display()))?;
-    let xdg_root = fs::canonicalize(&args.scoreboard_dir)
-        .map_err(|e| e.to_string())?
-        .join("xdg-scratch");
+    let scoreboard_root = fs::canonicalize(&args.scoreboard_dir).map_err(|e| e.to_string())?;
+    let xdg_root = scoreboard_root.join("xdg-scratch");
     for leaf in ["config", "state", "cache"] {
         fs::create_dir_all(xdg_root.join(leaf)).map_err(|e| e.to_string())?;
     }
+    // Per-case, per-engine sandboxes live next to the scoreboard.
+    let sandbox_area = scoreboard_root.join("sandboxes");
     let base = base_env(&xdg_root);
 
     let mut results = Vec::with_capacity(selected.len());
     for case in &selected {
-        let out_a = run_engine(&engine_a, case, &repo_root, &base)?;
-        let out_b = run_engine(&engine_b, case, &repo_root, &base)?;
-        let result = judge_case(case, &out_a, &out_b);
+        let side_a = run_side(&engine_a, case, "a", &repo_root, &base, &sandbox_area)?;
+        let side_b = run_side(&engine_b, case, "b", &repo_root, &base, &sandbox_area)?;
+        let result = judge_case(case, &side_a, &side_b);
         eprintln!(
             "{} {} (exit A={} B={})",
             if result.pass { "PASS" } else { "FAIL" },

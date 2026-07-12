@@ -1,0 +1,67 @@
+[
+  {"id": "closure-smoke-new-decision-tree-human",
+   "sandbox": {"fixture": "rust/fixtures/closure/mini-repo"},
+   "cwd": "{SANDBOX}",
+   "argv": ["new", "decision", "rac/decisions/pinned-choice.md"],
+   "expect_exit": 0,
+   "normalize": ["mask-ids"],
+   "capture": ["rac/**", ".rac/**"]},
+
+  {"id": "closure-smoke-new-requirement-mkdir-json",
+   "sandbox": {"fixture": "rust/fixtures/closure/mini-repo",
+               "setup": [{"step": "mkdir", "path": "rac/requirements"}]},
+   "cwd": "{SANDBOX}",
+   "argv": ["new", "requirement", "rac/requirements/pinned-req.md", "--json"],
+   "expect_exit": 0,
+   "normalize": ["mask-ids"],
+   "capture": ["rac/**"]},
+
+  {"id": "closure-smoke-git-pinned-recency-json",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "corpus/pinned-base.md",
+      "content": "# Pinned Base Note\n\nThe pinned base body.\n"},
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus"},
+       {"date": "2024-04-01T09:30:00-05:00", "message": "pin: second note",
+        "write": [{"path": "corpus/pinned-second.md",
+                   "content": "# Pinned Second Note\n\nThe pinned second body.\n"}]}
+     ]},
+     {"step": "write", "path": "corpus/pinned-uncommitted.md",
+      "content": "# Pinned Uncommitted Note\n\nThe pinned uncommitted body.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["find", "pinned", "corpus", "--json"],
+   "expect_exit": 0,
+   "normalize": ["mask-json-field:recency.age_days"]},
+
+  {"id": "closure-smoke-setup-chmod-mode-compare",
+   "sandbox": {"fixture": "rust/fixtures/closure/mini-repo",
+               "setup": [
+                 {"step": "write", "path": "hooks/post-edit.sh",
+                  "content": "#!/bin/sh\nexit 0\n"},
+                 {"step": "chmod-exec", "path": "hooks/post-edit.sh"}
+               ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["validate", "rac"],
+   "expect_exit": 0,
+   "capture": ["hooks/*"],
+   "compare_file_mode": true},
+
+  {"id": "closure-smoke-stdin-text-json",
+   "argv": ["validate", "-", "--json"],
+   "stdin_text": "# Stdin Smoke\n\n## Problem\n\nProve the literal stdin feed.\n\n## Requirements\n\n[REQ-001] The harness SHALL feed literal stdin text to both engines.\n",
+   "expect_exit": 0},
+
+  {"id": "closure-smoke-mask-json-field-export",
+   "argv": ["export", "tests/fixtures/export", "--json"],
+   "expect_exit": 0,
+   "normalize": ["mask-json-field:corpus.rac_version"]},
+
+  {"id": "closure-smoke-sandbox-path-mask",
+   "sandbox": {"setup": [{"step": "copy-tree",
+                          "from": "rust/fixtures/closure/mini-repo/rac",
+                          "to": "corpus"}]},
+   "argv": ["validate", "{SANDBOX}/corpus"],
+   "expect_exit": 0,
+   "normalize": ["mask-sandbox-path"]}
+]
