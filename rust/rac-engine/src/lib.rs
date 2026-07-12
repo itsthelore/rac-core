@@ -17,6 +17,7 @@
 //! - `relationships`: edge extraction, resolution, validation issues.
 //! - `resolve`: BM25F + RRF search with pinned f64 operation order.
 //! - `gitinfo`: git-derived recency/staleness via the real git CLI.
+//! - `budget`: the ADR-033 per-response character budget and truncation.
 //! - `output`: human/JSON/SARIF renderers per command.
 //! - `commands`: CLI command entry points (argv already parsed).
 //! - `cli`: argv parsing and exit codes matching the oracle's argparse
@@ -37,6 +38,7 @@ pub mod stats;
 pub mod resolve;
 pub mod retrieve;
 pub mod gitinfo;
+pub mod budget;
 pub mod portfolio;
 pub mod review;
 pub mod mdhtml;

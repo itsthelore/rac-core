@@ -4,45 +4,24 @@
 //! (ADR-032: no cache, no session state; identical repository bytes and
 //! identical input produce identical output, within the ADR-033 budget).
 
-use crate::budget::{
-    serialize, HINT_RELATED, MARKER_HINT, MARKER_OMITTED, MARKER_TRUNCATED,
-};
 use crate::graph;
 use crate::provenance;
+use rac_engine::budget::{
+    serialize, HINT_RELATED, MARKER_HINT, MARKER_OMITTED, MARKER_TRUNCATED,
+};
+use rac_engine::output;
 use rac_engine::relationships::{corpus_items, relationships_from_corpus};
 use rac_engine::resolve::{
     artifact_status, build_index, find_decisions, index_from_items, resolve_in_index,
-    search_index_filtered, IndexEntry, ResolutionResult, ResolvedArtifact, SearchResult,
-    OUTCOME_RESOLVED,
+    search_index_filtered, IndexEntry, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
 };
 use serde_json::{json, Map, Value};
-
-/// `Path(path).read_text(encoding="utf-8")` — strict UTF-8 with universal
-/// newlines; `None` maps to the `unreadable` structured error (ADR-034).
-fn read_content(path: &str) -> Option<String> {
-    let bytes = std::fs::read(path).ok()?;
-    let text = String::from_utf8(bytes).ok()?;
-    Some(text.replace("\r\n", "\n").replace('\r', "\n"))
-}
 
 fn opt_str(v: &Option<String>) -> Value {
     match v {
         Some(s) => json!(s),
         None => Value::Null,
     }
-}
-
-/// `ResolutionResult.to_dict()` for the failure outcomes — identical to the
-/// `rac resolve --json` error body (`errors.from_resolution`, ADR-034).
-fn resolution_error_payload(result: &ResolutionResult) -> Value {
-    let mut m = Map::new();
-    m.insert("schema_version".to_string(), json!("1"));
-    m.insert("error".to_string(), json!(result.outcome));
-    m.insert("id".to_string(), json!(result.artifact_id));
-    if !result.duplicate_paths.is_empty() {
-        m.insert("paths".to_string(), json!(result.duplicate_paths));
-    }
-    Value::Object(m)
 }
 
 /// `errors.unreadable(id, path)`.
@@ -55,71 +34,17 @@ fn unreadable_payload(artifact_id: &str, path: &str) -> Value {
     Value::Object(m)
 }
 
-/// `ResolvedArtifact.to_dict(include_evidence=True)` — the search-match /
-/// resolved-artifact dict in pinned key order.
+/// The MCP surfaces always include evidence
+/// (`to_dict(include_evidence=True)`); the field map itself is the engine's.
 fn artifact_value(m: &ResolvedArtifact) -> Map<String, Value> {
-    let mut obj = Map::new();
-    obj.insert("id".to_string(), json!(m.id));
-    obj.insert("type".to_string(), json!(m.artifact_type));
-    obj.insert("title".to_string(), opt_str(&m.title));
-    obj.insert("path".to_string(), json!(m.path));
-    if let Some(section) = &m.section {
-        obj.insert("section".to_string(), json!(section));
+    match output::find_match_value(m, true) {
+        Value::Object(obj) => obj,
+        _ => unreachable!("find_match_value returns an object"),
     }
-    if let Some(snippet) = &m.snippet {
-        obj.insert("snippet".to_string(), json!(snippet));
-    }
-    if let Some(e) = &m.evidence {
-        let mut ev = Map::new();
-        ev.insert("field".to_string(), json!(e.field));
-        ev.insert("terms".to_string(), json!(e.terms));
-        ev.insert("tier".to_string(), json!(e.tier));
-        ev.insert("score".to_string(), rac_engine::pyjson::py_float(e.score));
-        let mut components = Map::new();
-        components.insert("bm25".to_string(), rac_engine::pyjson::py_float(e.bm25));
-        components.insert("lexical_rank".to_string(), json!(e.lexical_rank));
-        components.insert("graph_rank".to_string(), json!(e.graph_rank));
-        components.insert("inbound".to_string(), json!(e.inbound));
-        ev.insert("components".to_string(), Value::Object(components));
-        obj.insert("evidence".to_string(), Value::Object(ev));
-    }
-    if let Some(recency) = &m.recency {
-        let mut r = Map::new();
-        r.insert("last_committed".to_string(), opt_str(&recency.last_committed));
-        r.insert(
-            "age_days".to_string(),
-            recency.age_days.map(|d| json!(d)).unwrap_or(Value::Null),
-        );
-        r.insert(
-            "stale".to_string(),
-            recency.stale.map(|b| json!(b)).unwrap_or(Value::Null),
-        );
-        obj.insert("recency".to_string(), Value::Object(r));
-    }
-    if !m.tags.is_empty() {
-        obj.insert("tags".to_string(), json!(m.tags));
-    }
-    obj
 }
 
-/// `SearchResult.to_dict(include_evidence=True)`.
 fn search_result_payload(result: &SearchResult) -> Value {
-    let mut m = Map::new();
-    m.insert("schema_version".to_string(), json!("1"));
-    m.insert("query".to_string(), json!(result.query));
-    m.insert("type".to_string(), opt_str(&result.artifact_type));
-    m.insert("match_count".to_string(), json!(result.matches.len()));
-    m.insert(
-        "matches".to_string(),
-        Value::Array(
-            result
-                .matches
-                .iter()
-                .map(|mm| Value::Object(artifact_value(mm)))
-                .collect(),
-        ),
-    );
-    Value::Object(m)
+    output::search_result_value(result, true)
 }
 
 /// The per-call budget clamp (ADR-113): a call may only *lower* the server
@@ -140,9 +65,10 @@ pub fn get_artifact(root: &str, artifact_id: &str, budget: i64) -> String {
         .as_ref()
         .filter(|_| result.outcome == OUTCOME_RESOLVED)
     else {
-        return serialize(&resolution_error_payload(&result), budget);
+        return serialize(&output::resolution_error_value(&result), budget);
     };
-    let Some(content) = read_content(&artifact.path) else {
+    // `None` maps to the `unreadable` structured error (ADR-034).
+    let Some(content) = rac_engine::pycompat::read_text_universal(&artifact.path) else {
         return serialize(&unreadable_payload(&artifact.id, &artifact.path), budget);
     };
     let mut payload = Map::new();
@@ -172,7 +98,7 @@ pub fn search_artifacts(
 ) -> String {
     let entries = build_index(root, true);
     let mut result = search_index_filtered(&entries, query, artifact_type, tags, live_only);
-    provenance::annotate_search_recency(&mut result.matches, root);
+    rac_engine::commands::annotate_search_recency(&mut result.matches, root);
     serialize(&search_result_payload(&result), budget)
 }
 
@@ -211,7 +137,7 @@ pub fn get_related(root: &str, artifact_id: &str, depth: i64, budget: i64) -> St
         .as_ref()
         .filter(|_| result.outcome == OUTCOME_RESOLVED)
     else {
-        return serialize(&resolution_error_payload(&result), budget);
+        return serialize(&output::resolution_error_value(&result), budget);
     };
     let outgoing = graph::outgoing_references(&relationships, &artifact.path);
     let incoming_result =

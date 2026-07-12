@@ -19,7 +19,9 @@ use crate::relationships::{
     ISSUE_SELF_REFERENCE, ISSUE_TARGET_AMBIGUOUS, ISSUE_TARGET_NOT_FOUND, ISSUE_TARGET_SUPERSEDED,
     ISSUE_TARGET_TYPE_MISMATCH,
 };
-use crate::resolve::{Recency, ResolutionResult, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED};
+use crate::resolve::{
+    Evidence, Recency, ResolutionResult, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
+};
 use crate::review::{ReviewIssue, ReviewReport};
 use crate::spec::{snake as spec_snake, spec_for, ArtifactSpec};
 use crate::stats::PortfolioStats;
@@ -1646,29 +1648,40 @@ pub fn render_resolve_human(artifact: &ResolvedArtifact) -> String {
     )
 }
 
-/// `render_resolve_json` — `ResolutionResult.to_dict()` with `indent=2`.
-pub fn render_resolve_json(result: &ResolutionResult) -> String {
+/// `ResolutionResult.to_dict()` for the failure outcomes — the `rac resolve
+/// --json` error body, also served as the MCP structured lookup error
+/// (`errors.from_resolution`, ADR-034).
+pub fn resolution_error_value(result: &ResolutionResult) -> Value {
     let mut m = Map::new();
     m.insert("schema_version".into(), json!("1"));
-    if result.outcome == OUTCOME_RESOLVED {
-        let artifact = result.artifact.as_ref().expect("resolved implies artifact");
-        m.insert("id".into(), json!(artifact.id));
-        m.insert("type".into(), json!(artifact.artifact_type));
-        m.insert("title".into(), json!(artifact.title));
-        m.insert("path".into(), json!(artifact.path));
-        // section/snippet/evidence/recency/tags are never set on the
-        // resolution path — the keys stay absent.
-    } else {
-        m.insert("error".into(), json!(result.outcome));
-        m.insert("id".into(), json!(result.artifact_id)); // as given, unstripped
-        if !result.duplicate_paths.is_empty() {
-            m.insert("paths".into(), json!(result.duplicate_paths));
-        }
+    m.insert("error".into(), json!(result.outcome));
+    m.insert("id".into(), json!(result.artifact_id)); // as given, unstripped
+    if !result.duplicate_paths.is_empty() {
+        m.insert("paths".into(), json!(result.duplicate_paths));
     }
+    Value::Object(m)
+}
+
+/// `render_resolve_json` — `ResolutionResult.to_dict()` with `indent=2`.
+pub fn render_resolve_json(result: &ResolutionResult) -> String {
+    if result.outcome != OUTCOME_RESOLVED {
+        return dumps_indent2(&resolution_error_value(result));
+    }
+    let artifact = result.artifact.as_ref().expect("resolved implies artifact");
+    let mut m = Map::new();
+    m.insert("schema_version".into(), json!("1"));
+    m.insert("id".into(), json!(artifact.id));
+    m.insert("type".into(), json!(artifact.artifact_type));
+    m.insert("title".into(), json!(artifact.title));
+    m.insert("path".into(), json!(artifact.path));
+    // section/snippet/evidence/recency/tags are never set on the
+    // resolution path — the keys stay absent.
     dumps_indent2(&Value::Object(m))
 }
 
-fn recency_value(recency: &Recency) -> Value {
+/// The match `recency` dict: `{last_committed, age_days, stale}`, all three
+/// keys always present, each null when unknown.
+pub fn recency_value(recency: &Recency) -> Value {
     let mut m = Map::new();
     m.insert("last_committed".into(), json!(recency.last_committed));
     m.insert("age_days".into(), json!(recency.age_days));
@@ -1676,7 +1689,30 @@ fn recency_value(recency: &Recency) -> Value {
     Value::Object(m)
 }
 
-fn find_match_value(m: &ResolvedArtifact, explain: bool) -> Value {
+/// The search-match `evidence` dict exactly as `rac find --json --explain`
+/// serializes it: `{field, terms, tier, score, components:{bm25,
+/// lexical_rank, graph_rank, inbound}}`.
+pub fn evidence_value(e: &Evidence) -> Value {
+    let mut ev = Map::new();
+    ev.insert("field".into(), json!(e.field));
+    ev.insert("terms".into(), json!(e.terms));
+    ev.insert("tier".into(), json!(e.tier));
+    ev.insert("score".into(), py_float(e.score));
+    let mut components = Map::new();
+    components.insert("bm25".into(), py_float(e.bm25));
+    components.insert("lexical_rank".into(), json!(e.lexical_rank));
+    components.insert("graph_rank".into(), json!(e.graph_rank));
+    components.insert("inbound".into(), json!(e.inbound));
+    ev.insert("components".into(), Value::Object(components));
+    Value::Object(ev)
+}
+
+/// `ResolvedArtifact.to_dict(include_evidence=…)` — the search-match /
+/// resolved-artifact dict in pinned key order (`id, type, title, path,
+/// [section], [snippet], [evidence], [recency], [tags]`); conditional keys
+/// are absent, never null (except `title`). Shared by the CLI `rac find`
+/// renderers and the MCP tool payloads.
+pub fn find_match_value(m: &ResolvedArtifact, include_evidence: bool) -> Value {
     let mut obj = Map::new();
     obj.insert("id".into(), json!(m.id));
     obj.insert("type".into(), json!(m.artifact_type));
@@ -1688,20 +1724,9 @@ fn find_match_value(m: &ResolvedArtifact, explain: bool) -> Value {
     if let Some(snippet) = &m.snippet {
         obj.insert("snippet".into(), json!(snippet));
     }
-    if explain {
+    if include_evidence {
         if let Some(e) = &m.evidence {
-            let mut ev = Map::new();
-            ev.insert("field".into(), json!(e.field));
-            ev.insert("terms".into(), json!(e.terms));
-            ev.insert("tier".into(), json!(e.tier));
-            ev.insert("score".into(), py_float(e.score));
-            let mut components = Map::new();
-            components.insert("bm25".into(), py_float(e.bm25));
-            components.insert("lexical_rank".into(), json!(e.lexical_rank));
-            components.insert("graph_rank".into(), json!(e.graph_rank));
-            components.insert("inbound".into(), json!(e.inbound));
-            ev.insert("components".into(), Value::Object(components));
-            obj.insert("evidence".into(), Value::Object(ev));
+            obj.insert("evidence".into(), evidence_value(e));
         }
     }
     if let Some(recency) = &m.recency {
@@ -1806,8 +1831,10 @@ pub fn render_retrieve_human(payload: &Value) -> String {
     lines.join("\n")
 }
 
-/// `render_find_json` — `SearchResult.to_dict(include_evidence=explain)`.
-pub fn render_find_json(result: &SearchResult, explain: bool) -> String {
+/// `SearchResult.to_dict(include_evidence=…)` — `{schema_version, query,
+/// type, match_count, matches}`. Shared by `render_find_json` (which wraps
+/// it in `indent=2` dumps) and the MCP search payloads (budget serializer).
+pub fn search_result_value(result: &SearchResult, include_evidence: bool) -> Value {
     let mut m = Map::new();
     m.insert("schema_version".into(), json!("1"));
     m.insert("query".into(), json!(result.query));
@@ -1819,11 +1846,16 @@ pub fn render_find_json(result: &SearchResult, explain: bool) -> String {
             result
                 .matches
                 .iter()
-                .map(|mm| find_match_value(mm, explain))
+                .map(|mm| find_match_value(mm, include_evidence))
                 .collect(),
         ),
     );
-    dumps_indent2(&Value::Object(m))
+    Value::Object(m)
+}
+
+/// `render_find_json` — `SearchResult.to_dict(include_evidence=explain)`.
+pub fn render_find_json(result: &SearchResult, explain: bool) -> String {
+    dumps_indent2(&search_result_value(result, explain))
 }
 
 /// `render_find_human` — aligned match rows, or a valid empty result

@@ -261,6 +261,15 @@ pub fn first_nonempty_line(s: &str) -> &str {
         .unwrap_or("")
 }
 
+/// `Path(path).read_text(encoding="utf-8")` — strict UTF-8 with universal
+/// newlines (`\r\n`/`\r` → `\n`); `None` on OSError/UnicodeDecodeError
+/// (callers substitute "" or a structured `unreadable` error).
+pub fn read_text_universal(path: &str) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let text = String::from_utf8(bytes).ok()?;
+    Some(text.replace("\r\n", "\n").replace('\r', "\n"))
+}
+
 /// Python `str.isprintable()` for a single character.
 pub fn py_is_printable(c: char) -> bool {
     in_ranges(&tables().isprintable, c as u32)

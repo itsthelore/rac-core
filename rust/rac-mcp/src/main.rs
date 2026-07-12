@@ -8,13 +8,13 @@
 //! superset of PRIMARY's five, §10). Stateless re-read per call (ADR-032).
 
 mod args;
-mod budget;
 mod graph;
 mod provenance;
 mod sidecar;
 mod tools;
 
 use args::{Arg, Kind, Param};
+use rac_engine::budget;
 use serde_json::{json, Map, Value};
 use std::io::{BufRead, Write};
 

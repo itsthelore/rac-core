@@ -88,15 +88,6 @@ impl ReviewReport {
     }
 }
 
-/// `Path(path).stem` — filename with the final suffix stripped.
-fn path_stem(path: &str) -> String {
-    let name = path.rsplit('/').next().unwrap_or(path);
-    match name.rfind('.') {
-        Some(0) | None => name.to_string(),
-        Some(i) => name[..i].to_string(),
-    }
-}
-
 fn attention_priority(code: &str) -> i64 {
     match code {
         ATTENTION_INVALID => PRIORITY_INVALID_ARTIFACT,
@@ -155,7 +146,7 @@ fn review_from_portfolio(
             priority: PRIORITY_UNKNOWN_ARTIFACT,
             severity: "info".to_string(),
             path: path.clone(),
-            identifier: path_stem(path),
+            identifier: crate::identity::path_stem(path),
             code: REVIEW_UNKNOWN_ARTIFACT.to_string(),
             message: "No artifact schema matched this document.".to_string(),
             action: format!("Run: rac inspect {path} (see rac schema --list)"),
@@ -277,7 +268,7 @@ fn drift_findings(directory: &str, items: &[CorpusItem]) -> Vec<ReviewIssue> {
             priority: PRIORITY_SUSPECT_DRIFT,
             severity: "warning".to_string(),
             path: record.source_path.clone(),
-            identifier: path_stem(&record.source_path),
+            identifier: crate::identity::path_stem(&record.source_path),
             code: REVIEW_SUSPECT_ARTIFACT.to_string(),
             message: drift_problem(&record),
             action: format!("Run: rac doctor {directory}"),
@@ -290,37 +281,9 @@ fn drift_problem(record: &DriftRecord) -> String {
     format!(
         "references {} which changed more recently (target last committed {}, this artifact {}) — review recommended",
         record.target_ref,
-        iso_roundtrip(&record.target_committed),
-        iso_roundtrip(&record.source_committed),
+        gitinfo::isoformat_roundtrip(&record.target_committed),
+        gitinfo::isoformat_roundtrip(&record.source_committed),
     )
-}
-
-/// `datetime.fromisoformat(stamp).isoformat()`. For a git `%cI` stamp (which is
-/// already strict ISO-8601 with a colon offset) this is the identity, but a `Z`
-/// or colonless offset is normalised as Python would.
-fn iso_roundtrip(stamp: &str) -> String {
-    let mut s = stamp.to_string();
-    if s.len() > 10 && s.as_bytes()[10] == b' ' {
-        s.replace_range(10..11, "T");
-    }
-    if s.ends_with('Z') || s.ends_with('z') {
-        s.truncate(s.len() - 1);
-        s.push_str("+00:00");
-        return s;
-    }
-    if let Some(pos) = s.rfind(['+', '-']) {
-        if pos > 10 {
-            let body = &s[pos + 1..];
-            if body.len() == 4 && body.bytes().all(|b| b.is_ascii_digit()) {
-                let fixed = format!("{}:{}", &body[..2], &body[2..]);
-                s.replace_range(pos + 1.., &fixed);
-            } else if body.len() == 2 && body.bytes().all(|b| b.is_ascii_digit()) {
-                let fixed = format!("{body}:00");
-                s.replace_range(pos + 1.., &fixed);
-            }
-        }
-    }
-    s
 }
 
 // --- write-cadence nudge -----------------------------------------------------

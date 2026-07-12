@@ -24,8 +24,8 @@ use std::process::Command;
 /// The default "stale after" window (`DEFAULT_STALE_AFTER_DAYS`).
 pub const DEFAULT_STALE_AFTER_DAYS: i64 = 180;
 
-/// Run `git <args>` with the given working directory. Returns the trimmed
-/// stdout on exit code 0, or `None` for a non-zero exit or a missing binary
+/// Run `git <args>` with the given working directory. Returns the raw stdout
+/// on exit code 0, or `None` for a non-zero exit or a missing binary
 /// (`FileNotFoundError` in the oracle).
 fn run_git(args: &[&str], cwd: &Path) -> Option<String> {
     let output = Command::new("git").args(args).current_dir(cwd).output().ok()?;
@@ -33,6 +33,15 @@ fn run_git(args: &[&str], cwd: &Path) -> Option<String> {
         return None;
     }
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// `run_git` with Python `text=True` universal-newline decoding (`\r\n` and
+/// lone `\r` → `\n`). The recency callers in this module only trim `%cI`
+/// stamps and the toplevel path, so they stay on the raw form; the rac-mcp
+/// provenance surface parses `git show` file content, where the
+/// normalization is load-bearing.
+pub fn run_git_text(args: &[&str], cwd: &Path) -> Option<String> {
+    run_git(args, cwd).map(|t| t.replace("\r\n", "\n").replace('\r', "\n"))
 }
 
 /// The work-tree root containing `directory`, or `None` if it is not a repo /
@@ -50,7 +59,7 @@ pub fn repository_root(directory: &Path) -> Option<PathBuf> {
 /// `path` made relative to `repo_root` (via `canonicalize`, like Python's
 /// `Path.resolve()`); if it lies outside the work tree, the absolute path is
 /// passed through unchanged.
-fn pathspec(repo_root: &Path, path: &Path) -> String {
+pub fn pathspec(repo_root: &Path, path: &Path) -> String {
     let abspath = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
     match abspath.strip_prefix(&root) {
@@ -148,6 +157,37 @@ fn floor_div(a: i64, b: i64) -> i64 {
     } else {
         q
     }
+}
+
+/// Python `datetime.fromisoformat(stamp).isoformat()` round trip of a git
+/// `%cI` stamp: verbatim for the `±HH:MM` form git emits; a trailing `Z`
+/// re-serializes as `+00:00`, a colonless `±HHMM` gains its colon, `±HH`
+/// becomes `±HH:00`, and a space separator becomes `T`.
+pub fn isoformat_roundtrip(stamp: &str) -> String {
+    let mut s = stamp.to_string();
+    if s.len() > 10 && s.as_bytes()[10] == b' ' {
+        s.replace_range(10..11, "T");
+    }
+    if s.ends_with('Z') || s.ends_with('z') {
+        s.truncate(s.len() - 1);
+        s.push_str("+00:00");
+        return s;
+    }
+    // Find the offset sign after the time part (beyond index 10 to skip the
+    // date's hyphens).
+    if let Some(pos) = s.rfind(['+', '-']) {
+        if pos > 10 {
+            let body = &s[pos + 1..];
+            if body.len() == 4 && body.bytes().all(|b| b.is_ascii_digit()) {
+                let fixed = format!("{}:{}", &body[..2], &body[2..]);
+                s.replace_range(pos + 1.., &fixed);
+            } else if body.len() == 2 && body.bytes().all(|b| b.is_ascii_digit()) {
+                let fixed = format!("{body}:00");
+                s.replace_range(pos + 1.., &fixed);
+            }
+        }
+    }
+    s
 }
 
 /// Parse a strict ISO-8601 timestamp with an explicit offset (`%cI` form:

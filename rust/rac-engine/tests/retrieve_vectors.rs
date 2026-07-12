@@ -11,7 +11,8 @@ use std::fs;
 use std::path::Path;
 
 use rac_engine::output::render_retrieve_human;
-use rac_engine::retrieve::{retrieve_grounding, serialize};
+use rac_engine::budget::serialize;
+use rac_engine::retrieve::retrieve_grounding;
 use serde_json::Value;
 
 fn vectors() -> Value {

@@ -4,25 +4,18 @@
 //! `rac_engine::gitinfo`: shell out to the real `git`, degrade every field to
 //! `null` / `[]` when git cannot answer — no error crosses the boundary.
 
+use rac_engine::gitinfo::{pathspec, run_git_text as run_git};
 use rac_engine::pycompat::py_strip;
 use rac_engine::resolve::artifact_status;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Field separator in combined `git log --format` records (`\x1f`).
 const FIELD_SEP: char = '\x1f';
 
-fn run_git(args: &[&str], cwd: &Path) -> Option<String> {
-    let output = Command::new("git").args(args).current_dir(cwd).output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    // Python `text=True` decodes and applies universal newlines.
-    let text = String::from_utf8_lossy(&output.stdout).into_owned();
-    Some(text.replace("\r\n", "\n").replace('\r', "\n"))
-}
-
+/// Like `gitinfo::repository_root`, but over the universal-newline `run_git`
+/// (Python `text=True`) this surface uses everywhere — the two differ only
+/// for a toplevel path containing a bare `\r`.
 fn repository_root(directory: &str) -> Option<PathBuf> {
     let out = run_git(&["rev-parse", "--show-toplevel"], Path::new(directory))?;
     let root = out.trim();
@@ -31,47 +24,6 @@ fn repository_root(directory: &str) -> Option<PathBuf> {
     } else {
         Some(PathBuf::from(root))
     }
-}
-
-/// `path` relative to `repo_root`, or absolute if outside the work tree.
-fn pathspec(repo_root: &Path, path: &str) -> String {
-    let p = Path::new(path);
-    let abspath = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
-    let root = repo_root
-        .canonicalize()
-        .unwrap_or_else(|_| repo_root.to_path_buf());
-    match abspath.strip_prefix(&root) {
-        Ok(rel) => rel.to_string_lossy().into_owned(),
-        Err(_) => abspath.to_string_lossy().into_owned(),
-    }
-}
-
-/// `datetime.fromisoformat(stamp).isoformat()` round trip on a git `%cI`
-/// stamp (same normalization the search-recency join applies): space
-/// separator → `T`, `Z` → `+00:00`, `±HHMM`/`±HH` → `±HH:MM`.
-fn py_isoformat_roundtrip(stamp: &str) -> String {
-    let mut s = stamp.to_string();
-    if s.len() > 10 && s.as_bytes()[10] == b' ' {
-        s.replace_range(10..11, "T");
-    }
-    if s.ends_with('Z') || s.ends_with('z') {
-        s.truncate(s.len() - 1);
-        s.push_str("+00:00");
-        return s;
-    }
-    if let Some(pos) = s.rfind(['+', '-']) {
-        if pos > 10 {
-            let body = &s[pos + 1..];
-            if body.len() == 4 && body.bytes().all(|b| b.is_ascii_digit()) {
-                let fixed = format!("{}:{}", &body[..2], &body[2..]);
-                s.replace_range(pos + 1.., &fixed);
-            } else if body.len() == 2 && body.bytes().all(|b| b.is_ascii_digit()) {
-                let fixed = format!("{body}:00");
-                s.replace_range(pos + 1.., &fixed);
-            }
-        }
-    }
-    s
 }
 
 /// `_parse_stamp` → isoformat, or `None` for a blank/unparseable stamp.
@@ -83,7 +35,7 @@ fn parse_stamp(stamp: &str) -> Option<String> {
     // The oracle treats a `fromisoformat` failure as unknown; git `%cI` is
     // always parseable, so validate lightly through the epoch parser.
     rac_engine::gitinfo::parse_iso8601_epoch(stamp)?;
-    Some(py_isoformat_roundtrip(stamp))
+    Some(rac_engine::gitinfo::isoformat_roundtrip(stamp))
 }
 
 /// `(committed isoformat | None, author | None)` for one boundary commit.
@@ -179,7 +131,7 @@ pub fn artifact_provenance(directory: &str, path: &str) -> Map<String, Value> {
             m.insert("status_history".to_string(), json!([]));
         }
         Some(root) => {
-            let spec = pathspec(&root, path);
+            let spec = pathspec(&root, Path::new(path));
             let (last_committed, last_author) = commit_record(&root, &spec, false);
             let (first_committed, first_author) = commit_record(&root, &spec, true);
             m.insert("last_committed".to_string(), opt(last_committed));
@@ -195,31 +147,3 @@ pub fn artifact_provenance(directory: &str, path: &str) -> Map<String, Value> {
     m
 }
 
-/// `annotate_search_recency(matches, directory)` — the read-surface join
-/// (ADR-045), byte-identical to the CLI `rac find` path.
-pub fn annotate_search_recency(
-    matches: &mut [rac_engine::resolve::ResolvedArtifact],
-    directory: &str,
-) {
-    use rac_engine::gitinfo;
-    if matches.is_empty() {
-        return;
-    }
-    let threshold = rac_engine::validate::load_freshness_threshold(directory);
-    let reference = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let repo_root = gitinfo::repository_root(Path::new(directory));
-    for m in matches.iter_mut() {
-        let last = repo_root
-            .as_ref()
-            .and_then(|root| gitinfo::last_committed(root, Path::new(&m.path)));
-        let st = gitinfo::staleness(last.as_deref(), threshold, reference);
-        m.recency = Some(rac_engine::resolve::Recency {
-            last_committed: st.last_committed.as_deref().map(py_isoformat_roundtrip),
-            age_days: st.age_days,
-            stale: st.stale,
-        });
-    }
-}

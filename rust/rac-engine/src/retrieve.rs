@@ -1,13 +1,11 @@
 //! Compound deterministic grounding retrieval (`rac retrieve`, ADR-113) — a
-//! port of `src/rac/services/retrieve.py`, `src/rac/services/scope.py` /
-//! `scope_paths.py` (the scope-binding channel), and the retrieve arm of
-//! `src/rac/mcp/budget.py` from the `grounding-retrieval-surface` branch
-//! (oracle `0.1.dev55+gf2091befd`).
+//! port of `src/rac/services/retrieve.py` and `src/rac/services/scope.py` /
+//! `scope_paths.py` (the scope-binding channel) from the
+//! `grounding-retrieval-surface` branch (oracle `0.1.dev55+gf2091befd`).
+//! The ADR-033 response budget (serialization + truncation) lives in
+//! `crate::budget`.
 //!
 //! Landmines reproduced here:
-//! - The budget unit is CHARACTERS of the serialized JSON
-//!   (`json.dumps(payload, ensure_ascii=False)` — `pyjson::dumps_compact`),
-//!   never bytes.
 //! - Excerpts are Python character slices (`content[:share]`), over the file's
 //!   text read with universal newlines (`\r\n`/`\r` → `\n`); an unreadable or
 //!   non-UTF-8 file contributes an empty excerpt.
@@ -19,17 +17,15 @@
 //!   exactly like `_glob_to_regex` (`*`/`?` within a segment, `**` across,
 //!   `**/` zero-or-more whole segments, `[...]` classes, `.`-collapse and
 //!   `..`-rejection in path normalisation).
-//! - Truncation is excerpt-first (binary search for the largest fitting
-//!   prefix), whole-item drop only when an emptied excerpt still misses.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
+use crate::budget::py_slice_to;
 use crate::identity::artifact_identifier;
-use crate::pycompat::{py_casefold, py_strip};
-use crate::pyjson::dumps_compact;
+use crate::pycompat::{py_casefold, py_strip, read_text_universal};
 use crate::relationships::{
     classify_scope_entry, corpus_items, extract_relationships_full, normalized_scope_path,
     relationships_from_corpus, CorpusItem, Relationship,
@@ -41,7 +37,6 @@ use crate::resolve::{
 
 // Defaults pinned by the grounding-retrieval-surface design.
 pub const DEFAULT_TOP_K: i64 = 5;
-pub const DEFAULT_BUDGET: i64 = 10_000;
 
 const SUPERSEDES: &str = "supersedes";
 const DECISION_TYPE: &str = "decision";
@@ -50,36 +45,6 @@ const DECISION_TYPE: &str = "decision";
 const CHANNEL_KEYWORD: &str = "keyword";
 const CHANNEL_SCOPE: &str = "scope";
 const CHANNEL_SUPERSEDES: &str = "supersedes";
-
-// Pinned marker fields + retrieve hint (`rac.mcp.budget`).
-const MARKER_TRUNCATED: &str = "truncated";
-const MARKER_OMITTED: &str = "omitted";
-const MARKER_HINT: &str = "hint";
-const HINT_RETRIEVE: &str = "Lower top_k, raise the budget, or narrow the task.";
-
-// ---------------------------------------------------------------------------
-// Python character-slice helpers
-// ---------------------------------------------------------------------------
-
-/// `len(text)` in Python — code points, not bytes.
-fn char_len(s: &str) -> i64 {
-    s.chars().count() as i64
-}
-
-/// `text[:stop]` with Python slice semantics (negative stop trims the tail).
-fn py_slice_to(s: &str, stop: i64) -> String {
-    let n = char_len(s);
-    let stop = if stop < 0 { (n + stop).max(0) } else { stop.min(n) };
-    s.chars().take(stop as usize).collect()
-}
-
-/// `Path(path).read_text(encoding="utf-8")` — strict UTF-8 with universal
-/// newlines; OSError/UnicodeDecodeError callers substitute "".
-fn read_text_universal(path: &str) -> Option<String> {
-    let bytes = std::fs::read(path).ok()?;
-    let text = String::from_utf8(bytes).ok()?;
-    Some(text.replace("\r\n", "\n").replace('\r', "\n"))
-}
 
 // ---------------------------------------------------------------------------
 // scope_paths.py — path normalisation, repository root (entry classification
@@ -611,26 +576,9 @@ fn add_item(
     }
 }
 
-/// The search-match `evidence` dict exactly as `rac find --json --explain`
-/// serializes it: `{field, terms, tier, score, components:{bm25,
-/// lexical_rank, graph_rank, inbound}}`.
-fn evidence_value(e: &crate::resolve::Evidence) -> Value {
-    let mut ev = Map::new();
-    ev.insert("field".to_string(), json!(e.field));
-    ev.insert("terms".to_string(), json!(e.terms));
-    ev.insert("tier".to_string(), json!(e.tier));
-    ev.insert("score".to_string(), crate::pyjson::py_float(e.score));
-    let mut components = Map::new();
-    components.insert("bm25".to_string(), crate::pyjson::py_float(e.bm25));
-    components.insert("lexical_rank".to_string(), json!(e.lexical_rank));
-    components.insert("graph_rank".to_string(), json!(e.graph_rank));
-    components.insert("inbound".to_string(), json!(e.inbound));
-    ev.insert("components".to_string(), Value::Object(components));
-    Value::Object(ev)
-}
-
 /// `retrieve_grounding(directory, task, scope, top_k, budget, live_only)` —
-/// the contract-shaped payload, pre-serialization (`serialize` caps it).
+/// the contract-shaped payload, pre-serialization (`budget::serialize` caps
+/// it).
 pub fn retrieve_grounding(
     directory: &str,
     task: &str,
@@ -744,7 +692,7 @@ pub fn retrieve_grounding(
             &status_of(&m.path),
             None,
             None,
-            m.evidence.as_ref().map(evidence_value),
+            m.evidence.as_ref().map(crate::output::evidence_value),
         );
     }
 
@@ -788,78 +736,3 @@ pub fn retrieve_grounding(
     Value::Object(payload)
 }
 
-// ---------------------------------------------------------------------------
-// mcp/budget.py — serialize + the `items` truncation rule
-// ---------------------------------------------------------------------------
-
-/// `budget.serialize(payload, budget)` — Python-shaped JSON within `budget`
-/// characters, truncating the retrieve `items` shape when needed.
-pub fn serialize(payload: &Value, budget: i64) -> String {
-    let text = dumps_compact(payload);
-    if char_len(&text) <= budget {
-        return text;
-    }
-    dumps_compact(&truncate_items(payload, budget))
-}
-
-fn with_marker(payload: &Value, kept: Vec<Value>, omitted: i64) -> Value {
-    let mut marked = payload.as_object().expect("object payload").clone();
-    marked.insert("items".to_string(), Value::Array(kept)); // keeps position
-    marked.insert(MARKER_TRUNCATED.to_string(), json!(true));
-    marked.insert(MARKER_OMITTED.to_string(), json!(omitted));
-    marked.insert(MARKER_HINT.to_string(), json!(HINT_RETRIEVE));
-    Value::Object(marked)
-}
-
-fn fits(candidate: &Value, budget: i64) -> bool {
-    char_len(&dumps_compact(candidate)) <= budget
-}
-
-/// `_truncate_items(payload, budget)` — excerpt-first, then whole-item.
-fn truncate_items(payload: &Value, budget: i64) -> Value {
-    let items: Vec<Value> = payload["items"].as_array().cloned().unwrap_or_default();
-    let total = items.len() as i64;
-    let mut kept = items;
-    while !kept.is_empty() {
-        let omitted = total - kept.len() as i64;
-        let candidate = with_marker(payload, kept.clone(), omitted);
-        if fits(&candidate, budget) {
-            return candidate;
-        }
-        // Trim the last kept item's excerpt before dropping it entirely.
-        let mut last = kept
-            .last()
-            .and_then(Value::as_object)
-            .expect("item object")
-            .clone();
-        let excerpt: String = last
-            .get("excerpt")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        let (mut lo, mut hi) = (0i64, char_len(&excerpt));
-        let mut best: Option<i64> = None;
-        while lo <= hi {
-            let mid = (lo + hi).div_euclid(2);
-            last.insert("excerpt".to_string(), json!(py_slice_to(&excerpt, mid)));
-            let mut trial_items: Vec<Value> = kept[..kept.len() - 1].to_vec();
-            trial_items.push(Value::Object(last.clone()));
-            let trial = with_marker(payload, trial_items, omitted);
-            if fits(&trial, budget) {
-                best = Some(mid);
-                lo = mid + 1;
-            } else {
-                hi = mid - 1;
-            }
-        }
-        if let Some(best) = best {
-            last.insert("excerpt".to_string(), json!(py_slice_to(&excerpt, best)));
-            let mut final_items: Vec<Value> = kept[..kept.len() - 1].to_vec();
-            final_items.push(Value::Object(last));
-            return with_marker(payload, final_items, omitted);
-        }
-        kept.pop();
-    }
-    // Even an empty list does not fit: marked empty-list payload.
-    with_marker(payload, Vec::new(), total)
-}
