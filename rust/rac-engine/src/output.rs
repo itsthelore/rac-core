@@ -19,7 +19,10 @@ use crate::parse::Issue;
 use crate::pycompat::{
     py_float_repr, py_format_1f, py_format_percent0, py_repr_str, py_round, py_rstrip,
 };
-use crate::pyjson::{dumps_compact, dumps_indent2, py_float};
+use crate::coverage::{CoverageReport, GAP_UNAPPLIED, GAP_UNSCHEDULED, GAP_UNSCOPED};
+use crate::portfolio::PortfolioSummary;
+use crate::pyjson::{dumps_compact, dumps_indent2, dumps_indent2_no_ascii, py_float};
+use crate::retrieve::{scope_lookup_value, ScopeLookupResult};
 use crate::relationships::{
     RelationshipIssue, RelationshipReport, RelationshipValidation, ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_EDGE_UNSUPPORTED, ISSUE_RELATIONSHIP_CYCLE, ISSUE_SCOPE_TARGET_NOT_FOUND,
@@ -1820,6 +1823,308 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
     }
 
     lines.join("\n")
+}
+
+// --- portfolio ---------------------------------------------------------------
+
+/// Human `rac portfolio` output (`render_portfolio_human`).
+pub fn render_portfolio_human(s: &PortfolioSummary) -> String {
+    let mut lines: Vec<String> = vec![
+        bold("Repository Summary"),
+        "==================".to_string(),
+        String::new(),
+        format!("Directory:  {}", s.directory),
+        format!("Artifacts:  {}", s.total_artifacts()),
+        String::new(),
+        bold("By Type"),
+        "-------".to_string(),
+        String::new(),
+    ];
+    for (type_name, count) in &s.by_type {
+        if *count > 0 {
+            lines.push(format!("  {:<14} {count}", py_title(type_name)));
+        }
+    }
+
+    lines.extend([
+        String::new(),
+        bold("Validation"),
+        "----------".to_string(),
+        String::new(),
+        format!("  Valid:    {}", s.valid_artifacts),
+        format!("  Invalid:  {}", s.invalid_artifacts),
+        String::new(),
+        bold("Completeness"),
+        "------------".to_string(),
+        String::new(),
+        format!(
+            "  {} ({} / {} recommended slots filled)",
+            py_format_percent0(s.completeness()),
+            s.filled_slots,
+            s.recommended_slots
+        ),
+        String::new(),
+        bold("Relationships"),
+        "-------------".to_string(),
+        String::new(),
+        format!("  Total:    {}", s.relationships.total),
+        format!("  Valid:    {}", s.relationships.valid),
+        format!("  Broken:   {}", s.relationships.broken),
+        format!("  Orphaned: {}", s.relationships.orphaned),
+        format!("  Coverage: {}", py_format_percent0(s.relationships.coverage)),
+    ]);
+
+    if !s.attention.is_empty() {
+        lines.extend([
+            String::new(),
+            bold(&format!("Attention ({} items)", s.attention.len())),
+            "----------".to_string(),
+            String::new(),
+        ]);
+        for item in &s.attention {
+            let icon = if item.severity == "error" {
+                red("\u{2717}")
+            } else {
+                yellow("!")
+            };
+            lines.push(format!("  {icon} {}", item.identifier));
+            lines.push(format!("      {}", item.message));
+        }
+    } else {
+        lines.push(String::new());
+        lines.push(green("\u{2713} No attention items."));
+    }
+
+    let score = s.health_score();
+    let colored = if score >= 80 {
+        green(&score.to_string())
+    } else if score >= 60 {
+        yellow(&score.to_string())
+    } else {
+        red(&score.to_string())
+    };
+    lines.extend([
+        String::new(),
+        bold("Health Score"),
+        "------------".to_string(),
+        String::new(),
+        format!("  {colored} / 100"),
+    ]);
+
+    if s.total_artifacts() == 0 {
+        lines.push(String::new());
+        lines.push(EMPTY_CORPUS_HINT.to_string());
+    }
+
+    lines.join("\n")
+}
+
+/// JSON `rac portfolio` output — `PortfolioSummary.to_dict()` (ADR-007).
+pub fn render_portfolio_json(s: &PortfolioSummary) -> String {
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("directory".into(), json!(s.directory));
+    payload.insert("recursive".into(), json!(s.recursive));
+    payload.insert("empty".into(), json!(s.total_artifacts() == 0));
+
+    let mut by_type = Map::new();
+    for (t, c) in &s.by_type {
+        by_type.insert(t.clone(), json!(c));
+    }
+    let mut artifacts = Map::new();
+    artifacts.insert("total".into(), json!(s.total_artifacts()));
+    artifacts.insert("by_type".into(), Value::Object(by_type));
+    artifacts.insert("unknown_paths".into(), json!(s.unknown_paths));
+    payload.insert("artifacts".into(), Value::Object(artifacts));
+
+    let mut validation = Map::new();
+    validation.insert("valid".into(), json!(s.valid_artifacts));
+    validation.insert("invalid".into(), json!(s.invalid_artifacts));
+    payload.insert("validation".into(), Value::Object(validation));
+
+    let mut completeness = Map::new();
+    completeness.insert("recommended_slots".into(), json!(s.recommended_slots));
+    completeness.insert("filled".into(), json!(s.filled_slots));
+    completeness.insert("ratio".into(), py_float(s.completeness()));
+    payload.insert("completeness".into(), Value::Object(completeness));
+
+    let mut relationships = Map::new();
+    relationships.insert("total".into(), json!(s.relationships.total));
+    relationships.insert("valid".into(), json!(s.relationships.valid));
+    relationships.insert("broken".into(), json!(s.relationships.broken));
+    relationships.insert("orphaned".into(), json!(s.relationships.orphaned));
+    relationships.insert("coverage".into(), py_float(s.relationships.coverage));
+    payload.insert("relationships".into(), Value::Object(relationships));
+
+    let attention: Vec<Value> = s
+        .attention
+        .iter()
+        .map(|item| {
+            let mut m = Map::new();
+            m.insert("path".into(), json!(item.path));
+            m.insert("identifier".into(), json!(item.identifier));
+            m.insert("severity".into(), json!(item.severity));
+            m.insert("code".into(), json!(item.code));
+            m.insert("message".into(), json!(item.message));
+            Value::Object(m)
+        })
+        .collect();
+    payload.insert("attention".into(), Value::Array(attention));
+
+    let mut health = Map::new();
+    health.insert("score".into(), json!(s.health_score()));
+    payload.insert("health".into(), Value::Object(health));
+
+    let mut validation_status = Map::new();
+    validation_status.insert("artifacts_ok".into(), json!(s.invalid_artifacts == 0));
+    validation_status.insert("relationships_ok".into(), json!(s.relationships_ok));
+    validation_status.insert(
+        "ok".into(),
+        json!(s.invalid_artifacts == 0 && s.relationships_ok),
+    );
+    payload.insert("validation_status".into(), Value::Object(validation_status));
+
+    dumps_indent2(&Value::Object(payload))
+}
+
+// --- coverage ----------------------------------------------------------------
+
+/// Human `rac coverage` output (`render_coverage_human`).
+pub fn render_coverage_human(report: &CoverageReport) -> String {
+    let (unscheduled, unapplied, unscoped) = report.counts();
+    let mut lines: Vec<String> = vec![
+        format!("Traceability coverage \u{2014} {}", report.directory),
+        String::new(),
+    ];
+    if report.gaps.is_empty() {
+        lines.push(
+            "\u{2713} No coverage gaps \u{2014} every artifact has its expected traceability edge."
+                .to_string(),
+        );
+        return lines.join("\n");
+    }
+    let headings = [
+        (
+            GAP_UNSCHEDULED,
+            "Unscheduled requirements (no roadmap schedules them)",
+        ),
+        (
+            GAP_UNAPPLIED,
+            "Unapplied decisions (no requirement or roadmap applies them)",
+        ),
+        (GAP_UNSCOPED, "Unscoped roadmaps (reference no requirement)"),
+    ];
+    for (gap_class, heading) in headings {
+        let members: Vec<_> = report.gaps.iter().filter(|g| g.gap == gap_class).collect();
+        if members.is_empty() {
+            continue;
+        }
+        lines.push(format!("{heading}: {}", members.len()));
+        for gap in members {
+            lines.push(format!("  {}  {}", gap.id, gap.path));
+        }
+        lines.push(String::new());
+    }
+    let total = report.gaps.len();
+    lines.push(format!(
+        "{total} coverage gap{} ({unscheduled} unscheduled, {unapplied} unapplied, \
+{unscoped} unscoped) \u{2014} advisory, not a build failure.",
+        if total != 1 { "s" } else { "" }
+    ));
+    lines.join("\n")
+}
+
+/// JSON `rac coverage` output — `json.dumps(report.to_dict(), indent=2,
+/// ensure_ascii=False)`.
+pub fn render_coverage_json(report: &CoverageReport) -> String {
+    let (unscheduled, unapplied, unscoped) = report.counts();
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("directory".into(), json!(report.directory));
+    let gaps: Vec<Value> = report
+        .gaps
+        .iter()
+        .map(|g| {
+            let mut m = Map::new();
+            m.insert("path".into(), json!(g.path));
+            m.insert("id".into(), json!(g.id));
+            m.insert("type".into(), json!(g.artifact_type));
+            m.insert("gap".into(), json!(g.gap));
+            m.insert("missing".into(), json!(g.missing));
+            Value::Object(m)
+        })
+        .collect();
+    payload.insert("gaps".into(), Value::Array(gaps));
+    let mut summary = Map::new();
+    summary.insert("unscheduled".into(), json!(unscheduled));
+    summary.insert("unapplied".into(), json!(unapplied));
+    summary.insert("unscoped".into(), json!(unscoped));
+    summary.insert("total".into(), json!(report.gaps.len()));
+    payload.insert("summary".into(), Value::Object(summary));
+    dumps_indent2_no_ascii(&Value::Object(payload))
+}
+
+// --- decisions-for -----------------------------------------------------------
+
+/// Human `rac decisions-for` output: aligned `id  status  title` rows with the
+/// matching declared `## Applies To` entry under each, or a valid empty result.
+pub fn render_decisions_for_human(result: &ScopeLookupResult) -> String {
+    if result.decisions.is_empty() {
+        if !result.in_repository {
+            return format!(
+                "{} is outside the repository \u{2014} no governing decisions.",
+                py_repr_str(&result.query)
+            );
+        }
+        return format!(
+            "No decisions declare scope over {}.",
+            py_repr_str(&result.query)
+        );
+    }
+    let dash = "\u{2014}";
+    let id_w = result
+        .decisions
+        .iter()
+        .map(|d| d.id.chars().count())
+        .max()
+        .unwrap_or(0);
+    let status_w = result
+        .decisions
+        .iter()
+        .map(|d| {
+            if d.status.is_empty() {
+                dash.chars().count()
+            } else {
+                d.status.chars().count()
+            }
+        })
+        .max()
+        .unwrap_or(0);
+    let indent = format!("{}  {}  ", " ".repeat(id_w), " ".repeat(status_w));
+    let mut lines: Vec<String> = Vec::new();
+    for d in &result.decisions {
+        let status = if d.status.is_empty() { dash } else { &d.status };
+        let title = if d.title.is_empty() { dash } else { &d.title };
+        lines.push(format!(
+            "{}  {}  {title}",
+            ljust(&d.id, id_w),
+            ljust(status, status_w)
+        ));
+        lines.push(format!("{indent}\u{21b3} applies to: {}", d.matching_entry));
+    }
+    lines.push(String::new());
+    lines.push(format!(
+        "{} decision(s) govern {}.",
+        result.decisions.len(),
+        py_repr_str(&result.query)
+    ));
+    lines.join("\n")
+}
+
+/// JSON `rac decisions-for` output — the same `ScopeLookupResult` payload the
+/// MCP `find_decisions` path argument serializes (ADR-031).
+pub fn render_decisions_for_json(result: &ScopeLookupResult) -> String {
+    dumps_indent2(&scope_lookup_value(result))
 }
 
 // --- review ------------------------------------------------------------------

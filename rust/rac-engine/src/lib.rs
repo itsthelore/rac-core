@@ -43,6 +43,7 @@ pub mod retrieve;
 pub mod gitinfo;
 pub mod budget;
 pub mod portfolio;
+pub mod coverage;
 pub mod review;
 pub mod mdhtml;
 pub mod export;

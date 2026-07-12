@@ -37,6 +37,14 @@ pub fn dumps_indent2(value: &Value) -> String {
     out
 }
 
+/// `json.dumps(value, indent=2, ensure_ascii=False)` — raw UTF-8 output
+/// (the `rac coverage` JSON contract). No trailing newline.
+pub fn dumps_indent2_no_ascii(value: &Value) -> String {
+    let mut out = String::new();
+    write_value(&mut out, value, false, Some(0));
+    out
+}
+
 /// `json.dumps(value, ensure_ascii=False)` — compact separators
 /// (`", "` item, `": "` key), raw UTF-8. No trailing newline.
 pub fn dumps_compact(value: &Value) -> String {
