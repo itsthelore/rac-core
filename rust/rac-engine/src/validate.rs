@@ -44,13 +44,7 @@ pub fn py_title(s: &str) -> String {
 /// validation's `_first_value(body)`: first non-blank stripped line — NO
 /// list-marker stripping (distinct from identity's helper).
 fn first_value(body: &str) -> String {
-    for line in py_splitlines(body) {
-        let stripped = py_strip(line);
-        if !stripped.is_empty() {
-            return stripped.to_string();
-        }
-    }
-    String::new()
+    crate::pycompat::first_nonempty_line(body).to_string()
 }
 
 fn is_word_char(c: char) -> bool {

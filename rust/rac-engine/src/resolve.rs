@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use crate::identity::{artifact_identifier, artifact_identifiers};
 use crate::markdown::SearchSection;
 use crate::parse::Artifact;
-use crate::pycompat::{py_casefold, py_round, py_splitlines, py_strip};
+use crate::pycompat::{first_nonempty_line, py_casefold, py_round, py_strip};
 use crate::relationships::{
     corpus_items, edge_spec, resolution_index_from_rows, validation_row, CorpusItem,
 };
@@ -125,7 +125,11 @@ pub struct IndexEntry {
     pub tags: Vec<String>,
 }
 
-fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
+/// The identity-only projection of an entry (the oracle's `_identity_index`):
+/// `_identity_index` never reads tags/sections/graph, so those stay at their
+/// empty defaults — the resolved artifact matches the oracle's shape exactly
+/// and the discarded clones never happen.
+fn identity_entry_from_item(item: &CorpusItem) -> IndexEntry {
     let artifact_type = item
         .spec
         .map(|s| s.name.clone())
@@ -136,6 +140,14 @@ fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
         title: item.artifact.product.title.clone(),
         path: item.path.clone(),
         aliases: artifact_identifiers(&item.artifact, item.spec, &item.path),
+        search_sections: Vec::new(),
+        inbound_count: 0,
+        tags: Vec::new(),
+    }
+}
+
+fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
+    IndexEntry {
         search_sections: item.artifact.product.search_sections.clone(),
         inbound_count: inbound,
         tags: item
@@ -144,6 +156,7 @@ fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
             .as_ref()
             .map(|m| m.tags.clone())
             .unwrap_or_default(),
+        ..identity_entry_from_item(item)
     }
 }
 
@@ -300,17 +313,7 @@ pub fn resolve_in_index(entries: &[IndexEntry], artifact_id: &str) -> Resolution
 /// fields never surface (resolve JSON never gains a "tags" key).
 pub fn resolve_artifact(directory: &str, artifact_id: &str, recursive: bool) -> ResolutionResult {
     let items = corpus_items(directory, recursive);
-    let entries: Vec<IndexEntry> = items
-        .iter()
-        .map(|item| {
-            let mut entry = entry_from_item(item, 0);
-            // `_identity_index` never reads tags/sections; keep them empty so
-            // the resolved artifact matches the oracle's shape exactly.
-            entry.tags = Vec::new();
-            entry.search_sections = Vec::new();
-            entry
-        })
-        .collect();
+    let entries: Vec<IndexEntry> = items.iter().map(identity_entry_from_item).collect();
     resolve_in_index(&entries, artifact_id)
 }
 
@@ -827,16 +830,9 @@ pub fn find_artifacts(
 
 /// `agent_rules.artifact_status`: first non-empty stripped line of `## Status`.
 pub fn artifact_status(artifact: &Artifact) -> String {
-    let Some(body) = artifact.section("status") else {
-        return String::new();
-    };
-    if body.is_empty() {
-        return String::new();
-    }
-    py_splitlines(body)
-        .into_iter()
-        .map(py_strip)
-        .find(|l| !l.is_empty())
+    artifact
+        .section("status")
+        .map(first_nonempty_line)
         .unwrap_or("")
         .to_string()
 }

@@ -231,12 +231,7 @@ fn is_retired(artifact: &Artifact, spec: &ArtifactSpec) -> bool {
     if body.is_empty() {
         return false;
     }
-    let first = py_splitlines(body)
-        .into_iter()
-        .map(py_strip)
-        .find(|l| !l.is_empty())
-        .unwrap_or("");
-    let ff = py_casefold(first);
+    let ff = py_casefold(crate::pycompat::first_nonempty_line(body));
     spec.retired_status.iter().any(|s| py_casefold(s) == ff)
 }
 
@@ -376,7 +371,7 @@ impl RelationshipValidation {
 // ---------------------------------------------------------------------------
 
 /// `classify_scope_entry(entry)` -> "glob" | "path" | "component".
-fn classify_scope_entry(entry: &str) -> &'static str {
+pub(crate) fn classify_scope_entry(entry: &str) -> &'static str {
     if entry.contains('*') || entry.contains('?') || entry.contains('[') {
         "glob"
     } else if entry.contains('/') {
@@ -387,7 +382,7 @@ fn classify_scope_entry(entry: &str) -> &'static str {
 }
 
 /// `normalized_scope_path(entry)` — POSIX repo-relative form, or None.
-fn normalized_scope_path(entry: &str) -> Option<String> {
+pub(crate) fn normalized_scope_path(entry: &str) -> Option<String> {
     let text = py_strip(entry);
     if text.is_empty() || text.starts_with('/') {
         return None;
