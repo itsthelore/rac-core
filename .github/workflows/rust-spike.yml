@@ -17,7 +17,7 @@ on:
       - "rust/**"
       - ".github/workflows/rust-spike.yml"
   push:
-    branches: [claude/new-session-j9fwdl, claude/rac-mcp-http-spike]
+    branches: [claude/rac-mcp-http-spike] # PR branches are covered by pull_request
     paths:
       - "rust/**"
       - ".github/workflows/rust-spike.yml"
@@ -29,8 +29,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # git-derived recency vectors need real history
 
       - uses: actions/setup-python@v5
         with:
@@ -48,7 +46,7 @@ jobs:
           SETUPTOOLS_SCM_PRETEND_VERSION: 0.1.dev50+g21c8be403
         run: |
           python -m venv .venv-oracle
-          .venv-oracle/bin/pip install --quiet -e .
+          .venv-oracle/bin/pip install --quiet -e . "mcp==1.28.1" "pydantic==2.13.4"
           .venv-oracle/bin/rac --version
 
       - name: cargo build --release
@@ -119,7 +117,7 @@ jobs:
           git fetch origin claude/rac-mcp-retrieval-spec-vmglox
           git worktree add ../oracle-next FETCH_HEAD
           python -m venv .venv-oracle-next
-          .venv-oracle-next/bin/pip install --quiet -e ../oracle-next
+          .venv-oracle-next/bin/pip install --quiet -e ../oracle-next "mcp==1.28.1" "pydantic==2.13.4"
           .venv-oracle-next/bin/rac --version
 
       - name: cargo build --release

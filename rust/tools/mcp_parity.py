@@ -94,7 +94,19 @@ class Server:
         assert self.proc.stdout is not None
         line = self.proc.stdout.readline()
         if not line:
-            raise RuntimeError("server closed stdout unexpectedly")
+            # Surface the server's dying words — a silent EOF is undiagnosable
+            # in CI logs (stderr is never compared, only reported here).
+            err = b""
+            if self.proc.stderr is not None:
+                try:
+                    self.proc.wait(timeout=5)
+                    err = self.proc.stderr.read() or b""
+                except Exception:
+                    pass
+            tail = err.decode("utf-8", "replace")[-2000:]
+            raise RuntimeError(
+                f"server closed stdout unexpectedly (exit={self.proc.poll()}); stderr tail:\n{tail}"
+            )
         return line
 
     def call(self, method: str, params: dict) -> bytes:
