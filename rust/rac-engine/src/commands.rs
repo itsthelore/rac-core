@@ -312,6 +312,150 @@ pub fn cmd_validate(args: &ValidateArgs) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// cmd_diff
+// ---------------------------------------------------------------------------
+
+pub struct DiffArgs {
+    pub old: String,
+    pub new: String,
+    pub json: bool,
+}
+
+pub fn cmd_diff(args: &DiffArgs) -> i32 {
+    // `old` is `_read()` before `new`, so a bad old path wins the error.
+    let old = match read_named_file(&args.old) {
+        Ok(a) => a,
+        Err(code) => return code,
+    };
+    let new = match read_named_file(&args.new) {
+        Ok(a) => a,
+        Err(code) => return code,
+    };
+    let result = crate::diff::diff(&old, &new);
+    if args.json {
+        emit(output::render_diff_json(&result, &args.old, &args.new));
+    } else {
+        emit(output::render_diff_human(&result));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
+// cmd_inspect / cmd_improve
+// ---------------------------------------------------------------------------
+
+/// `Path(target).suffix.lower()` — the final `.`-suffix of the last path
+/// component, empty for dotless names, leading-dot names, and trailing dots.
+fn py_suffix_lower(target: &str) -> String {
+    let name = target.rsplit('/').next().unwrap_or(target);
+    match name.rfind('.') {
+        Some(i) if i > 0 && i < name.len() - 1 => name[i..].to_lowercase(),
+        _ => String::new(),
+    }
+}
+
+/// `_read_markdown_input(target, command)` — a Markdown file or stdin (`-`).
+fn read_markdown_input(target: &str, command: &str) -> Result<String, i32> {
+    if target == "-" {
+        use std::io::Read;
+        let mut buf = Vec::new();
+        let _ = std::io::stdin().lock().read_to_end(&mut buf);
+        // `sys.stdin.read()` under the harness locale decodes UTF-8 with
+        // errors="surrogateescape" — same seam as `validate -`.
+        return Ok(crate::pycompat::decode_stdin_surrogateescape(&buf));
+    }
+    if !Path::new(target).is_file() {
+        return Err(usage_error(&format!("file not found: {target}")));
+    }
+    let suffix = py_suffix_lower(target);
+    if suffix != ".md" && suffix != ".markdown" {
+        return Err(usage_error(&format!(
+            "{command} expects a Markdown file; convert it first with: rac ingest {target}"
+        )));
+    }
+    match std::fs::read(target) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => Ok(text),
+            // The oracle's `path.read_text(encoding="utf-8")` decodes
+            // strictly: invalid UTF-8 raises UnicodeDecodeError, which no
+            // handler catches — an unhandled traceback, exit 1, empty stdout.
+            Err(e) => {
+                eprintln!(
+                    "UnicodeDecodeError: 'utf-8' codec can't decode input: {e}"
+                );
+                Err(EXIT_VALIDATION_FAILED)
+            }
+        },
+        // OSError -> `rac: cannot read <t>: <err>`, exit 2.
+        Err(e) => Err(usage_error(&format!("cannot read {target}: {e}"))),
+    }
+}
+
+pub struct InspectArgs {
+    pub file: String,
+    pub verbose: bool,
+    pub top_level: bool,
+    pub json: bool,
+}
+
+pub fn cmd_inspect(args: &InspectArgs) -> i32 {
+    // Directory? Aggregate per-file results into type counts. (The directory
+    // check precedes the .md extension guard — and never applies to `-`.)
+    if args.file != "-" && Path::new(&args.file).is_dir() {
+        let result = crate::inspect::inspect_directory(&args.file, !args.top_level);
+        if args.json {
+            emit(output::render_dir_inspect_json(&result));
+        } else {
+            emit(output::render_dir_inspect_human(&result));
+        }
+        return EXIT_OK;
+    }
+
+    // Single file (or stdin).
+    let text = match read_markdown_input(&args.file, "inspect") {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
+    let artifact = parse_text(&text, "");
+    let inspection = crate::inspect::build_inspection(&artifact);
+    if args.verbose && !args.json {
+        emit(output::render_inspect_verbose(
+            &inspection,
+            &crate::classify::score_artifacts(&artifact),
+        ));
+    } else if args.json {
+        emit(output::render_inspect_json(&inspection));
+    } else {
+        emit(output::render_inspect_human(&inspection));
+    }
+    // A completed inspection always succeeds — Unknown is a valid outcome.
+    EXIT_OK
+}
+
+pub struct ImproveArgs {
+    pub file: String,
+    pub json: bool,
+    pub template: bool,
+}
+
+pub fn cmd_improve(args: &ImproveArgs) -> i32 {
+    let text = match read_markdown_input(&args.file, "improve") {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
+    let result = crate::improve::improve_product(&parse_text(&text, ""));
+    if args.json {
+        emit(output::render_improve_json(&result));
+    } else if args.template {
+        emit(output::render_improve_template(&result));
+    } else {
+        emit(output::render_improve_human(&result));
+    }
+    // Advisory: a completed analysis always succeeds.
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
 // cmd_relationships (--validate arm; inspection arm is out of this phase)
 // ---------------------------------------------------------------------------
 

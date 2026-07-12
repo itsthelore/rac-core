@@ -8,10 +8,17 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Map, Value};
 
+use crate::classify::{TypeScore, CONFIDENCE_THRESHOLD};
 use crate::commands::{DirectoryValidation, StdinCorpusValidation, STATUS_INVALID};
+use crate::diff::Diff;
 use crate::export::{CorpusExport, DocumentsExport, GraphExport};
+use crate::improve::ImprovementResult;
+use crate::inspect::{DirectoryInspection, InspectionResult};
+use crate::markdown::Requirement;
 use crate::parse::Issue;
-use crate::pycompat::{py_float_repr, py_format_1f, py_repr_str, py_round};
+use crate::pycompat::{
+    py_float_repr, py_format_1f, py_format_percent0, py_repr_str, py_round, py_rstrip,
+};
 use crate::pyjson::{dumps_compact, dumps_indent2, py_float};
 use crate::relationships::{
     RelationshipIssue, RelationshipReport, RelationshipValidation, ISSUE_DUPLICATE_IDENTIFIER,
@@ -23,7 +30,7 @@ use crate::resolve::{
     Evidence, Recency, ResolutionResult, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
 };
 use crate::review::{ReviewIssue, ReviewReport};
-use crate::spec::{snake as spec_snake, spec_for, ArtifactSpec};
+use crate::spec::{snake as spec_snake, spec_for, specs, ArtifactSpec};
 use crate::stats::PortfolioStats;
 use crate::validate::py_title;
 
@@ -1016,6 +1023,476 @@ pub fn render_schema_template(spec: &ArtifactSpec) -> String {
                 comments.iter().map(|c| format!("<!-- {c} -->")).collect();
             block.push_str("\n\n");
             block.push_str(&rendered.join("\n"));
+        }
+        blocks.push(block);
+    }
+    format!("{}\n", blocks.join("\n\n"))
+}
+
+// --- diff --------------------------------------------------------------------
+
+/// One titled block of single-line `+`/`-` entries (added/removed).
+fn diff_list_block(blocks: &mut Vec<String>, title: &str, items: &[String], sign: char) {
+    if items.is_empty() {
+        return;
+    }
+    let color: fn(&str) -> String = if sign == '+' { green } else { red };
+    let mut lines = vec![bold(title), String::new()];
+    lines.extend(items.iter().map(|item| color(&format!("{sign} {item}"))));
+    blocks.push(lines.join("\n"));
+}
+
+pub fn render_diff_human(d: &Diff) -> String {
+    if d.is_empty() {
+        return "No changes.".to_string();
+    }
+
+    let mut blocks: Vec<String> = Vec::new();
+
+    let req_lines = |reqs: &[Requirement]| -> Vec<String> {
+        reqs.iter().map(|r| format!("{} {}", r.id, r.text)).collect()
+    };
+
+    diff_list_block(
+        &mut blocks,
+        "Added Requirements",
+        &req_lines(&d.added_requirements),
+        '+',
+    );
+    diff_list_block(
+        &mut blocks,
+        "Removed Requirements",
+        &req_lines(&d.removed_requirements),
+        '-',
+    );
+
+    if !d.modified_requirements.is_empty() {
+        let mut lines = vec![bold("Modified Requirements"), String::new()];
+        for (i, c) in d.modified_requirements.iter().enumerate() {
+            if i > 0 {
+                lines.push(String::new());
+            }
+            lines.push(format!("~ {}", c.id));
+            lines.push(String::new());
+            lines.push("Before:".to_string());
+            lines.push(red(&c.old_text));
+            lines.push(String::new());
+            lines.push("After:".to_string());
+            lines.push(green(&c.new_text));
+        }
+        blocks.push(lines.join("\n"));
+    }
+
+    diff_list_block(&mut blocks, "Added Metrics", &d.added_metrics, '+');
+    diff_list_block(&mut blocks, "Removed Metrics", &d.removed_metrics, '-');
+    diff_list_block(&mut blocks, "Added Risks", &d.added_risks, '+');
+    diff_list_block(&mut blocks, "Removed Risks", &d.removed_risks, '-');
+
+    // Blank line between blocks.
+    blocks.join("\n\n")
+}
+
+/// `asdict(Requirement)` — field order `id, text, line`.
+fn requirement_value(r: &Requirement) -> Value {
+    let mut m = Map::new();
+    m.insert("id".into(), json!(r.id));
+    m.insert("text".into(), json!(r.text));
+    m.insert("line".into(), json!(r.line));
+    Value::Object(m)
+}
+
+/// `render_diff_json` — fixed key order; `old`/`new` echo the raw argv paths.
+pub fn render_diff_json(d: &Diff, old_path: &str, new_path: &str) -> String {
+    let mut m = Map::new();
+    m.insert("old".into(), json!(old_path));
+    m.insert("new".into(), json!(new_path));
+    m.insert(
+        "added_requirements".into(),
+        Value::Array(d.added_requirements.iter().map(requirement_value).collect()),
+    );
+    m.insert(
+        "removed_requirements".into(),
+        Value::Array(d.removed_requirements.iter().map(requirement_value).collect()),
+    );
+    m.insert(
+        "modified_requirements".into(),
+        Value::Array(
+            d.modified_requirements
+                .iter()
+                .map(|c| {
+                    let mut cm = Map::new();
+                    cm.insert("id".into(), json!(c.id));
+                    cm.insert("old_text".into(), json!(c.old_text));
+                    cm.insert("new_text".into(), json!(c.new_text));
+                    Value::Object(cm)
+                })
+                .collect(),
+        ),
+    );
+    m.insert("added_metrics".into(), json!(d.added_metrics));
+    m.insert("removed_metrics".into(), json!(d.removed_metrics));
+    m.insert("added_risks".into(), json!(d.added_risks));
+    m.insert("removed_risks".into(), json!(d.removed_risks));
+    dumps_indent2(&Value::Object(m))
+}
+
+// --- inspect -----------------------------------------------------------------
+
+/// Add a Relationships block when the artifact declares related artifacts.
+fn append_relationships(lines: &mut Vec<String>, result: &InspectionResult) {
+    if result.relationships.is_empty() {
+        return;
+    }
+    lines.push(String::new());
+    lines.push(bold("Relationships:"));
+    for (section, refs) in &result.relationships {
+        lines.push(format!("  {}:", relationship_label(section)));
+        for r in refs {
+            lines.push(format!("    - {r}"));
+        }
+    }
+}
+
+/// Add Status / Category / Supersedes lines when a decision declares them.
+fn append_decision_metadata(lines: &mut Vec<String>, result: &InspectionResult) {
+    let pairs = [
+        ("Status", result.status.as_deref()),
+        ("Category", result.category.as_deref()),
+        ("Supersedes", result.supersedes.as_deref()),
+    ];
+    // `if value` — truthy filter, so an empty string is dropped too.
+    let shown: Vec<(&str, &str)> = pairs
+        .iter()
+        .filter_map(|(label, value)| value.filter(|v| !v.is_empty()).map(|v| (*label, v)))
+        .collect();
+    if !shown.is_empty() {
+        lines.push(String::new());
+        lines.push(bold("Decision Metadata:"));
+        for (label, value) in shown {
+            lines.push(format!("  {label}: {value}"));
+        }
+    }
+}
+
+pub fn render_inspect_human(result: &InspectionResult) -> String {
+    let mut lines = vec![
+        bold(&format!(
+            "Artifact Type: {}",
+            py_title(&result.artifact_type)
+        )),
+        format!("Confidence: {}", py_format_percent0(result.confidence)),
+        String::new(),
+        bold("Present Sections:"),
+    ];
+    if result.present_sections.is_empty() {
+        lines.push("  (none)".to_string());
+    } else {
+        for s in &result.present_sections {
+            lines.push(green(&format!("  \u{2713} {}", py_title(s))));
+        }
+    }
+    if !result.missing_sections.is_empty() {
+        lines.push(String::new());
+        lines.push(bold("Missing Sections:"));
+        for s in &result.missing_sections {
+            lines.push(red(&format!("  \u{2717} {}", py_title(s))));
+        }
+    }
+    append_decision_metadata(&mut lines, result);
+    append_relationships(&mut lines, result);
+    lines.join("\n")
+}
+
+/// Python `f"{x:g}"` for the score arithmetic operands. `points`/`ceiling`
+/// are small multiples of 0.5 (bounded by section counts), so the general
+/// format never reaches scientific notation: integral values drop the
+/// decimal, halves render as `n.5`.
+fn format_g(x: f64) -> String {
+    if x.fract() == 0.0 {
+        format!("{}", x as i64)
+    } else {
+        py_float_repr(x)
+    }
+}
+
+/// Explainable single-file output: matches, misses, and the score math.
+pub fn render_inspect_verbose(result: &InspectionResult, scores: &[TypeScore]) -> String {
+    // The TypeScore matching the chosen type, or scores[0] for Unknown.
+    let chosen = scores
+        .iter()
+        .find(|s| s.name == result.artifact_type)
+        .or_else(|| scores.first());
+
+    let mut lines = vec![
+        bold(&format!(
+            "Artifact Type: {}",
+            py_title(&result.artifact_type)
+        )),
+        format!("Confidence: {}", py_format_percent0(result.confidence)),
+    ];
+    let Some(chosen) = chosen else {
+        return lines.join("\n");
+    };
+    if result.artifact_type == "unknown" {
+        let display = spec_for(&chosen.name)
+            .map(|s| s.display.clone())
+            .unwrap_or_else(|| py_title(&chosen.name));
+        lines.push(format!("Closest match: {display}"));
+    }
+
+    let block = |title: &str, names: &[String], lines: &mut Vec<String>| {
+        lines.push(String::new());
+        lines.push(bold(title));
+        if names.is_empty() {
+            lines.push("  (none)".to_string());
+        } else {
+            for s in names {
+                lines.push(green(&format!("  \u{2713} {}", py_title(s))));
+            }
+        }
+    };
+
+    block("Required Matches:", &chosen.matched_required, &mut lines);
+    block("Recommended Matches:", &chosen.matched_recommended, &mut lines);
+    if !chosen.missing.is_empty() {
+        lines.push(String::new());
+        lines.push(bold("Missing:"));
+        for s in &chosen.missing {
+            lines.push(red(&format!("  \u{2717} {}", py_title(s))));
+        }
+    }
+
+    let req = chosen.matched_required.len();
+    let rec = chosen.matched_recommended.len();
+    lines.push(String::new());
+    lines.push(format!(
+        "{} {req} + 0.5 \u{d7} {rec} = {} / {} = {}",
+        bold("Score:"),
+        format_g(chosen.points),
+        format_g(chosen.ceiling),
+        py_float_repr(py_round(chosen.fit, 2))
+    ));
+    if result.artifact_type == "unknown" {
+        lines.push(format!(
+            "(below the {} threshold \u{2192} Unknown)",
+            py_format_percent0(CONFIDENCE_THRESHOLD)
+        ));
+    }
+    lines.join("\n")
+}
+
+pub fn render_dir_inspect_human(d: &DirectoryInspection) -> String {
+    let counts = d.counts();
+    let count_of = |name: &str| -> usize {
+        counts
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, c)| *c)
+            .unwrap_or(0)
+    };
+    let mut lines = vec![
+        bold(&format!("Files Inspected: {}", d.total_files())),
+        String::new(),
+    ];
+    for spec in specs() {
+        lines.push(format!("{}s: {}", spec.display, count_of(&spec.name)));
+    }
+    lines.push(format!("Unknown: {}", count_of("unknown")));
+    lines.join("\n")
+}
+
+/// `InspectionResult.to_dict()` — additive-friendly: decision metadata and
+/// `relationships` appear only when present.
+pub fn render_inspect_json(result: &InspectionResult) -> String {
+    let mut m = Map::new();
+    m.insert("type".into(), json!(result.artifact_type));
+    m.insert("confidence".into(), py_float(result.confidence));
+    m.insert(
+        "present_sections".into(),
+        Value::Array(
+            result
+                .present_sections
+                .iter()
+                .map(|s| json!(spec_snake(s)))
+                .collect(),
+        ),
+    );
+    m.insert(
+        "missing_sections".into(),
+        Value::Array(
+            result
+                .missing_sections
+                .iter()
+                .map(|s| json!(spec_snake(s)))
+                .collect(),
+        ),
+    );
+    // `if value is not None` — an empty string IS emitted here (unlike human).
+    for (key, value) in [
+        ("status", &result.status),
+        ("category", &result.category),
+        ("supersedes", &result.supersedes),
+    ] {
+        if let Some(v) = value {
+            m.insert(key.into(), json!(v));
+        }
+    }
+    if !result.relationships.is_empty() {
+        let mut rel = Map::new();
+        for (section, refs) in &result.relationships {
+            rel.insert(section.clone(), json!(refs));
+        }
+        m.insert("relationships".into(), Value::Object(rel));
+    }
+    dumps_indent2(&Value::Object(m))
+}
+
+pub fn render_dir_inspect_json(d: &DirectoryInspection) -> String {
+    let mut counts = Map::new();
+    for (name, count) in d.counts() {
+        counts.insert(name.to_string(), json!(count));
+    }
+    let mut summary = Map::new();
+    summary.insert("total_files".into(), json!(d.total_files()));
+    summary.insert("counts".into(), Value::Object(counts));
+    summary.insert("unknown".into(), json!(d.unknown_count()));
+    let mut m = Map::new();
+    m.insert("schema_version".into(), json!("1"));
+    m.insert("directory".into(), json!(d.directory));
+    m.insert("recursive".into(), json!(d.recursive));
+    m.insert("summary".into(), Value::Object(summary));
+    m.insert(
+        "files".into(),
+        Value::Array(
+            d.files
+                .iter()
+                .map(|f| {
+                    let mut fm = Map::new();
+                    fm.insert("path".into(), json!(f.path));
+                    fm.insert("type".into(), json!(f.artifact_type));
+                    fm.insert("confidence".into(), py_float(f.confidence));
+                    Value::Object(fm)
+                })
+                .collect(),
+        ),
+    );
+    dumps_indent2(&Value::Object(m))
+}
+
+// --- improve -----------------------------------------------------------------
+
+/// Shown when guidance cannot be produced (`_UNKNOWN_MESSAGE`).
+const UNKNOWN_MESSAGE: &str =
+    "Unable to generate improvement guidance.\nArtifact type could not be determined.";
+
+/// `_unsupported_message(result)` — a known but unsupported artifact type.
+/// Unreachable today (all five specs support improve); ported for fidelity.
+fn unsupported_message(result: &ImprovementResult) -> String {
+    format!(
+        "Artifact Type: {}\n\nImprovement guidance is not currently available for this artifact type.",
+        py_title(&result.artifact_type)
+    )
+}
+
+pub fn render_improve_human(result: &ImprovementResult) -> String {
+    if result.artifact_type == "unknown" {
+        return UNKNOWN_MESSAGE.to_string();
+    }
+    if !result.supported {
+        return unsupported_message(result);
+    }
+
+    let mut lines = vec![
+        bold(&format!(
+            "Artifact Type: {}",
+            py_title(&result.artifact_type)
+        )),
+        String::new(),
+    ];
+    if result.missing_required.is_empty() && result.missing_recommended.is_empty() {
+        lines.push("Nothing to improve \u{2014} all expected sections present.".to_string());
+        return lines.join("\n");
+    }
+
+    let block = |title: &str, names: &[String], lines: &mut Vec<String>| {
+        lines.push(bold(title));
+        if names.is_empty() {
+            lines.push("  (none)".to_string());
+        } else {
+            for s in names {
+                lines.push(format!("  - {}", py_title(s)));
+                if let Some((_, questions)) = result.guidance.iter().find(|(k, _)| k == s) {
+                    for q in questions {
+                        lines.push(format!("      \u{2022} {q}"));
+                    }
+                }
+            }
+        }
+        lines.push(String::new());
+    };
+
+    block("Missing Required:", &result.missing_required, &mut lines);
+    block("Missing Recommended:", &result.missing_recommended, &mut lines);
+    py_rstrip(&lines.join("\n")).to_string()
+}
+
+/// `ImprovementResult.to_dict()` — `{type, missing_required,
+/// missing_recommended, guidance}`, sections snake_cased.
+pub fn render_improve_json(result: &ImprovementResult) -> String {
+    let mut m = Map::new();
+    m.insert("type".into(), json!(result.artifact_type));
+    m.insert(
+        "missing_required".into(),
+        Value::Array(
+            result
+                .missing_required
+                .iter()
+                .map(|s| json!(spec_snake(s)))
+                .collect(),
+        ),
+    );
+    m.insert(
+        "missing_recommended".into(),
+        Value::Array(
+            result
+                .missing_recommended
+                .iter()
+                .map(|s| json!(spec_snake(s)))
+                .collect(),
+        ),
+    );
+    m.insert("guidance".into(), snake_map_value(&result.guidance));
+    dumps_indent2(&Value::Object(m))
+}
+
+/// Markdown templates for the missing sections (required first).
+pub fn render_improve_template(result: &ImprovementResult) -> String {
+    if result.artifact_type == "unknown" {
+        return UNKNOWN_MESSAGE.to_string();
+    }
+    if !result.supported {
+        return unsupported_message(result);
+    }
+
+    let missing: Vec<&String> = result
+        .missing_required
+        .iter()
+        .chain(result.missing_recommended.iter())
+        .collect();
+    if missing.is_empty() {
+        return "# Nothing to add \u{2014} all expected sections present.".to_string();
+    }
+
+    let mut blocks: Vec<String> = Vec::new();
+    for section in missing {
+        let mut block = format!("## {}\n\n_TODO_", py_title(section));
+        if let Some((_, questions)) = result.guidance.iter().find(|(k, _)| k == section) {
+            if !questions.is_empty() {
+                let rendered: Vec<String> =
+                    questions.iter().map(|q| format!("<!-- {q} -->")).collect();
+                block.push_str("\n\n");
+                block.push_str(&rendered.join("\n"));
+            }
         }
         blocks.push(block);
     }

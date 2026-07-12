@@ -5,9 +5,10 @@
 //! (decision 9) — stdout stays byte-identical (empty on errors).
 
 use crate::commands::{
-    cmd_export, cmd_find, cmd_relationships, cmd_resolve, cmd_retrieve, cmd_review, cmd_schema,
-    cmd_stats, cmd_templates, cmd_validate, ExportArgs, FindArgs, RelationshipsArgs, ResolveArgs,
-    RetrieveArgs, ReviewArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
+    cmd_diff, cmd_export, cmd_find, cmd_improve, cmd_inspect, cmd_relationships, cmd_resolve,
+    cmd_retrieve, cmd_review, cmd_schema, cmd_stats, cmd_templates, cmd_validate, DiffArgs,
+    ExportArgs, FindArgs, ImproveArgs, InspectArgs, RelationshipsArgs, ResolveArgs, RetrieveArgs,
+    ReviewArgs, SchemaArgs, StatsArgs, TemplatesArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -129,6 +130,9 @@ pub fn run(args: &[String]) -> u8 {
 
     match first.as_str() {
         "validate" => run_validate(&rest),
+        "diff" => run_diff(&rest),
+        "inspect" => run_inspect(&rest),
+        "improve" => run_improve(&rest),
         "relationships" => run_relationships(&rest),
         "stats" => run_stats(&rest),
         "schema" => run_schema(&rest),
@@ -247,6 +251,146 @@ fn run_validate(rest: &[&String]) -> u8 {
         sarif,
         top_level,
         corpus,
+    }) as u8
+}
+
+fn run_diff(rest: &[&String]) -> u8 {
+    let prog = "rac diff";
+    let mut old: Option<String> = None;
+    let mut new: Option<String> = None;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if old.is_none() {
+                old = Some(arg.to_string());
+            } else if new.is_none() {
+                new = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    // argparse reports every still-missing required positional at once:
+    // neither given -> "old, new"; only `old` given -> "new".
+    let (Some(old), Some(new)) = (old.clone(), new) else {
+        let missing = if old.is_none() { "old, new" } else { "new" };
+        return argparse_error(
+            prog,
+            &format!("the following arguments are required: {missing}"),
+        );
+    };
+    if !extras.is_empty() {
+        // Leftover positionals surface as the TOP-LEVEL parser's error.
+        return unrecognized(&extras);
+    }
+
+    cmd_diff(&DiffArgs { old, new, json }) as u8
+}
+
+fn run_inspect(rest: &[&String]) -> u8 {
+    let prog = "rac inspect";
+    let mut file: Option<String> = None;
+    let mut verbose = false;
+    let mut top_level = false;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if file.is_none() {
+                file = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--verbose" => verbose = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {} // affirmation of the default
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    let Some(file) = file else {
+        return argparse_error(prog, "the following arguments are required: file");
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_inspect(&InspectArgs {
+        file,
+        verbose,
+        top_level,
+        json,
+    }) as u8
+}
+
+fn run_improve(rest: &[&String]) -> u8 {
+    let prog = "rac improve";
+    let mut file: Option<String> = None;
+    let mut json = false;
+    let mut template = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if file.is_none() {
+                file = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            // `--json | --template` is a local mutually-exclusive group
+            // (improve does NOT inherit json_parent).
+            "--json" => {
+                if let Some(code) = mutex_check(prog, "--json", "--template", template) {
+                    return code;
+                }
+                json = true;
+            }
+            "--template" => {
+                if let Some(code) = mutex_check(prog, "--template", "--json", json) {
+                    return code;
+                }
+                template = true;
+            }
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    let Some(file) = file else {
+        return argparse_error(prog, "the following arguments are required: file");
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_improve(&ImproveArgs {
+        file,
+        json,
+        template,
     }) as u8
 }
 
