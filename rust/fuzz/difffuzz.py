@@ -23,6 +23,28 @@ Campaign-2 matrix additions over campaign 1:
     .markdown extension as a direct file argument),
   - multi-file corpora (auxiliary artifacts next to the mutated primary).
 
+Closure extension (roadmap:native-cli-closure wrap-up) — the newly ported
+read-only/reporting commands join the EXTENDED pool, driven by the same
+hostile inputs:
+  - diff (mutated primary vs a pinned synthetic template, self-diff),
+  - inspect FILE/DIR/- [--verbose] [--json], improve FILE/-
+    [--json|--template],
+  - portfolio / coverage / decisions-for [--json],
+  - gate [--json|--sarif] with no config, a pinned policy config, and the
+    MUTATED PRIMARY as `.rac/config.yaml` (hostile-config arm),
+  - doctor [--json] [--hub-threshold 0] (non-git sandbox: drift phase
+    deterministically empty),
+  - export --graph, export --agent-rules --check (read-only drift arm),
+    and the --html/--okf write arms with per-engine output cleanup so both
+    engines see an identical pre-run tree (stdout `wrote ...` line + exit
+    refereed; written bytes are the parity suite's job, not difffuzz's).
+Write/scaffold and state commands (new, init, quickstart, rename, migrate,
+skill, hook, telemetry, eval, watchkeeper) are EXCLUDED: both engines run
+sequentially in one shared case dir, so corpus-mutating or state-writing
+commands would leak the oracle's writes into the Rust run; those surfaces
+are refereed by the parity harness's per-case sandboxes instead
+(rust/parity-cases-closure.json).
+
 Every input runs a CORE command set plus a deterministic sample of the
 EXTENDED pool. On divergence the input is greedily minimized (line-level
 ddmin, then byte-level) while the divergence AND its triage class persist,
@@ -792,9 +814,14 @@ def generate(rng: random.Random, corpus: list) -> tuple:
 # ---------------------------------------------------------------------------
 
 
-def cmd(name, argv, env=None, stdin=None, copy_as=None):
+def cmd(name, argv, env=None, stdin=None, copy_as=None, files=None,
+        cleanup=None):
+    """files: {relpath: bytes} static inputs staged before each engine run;
+    cleanup: relpaths (files or trees) removed before each engine run and
+    after the pair, so a write command's outputs never leak from the oracle
+    run into the Rust run (or into later specs)."""
     return {"name": name, "argv": argv, "env": env or {}, "stdin": stdin,
-            "copy_as": copy_as}
+            "copy_as": copy_as, "files": files or {}, "cleanup": cleanup or []}
 
 
 # Always run: broad, cheap detectors for the parse/validate pipeline.
@@ -818,7 +845,16 @@ MAXBYTES_VALUES = [
 
 SCHEMA_NAMES = ["requirement", "decision", "roadmap", "prompt", "design"]
 
-EXTENDED_SAMPLE = 5  # extended commands sampled per input
+# Closure-extension static inputs (staged per spec via `files`).
+DIFF_OTHER = SYNTHETIC_TEMPLATES[0].encode("utf-8")  # legacy requirement
+GATE_POLICY_CONFIG = (
+    b"repository_key: RAC\n"
+    b"enforcement:\n"
+    b"  advisory: [missing-problem, missing-requirements]\n"
+    b"  off: [missing-success-metrics]\n"
+)
+
+EXTENDED_SAMPLE = 8  # extended commands sampled per input
 
 
 def derive_queries(rng: random.Random, data: bytes) -> list:
@@ -911,6 +947,54 @@ def build_commands(rng: random.Random, data: bytes) -> list:
         cmd("stats-dir-slash", ["stats", "corpus/"]),
         cmd("validate-markdown-ext", ["validate", "corpus/case.markdown"],
             copy_as="corpus/case.markdown"),
+        # --- closure extension: newly ported read-only/reporting commands
+        # file ops (PORT-CONTRACT.d/11)
+        cmd("diff-vs-template", ["diff", "corpus/other.md", "corpus/case.md"],
+            files={"corpus/other.md": DIFF_OTHER}),
+        cmd("diff-vs-template-json",
+            ["diff", "corpus/other.md", "corpus/case.md", "--json"],
+            files={"corpus/other.md": DIFF_OTHER}),
+        cmd("diff-self", ["diff", "corpus/case.md", "corpus/case.md"]),
+        cmd("inspect-file", ["inspect", "corpus/case.md"]),
+        cmd("inspect-file-verbose-json",
+            ["inspect", "corpus/case.md", "--verbose", "--json"]),
+        cmd("inspect-dir-json", ["inspect", "corpus", "--json"]),
+        cmd("inspect-stdin", ["inspect", "-"], stdin="primary"),
+        cmd("improve-file", ["improve", "corpus/case.md"]),
+        cmd("improve-file-json", ["improve", "corpus/case.md", "--json"]),
+        cmd("improve-stdin-template", ["improve", "-", "--template"],
+            stdin="primary"),
+        # reporting (PORT-CONTRACT.d/12)
+        cmd("portfolio-dir", ["portfolio", "corpus"]),
+        cmd("portfolio-dir-json", ["portfolio", "corpus", "--json"]),
+        cmd("coverage-dir", ["coverage", "corpus"]),
+        cmd("coverage-dir-json", ["coverage", "corpus", "--json"]),
+        cmd("decisions-for-file", ["decisions-for", "corpus/case.md", "corpus"]),
+        cmd("decisions-for-file-json",
+            ["decisions-for", "corpus/case.md", "corpus", "--json"]),
+        # gates (PORT-CONTRACT.d/13); doctor's drift phase is empty in the
+        # non-git sandbox, so its output stays deterministic
+        cmd("gate-dir", ["gate", "corpus"]),
+        cmd("gate-dir-json", ["gate", "corpus", "--json"]),
+        cmd("gate-dir-sarif", ["gate", "corpus", "--sarif"]),
+        cmd("gate-policy-config", ["gate", "corpus", "--json"],
+            files={"corpus/.rac/config.yaml": GATE_POLICY_CONFIG}),
+        cmd("gate-hostile-config", ["gate", "corpus"],
+            copy_as="corpus/.rac/config.yaml"),
+        cmd("doctor-dir", ["doctor", "corpus"]),
+        cmd("doctor-dir-json", ["doctor", "corpus", "--json"]),
+        cmd("doctor-hub0", ["doctor", "corpus", "--hub-threshold", "0"]),
+        # export closure modes (PORT-CONTRACT.d/17): read-only arms plus the
+        # write arms with per-engine output cleanup (stdout + exit refereed)
+        cmd("export-dir-graph", ["export", "corpus", "--graph"]),
+        cmd("export-agent-rules-check",
+            ["export", "corpus", "--agent-rules", "--check"]),
+        cmd("export-html-out",
+            ["export", "corpus", "--html", "--out", "fuzz-out.html"],
+            cleanup=["fuzz-out.html"]),
+        cmd("export-okf-out",
+            ["export", "corpus", "--okf", "--out", "fuzz-okf"],
+            cleanup=["fuzz-okf"]),
     ]
     return CORE_COMMANDS + rng.sample(pool, EXTENDED_SAMPLE)
 
@@ -973,27 +1057,51 @@ class Fuzzer:
     # -- core check
     def diverges(self, worker: Worker, data: bytes, spec: dict):
         """Write data as the primary case file (aux already staged in the
-        worker), run one command spec on both engines.
+        worker), run one command spec on both engines. Inputs (`files`,
+        `copy_as`) are re-staged and outputs (`cleanup`) cleared before EACH
+        engine run so both engines see an identical pre-run tree.
 
         Returns (diverged, detail, triage) where detail = (ea, oa, eb, ob)
         and triage = "oracle-crash" for the documented 001 class (oracle
         uncaught traceback + Rust marker) else "engine"."""
-        with open(os.path.join(worker.corpus_dir, "case.md"), "wb") as fh:
-            fh.write(data)
+        extra = dict(spec["files"])
         if spec["copy_as"]:
-            p = os.path.join(worker.case_dir, spec["copy_as"])
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            with open(p, "wb") as fh:
+            extra[spec["copy_as"]] = data
+
+        def stage_inputs():
+            with open(os.path.join(worker.corpus_dir, "case.md"), "wb") as fh:
                 fh.write(data)
+            for rel, blob in extra.items():
+                p = os.path.join(worker.case_dir, rel)
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "wb") as fh:
+                    fh.write(blob)
+
+        def clear_outputs():
+            for rel in spec["cleanup"]:
+                p = os.path.join(worker.case_dir, rel)
+                if os.path.isdir(p):
+                    shutil.rmtree(p, ignore_errors=True)
+                else:
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+
         env = dict(worker.env)
         env.update(spec["env"])
         stdin_data = data if spec["stdin"] == "primary" else None
         self.evals += 1
+        stage_inputs()
+        clear_outputs()
         ea, oa, sa = run_engine_full(self.oracle, spec["argv"], worker.case_dir, env, stdin_data)
+        stage_inputs()
+        clear_outputs()
         eb, ob, sb = run_engine_full(self.engine, spec["argv"], worker.case_dir, env, stdin_data)
-        if spec["copy_as"]:
+        clear_outputs()
+        for rel in extra:
             try:
-                os.remove(os.path.join(worker.case_dir, spec["copy_as"]))
+                os.remove(os.path.join(worker.case_dir, rel))
             except OSError:
                 pass
         detail = (ea, oa, eb, ob)
