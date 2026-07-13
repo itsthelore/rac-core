@@ -259,7 +259,7 @@ pub struct ResolutionResult {
     pub duplicate_paths: Vec<String>,
 }
 
-fn resolved_from_entry(entry: &IndexEntry) -> ResolvedArtifact {
+pub(crate) fn resolved_from_entry(entry: &IndexEntry) -> ResolvedArtifact {
     ResolvedArtifact {
         id: entry.id.clone(),
         artifact_type: entry.artifact_type.clone(),

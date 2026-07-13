@@ -114,6 +114,68 @@ pub fn store_find_decisions(reader: &MmapIndexReader, topic: &str) -> SearchResu
     result
 }
 
+/// Point resolution over the persisted alias map — `Fold.resolve`,
+/// byte-identical to `resolve_in_index` over a walk of the same corpus.
+pub fn store_resolve(
+    reader: &MmapIndexReader,
+    artifact_id: &str,
+) -> crate::resolve::ResolutionResult {
+    use crate::resolve::{OUTCOME_DUPLICATE, OUTCOME_NOT_FOUND, OUTCOME_RESOLVED};
+    let wanted =
+        crate::pycompat::py_casefold(crate::pycompat::py_strip(artifact_id));
+    let docids = reader.alias_docids(&wanted).unwrap_or_default();
+    if docids.is_empty() {
+        return crate::resolve::ResolutionResult {
+            artifact_id: artifact_id.to_string(),
+            outcome: OUTCOME_NOT_FOUND,
+            artifact: None,
+            duplicate_paths: Vec::new(),
+        };
+    }
+    if docids.len() > 1 {
+        let mut paths: Vec<String> = docids
+            .iter()
+            .filter_map(|&docid| reader.entry_path(docid).ok())
+            .collect();
+        paths.sort();
+        return crate::resolve::ResolutionResult {
+            artifact_id: artifact_id.to_string(),
+            outcome: OUTCOME_DUPLICATE,
+            artifact: None,
+            duplicate_paths: paths,
+        };
+    }
+    match reader.identity_entry(docids[0]) {
+        // `from_entry` copies whatever tags the resolved projection carries:
+        // the store's identity rows DO persist tags (ADR-109), so the mapped
+        // base resolves WITH them — exactly as the oracle's Fold does. (The
+        // delta snapshot resolves over the tag-free identity projection; that
+        // asymmetry is the oracle's, mirrored at the caller.)
+        Ok(entry) => crate::resolve::ResolutionResult {
+            artifact_id: artifact_id.to_string(),
+            outcome: OUTCOME_RESOLVED,
+            artifact: Some(crate::resolve::resolved_from_entry(&entry)),
+            duplicate_paths: Vec::new(),
+        },
+        Err(_) => crate::resolve::ResolutionResult {
+            artifact_id: artifact_id.to_string(),
+            outcome: OUTCOME_NOT_FOUND,
+            artifact: None,
+            duplicate_paths: Vec::new(),
+        },
+    }
+}
+
+/// Every identity row of the mapped base, in docid (walk) order — the
+/// materialised projection `get_related`'s graph helpers read.
+pub fn store_identity_entries(
+    reader: &MmapIndexReader,
+) -> Vec<crate::resolve::IndexEntry> {
+    (0..reader.doc_count)
+        .filter_map(|docid| reader.identity_entry(docid).ok())
+        .collect()
+}
+
 /// `find_decisions_in` over already-derived structures — the fresh-build
 /// arm of the cache seam (`_find_from_store`'s `else` branch).
 pub fn find_decisions_in(

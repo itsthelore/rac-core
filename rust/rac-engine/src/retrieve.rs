@@ -471,6 +471,29 @@ pub fn scope_lookup_value(result: &ScopeLookupResult) -> Value {
     Value::Object(payload)
 }
 
+/// `decisions_for_path` over ALREADY-DERIVED scope rows (ADR-103): the
+/// read-model arm of the MCP `find_decisions` path mode, byte-identical to
+/// the fresh walk for the same corpus state.
+pub fn decisions_for_path_with_rows(
+    rows: &[ScopeRow],
+    directory: &str,
+    path: &str,
+) -> ScopeLookupResult {
+    let root = repository_root(directory);
+    match normalize_query(path, &root) {
+        None => ScopeLookupResult {
+            query: py_strip(path).to_string(),
+            in_repository: false,
+            decisions: Vec::new(),
+        },
+        Some(query) => ScopeLookupResult {
+            query,
+            in_repository: true,
+            decisions: governing_decisions(rows, directory, path),
+        },
+    }
+}
+
 /// `find_decisions` path mode (MCP surface): the `ScopeLookupResult.to_dict()`
 /// payload — `{schema_version, query, in_repository, decisions}` — for the live
 /// decisions whose declared `## Applies To` scope governs `path`. Additive

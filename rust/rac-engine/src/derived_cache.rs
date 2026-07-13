@@ -156,6 +156,12 @@ fn marker_valid(cache_dir: &Path, corpus_hash: &str) -> bool {
         == Some(SCHEMA_VERSION)
 }
 
+/// The tracker's compaction gate (INDEX-PLAN B6): write the marker for an
+/// already-landed store.
+pub fn write_marker_public(cache_dir: &Path, corpus_hash: &str) -> bool {
+    write_marker(cache_dir, corpus_hash, true)
+}
+
 fn write_marker(cache_dir: &Path, corpus_hash: &str, store_written: bool) -> bool {
     if !store_written {
         return false;

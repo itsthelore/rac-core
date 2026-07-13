@@ -47,16 +47,19 @@ fn usage_error(msg: &str) -> ! {
 fn main() {
     let mut argv = std::env::args().skip(1);
     let mut root = ".".to_string();
+    let mut cache = true;
     while let Some(a) = argv.next() {
         match a.as_str() {
             "--root" => match argv.next() {
                 Some(v) => root = v,
                 None => usage_error("--root requires a value"),
             },
-            // Cache flags are accepted and output-neutral (ADR-112: cache-on
-            // vs cache-off runs are frame-for-frame byte-identical; this port
-            // re-reads per call, the ADR-032 floor).
-            "--no-cache" | "--cache" => {}
+            // Cache flags are real since INDEX-PLAN B6 and remain
+            // output-neutral (ADR-112: cache-on vs cache-off runs are
+            // frame-for-frame byte-identical; native warm == cold holds
+            // even for the duplicate-token class, PORT-CONTRACT.d/10 §0a).
+            "--no-cache" => cache = false,
+            "--cache" => cache = true,
             other => usage_error(&format!("unrecognized argument: {other}")),
         }
     }
@@ -64,7 +67,19 @@ fn main() {
         usage_error(&format!("not a directory: {root}"));
     }
     check_corpus(&root);
-    serve(&root);
+    // Server-lifetime freshness (ADR-105): one tracker per server keeps the
+    // derived read-model current by stat-scan detection (ADR-114: no
+    // inotify rung), re-deriving only where files changed.
+    let mut tracker = if rac_engine::derived_cache::cache_enabled(cache) {
+        Some(rac_engine::freshness::FreshnessTracker::new(
+            rac_engine::derived_cache::default_cache_dir(),
+            &root,
+            None,
+        ))
+    } else {
+        None
+    };
+    serve(&root, &mut tracker);
 }
 
 /// Startup diagnostic (stderr only; declared-normalized in parity, §0).
@@ -79,7 +94,7 @@ a new repository. The server is running; get_summary will report the empty state
     }
 }
 
-fn serve(root: &str) {
+fn serve(root: &str, tracker: &mut Option<rac_engine::freshness::FreshnessTracker>) {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
@@ -115,7 +130,7 @@ fn serve(root: &str) {
             "resources/list" => {
                 format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"resources\":[]}}}}")
             }
-            "tools/call" => tools_call_frame(root, &id_json, &message),
+            "tools/call" => tools_call_frame(root, tracker, &id_json, &message),
             _ => format!(
                 "{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"error\":{{\"code\":-32602,\"message\":\"Invalid request parameters\",\"data\":\"\"}}}}"
             ),
@@ -167,14 +182,19 @@ fn call_result_frame(id_json: &str, text: &str, is_error: bool) -> String {
     format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{result_json}}}")
 }
 
-fn tools_call_frame(root: &str, id_json: &str, message: &Value) -> String {
+fn tools_call_frame(
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    id_json: &str,
+    message: &Value,
+) -> String {
     let name = message
         .pointer("/params/name")
         .and_then(Value::as_str)
         .unwrap_or("");
     let empty = json!({});
     let arguments = message.pointer("/params/arguments").unwrap_or(&empty);
-    match dispatch(root, name, arguments) {
+    match dispatch(root, tracker, name, arguments) {
         Ok(payload) => call_result_frame(id_json, &payload, false),
         Err(text) => call_result_frame(id_json, &text, true),
     }
@@ -213,10 +233,18 @@ fn a_bool(args: &[Arg], i: usize, default: bool) -> bool {
     }
 }
 
-fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String> {
+fn dispatch(
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    name: &str,
+    arguments: &Value,
+) -> Result<String, String> {
     // ADR-033: the server budget is fixed at construction; the stdio CLI has
     // no flag, so it is always the default.
     let server_budget = budget::DEFAULT_BUDGET;
+    // Freshen the read-model once per call (the corpus-change check every
+    // tool answer rides, ADR-105); without the tracker every arm re-walks.
+    let model = tracker.as_mut().map(|t| t.read_model(false));
     match name {
         "get_artifact" => {
             let params = [
@@ -226,7 +254,7 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             let a = args::validate(name, "get_artifactArguments", &params, arguments)?;
             let effective = tools::effective_budget(server_budget, a_int(&a, 1, 0));
             Ok(sidecar::observe(name, || {
-                tools::get_artifact(root, &a_str(&a, 0, ""), effective)
+                tools::get_artifact(root, model, &a_str(&a, 0, ""), effective)
             }))
         }
         "search_artifacts" => {
@@ -244,6 +272,7 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             Ok(sidecar::observe(name, || {
                 tools::search_artifacts(
                     root,
+                    model,
                     &query,
                     artifact_type.as_deref(),
                     &tags,
@@ -282,7 +311,7 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             let topic = a_str(&a, 0, "");
             let path = a_opt_str(&a, 1);
             Ok(sidecar::observe(name, || {
-                tools::find_decisions_tool(root, &topic, path.as_deref(), server_budget)
+                tools::find_decisions_tool(root, model, &topic, path.as_deref(), server_budget)
             }))
         }
         "get_related" => {
@@ -292,14 +321,14 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             ];
             let a = args::validate(name, "get_relatedArguments", &params, arguments)?;
             Ok(sidecar::observe(name, || {
-                tools::get_related(root, &a_str(&a, 0, ""), a_int(&a, 1, 1), server_budget)
+                tools::get_related(root, model, &a_str(&a, 0, ""), a_int(&a, 1, 1), server_budget)
             }))
         }
         "get_summary" => {
             let params: [Param; 0] = [];
             args::validate(name, "get_summaryArguments", &params, arguments)?;
             Ok(sidecar::observe(name, || {
-                tools::get_summary(root, server_budget)
+                tools::get_summary(root, model, server_budget)
             }))
         }
         _ => Err(format!("Unknown tool: {name}")),
