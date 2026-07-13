@@ -25,6 +25,9 @@
 //! - `skill`: bundled agent skills — registry + embedded-asset install.
 //! - `hook`: bundled git hooks — registry + embedded-asset install.
 //! - `eval`: the ADR-066 grounding retrieval benchmark and gate.
+//! - `portal`: the vendored Portal shell + export-HTML assembly.
+//! - `agent_rules`: the ADR-067 agent-rules projection and drift gate.
+//! - `okf`: the ADR-048 OKF bundle projection (git-derived recency join).
 //! - `output`: human/JSON/SARIF renderers per command.
 //! - `commands`: CLI command entry points (argv already parsed).
 //! - `cli`: argv parsing and exit codes matching the oracle's argparse
@@ -56,6 +59,9 @@ pub mod gate;
 pub mod doctor;
 pub mod mdhtml;
 pub mod export;
+pub mod portal;
+pub mod agent_rules;
+pub mod okf;
 pub mod consent;
 pub mod telemetry;
 pub mod usage;

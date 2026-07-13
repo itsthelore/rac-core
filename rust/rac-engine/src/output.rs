@@ -2526,6 +2526,101 @@ pub fn render_export_json(export: &CorpusExport) -> String {
     dumps_indent2(&Value::Object(payload))
 }
 
+// --- export --agent-rules ------------------------------------------------
+
+/// Per-file state icon (`_AGENT_RULES_ICONS`): a write/update is a neutral
+/// bullet, in-sync the green clear, stale/missing the red failure.
+fn agent_rules_icon(state: &str) -> String {
+    match state {
+        crate::agent_rules::STATE_WRITTEN => "+".to_string(),
+        crate::agent_rules::STATE_UPDATED => "~".to_string(),
+        crate::agent_rules::STATE_IN_SYNC => green("\u{2713}"),
+        crate::agent_rules::STATE_STALE | crate::agent_rules::STATE_MISSING => {
+            red("\u{2717}")
+        }
+        _ => "\u{00b7}".to_string(),
+    }
+}
+
+pub fn render_agent_rules_human(result: &crate::agent_rules::AgentRulesResult) -> String {
+    let checking = result.mode == "check";
+    let title = if checking {
+        "Agent Rules \u{2014} drift check"
+    } else {
+        "Agent Rules"
+    };
+    let mut lines = vec![
+        bold(title),
+        "=".repeat(title.chars().count()),
+        String::new(),
+        format!("Corpus digest: {}", result.digest),
+        format!("Output root:   {}", result.root),
+        String::new(),
+    ];
+    for f in &result.files {
+        lines.push(format!("  {} {}  [{}]", agent_rules_icon(f.state), f.path, f.state));
+    }
+    lines.push(String::new());
+    if checking {
+        if result.drifted() {
+            let stale = result
+                .files
+                .iter()
+                .filter(|f| {
+                    f.state == crate::agent_rules::STATE_STALE
+                        || f.state == crate::agent_rules::STATE_MISSING
+                })
+                .count();
+            lines.push(red(&format!(
+                "\u{2717} Drift \u{2014} {stale} file(s) stale or missing the block."
+            )));
+            lines.push("  Regenerate: rac export --agent-rules".to_string());
+        } else {
+            lines.push(green(
+                "\u{2713} In sync \u{2014} every present target matches the corpus.",
+            ));
+        }
+    } else {
+        let written = result
+            .files
+            .iter()
+            .filter(|f| {
+                f.state == crate::agent_rules::STATE_WRITTEN
+                    || f.state == crate::agent_rules::STATE_UPDATED
+            })
+            .count();
+        if written > 0 {
+            lines.push(green(&format!("\u{2713} Wrote/updated {written} file(s).")));
+        } else {
+            lines.push(green(
+                "\u{2713} All targets already in sync \u{2014} nothing to write.",
+            ));
+        }
+    }
+    lines.join("\n")
+}
+
+/// `json.dumps(result.to_dict(), indent=2)` (ensure_ascii default).
+pub fn render_agent_rules_json(result: &crate::agent_rules::AgentRulesResult) -> String {
+    let files: Vec<Value> = result
+        .files
+        .iter()
+        .map(|f| {
+            let mut m = Map::new();
+            m.insert("client".into(), json!(f.client));
+            m.insert("path".into(), json!(f.path));
+            m.insert("state".into(), json!(f.state));
+            Value::Object(m)
+        })
+        .collect();
+    let mut payload = Map::new();
+    payload.insert("mode".into(), json!(result.mode));
+    payload.insert("digest".into(), json!(result.digest));
+    payload.insert("root".into(), json!(result.root));
+    payload.insert("files".into(), Value::Array(files));
+    dumps_indent2(&Value::Object(payload))
+}
+
 pub fn render_documents_jsonl(export: &DocumentsExport) -> String {
     export
         .documents

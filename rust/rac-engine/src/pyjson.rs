@@ -53,6 +53,46 @@ pub fn dumps_compact(value: &Value) -> String {
     out
 }
 
+/// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
+/// — the canonical digest dialect (agent-rules provenance digest): keys
+/// sorted (code-point order, like Python `str` `<`), no separator spaces,
+/// raw UTF-8. No trailing newline.
+pub fn dumps_canonical_sorted(value: &Value) -> String {
+    let mut out = String::new();
+    write_canonical(&mut out, value);
+    out
+}
+
+fn write_canonical(out: &mut String, value: &Value) {
+    match value {
+        Value::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_canonical(out, item);
+            }
+            out.push(']');
+        }
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            out.push('{');
+            for (i, key) in keys.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_string(out, key, false);
+                out.push(':');
+                write_canonical(out, &map[key.as_str()]);
+            }
+            out.push('}');
+        }
+        other => write_value(out, other, false, None),
+    }
+}
+
 fn write_value(out: &mut String, value: &Value, ensure_ascii: bool, indent: Option<usize>) {
     match value {
         Value::Null => out.push_str("null"),
@@ -188,5 +228,15 @@ mod tests {
     fn int_vs_float_form() {
         let v = json!({"i": 2, "f": py_float(2.0), "t": 1e-5});
         assert_eq!(dumps_compact(&v), "{\"i\": 2, \"f\": 2.0, \"t\": 1e-05}");
+    }
+
+    #[test]
+    fn canonical_sorted_dialect() {
+        // json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        let v = json!([{"title": "café — x", "identifier": "A", "category": null}]);
+        assert_eq!(
+            dumps_canonical_sorted(&v),
+            "[{\"category\":null,\"identifier\":\"A\",\"title\":\"café — x\"}]"
+        );
     }
 }

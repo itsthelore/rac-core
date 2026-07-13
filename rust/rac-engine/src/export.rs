@@ -107,6 +107,9 @@ pub struct ExportArtifact {
     pub title: String,
     pub path: String,
     pub body_html: String,
+    /// OKF-reserved descriptive labels (ADR-050): carried for the OKF
+    /// bundle projection, deliberately NOT in the viewer JSON (ADR-007).
+    pub tags: Vec<String>,
 }
 
 pub struct ExportRelationship {
@@ -148,6 +151,7 @@ pub fn build_corpus_export(directory: &str, rac_version: String) -> CorpusExport
             title,
             path: it.path.clone(),
             body_html: crate::mdhtml::render(&body_markdown(&it.path)),
+            tags: tags_of(&it.artifact),
         });
     }
 

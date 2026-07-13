@@ -1,0 +1,87 @@
+//! Portal HTML assembly (`rac.output.portal`) — inject the export payload
+//! into the vendored shell, per PORT-CONTRACT.d/17 §2.
+//!
+//! The shell is the exact packaged asset the oracle ships
+//! (`src/rac/templates/portal/lore-portal-shell.html`, vendored from
+//! lore-web @ ed4dd42, 182669 bytes), embedded at compile time so the
+//! emitted HTML is byte-identical. The unit test below pins the embed to
+//! the Python package file: re-vendor `assets/portal/` in lockstep
+//! whenever the oracle's shell changes.
+
+use crate::export::CorpusExport;
+
+/// The packaged Portal shell, embedded verbatim.
+pub const SHELL: &str = include_str!("../assets/portal/lore-portal-shell.html");
+
+/// The exact empty data seam the shell-only viewer build emits (no
+/// whitespace inside the element); the populated form replaces it verbatim.
+const SEAM: &str = r#"<script type="application/json" id="lore-export"></script>"#;
+
+/// `_escape_for_script(payload)` — make serialized JSON safe inside a
+/// `<script>` element with two valid JSON escapes, applied in the oracle's
+/// order: `</` → `<\/` first, then `<!--` → `<\u{0021}--` (both literal
+/// `str.replace` passes over the whole serialized document).
+fn escape_for_script(payload: &str) -> String {
+    payload.replace("</", "<\\/").replace("<!--", "<\\u0021--")
+}
+
+/// `render_export_html(export)` — the vendored shell with the export JSON
+/// injected into its single data seam.
+///
+/// `PortalShellMissing` is unreachable with a compile-time embed; the
+/// `PortalSeamMissing` guard is retained for contract fidelity (its message
+/// bytes feed `rac: <msg>`, exit 2). Both are operational errors in the
+/// oracle, not caller errors.
+pub fn render_export_html(export: &CorpusExport) -> Result<String, String> {
+    if SHELL.matches(SEAM).count() != 1 {
+        return Err(format!(
+            "packaged portal shell has no usable data seam \
+             ({SEAM}); re-vendor it: cd rac-localview && npm run vendor:shell"
+        ));
+    }
+    let payload = escape_for_script(&crate::output::render_export_json(export));
+    let populated =
+        format!(r#"<script type="application/json" id="lore-export">{payload}</script>"#);
+    // `str.replace` on a count-1 needle: a single substitution.
+    Ok(SHELL.replacen(SEAM, &populated, 1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The embedded shell must be byte-identical to the Python package file
+    /// the oracle loads (html brief, landmine 1). Size pinned from the
+    /// extraction probe as a second, independent check.
+    #[test]
+    fn embedded_shell_equals_python_package_file() {
+        let py_path = format!(
+            "{}/../../src/rac/templates/portal/lore-portal-shell.html",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let py_bytes =
+            std::fs::read(&py_path).unwrap_or_else(|e| panic!("cannot read {py_path}: {e}"));
+        assert_eq!(
+            py_bytes,
+            SHELL.as_bytes(),
+            "embedded portal shell differs from the Python package file"
+        );
+        assert_eq!(SHELL.len(), 182_669, "unexpected embedded shell size");
+    }
+
+    #[test]
+    fn shell_carries_exactly_one_empty_seam() {
+        assert_eq!(SHELL.matches(SEAM).count(), 1);
+    }
+
+    /// The two escapes in the oracle's order; the comment-open rewrite must
+    /// not be disturbed by the `</` pass.
+    #[test]
+    fn escape_order_and_exactness() {
+        assert_eq!(
+            escape_for_script(r#"a</script>b<!--c"#),
+            r#"a<\/script>b<\u0021--c"#
+        );
+        assert_eq!(escape_for_script("plain"), "plain");
+    }
+}

@@ -729,6 +729,85 @@ pub fn py_format_percent0(x: f64) -> String {
     s
 }
 
+// ---------------------------------------------------------------------------
+// posixpath — normpath / abspath / relpath (the OKF bundle's key derivation)
+// ---------------------------------------------------------------------------
+
+/// Python `posixpath.normpath(path)`: collapse duplicate slashes and `.`
+/// components, resolve `..` lexically (kept when it would climb past a
+/// relative start; dropped at an absolute root), preserve an exactly-double
+/// leading slash. Empty input yields `.`.
+pub fn py_normpath(path: &str) -> String {
+    if path.is_empty() {
+        return ".".to_string();
+    }
+    let initial_slashes = if path.starts_with('/') {
+        if path.starts_with("//") && !path.starts_with("///") {
+            2
+        } else {
+            1
+        }
+    } else {
+        0
+    };
+    let mut comps: Vec<&str> = Vec::new();
+    for comp in path.split('/') {
+        if comp.is_empty() || comp == "." {
+            continue;
+        }
+        if comp != ".."
+            || (initial_slashes == 0 && comps.is_empty())
+            || comps.last() == Some(&"..")
+        {
+            comps.push(comp);
+        } else if !comps.is_empty() {
+            comps.pop();
+        }
+    }
+    let mut out = "/".repeat(initial_slashes);
+    out.push_str(&comps.join("/"));
+    if out.is_empty() {
+        ".".to_string()
+    } else {
+        out
+    }
+}
+
+/// Python `posixpath.abspath(path)` — `normpath(join(cwd, path))`, lexical
+/// (never touches the filesystem beyond reading the cwd).
+pub fn py_abspath(path: &str) -> String {
+    if path.starts_with('/') {
+        return py_normpath(path);
+    }
+    let cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| ".".to_string());
+    py_normpath(&format!("{cwd}/{path}"))
+}
+
+/// Python `os.path.relpath(path, start)` on POSIX: both sides are
+/// `abspath`'d lexically, then the relative walk is derived from the
+/// component lists. Returns `.` when they coincide.
+pub fn py_relpath(path: &str, start: &str) -> String {
+    let path_abs = py_abspath(path);
+    let start_abs = py_abspath(start);
+    let path_list: Vec<&str> = path_abs.split('/').filter(|c| !c.is_empty()).collect();
+    let start_list: Vec<&str> = start_abs.split('/').filter(|c| !c.is_empty()).collect();
+    let common = path_list
+        .iter()
+        .zip(start_list.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut rel: Vec<&str> = Vec::new();
+    rel.resize(start_list.len() - common, "..");
+    rel.extend(&path_list[common..]);
+    if rel.is_empty() {
+        ".".to_string()
+    } else {
+        rel.join("/")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -819,5 +898,28 @@ mod tests {
         set_surrogate_sentinels_active(true);
         let s = decode_stdin_surrogateescape(b"a\xccb");
         assert_eq!(py_repr_str(&s), "'a\\udcccb'"); // Python repr('a\udcccb')
+    }
+
+    #[test]
+    fn normpath_contract_examples() {
+        // Pinned against CPython posixpath.normpath.
+        assert_eq!(py_normpath(""), ".");
+        assert_eq!(py_normpath("a//b/./c/"), "a/b/c");
+        assert_eq!(py_normpath("a/b/../c"), "a/c");
+        assert_eq!(py_normpath("../a"), "../a");
+        assert_eq!(py_normpath("a/../../b"), "../b");
+        assert_eq!(py_normpath("/../a"), "/a");
+        assert_eq!(py_normpath("//a/b"), "//a/b");
+        assert_eq!(py_normpath("///a/b"), "/a/b");
+        assert_eq!(py_normpath("/"), "/");
+    }
+
+    #[test]
+    fn relpath_contract_examples() {
+        // Absolute inputs keep relpath cwd-independent in the test.
+        assert_eq!(py_relpath("/x/rac/decisions/a.md", "/x/rac"), "decisions/a.md");
+        assert_eq!(py_relpath("/x/rac", "/x/rac"), ".");
+        assert_eq!(py_relpath("/x/other/a.md", "/x/rac"), "../other/a.md");
+        assert_eq!(py_relpath("/x/rac/a.md", "/x/rac/"), "a.md");
     }
 }
