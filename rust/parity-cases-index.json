@@ -1,0 +1,156 @@
+[
+  {
+    "id": "p0-find-cache-cold",
+    "argv": ["find", "widget", "rac", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {"fixture": "rust/fixtures/index/repo"},
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-cache-warm",
+    "argv": ["find", "widget", "rac", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["find", "widget", "rac", "--json"]}
+      ]
+    },
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-cache-warm-human",
+    "argv": ["find", "cache policy", "rac"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["find", "cache policy", "rac"]}
+      ]
+    },
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-cache-stale",
+    "argv": ["find", "gizmo", "rac", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["find", "gizmo", "rac", "--json"]},
+        {"step": "write", "path": "rac/notes/unknown.md", "content": "Fresh gizmo notes after the warm run.\n\n## Scratch Heading\n\n- gizmo line\n"}
+      ]
+    },
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-cache-bypassed",
+    "argv": ["find", "widget", "rac", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": "1"},
+    "sandbox": {"fixture": "rust/fixtures/index/repo"},
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-no-cache-flag",
+    "argv": ["find", "widget", "rac", "--json", "--no-cache"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {"fixture": "rust/fixtures/index/repo"},
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-cache-verify",
+    "argv": ["find", "widget", "rac", "--json", "--verify"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["find", "widget", "rac", "--json"]}
+      ]
+    },
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-decisions-cache-warm",
+    "argv": ["find", "cache", "rac", "--decisions", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["find", "cache", "rac", "--decisions", "--json"]}
+      ]
+    },
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-find-tag-facet-cache-warm",
+    "argv": ["find", "widget", "rac", "--tag", "cache", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["find", "widget", "rac", "--tag", "cache", "--json"]}
+      ]
+    },
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-validate-cache-cold",
+    "argv": ["validate", "rac", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {"fixture": "rust/fixtures/index/repo"},
+    "expect_exit": 1,
+    "expect_nonzero_ok": true
+  },
+  {
+    "id": "p0-validate-cache-warm",
+    "argv": ["validate", "rac", "--json"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["validate", "rac", "--json"], "expect_exit": 1}
+      ]
+    },
+    "expect_exit": 1,
+    "expect_nonzero_ok": true
+  },
+  {
+    "id": "p0-validate-cache-stale-fix",
+    "argv": ["validate", "rac"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["validate", "rac"], "expect_exit": 1},
+        {"step": "write", "path": "rac/decisions/adr-4-invalid.md", "content": "# ADR-4: Widget Export Format\n\n## ID\n\nFIX-IDX-DEC4\n\n## Context\n\nWidget exports need a stable format; this record is now complete.\n\n## Decision\n\nExport widgets as JSON lines.\n\n## Consequences\n\nExports stay diffable.\n\n## Status\n\nAccepted\n"}
+      ]
+    },
+    "expect_exit": 0
+  },
+  {
+    "id": "p0-validate-cache-verify-warm",
+    "argv": ["validate", "rac", "--verify"],
+    "cwd": "{SANDBOX}",
+    "env": {"RAC_CACHE_DIR": "{SANDBOX}/cache", "RAC_NO_CACHE": ""},
+    "sandbox": {
+      "fixture": "rust/fixtures/index/repo",
+      "setup": [
+        {"step": "engine-run", "argv": ["validate", "rac"], "expect_exit": 1}
+      ]
+    },
+    "expect_exit": 1,
+    "expect_nonzero_ok": true
+  }
+]
