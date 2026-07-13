@@ -87,6 +87,12 @@ pub fn consent_path() -> String {
     xdg_rac_file("XDG_CONFIG_HOME", &[".config"], CONSENT_FILENAME)
 }
 
+/// `consent_recorded()` — true once ANY answer (including a decline) has
+/// been persisted; the ask-at-most-once gate of the init/quickstart prompt.
+pub fn consent_recorded() -> bool {
+    std::path::Path::new(&consent_path()).is_file()
+}
+
 // ---------------------------------------------------------------------------
 // CPython value coercions (load_consent applies bool()/str() field-wise)
 // ---------------------------------------------------------------------------
@@ -225,6 +231,14 @@ pub fn opt_in() -> Consent {
         consented_at: utc_now_seconds_z(),
         enterprise_locked: existing.enterprise_locked,
     };
+    save_consent(&consent);
+    consent
+}
+
+/// `decline()` — persist the default no-consent record, making ask-once
+/// true (unlike `opt_out`, nothing from an existing record is kept).
+pub fn decline() -> Consent {
+    let consent = Consent::default();
     save_consent(&consent);
     consent
 }

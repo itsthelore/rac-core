@@ -3097,3 +3097,301 @@ pub fn render_hook_install_json(installation: &crate::hook::InstalledHook) -> St
         "hook": {"style": installation.style, "path": installation.path}
     }))
 }
+
+// --- scaffold writes (rac new / init / quickstart / migrate / rename —
+// PORT-CONTRACT.d/16) ---------------------------------------------------------
+
+/// Human `rac new`: what was created, its identity, and the next step. The
+/// path is the argv string VERBATIM (no pathlib normalization).
+pub fn render_new_human(created: &crate::scaffold::CreatedArtifact) -> String {
+    format!(
+        "Created {} artifact: {}\nID: {}\n\nEdit the TODO placeholders, then check it with: rac validate {}",
+        created.artifact_type, created.path, created.id, created.path
+    )
+}
+
+/// JSON `rac new` (stable contract, ADR-007) — note: NO `bytes_written`
+/// (in the oracle's dataclass but not its `to_dict`).
+pub fn render_new_json(created: &crate::scaffold::CreatedArtifact) -> String {
+    dumps_indent2(&json!({
+        "schema_version": "1",
+        "created": true,
+        "type": created.artifact_type,
+        "path": created.path,
+        "id": created.id,
+    }))
+}
+
+/// Human `rac init`: the established identity namespace. The idempotent
+/// verb carries its own colon (`Already initialized:`).
+pub fn render_init_human(result: &crate::scaffold::InitResult) -> String {
+    let verb = if result.created {
+        "Initialized"
+    } else {
+        "Already initialized:"
+    };
+    let mut lines = vec![
+        format!("{verb} repository key {}", result.repository_key),
+        format!("Config: {}", result.config_path),
+    ];
+    if let Some(profile) = &result.profile {
+        lines.push(format!("Profile: {profile}"));
+    }
+    lines.extend(result.files_written.iter().map(|p| format!("Wrote: {p}")));
+    lines.join("\n")
+}
+
+/// JSON `rac init` (stable contract, ADR-007).
+pub fn render_init_json(result: &crate::scaffold::InitResult) -> String {
+    dumps_indent2(&json!({
+        "schema_version": "1",
+        "repository_key": result.repository_key,
+        "config_path": result.config_path,
+        "created": result.created,
+        "profile": result.profile,
+        "files_written": result.files_written,
+    }))
+}
+
+/// Human `rac quickstart`: identity (`Initialized`/`Using`), first
+/// artifact, next step.
+pub fn render_quickstart_human(result: &crate::scaffold::QuickstartResult) -> String {
+    let verb = if result.created { "Initialized" } else { "Using" };
+    let artifact = &result.artifact;
+    format!(
+        "{verb} repository key {}\nCreated {} artifact: {}\nID: {}\n\nNext: edit the TODO placeholders, then run: rac validate {}",
+        result.repository_key, artifact.artifact_type, artifact.path, artifact.id, artifact.path
+    )
+}
+
+/// JSON `rac quickstart` (stable contract, ADR-007) — nested `artifact`.
+pub fn render_quickstart_json(result: &crate::scaffold::QuickstartResult) -> String {
+    dumps_indent2(&json!({
+        "schema_version": "1",
+        "repository_key": result.repository_key,
+        "config_path": result.config_path,
+        "created": result.created,
+        "artifact": {
+            "type": result.artifact.artifact_type,
+            "path": result.artifact.path,
+            "id": result.artifact.id,
+        },
+    }))
+}
+
+/// Human `rac migrate metadata`: assigned IDs and what remains. The
+/// migrated path column is code-point ljust'd; the Skipped block appears
+/// only when unknowns exist.
+pub fn render_migrate_human(report: &crate::scaffold::MigrationReport) -> String {
+    use crate::scaffold::{STATUS_MIGRATED, STATUS_SKIPPED_UNKNOWN};
+    let mut lines: Vec<String> = Vec::new();
+    if report.dry_run {
+        lines.push(bold("Dry run \u{2014} no files were written."));
+        lines.push(String::new());
+    }
+
+    let migrated: Vec<_> = report
+        .files
+        .iter()
+        .filter(|f| f.status == STATUS_MIGRATED)
+        .collect();
+    let unknown: Vec<_> = report
+        .files
+        .iter()
+        .filter(|f| f.status == STATUS_SKIPPED_UNKNOWN)
+        .collect();
+
+    let verb = if report.dry_run { "Would migrate" } else { "Migrated" };
+    if migrated.is_empty() {
+        lines.push(format!("{verb} 0 artifact(s) \u{2014} nothing to migrate."));
+    } else {
+        lines.push(bold(&format!("{verb} {} artifact(s):", migrated.len())));
+        let path_w = migrated.iter().map(|f| f.path.chars().count()).max().unwrap_or(0);
+        for f in &migrated {
+            lines.push(format!(
+                "  {}  {}  ({})",
+                ljust(&f.path, path_w),
+                f.id.as_deref().unwrap_or(""),
+                f.artifact_type.as_deref().unwrap_or("")
+            ));
+        }
+    }
+
+    if !unknown.is_empty() {
+        lines.push(String::new());
+        lines.push(bold(&format!(
+            "Skipped {} unrecognized document(s):",
+            unknown.len()
+        )));
+        lines.extend(unknown.iter().map(|f| format!("  - {}", f.path)));
+    }
+
+    lines.push(String::new());
+    lines.push(format!(
+        "{} file(s): {} migrated, {} already canonical, {} skipped (unknown type).",
+        report.files.len(),
+        report.migrated(),
+        report.already_canonical(),
+        report.skipped_unknown()
+    ));
+    lines.join("\n")
+}
+
+/// JSON `rac migrate metadata` (stable contract, ADR-007).
+pub fn render_migrate_json(report: &crate::scaffold::MigrationReport) -> String {
+    let files: Vec<Value> = report
+        .files
+        .iter()
+        .map(|f| {
+            json!({
+                "path": f.path,
+                "status": f.status,
+                "id": f.id,
+                "type": f.artifact_type,
+            })
+        })
+        .collect();
+    dumps_indent2(&json!({
+        "schema_version": "1",
+        "directory": report.directory,
+        "recursive": report.recursive,
+        "dry_run": report.dry_run,
+        "summary": {
+            "total_files": report.files.len(),
+            "migrated": report.migrated(),
+            "already_canonical": report.already_canonical(),
+            "skipped_unknown": report.skipped_unknown(),
+        },
+        "files": files,
+    }))
+}
+
+/// The stable refusal-reason phrases (`_RENAME_REASONS`).
+fn rename_reason_phrase(reason: Option<&str>) -> String {
+    match reason {
+        Some(crate::rename::REASON_OLD_NOT_FOUND) => "no artifact resolves to that id".to_string(),
+        Some(crate::rename::REASON_OLD_AMBIGUOUS) => {
+            "the id is ambiguous \u{2014} it resolves to more than one artifact".to_string()
+        }
+        Some(crate::rename::REASON_NEW_COLLIDES) => {
+            "the new id already names another artifact".to_string()
+        }
+        Some(crate::rename::REASON_NEW_INVALID) => {
+            "the new id is not a valid identifier".to_string()
+        }
+        Some(crate::rename::REASON_OLD_FILENAME_ONLY) => {
+            "the id is only a filename-derived alias \u{2014} there is no in-file identity to \
+             rewrite, and renaming files is out of scope"
+                .to_string()
+        }
+        Some(other) => other.to_string(),
+        None => "unknown".to_string(),
+    }
+}
+
+/// Human `rac rename` plan: a reviewable diff-hunk preview (dry run) or a
+/// refusal (the CALLER routes refusals to stderr).
+pub fn render_rename_human(plan: &crate::rename::RenamePlan) -> String {
+    let header = format!("Rename {} -> {}", plan.old_ref, plan.new_ref);
+    if !plan.ok {
+        let reason = rename_reason_phrase(plan.reason);
+        return format!("{header}\n\n{}", red(&format!("\u{2717} Refused: {reason}.")));
+    }
+    let mut lines = vec![header.clone(), "=".repeat(header.chars().count()), String::new()];
+    lines.push(format!(
+        "Target: {}  (identity field: {})",
+        plan.target_path.as_deref().unwrap_or(""),
+        plan.identity_field.unwrap_or("")
+    ));
+    lines.push(format!(
+        "{} inbound reference(s), {} identity edit across {} file(s).",
+        plan.reference_edits(),
+        plan.identity_edits(),
+        plan.files_changed()
+    ));
+    lines.push(String::new());
+    let mut current: Option<&str> = None;
+    for edit in &plan.edits {
+        if current != Some(edit.path.as_str()) {
+            current = Some(edit.path.as_str());
+            lines.push(format!("  {}", edit.path));
+        }
+        lines.push(format!(
+            "    L{} {}",
+            edit.line,
+            red(&format!("\u{2717} {}", edit.old_line))
+        ));
+        lines.push(format!(
+            "    L{} {}",
+            edit.line,
+            green(&format!("\u{2713} {}", edit.new_line))
+        ));
+    }
+    lines.push(String::new());
+    lines.push("Dry run \u{2014} pass --apply to write these edits.".to_string());
+    lines.join("\n")
+}
+
+/// JSON `rac rename` plan (stable additive contract, ADR-007) — emitted to
+/// STDOUT for refusals too (unlike the human refusal, which goes stderr).
+pub fn render_rename_json(plan: &crate::rename::RenamePlan) -> String {
+    let edits: Vec<Value> = plan
+        .edits
+        .iter()
+        .map(|e| {
+            json!({
+                "path": e.path,
+                "line": e.line,
+                "old_line": e.old_line,
+                "new_line": e.new_line,
+                "kind": e.kind,
+            })
+        })
+        .collect();
+    dumps_indent2(&json!({
+        "directory": plan.directory,
+        "recursive": plan.recursive,
+        "old_ref": plan.old_ref,
+        "new_ref": plan.new_ref,
+        "ok": plan.ok,
+        "reason": plan.reason,
+        "target_path": plan.target_path,
+        "identity_field": plan.identity_field,
+        "files_changed": plan.files_changed(),
+        "reference_edits": plan.reference_edits(),
+        "identity_edits": plan.identity_edits(),
+        "edits": edits,
+    }))
+}
+
+/// Human `rac rename --apply` outcome.
+pub fn render_rename_result_human(result: &crate::rename::RenameResult) -> String {
+    let header = format!("Rename {} -> {}", result.old_ref, result.new_ref);
+    if !result.applied {
+        return format!(
+            "{header}\n\n{}",
+            red("\u{2717} Nothing applied (the plan was refused).")
+        );
+    }
+    format!(
+        "{header}\n\n{}",
+        green(&format!(
+            "\u{2713} Applied: {} reference(s) and {} identity edit across {} file(s).",
+            result.reference_edits, result.identity_edits, result.files_changed
+        ))
+    )
+}
+
+/// JSON `rac rename --apply` outcome (no `edits` array).
+pub fn render_rename_result_json(result: &crate::rename::RenameResult) -> String {
+    dumps_indent2(&json!({
+        "directory": result.directory,
+        "old_ref": result.old_ref,
+        "new_ref": result.new_ref,
+        "applied": result.applied,
+        "target_path": result.target_path,
+        "files_changed": result.files_changed,
+        "reference_edits": result.reference_edits,
+        "identity_edits": result.identity_edits,
+    }))
+}

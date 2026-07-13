@@ -6,13 +6,14 @@
 
 use crate::commands::{
     cmd_coverage, cmd_decisions_for, cmd_diff, cmd_doctor, cmd_eval, cmd_export, cmd_find,
-    cmd_gate, cmd_hook, cmd_improve, cmd_inspect, cmd_mcp_stats, cmd_portfolio,
-    cmd_relationships, cmd_resolve, cmd_retrieve, cmd_review, cmd_schema, cmd_skill, cmd_stats,
-    cmd_telemetry, cmd_templates, cmd_usage, cmd_validate, CoverageArgs, DecisionsForArgs,
-    DiffArgs, DoctorArgs, EvalArgs, ExportArgs, FindArgs, GateArgs, HookArgs, ImproveArgs,
-    InspectArgs, McpStatsArgs, PortfolioArgs, RelationshipsArgs, ResolveArgs, RetrieveArgs,
-    ReviewArgs, SchemaArgs, SkillArgs, StatsArgs, TelemetryArgs, TemplatesArgs, UsageArgs,
-    ValidateArgs,
+    cmd_gate, cmd_hook, cmd_improve, cmd_init, cmd_inspect, cmd_mcp_stats, cmd_migrate, cmd_new,
+    cmd_portfolio, cmd_quickstart, cmd_relationships, cmd_rename, cmd_resolve, cmd_retrieve,
+    cmd_review, cmd_schema, cmd_skill, cmd_stats, cmd_telemetry, cmd_templates, cmd_usage,
+    cmd_validate, CoverageArgs, DecisionsForArgs, DiffArgs, DoctorArgs, EvalArgs, ExportArgs,
+    FindArgs, GateArgs, HookArgs, ImproveArgs, InitArgs, InspectArgs, McpStatsArgs, MigrateArgs,
+    NewArgs, PortfolioArgs, QuickstartArgs, RelationshipsArgs, RenameArgs, ResolveArgs,
+    RetrieveArgs, ReviewArgs, SchemaArgs, SkillArgs, StatsArgs, TelemetryArgs, TemplatesArgs,
+    UsageArgs, ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -163,14 +164,19 @@ fn run_dispatch(args: &[String]) -> u8 {
 
     // `--version` short-circuits on every subcommand (version_parent) —
     // EXCEPT where an earlier argv token can error first at its own
-    // position: choice-validated positionals (telemetry, skill, hook), a
-    // choice-validated option value (hook --style), an immediate mutex
-    // (usage/mcp-stats, eval --check|--update-baseline). Those parse
-    // order-aware and fire version/help at the encounter point, like
-    // argparse.
+    // position: choice-validated positionals (telemetry, skill, hook,
+    // migrate's target), a choice-validated option value (hook --style,
+    // init --ticketing/--profile), an immediate mutex (usage/mcp-stats,
+    // eval --check|--update-baseline), or a value-taking option whose
+    // missing value errors at the encounter point (init --key,
+    // quickstart --key/--type — measured: `quickstart --type --version`
+    // exits 2 while `quickstart --key bad --version` prints the version).
+    // Those parse order-aware and fire version/help at the encounter
+    // point, like argparse.
     let order_aware = matches!(
         first.as_str(),
-        "mcp-stats" | "telemetry" | "usage" | "skill" | "hook" | "eval"
+        "mcp-stats" | "telemetry" | "usage" | "skill" | "hook" | "eval" | "init" | "quickstart"
+            | "migrate"
     );
     if !order_aware {
         if rest.iter().any(|a| a.as_str() == "--version") {
@@ -210,6 +216,11 @@ fn run_dispatch(args: &[String]) -> u8 {
         "skill" => run_skill(&rest),
         "hook" => run_hook(&rest),
         "eval" => run_eval(&rest),
+        "new" => run_new(&rest),
+        "init" => run_init(&rest),
+        "quickstart" => run_quickstart(&rest),
+        "rename" => run_rename(&rest),
+        "migrate" => run_migrate(&rest),
         other => {
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
             2
@@ -1818,4 +1829,375 @@ fn run_templates(rest: &[&String]) -> u8 {
     }
 
     cmd_templates(&TemplatesArgs { json }) as u8
+}
+
+fn run_new(rest: &[&String]) -> u8 {
+    let prog = "rac new";
+    let mut artifact_type: Option<String> = None;
+    let mut output_path: Option<String> = None;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if artifact_type.is_none() {
+                artifact_type = Some(arg.to_string());
+            } else if output_path.is_none() {
+                output_path = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    // argparse reports every still-missing required positional at once.
+    let (Some(artifact_type), Some(output_path)) = (artifact_type.clone(), output_path) else {
+        let missing = if artifact_type.is_none() {
+            "type, output_path"
+        } else {
+            "output_path"
+        };
+        return argparse_error(
+            prog,
+            &format!("the following arguments are required: {missing}"),
+        );
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_new(&NewArgs {
+        artifact_type,
+        output_path,
+        json,
+    }) as u8
+}
+
+/// `rac init [directory] [--key KEY] [--ticketing PROVIDER] [--profile
+/// NAME] [--json]` — order-aware: `--ticketing`/`--profile` are
+/// argparse-choice-validated when their VALUE is consumed (an invalid
+/// choice beats a later `--version`; an earlier `--version` wins), and a
+/// missing option value errors at its own position too.
+fn run_init(rest: &[&String]) -> u8 {
+    let prog = "rac init";
+    let mut directory: Option<String> = None;
+    let mut key: String = "RAC".to_string(); // init.DEFAULT_KEY
+    let mut ticketing: Option<String> = None;
+    let mut profile: Option<String> = None;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let ticketing_choice = |v: &str| -> Option<u8> {
+        if matches!(v, "jira" | "github" | "linear" | "azure-devops" | "servicenow" | "none") {
+            None
+        } else {
+            Some(argparse_error(
+                prog,
+                &format!(
+                    "argument --ticketing: invalid choice: '{v}' (choose from 'jira', 'github', 'linear', 'azure-devops', 'servicenow', 'none')"
+                ),
+            ))
+        }
+    };
+    let profile_choice = |v: &str| -> Option<u8> {
+        if matches!(v, "default" | "enterprise") {
+            None
+        } else {
+            Some(argparse_error(
+                prog,
+                &format!(
+                    "argument --profile: invalid choice: '{v}' (choose from 'default', 'enterprise')"
+                ),
+            ))
+        }
+    };
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--json" => json = true,
+            other if other == "--key" || other.starts_with("--key=") => {
+                match take_opt_value(prog, "--key", other, rest, &mut i) {
+                    Ok(v) => key = v,
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--ticketing" || other.starts_with("--ticketing=") => {
+                match take_opt_value(prog, "--ticketing", other, rest, &mut i) {
+                    Ok(v) => {
+                        if let Some(code) = ticketing_choice(&v) {
+                            return code;
+                        }
+                        ticketing = Some(v);
+                    }
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--profile" || other.starts_with("--profile=") => {
+                match take_opt_value(prog, "--profile", other, rest, &mut i) {
+                    Ok(v) => {
+                        if let Some(code) = profile_choice(&v) {
+                            return code;
+                        }
+                        profile = Some(v);
+                    }
+                    Err(code) => return code,
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_init(&InitArgs {
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        key,
+        ticketing,
+        profile,
+        json,
+    }) as u8
+}
+
+/// `rac quickstart [directory] [--key KEY] [--type TYPE] [--json]` —
+/// order-aware only for the value-taking options: a MISSING `--key`/
+/// `--type` value errors at its own position (beating a later
+/// `--version`), while their values are free strings validated by the
+/// service (so `--key bad --version` prints the version, measured).
+fn run_quickstart(rest: &[&String]) -> u8 {
+    let prog = "rac quickstart";
+    let mut directory: Option<String> = None;
+    let mut key: String = "RAC".to_string(); // init.DEFAULT_KEY
+    let mut artifact_type: String = "requirement".to_string(); // quickstart.DEFAULT_TYPE
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--json" => json = true,
+            other if other == "--key" || other.starts_with("--key=") => {
+                match take_opt_value(prog, "--key", other, rest, &mut i) {
+                    Ok(v) => key = v,
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--type" || other.starts_with("--type=") => {
+                match take_opt_value(prog, "--type", other, rest, &mut i) {
+                    Ok(v) => artifact_type = v,
+                    Err(code) => return code,
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_quickstart(&QuickstartArgs {
+        directory: directory.unwrap_or_else(|| ".".to_string()),
+        key,
+        artifact_type,
+        json,
+    }) as u8
+}
+
+fn run_rename(rest: &[&String]) -> u8 {
+    let prog = "rac rename";
+    let mut old: Option<String> = None;
+    let mut new: Option<String> = None;
+    let mut directory: Option<String> = None;
+    let mut apply = false;
+    let mut top_level = false;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if old.is_none() {
+                old = Some(arg.to_string());
+            } else if new.is_none() {
+                new = Some(arg.to_string());
+            } else if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--apply" => apply = true,
+            "--top-level" => top_level = true,
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    // argparse reports every still-missing required positional at once
+    // (positional ORDER is old, new, directory — directory LAST).
+    let (Some(old), Some(new), Some(directory)) = (old.clone(), new.clone(), directory) else {
+        let mut missing: Vec<&str> = Vec::new();
+        if old.is_none() {
+            missing.push("old");
+        }
+        if new.is_none() {
+            missing.push("new");
+        }
+        missing.push("directory");
+        return argparse_error(
+            prog,
+            &format!("the following arguments are required: {}", missing.join(", ")),
+        );
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_rename(&RenameArgs {
+        old,
+        new,
+        directory,
+        apply,
+        top_level,
+        json,
+    }) as u8
+}
+
+/// `rac migrate {metadata} <directory> [--dry-run] [--top-level]
+/// [--recursive] [--json]` — order-aware: the `target` positional's choice
+/// set is validated when the token is CONSUMED (an invalid target beats a
+/// later `--version`; an earlier `--version` wins).
+fn run_migrate(rest: &[&String]) -> u8 {
+    let prog = "rac migrate";
+    let mut target: Option<String> = None;
+    let mut directory: Option<String> = None;
+    let mut dry_run = false;
+    let mut top_level = false;
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if target.is_none() {
+                if arg != "metadata" {
+                    return argparse_error(
+                        prog,
+                        &format!(
+                            "argument target: invalid choice: '{arg}' (choose from 'metadata')"
+                        ),
+                    );
+                }
+                target = Some(arg.to_string());
+            } else if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--dry-run" => dry_run = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {} // affirmation of the default (scope_parent)
+            "--json" => json = true,
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    let (Some(target), Some(directory)) = (target.clone(), directory) else {
+        let missing = if target.is_none() {
+            "target, directory"
+        } else {
+            "directory"
+        };
+        return argparse_error(
+            prog,
+            &format!("the following arguments are required: {missing}"),
+        );
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_migrate(&MigrateArgs {
+        target,
+        directory,
+        dry_run,
+        top_level,
+        json,
+    }) as u8
 }
