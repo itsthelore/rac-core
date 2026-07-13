@@ -82,6 +82,23 @@ pub fn last_committed(repo_root: &Path, path: &Path) -> Option<String> {
     }
 }
 
+/// The earliest commit time for `path` as the verbatim `%cI` string of the
+/// first non-blank line (committer offset preserved), or `None` when the
+/// file is untracked / uncommitted / outside a repo. Mirrors
+/// `git log --reverse --format=%cI -- <path>` (oldest first, first line is
+/// the creation commit) — used by the OKF export's `created` field.
+pub fn first_committed(repo_root: &Path, path: &Path) -> Option<String> {
+    let spec = pathspec(repo_root, path);
+    let out = run_git(
+        &["log", "--reverse", "--format=%cI", "--", &spec],
+        repo_root,
+    )?;
+    out.lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(str::to_string)
+}
+
 /// Last-committed time for each of `paths` (the raw recency primitive). Every
 /// path maps to `None` when `directory` is not a repo. Order preserved.
 pub fn last_committed_for_paths(directory: &Path, paths: &[PathBuf]) -> Vec<(PathBuf, Option<String>)> {

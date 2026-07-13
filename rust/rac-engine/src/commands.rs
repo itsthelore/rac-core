@@ -758,9 +758,10 @@ pub fn cmd_export(args: &ExportArgs) -> i32 {
     if !Path::new(&args.directory).is_dir() {
         return usage_error(&format!("not a directory: {}", args.directory));
     }
+    // Agent-rules is a distinct mode (ADR-067) owning --out/--client/--check
+    // and --json; it dispatches before the export-payload guards.
     if args.agent_rules {
-        eprintln!("rac-rs: export --agent-rules is not implemented in this stage");
-        return EXIT_USAGE;
+        return cmd_agent_rules(args);
     }
     if args.check {
         return usage_error("--check requires --agent-rules");
@@ -787,16 +788,91 @@ pub fn cmd_export(args: &ExportArgs) -> i32 {
         return EXIT_OK;
     }
     let export = crate::export::build_corpus_export(&args.directory, output::rac_version());
+
+    // OKF bundle (ADR-048): a derived tree written under out, sorted-path
+    // order; recency feeds created/updated and log.md (ADR-045).
     if args.okf {
-        eprintln!("rac-rs: export --okf is not implemented in this stage");
-        return EXIT_USAGE;
+        let recency = crate::okf::artifact_recency(&args.directory, &export);
+        let bundle = match crate::okf::render_okf_bundle(&export, &recency, &args.directory) {
+            Ok(bundle) => bundle,
+            Err(msg) => {
+                // The oracle's uncaught ValueError: a Python traceback on
+                // stderr, exit 1, nothing written. Stderr bytes are a
+                // documented divergence; the exit code and no-write
+                // behavior are the contract.
+                eprintln!("ValueError: {msg}");
+                return EXIT_VALIDATION_FAILED;
+            }
+        };
+        let out = args.out.as_deref().unwrap_or("okf-bundle");
+        for (rel, content) in &bundle {
+            let dest = std::path::Path::new(out).join(rel);
+            let written = dest
+                .parent()
+                .map(std::fs::create_dir_all)
+                .unwrap_or(Ok(()))
+                .and_then(|_| std::fs::write(&dest, content));
+            if let Err(exc) = written {
+                return usage_error(&format!("cannot write {out}: {exc}"));
+            }
+        }
+        let edges = export.relationships.len();
+        emit(format!(
+            "wrote {out}/ \u{2014} {} artifact(s), {edges} relationship(s)",
+            export.artifact_count()
+        ));
+        return EXIT_OK;
     }
+
+    // JSON is the default mode: the payload is the product (--json a no-op).
     if !args.html {
         emit(output::render_export_json(&export));
         return EXIT_OK;
     }
-    eprintln!("rac-rs: export --html is not implemented in this stage");
-    EXIT_USAGE
+
+    let html = match crate::portal::render_export_html(&export) {
+        Ok(html) => html,
+        Err(msg) => return usage_error(&msg), // PortalSeamMissing (unreachable)
+    };
+    let out = args.out.as_deref().unwrap_or("lore-export.html");
+    // Path(out).write_text: no parent mkdir — a missing directory is the
+    // OSError path (exit 2).
+    if let Err(exc) = std::fs::write(out, html) {
+        return usage_error(&format!("cannot write {out}: {exc}"));
+    }
+    let edges = export.relationships.len();
+    emit(format!(
+        "wrote {out} \u{2014} {} artifact(s), {edges} relationship(s)",
+        export.artifact_count()
+    ));
+    EXIT_OK
+}
+
+/// `_cmd_agent_rules(args)` — `rac export --agent-rules [--check]`
+/// (v0.21.15, ADR-067). `--check` never writes and exits 1 on drift.
+fn cmd_agent_rules(args: &ExportArgs) -> i32 {
+    // Invalid --client values were already rejected by the argv parser
+    // (argparse choices), so `unknown_clients` is unreachable here.
+    let root = crate::agent_rules::agent_rules_root(&args.directory, args.out.as_deref());
+    let result = if args.check {
+        crate::agent_rules::check_agent_rules(&args.directory, &root, &args.client)
+    } else {
+        match crate::agent_rules::generate_agent_rules(&args.directory, &root, &args.client) {
+            Ok(result) => result,
+            Err(exc) => return usage_error(&format!("cannot write under {root}: {exc}")),
+        }
+    };
+
+    if args.json {
+        emit(output::render_agent_rules_json(&result));
+    } else {
+        emit(output::render_agent_rules_human(&result));
+    }
+
+    if args.check && result.drifted() {
+        return EXIT_VALIDATION_FAILED;
+    }
+    EXIT_OK
 }
 
 // ---------------------------------------------------------------------------

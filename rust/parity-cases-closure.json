@@ -1623,5 +1623,363 @@
    "cwd": "{SANDBOX}",
    "argv": ["migrate", "metadata", "corpus", "extra"],
    "expect_exit": 2, "expect_nonzero_ok": true,
-   "capture": ["corpus/**"]}
+   "capture": ["corpus/**"]},
+
+  {"id": "export-html-out-fixture",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--html", "--out", "out.html"],
+   "expect_exit": 0,
+   "capture": ["out.html"]},
+
+  {"id": "export-html-default-out",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--html"],
+   "expect_exit": 0,
+   "capture": ["lore-export.html"]},
+
+  {"id": "export-html-out-eq-form",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--html", "--out=alt.html"],
+   "expect_exit": 0,
+   "capture": ["alt.html"]},
+
+  {"id": "export-html-subcorpus-name",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac/decisions", "--html", "--out", "d.html"],
+   "expect_exit": 0,
+   "capture": ["d.html"]},
+
+  {"id": "export-html-empty-corpus",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "sandbox": {"setup": [
+     {"step": "mkdir", "path": "empty"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "empty", "--html", "--out", "empty.html"],
+   "expect_exit": 0,
+   "capture": ["empty.html"]},
+
+  {"id": "export-html-err-json-conflict-writes-nothing",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--json", "--html"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "capture": ["*.html"]},
+
+  {"id": "export-html-err-out-under-file",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "blocker", "content": "just a file\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--html", "--out", "blocker/out.html"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "capture": ["blocker", "blocker/**"]},
+
+  {"id": "export-html-err-not-a-dir",
+   "argv": ["export", "rust/fixtures/nope", "--html"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true},
+
+  {"id": "export-html-err-mutex-okf",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--html", "--okf"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "capture": ["*.html", "okf-bundle/**"]},
+
+  {"id": "export-html-version-beats-missing-dir",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "argv": ["export", "bogus", "--html", "--version"],
+   "expect_exit": 0},
+
+  {"id": "export-html-check-precedes-json-conflict",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--check", "--json", "--html"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "capture": ["*.html"]},
+
+  {"id": "export-rules-generate-fresh",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules"],
+   "expect_exit": 0,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-generate-idempotent",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/seeded"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules"],
+   "expect_exit": 0,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-check-clean",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/seeded"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--check"],
+   "expect_exit": 0,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-check-stale",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/seeded",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": "<!-- BEGIN RAC MANAGED BLOCK (digest: deadbeef0f6fa31a858c241f7cc578e14855b54db255f50feb8cc8cc8daeb790) -->\n<!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->\n## Settled decisions (RAC)\n\nThese decisions are already accepted. Do not re-open or contradict them; ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the full text before proposing a change that touches one.\n\n- **adr-003** — ADR-003: Détente — café ünïcode strategy\n- **RAC-AAAA1111AAAA** — ADR-001: A Thing _(Architecture)_\n<!-- END RAC MANAGED BLOCK -->\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--check"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-check-missing-all",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--check"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-check-missing-subset",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": "<!-- BEGIN RAC MANAGED BLOCK (digest: 7bfb072f0f6fa31a858c241f7cc578e14855b54db255f50feb8cc8cc8daeb790) -->\n<!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->\n## Settled decisions (RAC)\n\nThese decisions are already accepted. Do not re-open or contradict them; ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the full text before proposing a change that touches one.\n\n- **adr-003** — ADR-003: Détente — café ünïcode strategy\n- **RAC-AAAA1111AAAA** — ADR-001: A Thing _(Architecture)_\n<!-- END RAC MANAGED BLOCK -->\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--check", "--client", "agents", "--client", "claude"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-generate-updates-stale",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/seeded",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": "<!-- BEGIN RAC MANAGED BLOCK (digest: deadbeef0f6fa31a858c241f7cc578e14855b54db255f50feb8cc8cc8daeb790) -->\n<!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->\n## Settled decisions (RAC)\n\nThese decisions are already accepted. Do not re-open or contradict them; ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the full text before proposing a change that touches one.\n\n- **adr-003** — ADR-003: Détente — café ünïcode strategy\n- **RAC-AAAA1111AAAA** — ADR-001: A Thing _(Architecture)_\n<!-- END RAC MANAGED BLOCK -->\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules"],
+   "expect_exit": 0,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-preserve-outside",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": "My own prose ABOVE.\n\nmiddle line\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--client", "claude"],
+   "expect_exit": 0,
+   "capture": ["CLAUDE.md"]},
+
+  {"id": "export-rules-append-no-trailing-newline",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": "Prose without trailing newline"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--client", "claude"],
+   "expect_exit": 0,
+   "capture": ["CLAUDE.md"]},
+
+  {"id": "export-rules-splice-replace",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": "Prose ABOVE.\n\n<!-- BEGIN RAC MANAGED BLOCK (digest: deadbeef0f6fa31a858c241f7cc578e14855b54db255f50feb8cc8cc8daeb790) -->\n<!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->\n## Settled decisions (RAC)\n\nThese decisions are already accepted. Do not re-open or contradict them; ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the full text before proposing a change that touches one.\n\n- **adr-003** — ADR-003: Détente — café ünïcode strategy\n- **RAC-AAAA1111AAAA** — ADR-001: A Thing _(Architecture)_\n<!-- END RAC MANAGED BLOCK -->\nTrailing prose AFTER.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--client", "claude"],
+   "expect_exit": 0,
+   "capture": ["CLAUDE.md"]},
+
+  {"id": "export-rules-blank-existing-updates",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": ""}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--client", "claude"],
+   "expect_exit": 0,
+   "capture": ["CLAUDE.md"]},
+
+  {"id": "export-rules-default-root-dot",
+   "sandbox": {"setup": [
+     {"step": "copy-tree", "from": "rust/fixtures/closure/export/proj", "to": "proj"}
+   ]},
+   "cwd": "{SANDBOX}/proj",
+   "argv": ["export", "rac", "--agent-rules"],
+   "expect_exit": 0,
+   "capture": ["proj/AGENTS.md", "proj/CLAUDE.md", "proj/.github/**", "proj/.cursor/**"]},
+
+  {"id": "export-rules-trailing-slash-root",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/seeded"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac/", "--agent-rules", "--check"],
+   "expect_exit": 0},
+
+  {"id": "export-rules-out-root",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--out", "custom-root"],
+   "expect_exit": 0,
+   "capture": ["custom-root/**"]},
+
+  {"id": "export-rules-json-generate",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--json"],
+   "expect_exit": 0,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-json-check-drift",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/seeded",
+               "setup": [
+     {"step": "write", "path": "CLAUDE.md", "content": "<!-- BEGIN RAC MANAGED BLOCK (digest: deadbeef0f6fa31a858c241f7cc578e14855b54db255f50feb8cc8cc8daeb790) -->\n<!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->\n## Settled decisions (RAC)\n\nThese decisions are already accepted. Do not re-open or contradict them; ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the full text before proposing a change that touches one.\n\n- **adr-003** — ADR-003: Détente — café ünïcode strategy\n- **RAC-AAAA1111AAAA** — ADR-001: A Thing _(Architecture)_\n<!-- END RAC MANAGED BLOCK -->\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--check", "--json"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-client-order",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--client", "cursor", "--client", "claude"],
+   "expect_exit": 0,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-duplicate-client",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--client", "claude", "--client", "claude"],
+   "expect_exit": 0,
+   "capture": ["AGENTS.md", "CLAUDE.md", ".github/**", ".cursor/**"]},
+
+  {"id": "export-rules-empty-corpus",
+   "sandbox": {"setup": [
+     {"step": "mkdir", "path": "empty/rac"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "empty/rac", "--agent-rules", "--client", "agents"],
+   "expect_exit": 0,
+   "capture": ["empty/AGENTS.md"]},
+
+  {"id": "export-rules-err-write-under-file",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "blocker", "content": "just a file\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--agent-rules", "--out", "blocker/root"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "capture": ["blocker", "blocker/**"]},
+
+  {"id": "export-okf-git-pinned",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "git", "commits": [{"date": "2024-03-05T10:00:00+02:00", "message": "pin: seed corpus"}, {"date": "2024-04-01T09:30:00-05:00", "message": "pin: late artifacts", "write": [{"path": "rac/decisions/adr-005-late.md", "content": "# ADR-005: A Late Thing\n\n## Context\n\nLate context.\n\n## Decision\n\nLand late.\n\n## Consequences\n\nLate consequences.\n\n## Status\n\nAccepted\n"}, {"path": "rac/requirements/req-late.md", "content": "# Requirement: Late Capture\n\n## Problem\n\nLate artifacts need created dates of their own.\n\n## Requirements\n\n- [REQ-001] Late artifacts MUST carry their first-commit date.\n\n## Success Metrics\n\nCreated differs from the seed commit.\n"}]}, {"date": "2024-04-02T23:30:00+09:00", "message": "pin: refresh adr-001", "write": [{"path": "rac/decisions/adr-001-a-thing.md", "content": "---\nschema_version: 1\nid: RAC-AAAA1111AAAA\ntype: decision\n---\n# ADR-001: A Thing\n\n## Context\n\nThe closure export cases need one live decision with a pinned canonical\nidentifier and a category.\n\n## Decision\n\nKeep a single Accepted, categorised decision at the head of the fixture.\n\n## Consequences\n\nThe agent-rules projection carries a stable `RAC-` identifier line,\nrefreshed by a later commit.\n\n## Status\n\nAccepted\n\n## Category\n\nArchitecture\n"}]}]},
+     {"step": "write", "path": "rac/decisions/adr-006-uncommitted.md", "content": "# ADR-006: Uncommitted\n\n## Context\n\nNever committed.\n\n## Decision\n\nStay out of git history.\n\n## Consequences\n\nNo created or updated dates.\n\n## Status\n\nAccepted\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--okf", "--out", "out"],
+   "expect_exit": 0,
+   "capture": ["out/**"]},
+
+  {"id": "export-okf-nongit",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--okf", "--out", "out"],
+   "expect_exit": 0,
+   "capture": ["out/**"]},
+
+  {"id": "export-okf-default-out",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--okf"],
+   "expect_exit": 0,
+   "capture": ["okf-bundle/**"]},
+
+  {"id": "export-okf-dot-directory",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", ".", "--okf", "--out", "dotout"],
+   "expect_exit": 0,
+   "capture": ["dotout/**"]},
+
+  {"id": "export-okf-single-artifact",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "solo/adr-100-sole.md", "content": "# ADR-100: Sole Artifact\n\n## Context\n\nOne artifact pins the singular index noun.\n\n## Decision\n\nKeep exactly one.\n\n## Consequences\n\nThe index reads 1 artifact.\n\n## Status\n\nAccepted\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "solo", "--okf", "--out", "out"],
+   "expect_exit": 0,
+   "capture": ["out/**"]},
+
+  {"id": "export-okf-empty-corpus",
+   "sandbox": {"setup": [
+     {"step": "mkdir", "path": "empty"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "empty", "--okf", "--out", "out"],
+   "expect_exit": 0,
+   "capture": ["out/**"]},
+
+  {"id": "export-okf-subcorpus-root",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac/decisions", "--okf", "--out", "d"],
+   "expect_exit": 0,
+   "capture": ["d/**"]},
+
+  {"id": "export-okf-err-json-conflict-writes-nothing",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--json", "--okf"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "capture": ["out/**", "okf-bundle/**"]},
+
+  {"id": "export-okf-err-out-under-file",
+   "sandbox": {"fixture": "rust/fixtures/closure/export/proj",
+               "setup": [
+     {"step": "write", "path": "blocker", "content": "just a file\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "rac", "--okf", "--out", "blocker/bundle"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "capture": ["blocker", "blocker/**"]},
+
+  {"id": "export-okf-err-not-a-dir",
+   "argv": ["export", "rust/fixtures/nope", "--okf"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true},
+
+  {"id": "export-okf-err-reserved-collision-writes-nothing",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "coll/index.md", "content": "# ADR-009: Collides\n\n## Context\n\nA typed artifact at index.md collides with the bundle entry point.\n\n## Decision\n\nKeep it to pin the uncaught-collision exit.\n\n## Consequences\n\nThe export refuses before writing anything.\n\n## Status\n\nAccepted\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["export", "coll", "--okf", "--out", "out"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "capture": ["out/**"]},
+
+  {"id": "export-okf-version-beats-missing-dir",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "argv": ["export", "bogus", "--okf", "--version"],
+   "expect_exit": 0}
 ]
