@@ -1,0 +1,163 @@
+# Index Report
+
+Execution record for `rust/INDEX-PLAN.md` (roadmap:native-derived-index,
+RAC-KXBE6DEDTCYA) on branch `claude/native-derived-index-plan-58s5mq`
+(from the head of `claude/rac-engine-heal`): the derived-index cache and
+persistent store stack — ADR-099, 103, 104, 105, 106, 107, 108, 112 —
+ported to `rac-engine`/`rac-mcp` byte-parity against the frozen Python
+oracle (`.venv-oracle/bin/rac`, `0.1.dev50+g21c8be403`; `src/` verified
+byte-identical to the branch head; the Python tree was never modified,
+ADR-063 unchanged). This closes the maintainer's recorded precondition
+for the ADR-063 flip; the flip decision itself is NOT taken here.
+
+## Commit list
+
+| batch | commit | subject |
+| --- | --- | --- |
+| P0 | `64e2f13` | docs(decisions): record native index workspace dependencies — ADR-114 |
+| P0 | `65735fe` | test(engine): pin index-store contracts, format spec, and oracle golden vectors |
+| P0 | `9e1747d` | feat(parity): add engine-run cache warming and the index cache-state smoke suite |
+| P0 | `9100597` | docs(decisions): correct ADR-114 — rayon is an existing workspace dependency |
+| B1 | `a5ac586` | feat(engine): port rac index — the plain-walk inventory |
+| B2 | `5893e8f` | feat(engine): port the index codec and memory-mapped store |
+| B3 | `6eb0c5e` | feat(engine): serve rac find from the persistent store |
+| B4 | `039fee5` | feat(engine): port incremental validate with the .vseg row store |
+| B5 | `f98a1c4` | feat(engine): port the parallel cold build |
+| B6 | `ccf4584` | feat(engine): port serving freshness behind rac-mcp |
+| B7 | (this commit) | perf addendum, this report, final verification |
+
+Durable contracts: `rust/spec/index-store-format.md` (byte-level store
+spec) and `rust/spec/index-contracts.json` (per-module briefs). Golden
+vectors: `rust/spec/gen_vectors_index.py` →
+`rac-engine/tests/vectors/index_store.json` (oracle-written store
+bytes over two pinned fixture corpora, all 12 segments raw, plus
+`.vseg`/`.fseg` codec vectors and the manifest root-key probes).
+
+## Store byte-identity (the chosen parity surface)
+
+The roadmap's format-may-differ escape hatch was **not** needed: the
+native writer is byte-identical to the oracle's store.
+
+- Golden vectors: every segment of both fixture corpora byte-equal
+  (`index_store_vectors.rs`, raw-hex compare, regenerated after every
+  corpus-shifting commit).
+- Live corpus: an oracle-written store and a native-written store over
+  the working tree's `rac/` — `diff -r` clean across all 12 segments,
+  matching corpus hash and marker (`rac-engine/examples/store_write.rs`
+  is the referee helper).
+- Cross-engine from the CLI: parity cases capture
+  `cache/store/**` + the marker after cold, warm, stale, and
+  forced-parallel runs — the SETS and BYTES must match between the
+  oracle's cache tree and the native one, and do (`b3-*-capture`,
+  `b5-find-cold-parallel-build-capture`).
+- Worker invariance: per-segment hashes equal at 1 and 4 workers and
+  equal to the serial floor (`parallel_build.rs` test).
+
+## Referee battery (green after every batch, cache-on AND cache-off)
+
+- CLI suite 130/130; closure suite 391/391; retrieve suite 44/44 —
+  unchanged, `RAC_NO_CACHE=1` base env as always.
+- Index suite (`rust/parity-cases-index.json`): 45 cases — P0
+  cache-state smoke (13), B1 `rac index` (17), B3 find/store (8),
+  B4 incremental validate (6), B5 parallel build (1) — every case
+  proven oracle-vs-oracle before its port landed, then
+  oracle-vs-rust.
+- MCP: 56/56 (primary) and 76/76 (six-tool oracle) no-cache;
+  **cache-on 52/52 and 71/71** (`mcp_parity.py --cache-on`;
+  duplicate-token cases excluded, see ledger entry 2).
+- Mutation-sequence referee (`rust/tools/mcp_mutation_referee.py`):
+  both servers cache-on over one shared corpus, 15 tool calls
+  interleaved with edits, adds, deletes (including a duplicate-alias
+  delete and a double mutation): all frames byte-identical.
+- Harness growth (P0/B4): `engine-run` sandbox setup step (per-side
+  cache warming under the case env) and `remove` (delete/rename
+  staleness); existing suites re-proven oracle-vs-oracle after each
+  harness change.
+
+## Cache-state differential matrix
+
+Cold, warm, stale (edit/add/delete/rename), bypassed
+(`--no-cache` / `RAC_NO_CACHE`), verify, corrupt-segment,
+truncated-header, unwritable-cache-dir, config-change invalidation,
+top-level root keys — for `find`, `validate`, and the MCP server, each
+byte-compared against the oracle in the same state. Native
+warm == cold additionally pinned in cargo tests over five queries per
+fixture corpus, including duplicate-token queries.
+
+## Divergence ledger
+
+1. **S5 accepted miss** (ADR-105/112). An in-place rewrite preserving
+   both size and mtime_ns is invisible to the stat rung. Pinned as-is,
+   not fixed: the native engine reproduces the stale reuse, `--verify`
+   (the content-confirm floor) catches it, and the verify pass
+   self-heals the store. Confirmed behavior-identical against the
+   oracle by direct experiment; cargo test
+   `incremental_validate::s5_...` pins it.
+2. **Duplicate-token df (oracle defect, PORT-CONTRACT.d/10 §0a).** The
+   oracle's warm search dedups a repeated query term's document
+   frequency where its own cold walk counts per occurrence — an
+   ADR-112 violation recorded during the spike. The native engine
+   keeps **warm == cold** (per-occurrence df on both paths), so for
+   this input class native-warm intentionally diverges from
+   oracle-warm. Duplicate-token cases are excluded from cache-on
+   referee runs and pinned natively instead
+   (`index_store_vectors.rs` warm==cold over `"widget widget"` etc.).
+3. **inotify deferred (ADR-114).** The tracker's fastest rung is the
+   stat-manifest scan; `mode()` is always `"stat"`. Behavior-neutral
+   by construction — the oracle only ever trusted inotify to assert
+   *clean* — and worth ~1 ms/call at live-corpus scale (PERF-REPORT
+   addendum). The ladder seam remains for a later decision.
+4. **`retrieve_grounding` under the tracker walks fresh.** The
+   native six-tool server serves retrieve by fresh walk in both cache
+   modes (byte-neutral either way; cache-on 71/71 against the
+   six-tool oracle confirms). Serving it from the read-model is a
+   latency follow-up, not a parity item.
+5. **Snapshot-arm resolution tag asymmetry (oracle-faithful).** The
+   oracle resolves `get_artifact`/`get_related` over the mapped base's
+   identity rows (tags present) but over the delta snapshot's
+   tag-elided `identity_entries` projection — observable only inside a
+   mutation window. Mirrored exactly; the mutation referee pins both
+   arms.
+6. **Unknown-tool calls freshen the tracker.** The native server
+   resolves the read-model once per `tools/call` before dispatch; the
+   oracle freshens inside each known tool. Latency-only, no wire
+   bytes.
+
+## RAC_TIMING scorecard
+
+`rac-timing:` lines (stderr-only, env-gated, never a parity surface)
+ported on both cold-build paths with the oracle's exact shape:
+`build_parse_ms/build_derive_ms/build_write_ms/workers/files` on the
+cache cold miss and the tracker cold start, and
+`detect_ms/recompute_ms/files_changed` on incremental validate.
+
+## Performance
+
+See the `PERF-REPORT.md` warm-path addendum. Headline (5k synthetic
+corpus, outside git): warm `find --json` **43 ms** vs the roadmap's
+recorded ~21.6 s floor (which was recency-join-dominated; the honest
+out-of-git fresh walk is 647 ms — the cache still buys 15×); warm
+`validate` 92 ms vs 150 ms fresh; warm MCP `get_summary` ~1.8 ms/call.
+
+## Evidence for the ADR-063 flip (taken separately)
+
+- The full recorded index architecture (ADR-099–112) now exists in the
+  Rust engine, proven byte-identical at the store level (stronger than
+  the read-model-contract fallback the roadmap allowed) and at every
+  covered CLI/MCP surface, cache-on and cache-off, through mutation
+  windows.
+- The gap list is unchanged from the closure report: `explorer`
+  (fenced delivery surface), `ingest` (markitdown sidecar by ADR-072).
+  `index` — the last unported non-fenced verb — is closed by B1.
+- The oracle keeps two recorded defects the native engine does not
+  reproduce (ledger 2; the closure report's oracle-crash class); both
+  are documented divergences in the native engine's favor.
+
+## Final verification — clean rebuild, batteries twice
+
+From one `cargo clean` (full rebuild): see the tail of this report's
+landing commit message for the recorded runs — build + clippy
+`-D warnings` clean; `cargo test --release` (24 binaries) twice;
+CLI/closure/retrieve/index parity twice; MCP no-cache and cache-on
+suites twice; mutation referee twice — all green, scoreboards
+byte-identical between runs.

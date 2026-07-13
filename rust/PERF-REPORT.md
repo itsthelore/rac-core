@@ -99,3 +99,53 @@ requirement, even at 100k+ artifacts (projected fresh walk ~3 s at 100k).
 
 Python remains the authoritative engine until the maintainer decides
 otherwise (ADR-063); this spike changes the evidence, not the decision.
+
+---
+
+## Warm-path addendum (roadmap:native-derived-index, 2026-07-13)
+
+The derived-index stack (ADR-099/103/104/105/106/107/108/112) is now
+ported (`rust/INDEX-PLAN.md`, report in `rust/INDEX-REPORT.md`), so the
+"no cache by design" posture above is superseded: the native engine
+ships the cache **on by default** (ADR-112), byte-neutral by contract
+and refereed cache-on and cache-off. Same box class, same harness
+posture (piped stdio, neutralized env, medians of 7 warm runs / 3
+fresh runs), oracle `.venv-oracle` at `21c8be4`. Corpus: the 5k
+synthetic corpus (`rust/tools/gen_corpus.py --n 5000`), measured
+OUTSIDE any git repository so the numbers isolate the cache (see the
+recency note below).
+
+| Workload (5k corpus) | Python oracle | Rust | Ratio |
+|---|---|---|---|
+| `find --json` no-cache (fresh walk) | 8 654 ms | 647 ms | 13× |
+| `find --json` cold (walk + store write) | 5 606 ms | 1 445 ms | 3.9× |
+| `find --json` **warm** (mapped store) | 446 ms | **43 ms** | 10× |
+| `validate` no-cache | 7 082 ms | 150 ms | 47× |
+| `validate` cold (incremental first run) | 7 123 ms | 800 ms | 8.9× |
+| `validate` **warm** (`.vseg` reuse) | 542 ms | **92 ms** | 5.9× |
+| broad-match `find "system"` fresh → warm (Rust) | 9 103 → 1 044 ms | 873 → **211 ms** | — |
+| MCP `get_summary` warm (per call, live corpus, tracker) | 2.8 ms | **1.8 ms** | — |
+
+Against the roadmap's motivating number (RAC-KXBE6DEDTCYA: "uncached
+`find --json` over a 5,000-file synthetic corpus takes ~21.6 s in the
+Rust engine"): that measurement ran with the synthetic corpus INSIDE
+the repository's git tree, and is dominated by the ADR-045 per-match
+recency join (git lookups after ranking), not by the walk — the same
+query outside git is 0.87 s fresh. The cache closes the walk/derive
+half: warm `find` on the 5k corpus is **43 ms** (~500× under the
+recorded floor, ~15× under the out-of-git fresh walk). The recency
+join is orthogonal to the cache (it runs identically warm or cold, in
+both engines, only for matches inside a git tree) and is recorded here
+so the floor's provenance is honest.
+
+Warm MCP serving (ADR-105 tracker, stat-scan rung per ADR-114 — no
+inotify): after the cold call, `get_summary` serves at ~1.8 ms/call
+native vs ~2.8 ms/call for the oracle's inotify-clean skip; the
+stat-scan of a 427-file corpus prices at ~1 ms, so the deferred
+inotify rung buys nothing at this scale (it becomes interesting at
+100k+ files, where the seam it slots into still exists).
+
+Methodology: `RAC_CACHE_DIR` pointed at a scratch dir per engine;
+no-cache = `RAC_NO_CACHE=1`; cold = first cache-on run against an
+empty cache dir; warm = median of 7 subsequent runs. MCP per-call
+numbers from a single long-lived server driven over stdio.
