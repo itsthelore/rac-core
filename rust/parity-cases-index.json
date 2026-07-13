@@ -522,5 +522,254 @@
    "RAC_RS_VERSION": "0.1.dev50+g21c8be403"
   },
   "expect_exit": 0
+ },
+ {
+  "id": "b3-find-cold-capture-store",
+  "argv": [
+   "find",
+   "widget",
+   "rac",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo"
+  },
+  "capture": [
+   "cache/store/**",
+   "cache/*.json"
+  ],
+  "expect_exit": 0
+ },
+ {
+  "id": "b3-find-warm-capture-store",
+  "argv": [
+   "find",
+   "cache policy",
+   "rac"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "find",
+      "widget",
+      "rac",
+      "--json"
+     ]
+    }
+   ]
+  },
+  "capture": [
+   "cache/store/**",
+   "cache/*.json"
+  ],
+  "expect_exit": 0
+ },
+ {
+  "id": "b3-find-stale-rebuild-capture",
+  "argv": [
+   "find",
+   "gizmo",
+   "rac",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "find",
+      "gizmo",
+      "rac",
+      "--json"
+     ]
+    },
+    {
+     "step": "write",
+     "path": "rac/notes/unknown.md",
+     "content": "Fresh gizmo notes after the warm run.\n\n## Scratch Heading\n\n- gizmo line\n"
+    }
+   ]
+  },
+  "capture": [
+   "cache/store/**",
+   "cache/*.json"
+  ],
+  "expect_exit": 0
+ },
+ {
+  "id": "b3-find-corrupt-segment-degrades",
+  "argv": [
+   "find",
+   "widget",
+   "rac",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "find",
+      "widget",
+      "rac",
+      "--json"
+     ]
+    },
+    {
+     "step": "write",
+     "path": "cache/store/v1/e5543c5de55ec0481cfde5ddd3be3d8e2230ccfe6cccf258c8f51c978809d446/entries.seg",
+     "content": "garbage, not a segment"
+    }
+   ]
+  },
+  "capture": [
+   "cache/store/**",
+   "cache/*.json"
+  ],
+  "expect_exit": 0
+ },
+ {
+  "id": "b3-find-truncated-header-degrades",
+  "argv": [
+   "find",
+   "widget",
+   "rac",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "find",
+      "widget",
+      "rac",
+      "--json"
+     ]
+    },
+    {
+     "step": "write",
+     "path": "cache/store/v1/e5543c5de55ec0481cfde5ddd3be3d8e2230ccfe6cccf258c8f51c978809d446/header.seg",
+     "content": ""
+    }
+   ]
+  },
+  "capture": [
+   "cache/store/**",
+   "cache/*.json"
+  ],
+  "expect_exit": 0
+ },
+ {
+  "id": "b3-find-unwritable-cache-degrades",
+  "argv": [
+   "find",
+   "widget",
+   "rac",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "write",
+     "path": "cache",
+     "content": "a file where the cache dir should be\n"
+    }
+   ]
+  },
+  "expect_exit": 0
+ },
+ {
+  "id": "b3-find-top-level-cache",
+  "argv": [
+   "find",
+   "widget",
+   "rac",
+   "--top-level",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "find",
+      "widget",
+      "rac",
+      "--top-level",
+      "--json"
+     ]
+    }
+   ]
+  },
+  "expect_exit": 0
+ },
+ {
+  "id": "b3-find-live-corpus-cold",
+  "argv": [
+   "find",
+   "derived index cache",
+   "rac",
+   "--json"
+  ],
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "setup": [
+    {
+     "step": "mkdir",
+     "path": "cache"
+    }
+   ]
+  },
+  "normalize": [
+   "strip-recency-json"
+  ],
+  "expect_exit": 0
  }
 ]

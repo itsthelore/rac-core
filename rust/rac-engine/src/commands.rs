@@ -1087,6 +1087,10 @@ pub struct FindArgs {
     pub top_level: bool,
     /// The live-only facet (ADR-113): drop retired matches of every type.
     pub live: bool,
+    /// `--cache` / `--no-cache` (ADR-112: on by default).
+    pub cache: bool,
+    /// `--verify`: force the full-hash freshness floor on the cache path.
+    pub verify: bool,
 }
 
 /// `annotate_search_recency(matches, directory)` — the read-surface join
@@ -1118,11 +1122,60 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
     }
 }
 
+/// Serve `rac find` from the persistent index store (`_find_from_store`,
+/// ADR-112): a warm run against an unchanged corpus reads the mapped base;
+/// a cold run builds fresh, writes the store, and serves either the
+/// reopened view or the fresh structures (ADR-080).
+fn find_from_store(args: &FindArgs) -> crate::resolve::SearchResult {
+    use crate::derived_cache::{DerivedIndexCache, ReadModel};
+    let view = DerivedIndexCache::default().load_or_build(
+        &args.directory,
+        !args.top_level,
+        args.verify,
+    );
+    match view {
+        ReadModel::View(reader) => {
+            if args.decisions {
+                crate::read_model::store_find_decisions(&reader, &args.query)
+            } else {
+                crate::read_model::store_search(
+                    &reader,
+                    &args.query,
+                    args.artifact_type.as_deref(),
+                    &args.tags,
+                    args.live,
+                )
+            }
+        }
+        ReadModel::Fresh(derived) => {
+            if args.decisions {
+                crate::read_model::find_decisions_in(
+                    &derived.index_entries,
+                    &derived.live_decision_paths,
+                    &args.query,
+                )
+            } else {
+                crate::resolve::search_index_filtered(
+                    &derived.index_entries,
+                    &args.query,
+                    args.artifact_type.as_deref(),
+                    &args.tags,
+                    args.live,
+                )
+            }
+        }
+    }
+}
+
 pub fn cmd_find(args: &FindArgs) -> i32 {
     if !Path::new(&args.directory).is_dir() {
         return usage_error(&format!("not a directory: {}", args.directory));
     }
-    let mut result = if args.decisions {
+    let mut result = if crate::derived_cache::cache_enabled(args.cache) {
+        // Default store reuse (ADR-112): serve from the persistent index
+        // store instead of a fresh walk, byte-identical to the walk below.
+        find_from_store(args)
+    } else if args.decisions {
         // The live decision query (ADR-067): decision type filter + the
         // Accepted/non-retired liveness filter; `--tag` is silently ignored.
         crate::resolve::find_decisions(&args.directory, &args.query, !args.top_level)

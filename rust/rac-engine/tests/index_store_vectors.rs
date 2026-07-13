@@ -106,7 +106,41 @@ fn store_bytes_match_oracle_goldens() {
         let reader = open_store(&cache_dir, expected_hash, SCHEMA_VERSION).expect("open");
         reader_reproduces_fresh_build(&reader, &derived);
 
-        // Fail-closed gates over this real store.
+        // Warm == cold on the search surface, including the duplicate-token
+        // class where the ORACLE's warm path diverges from its own cold path
+        // (PORT-CONTRACT.d/10 §0a) — the native engine pins walk semantics
+        // on both paths instead.
+        let reader = open_store(&cache_dir, expected_hash, SCHEMA_VERSION).expect("reopen");
+        for query in ["widget", "cache policy", "widget widget", "café", "sync sync sync"] {
+            let cold = rac_engine::resolve::search_index_filtered(
+                &derived.index_entries,
+                query,
+                None,
+                &[],
+                false,
+            );
+            let warm = rac_engine::read_model::store_search(&reader, query, None, &[], false);
+            assert_eq!(
+                rac_engine::output::render_find_json(&warm, true),
+                rac_engine::output::render_find_json(&cold, true),
+                "warm != cold for {query:?} over {name}"
+            );
+        }
+        let cold = rac_engine::read_model::find_decisions_in(
+            &derived.index_entries,
+            &derived.live_decision_paths,
+            "widget",
+        );
+        let warm = rac_engine::read_model::store_find_decisions(&reader, "widget");
+        assert_eq!(
+            rac_engine::output::render_find_json(&warm, true),
+            rac_engine::output::render_find_json(&cold, true),
+            "decisions warm != cold over {name}"
+        );
+        drop(reader);
+
+        // Fail-closed gates over this real store (LAST — the self-heal probe
+        // rewrites the store with an empty bundle).
         corruption_gates(&cache_dir, expected_hash, &seg_dir);
         let _ = fs::remove_dir_all(&cache_dir);
     }

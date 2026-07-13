@@ -1441,6 +1441,8 @@ fn run_find(rest: &[&String]) -> u8 {
     let mut explain = false;
     let mut top_level = false;
     let mut live = false;
+    let mut cache = true;
+    let mut verify = false;
     let mut extras: Vec<String> = Vec::new();
     let mut positional_only = false;
 
@@ -1464,8 +1466,10 @@ fn run_find(rest: &[&String]) -> u8 {
             "--explain" => explain = true,
             "--top-level" => top_level = true,
             "--live" => live = true, // the live-only facet (ADR-113)
-            "--recursive" => {}                        // affirmation of the default
-            "--cache" | "--no-cache" | "--verify" => {} // output-neutral (ADR-112)
+            "--recursive" => {} // affirmation of the default
+            "--cache" => cache = true,
+            "--no-cache" => cache = false,
+            "--verify" => verify = true,
             "--decisions" => {
                 // Mutually exclusive with --type (argparse group).
                 if let Some(code) =
@@ -1512,6 +1516,8 @@ fn run_find(rest: &[&String]) -> u8 {
         explain,
         top_level,
         live,
+        cache,
+        verify,
     }) as u8
 }
 
