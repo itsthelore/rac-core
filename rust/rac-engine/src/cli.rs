@@ -281,6 +281,8 @@ fn run_validate(rest: &[&String]) -> u8 {
     let mut sarif = false;
     let mut top_level = false;
     let mut corpus: Option<String> = None;
+    let mut cache = true;
+    let mut verify = false;
     let mut extras: Vec<String> = Vec::new();
     let mut positional_only = false;
 
@@ -312,7 +314,9 @@ fn run_validate(rest: &[&String]) -> u8 {
             }
             "--top-level" => top_level = true,
             "--recursive" => {} // affirmation of the default
-            "--cache" | "--no-cache" | "--verify" => {} // output-neutral (§6)
+            "--cache" => cache = true,
+            "--no-cache" => cache = false,
+            "--verify" => verify = true,
             other if other == "--corpus" || other.starts_with("--corpus=") => {
                 match take_opt_value(prog, "--corpus", other, rest, &mut i) {
                     Ok(v) => corpus = Some(v),
@@ -337,6 +341,8 @@ fn run_validate(rest: &[&String]) -> u8 {
         sarif,
         top_level,
         corpus,
+        cache,
+        verify,
     }) as u8
 }
 

@@ -771,5 +771,192 @@
    "strip-recency-json"
   ],
   "expect_exit": 0
+ },
+ {
+  "id": "b4-validate-warm-sarif",
+  "argv": [
+   "validate",
+   "rac",
+   "--sarif"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": "",
+   "RAC_RS_VERSION": "0.1.dev50+g21c8be403"
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "validate",
+      "rac"
+     ],
+     "expect_exit": 1
+    }
+   ]
+  },
+  "expect_exit": 1,
+  "expect_nonzero_ok": true
+ },
+ {
+  "id": "b4-validate-rename-stale",
+  "argv": [
+   "validate",
+   "rac"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "validate",
+      "rac"
+     ],
+     "expect_exit": 1
+    },
+    {
+     "step": "write",
+     "path": "rac/dup/one-renamed.md",
+     "content": "# Duplicate Widget Alias One\n\n## ID\n\nFIX-IDX-DUP\n\n## Context\n\nFirst holder of the duplicated identifier.\n\n## Decision\n\nExists to pin duplicate-alias resolution.\n\n## Consequences\n\nResolution reports a duplicate.\n\n## Status\n\nAccepted\n"
+    },
+    {
+     "step": "remove",
+     "path": "rac/dup/one.md"
+    }
+   ]
+  },
+  "expect_exit": 1,
+  "expect_nonzero_ok": true
+ },
+ {
+  "id": "b4-validate-delete-stale",
+  "argv": [
+   "validate",
+   "rac",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "validate",
+      "rac",
+      "--json"
+     ],
+     "expect_exit": 1
+    },
+    {
+     "step": "remove",
+     "path": "rac/decisions/adr-4-invalid.md"
+    }
+   ]
+  },
+  "expect_exit": 0
+ },
+ {
+  "id": "b4-validate-add-stale",
+  "argv": [
+   "validate",
+   "rac"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "validate",
+      "rac"
+     ],
+     "expect_exit": 1
+    },
+    {
+     "step": "write",
+     "path": "rac/decisions/adr-5-added.md",
+     "content": "# ADR-5: Widget Export Format\n\n## ID\n\nFIX-IDX-DEC5\n\n## Context\n\nWidget exports need a stable format; this record is now complete.\n\n## Decision\n\nExport widgets as JSON lines.\n\n## Consequences\n\nExports stay diffable.\n\n## Status\n\nAccepted\n"
+    }
+   ]
+  },
+  "expect_exit": 1,
+  "expect_nonzero_ok": true
+ },
+ {
+  "id": "b4-validate-config-change-invalidates",
+  "argv": [
+   "validate",
+   "rac"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "validate",
+      "rac"
+     ],
+     "expect_exit": 1
+    },
+    {
+     "step": "write",
+     "path": ".rac/config.yaml",
+     "content": "repository_key: FIX\nvalidation:\n  rules:\n    missing-consequences: warning\n"
+    }
+   ]
+  },
+  "expect_exit": 0
+ },
+ {
+  "id": "b4-validate-top-level-cache",
+  "argv": [
+   "validate",
+   "rac",
+   "--top-level"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": ""
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo",
+   "setup": [
+    {
+     "step": "engine-run",
+     "argv": [
+      "validate",
+      "rac",
+      "--top-level"
+     ]
+    }
+   ]
+  },
+  "expect_exit": 0
  }
 ]

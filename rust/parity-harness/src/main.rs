@@ -136,6 +136,11 @@ enum SetupStep {
         path: String,
         commits: Vec<GitCommit>,
     },
+    /// Remove a file (or an empty directory) inside the sandbox — the
+    /// delete/rename half of cache staleness cases (INDEX-PLAN B4). A
+    /// missing target is a setup error: a case that deletes nothing is
+    /// not testing what it claims.
+    Remove { path: String },
     /// Run the SIDE'S OWN engine once inside the sandbox before the
     /// refereed run — the cache-warming step (INDEX-PLAN P0). argv gets
     /// `{SANDBOX}` resolved; env is the same deterministic base + case
@@ -686,6 +691,15 @@ fn apply_setup_step(
                 )?;
             }
             Ok(())
+        }
+        SetupStep::Remove { path } => {
+            let target = root.join(path);
+            let result = if target.is_dir() {
+                fs::remove_dir(&target)
+            } else {
+                fs::remove_file(&target)
+            };
+            result.map_err(|e| format!("cannot remove {}: {e}", target.display()))
         }
         SetupStep::EngineRun {
             argv,
