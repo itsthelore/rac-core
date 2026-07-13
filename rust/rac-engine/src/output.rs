@@ -3008,3 +3008,92 @@ pub fn render_usage_json(
 ) -> String {
     dumps_indent2_no_ascii(&crate::usage::combined_value(cli, guide))
 }
+
+// --- skill / hook (rac skill, rac hook — PORT-CONTRACT.d/15) -----------------
+
+/// Human `rac skill list`: bold header, blank line, `- <name ljust w>  <desc>`
+/// rows in registry order; the name column width is computed dynamically as
+/// `max(len(name))` (13 with the current set).
+pub fn render_skill_list_human() -> String {
+    let specs = &crate::skill::BUNDLED_SKILLS;
+    let mut lines = vec![bold("Bundled agent skills:"), String::new()];
+    let name_w = specs.iter().map(|s| s.name.chars().count()).max().unwrap_or(0);
+    for spec in specs {
+        lines.push(format!("- {}  {}", ljust(spec.name, name_w), spec.description));
+    }
+    lines.join("\n")
+}
+
+/// JSON `rac skill list` (stable contract, ADR-007; `ensure_ascii=True`).
+pub fn render_skill_list_json() -> String {
+    let skills: Vec<Value> = crate::skill::BUNDLED_SKILLS
+        .iter()
+        .map(|s| json!({"skill": s.name, "description": s.description}))
+        .collect();
+    dumps_indent2(&json!({"schema_version": "1", "skills": skills}))
+}
+
+/// Human `rac skill install`: one `Installed <name> skill: <path>` line per
+/// skill, blank line, the discovery blurb.
+pub fn render_skill_install_human(installation: &crate::skill::SkillInstallation) -> String {
+    let mut lines: Vec<String> = installation
+        .skills
+        .iter()
+        .map(|s| format!("Installed {} skill: {}", s.skill, s.path))
+        .collect();
+    lines.push(String::new());
+    lines.push(
+        "Claude Code discovers skills automatically from .claude/skills/ in the project."
+            .to_string(),
+    );
+    lines.join("\n")
+}
+
+/// JSON `rac skill install` — note: no `bytes_written` (it is in the
+/// oracle's model but NOT in `to_dict`, skill brief landmine 4).
+pub fn render_skill_install_json(installation: &crate::skill::SkillInstallation) -> String {
+    let skills: Vec<Value> = installation
+        .skills
+        .iter()
+        .map(|s| json!({"skill": s.skill, "path": s.path}))
+        .collect();
+    dumps_indent2(&json!({"schema_version": "1", "installed": true, "skills": skills}))
+}
+
+/// Human `rac hook list`: bold header, blank line, `- <style ljust w>  <desc>`
+/// rows (style column width dynamic = 11 with the current set).
+pub fn render_hook_list_human() -> String {
+    let specs = &crate::hook::BUNDLED_HOOKS;
+    let mut lines = vec![bold("Bundled git hooks:"), String::new()];
+    let style_w = specs.iter().map(|s| s.style.chars().count()).max().unwrap_or(0);
+    for spec in specs {
+        lines.push(format!("- {}  {}", ljust(spec.style, style_w), spec.description));
+    }
+    lines.join("\n")
+}
+
+/// JSON `rac hook list` (stable contract, ADR-007).
+pub fn render_hook_list_json() -> String {
+    let hooks: Vec<Value> = crate::hook::BUNDLED_HOOKS
+        .iter()
+        .map(|h| json!({"style": h.style, "description": h.description}))
+        .collect();
+    dumps_indent2(&json!({"schema_version": "1", "hooks": hooks}))
+}
+
+/// Human `rac hook install`.
+pub fn render_hook_install_human(installation: &crate::hook::InstalledHook) -> String {
+    format!(
+        "Installed {} git hook: {}\n\nGit runs it automatically on each commit. Remove the file to stop it.",
+        installation.style, installation.path
+    )
+}
+
+/// JSON `rac hook install`.
+pub fn render_hook_install_json(installation: &crate::hook::InstalledHook) -> String {
+    dumps_indent2(&json!({
+        "schema_version": "1",
+        "installed": true,
+        "hook": {"style": installation.style, "path": installation.path}
+    }))
+}

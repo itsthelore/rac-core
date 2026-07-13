@@ -1083,6 +1083,164 @@ pub fn cmd_usage(args: &UsageArgs) -> i32 {
     EXIT_OK
 }
 
+pub struct SkillArgs {
+    /// Validated positional choice: `install` or `list`.
+    pub action: String,
+    /// Optional skill name (install: one skill; absent: all, all-or-nothing).
+    pub name: Option<String>,
+    /// Target directory (argparse default ".").
+    pub dir: String,
+    pub json: bool,
+}
+
+/// `rac skill <action> [name] [--dir DIR] [--json]` — list or install the
+/// bundled Claude Code agent skills. The `--dir` not-a-directory check runs
+/// BEFORE the unknown-name check (skill brief, landmine 5).
+pub fn cmd_skill(args: &SkillArgs) -> i32 {
+    use crate::skill::{install_skills, SkillInstallError};
+
+    if args.action == "list" {
+        if args.name.is_some() {
+            return usage_error("skill list takes no skill name");
+        }
+        if args.json {
+            emit(output::render_skill_list_json());
+        } else {
+            emit(output::render_skill_list_human());
+        }
+        return EXIT_OK;
+    }
+
+    if !Path::new(&args.dir).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.dir));
+    }
+    let installation = match install_skills(&args.dir, args.name.as_deref()) {
+        Ok(installation) => installation,
+        Err(SkillInstallError::NotFound(message)) => return usage_error(&message),
+        Err(SkillInstallError::FileExists(message)) | Err(SkillInstallError::Io(message)) => {
+            // Refused (never overwrites) or operational failure — exit 1
+            // with the `rac: ` prefix, every existing file untouched.
+            eprintln!("rac: {message}");
+            return EXIT_VALIDATION_FAILED;
+        }
+    };
+    if args.json {
+        emit(output::render_skill_install_json(&installation));
+    } else {
+        emit(output::render_skill_install_human(&installation));
+    }
+    EXIT_OK
+}
+
+pub struct HookArgs {
+    /// Validated positional choice: `install` or `list`.
+    pub action: String,
+    /// Validated `--style` choice (argparse default `post-commit`).
+    pub style: String,
+    /// Target directory (argparse default ".").
+    pub dir: String,
+    pub json: bool,
+}
+
+/// `rac hook <action> [--style STYLE] [--dir DIR] [--json]` — list or
+/// install the bundled git hooks. `list` ignores `--style`/`--dir`; an
+/// invalid style never reaches here (argparse choices fire first).
+pub fn cmd_hook(args: &HookArgs) -> i32 {
+    use crate::hook::{install_hook, HookInstallError};
+
+    if args.action == "list" {
+        if args.json {
+            emit(output::render_hook_list_json());
+        } else {
+            emit(output::render_hook_list_human());
+        }
+        return EXIT_OK;
+    }
+
+    if !Path::new(&args.dir).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.dir));
+    }
+    let installation = match install_hook(&args.dir, &args.style) {
+        Ok(installation) => installation,
+        Err(HookInstallError::NotAGitWorkTree(message)) => return usage_error(&message),
+        Err(HookInstallError::FileExists(message)) | Err(HookInstallError::Io(message)) => {
+            eprintln!("rac: {message}");
+            return EXIT_VALIDATION_FAILED;
+        }
+    };
+    if args.json {
+        emit(output::render_hook_install_json(&installation));
+    } else {
+        emit(output::render_hook_install_human(&installation));
+    }
+    EXIT_OK
+}
+
+pub struct EvalArgs {
+    pub check: bool,
+    pub update_baseline: bool,
+    pub json: bool,
+    pub root: String,
+    pub queries: String,
+    pub baseline: String,
+    pub config: String,
+}
+
+/// `rac eval [--check | --update-baseline] [--json] ...` — score retrieval
+/// against the fixture benchmark, or gate against the baseline (ADR-066).
+/// Modes win over `--json` (eval brief, landmine 7); every `EvalUsageError`
+/// exits 2 with a `rac eval: ` stderr prefix — including a missing baseline
+/// under `--check`, discovered only AFTER the benchmark has run (statement
+/// order mirrors the oracle's single try block).
+pub fn cmd_eval(args: &EvalArgs) -> i32 {
+    use crate::eval;
+
+    let fail = |err: eval::EvalUsageError| -> i32 {
+        eprintln!("rac eval: {}", err.0);
+        EXIT_USAGE
+    };
+    let scorecard = match eval::run_eval(&args.root, &args.queries) {
+        Ok(scorecard) => scorecard,
+        Err(err) => return fail(err),
+    };
+    if args.update_baseline {
+        let payload = eval::render_metrics_json(&scorecard.metrics) + "\n";
+        if let Err(e) = std::fs::write(&args.baseline, payload) {
+            // The oracle lets the OSError escape as a traceback (exit 1);
+            // fail with the same code without the traceback noise.
+            eprintln!("rac: cannot write {}: {e}", args.baseline);
+            return EXIT_VALIDATION_FAILED;
+        }
+        emit(format!("rac eval: baseline updated -> {}", args.baseline));
+        return EXIT_OK;
+    }
+    if args.check {
+        let baseline = match eval::load_baseline(&args.baseline) {
+            Ok(baseline) => baseline,
+            Err(err) => return fail(err),
+        };
+        let config = match eval::load_config(&args.config) {
+            Ok(config) => config,
+            Err(err) => return fail(err),
+        };
+        let failures = eval::evaluate_gate(&scorecard.metrics, &baseline, &config);
+        if !failures.is_empty() {
+            for failure in &failures {
+                emit(failure.render());
+            }
+            return EXIT_VALIDATION_FAILED;
+        }
+        emit("rac eval: gate PASS".to_string());
+        return EXIT_OK;
+    }
+    if args.json {
+        emit(eval::render_scorecard_json(&scorecard));
+    } else {
+        emit(eval::render_scorecard_human(&scorecard));
+    }
+    EXIT_OK
+}
+
 pub struct TelemetryArgs {
     /// Validated positional choice; argparse default is `status`.
     pub action: String,

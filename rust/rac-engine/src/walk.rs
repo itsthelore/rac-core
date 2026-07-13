@@ -161,6 +161,15 @@ pub fn normalize_root(directory: &str) -> String {
     }
 }
 
+/// `str(Path(root) / a / b / ...)` — the normalized root joined with literal
+/// relative components (skill/hook install destination paths). Reuses the
+/// walk's `join_display` semantics: a bare-`.` root vanishes, "/" and a
+/// preserved "//" prefix avoid doubled slashes.
+pub fn py_join(root: &str, components: &[&str]) -> String {
+    let owned: Vec<String> = components.iter().map(|c| (*c).to_string()).collect();
+    join_display(&normalize_root(root), &owned)
+}
+
 /// What a command should do with a positional path argument: validate/inspect
 /// and friends dispatch a single file directly, a directory through the walk.
 #[derive(Debug, Clone, PartialEq, Eq)]

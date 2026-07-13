@@ -708,6 +708,12 @@ pub fn py_format_1f(x: f64) -> String {
     py_fixed(x, 1)
 }
 
+/// Python `f"{x:.<nd>f}"` for an arbitrary decimal count (eval's `.3f`,
+/// `.6f`, and `.0f` report/gate formats).
+pub fn py_format_fixed(x: f64, nd: usize) -> String {
+    py_fixed(x, nd)
+}
+
 /// Python `f"{x:.0%}"` — multiplies by 100 in binary (a rounding f64
 /// multiply, exactly as CPython does), formats with zero decimals
 /// half-to-even, appends `%`.
