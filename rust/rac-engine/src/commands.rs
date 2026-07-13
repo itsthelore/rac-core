@@ -669,6 +669,77 @@ pub fn cmd_gate(args: &GateArgs) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// cmd_watchkeeper
+// ---------------------------------------------------------------------------
+
+pub struct WatchkeeperArgs {
+    pub directory: Option<String>,
+    pub base: String,
+    pub head: Option<String>,
+    pub format: String, // human | json | github (choice-validated by the parser)
+    pub json: bool,     // alias that OVERRIDES --format to json
+    pub fail_on: String, // error | warning | none
+    pub annotate: bool, // github format's stderr annotations (--no-annotate clears)
+}
+
+/// Review product knowledge changes between two repository states. Base and
+/// head each name an existing directory (used as-is) or a git revision
+/// materialized via `git archive`. Failure policy (v0.12.2): `error` fails
+/// on a review recommendation, `warning` also on any warning-severity
+/// finding, `none` never fails. Revision/repository errors are the exit-2
+/// usage class (`rac: <msg>`).
+pub fn cmd_watchkeeper(args: &WatchkeeperArgs) -> i32 {
+    let directory = match &args.directory {
+        Some(d) => d.clone(),
+        // ADR-018: rac/ is the conventional knowledge root — compare it when
+        // it exists; otherwise the current directory.
+        None => {
+            if Path::new("rac").is_dir() {
+                "rac".to_string()
+            } else {
+                ".".to_string()
+            }
+        }
+    };
+    if !Path::new(&directory).is_dir() {
+        return usage_error(&format!("not a directory: {directory}"));
+    }
+    let report = match crate::watchkeeper::build_watchkeeper_report(
+        &directory,
+        &args.base,
+        args.head.as_deref(),
+    ) {
+        Ok(report) => report,
+        Err(exc) => return usage_error(exc.message()),
+    };
+    let output_format = if args.json { "json" } else { args.format.as_str() };
+    if output_format == "json" {
+        emit(output::render_watchkeeper_json(&report));
+    } else if output_format == "github" {
+        // stdout is the step-summary Markdown; annotations go to stderr so
+        // `> "$GITHUB_STEP_SUMMARY"` keeps them in the step log.
+        emit(output::render_watchkeeper_github(&report));
+        if args.annotate {
+            for line in output::watchkeeper_annotations(&report) {
+                eprintln!("{line}");
+            }
+        }
+    } else {
+        emit(output::render_watchkeeper_human(&report));
+    }
+    if args.fail_on == "none" {
+        return EXIT_OK;
+    }
+    if report.review_recommended() {
+        return EXIT_VALIDATION_FAILED;
+    }
+    if args.fail_on == "warning" && report.has_warnings() {
+        return EXIT_VALIDATION_FAILED;
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
 // cmd_doctor
 // ---------------------------------------------------------------------------
 

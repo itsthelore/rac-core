@@ -13,8 +13,9 @@ use crate::commands::{
     FindArgs, GateArgs, HookArgs, ImproveArgs, InitArgs, InspectArgs, McpStatsArgs, MigrateArgs,
     NewArgs, PortfolioArgs, QuickstartArgs, RelationshipsArgs, RenameArgs, ResolveArgs,
     RetrieveArgs, ReviewArgs, SchemaArgs, SkillArgs, StatsArgs, TelemetryArgs, TemplatesArgs,
-    UsageArgs, ValidateArgs,
+    UsageArgs, ValidateArgs, WatchkeeperArgs,
 };
+use crate::commands::cmd_watchkeeper;
 use crate::output::rac_version;
 
 /// Root subcommand table, in argparse declaration order (the order the
@@ -172,11 +173,15 @@ fn run_dispatch(args: &[String]) -> u8 {
     // quickstart --key/--type — measured: `quickstart --type --version`
     // exits 2 while `quickstart --key bad --version` prints the version).
     // Those parse order-aware and fire version/help at the encounter
-    // point, like argparse.
+    // point, like argparse. watchkeeper joins the set for its
+    // choice-validated option VALUES (--format/--fail-on) and value-taking
+    // options (--base/--head), measured: `watchkeeper --format bogus
+    // --version` exits 2 while `watchkeeper --version --format bogus`
+    // prints the version.
     let order_aware = matches!(
         first.as_str(),
         "mcp-stats" | "telemetry" | "usage" | "skill" | "hook" | "eval" | "init" | "quickstart"
-            | "migrate"
+            | "migrate" | "watchkeeper"
     );
     if !order_aware {
         if rest.iter().any(|a| a.as_str() == "--version") {
@@ -210,6 +215,7 @@ fn run_dispatch(args: &[String]) -> u8 {
         "decisions-for" => run_decisions_for(&rest),
         "gate" => run_gate(&rest),
         "doctor" => run_doctor(&rest),
+        "watchkeeper" => run_watchkeeper(&rest),
         "mcp-stats" => run_mcp_stats(&rest),
         "usage" => run_usage(&rest),
         "telemetry" => run_telemetry(&rest),
@@ -1114,6 +1120,132 @@ fn run_hook(rest: &[&String]) -> u8 {
         style,
         dir,
         json,
+    }) as u8
+}
+
+/// `rac watchkeeper [directory] [--base REV] [--head REV]
+/// [--format {human,json,github}] [--json] [--fail-on {error,warning,none}]
+/// [--no-annotate]` — order-aware: `--format`/`--fail-on` are
+/// argparse-choice-validated when their VALUE is consumed and a missing
+/// `--base`/`--head` value errors at its own position (each beats a later
+/// `--version`; an earlier `--version` wins). The directory positional is a
+/// free string (a bad directory defers to dispatch, so `--version` after it
+/// still wins), and extra positionals defer to the end-of-parse
+/// `unrecognized arguments`.
+fn run_watchkeeper(rest: &[&String]) -> u8 {
+    let prog = "rac watchkeeper";
+    let mut directory: Option<String> = None;
+    let mut base: String = "main".to_string();
+    let mut head: Option<String> = None;
+    let mut format: String = "human".to_string();
+    let mut json = false;
+    let mut fail_on: String = "error".to_string();
+    let mut annotate = true;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let format_choice = |v: &str| -> Option<u8> {
+        if matches!(v, "human" | "json" | "github") {
+            None
+        } else {
+            Some(argparse_error(
+                prog,
+                &format!(
+                    "argument --format: invalid choice: '{v}' (choose from 'human', 'json', 'github')"
+                ),
+            ))
+        }
+    };
+    let fail_on_choice = |v: &str| -> Option<u8> {
+        if matches!(v, "error" | "warning" | "none") {
+            None
+        } else {
+            Some(argparse_error(
+                prog,
+                &format!(
+                    "argument --fail-on: invalid choice: '{v}' (choose from 'error', 'warning', 'none')"
+                ),
+            ))
+        }
+    };
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--json" => json = true,
+            "--no-annotate" => annotate = false,
+            other if other == "--base" || other.starts_with("--base=") => {
+                match take_opt_value(prog, "--base", other, rest, &mut i) {
+                    Ok(v) => base = v,
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--head" || other.starts_with("--head=") => {
+                match take_opt_value(prog, "--head", other, rest, &mut i) {
+                    Ok(v) => head = Some(v),
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--format" || other.starts_with("--format=") => {
+                match take_opt_value(prog, "--format", other, rest, &mut i) {
+                    Ok(v) => {
+                        if let Some(code) = format_choice(&v) {
+                            return code;
+                        }
+                        format = v;
+                    }
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--fail-on" || other.starts_with("--fail-on=") => {
+                match take_opt_value(prog, "--fail-on", other, rest, &mut i) {
+                    Ok(v) => {
+                        if let Some(code) = fail_on_choice(&v) {
+                            return code;
+                        }
+                        fail_on = v;
+                    }
+                    Err(code) => return code,
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_watchkeeper(&WatchkeeperArgs {
+        directory,
+        base,
+        head,
+        format,
+        json,
+        fail_on,
+        annotate,
     }) as u8
 }
 

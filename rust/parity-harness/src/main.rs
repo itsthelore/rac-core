@@ -84,6 +84,14 @@ struct Case {
     /// install cases). Default: bytes only.
     #[serde(default)]
     compare_file_mode: bool,
+    /// Byte-compare STDERR as well (after the case's normalizations), for
+    /// commands whose stderr is contract-shaped and deterministic —
+    /// watchkeeper's github-mode annotations, `rac: <msg>` usage errors,
+    /// and empty-stderr proofs. Default false: stderr is recorded (length
+    /// only) but not refereed, because argparse usage bodies and traceback
+    /// tails are documented out-of-scope divergences.
+    #[serde(default)]
+    compare_stderr: bool,
 }
 
 /// Per-engine sandbox spec: a fixture tree to copy in, then ordered setup
@@ -753,7 +761,7 @@ fn capture_files(
 struct RunOutput {
     exit: i32,
     stdout: Vec<u8>,
-    stderr_len: usize,
+    stderr: Vec<u8>,
 }
 
 /// Deterministic base environment for every engine run (PORT-CONTRACT.d/01
@@ -856,7 +864,7 @@ fn run_engine(
     Ok(RunOutput {
         exit,
         stdout: out.stdout,
-        stderr_len: out.stderr.len(),
+        stderr: out.stderr,
     })
 }
 
@@ -1010,6 +1018,35 @@ fn judge_case(case: &Case, side_a: &EngineSide, side_b: &EngineSide) -> CaseResu
         (_, Err(e)) => reasons.push(format!("engine B: {e}")),
     }
 
+    // stderr comparison, opt-in per case: same normalizations, same byte
+    // referee, its own failure context (watchkeeper github-mode annotations
+    // and `rac: <msg>` usage errors are contract-shaped stderr).
+    if case.compare_stderr {
+        match (
+            apply_normalizations(&case.normalize, &a.stderr, &ctx_a),
+            apply_normalizations(&case.normalize, &b.stderr, &ctx_b),
+        ) {
+            (Ok(na), Ok(nb)) => {
+                if let Some(off) = first_diff(&na, &nb) {
+                    reasons.push(format!(
+                        "stderr mismatch at byte {off} (normalized lengths A={} B={})",
+                        na.len(),
+                        nb.len()
+                    ));
+                    if diff_context.is_none() {
+                        diff_context = Some(format!(
+                            "engine A stderr (normalized):\n{}\nengine B stderr (normalized):\n{}",
+                            hexdump_window(&na, off),
+                            hexdump_window(&nb, off)
+                        ));
+                    }
+                }
+            }
+            (Err(e), _) => reasons.push(format!("engine A stderr: {e}")),
+            (_, Err(e)) => reasons.push(format!("engine B stderr: {e}")),
+        }
+    }
+
     // Written-tree comparison: the captured file SETS must be identical,
     // then each common file's bytes after the case's normalizations (the
     // same ones applied to stdout), then modes when the case demands.
@@ -1064,8 +1101,8 @@ fn judge_case(case: &Case, side_a: &EngineSide, side_b: &EngineSide) -> CaseResu
         expect_exit: case.expect_exit,
         stdout_bytes_a: a.stdout.len(),
         stdout_bytes_b: b.stdout.len(),
-        stderr_bytes_a: a.stderr_len,
-        stderr_bytes_b: b.stderr_len,
+        stderr_bytes_a: a.stderr.len(),
+        stderr_bytes_b: b.stderr.len(),
         normalize: case.normalize.clone(),
         fail_reasons: reasons,
         first_diff_offset,

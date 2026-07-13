@@ -3490,3 +3490,538 @@ pub fn render_rename_result_json(result: &crate::rename::RenameResult) -> String
         "identity_edits": result.identity_edits,
     }))
 }
+
+// --- watchkeeper --------------------------------------------------------------
+
+use crate::compare::{RelationshipIssueRef, CHANGE_ADDED, CHANGE_MODIFIED};
+use crate::intent::{IntentFinding, SEVERITY_WARNING as WK_SEVERITY_WARNING};
+use crate::watchkeeper::{
+    is_recommending, WatchkeeperReport, REASON_BROKEN_RELATIONSHIP,
+    REASON_VALIDATION_REGRESSION,
+};
+
+fn wk_delta(base: usize, head: usize) -> String {
+    format!("{base} \u{2192} {head}")
+}
+
+/// `str(x)` for the optional fields Python interpolates directly — `None`
+/// renders as the literal `None` (the duplicate-identifier annotation's
+/// `reference 'None'` is contract bytes).
+fn py_opt_str(value: &Option<String>) -> &str {
+    value.as_deref().unwrap_or("None")
+}
+
+fn wk_issue_phrase(issue: &RelationshipIssueRef) -> String {
+    match &issue.relationship {
+        None => {
+            // `issue.identifier or issue.path` — empty string is falsy.
+            let subject = match issue.identifier.as_deref() {
+                Some(id) if !id.is_empty() => id,
+                _ => issue.path.as_str(),
+            };
+            format!("{subject}: {}", issue.code)
+        }
+        Some(relationship) => {
+            let label = py_title(&relationship.replace('_', " "));
+            format!(
+                "{} \u{2014} {} reference '{}' ({})",
+                issue.path,
+                label,
+                py_opt_str(&issue.target),
+                issue.code
+            )
+        }
+    }
+}
+
+/// Human-readable `rac watchkeeper` output (v0.12.0).
+pub fn render_watchkeeper_human(report: &WatchkeeperReport) -> String {
+    let comparison = &report.comparison;
+    let mut lines: Vec<String> = vec![
+        bold("RAC Watchkeeper"),
+        "===============".to_string(),
+        String::new(),
+        format!("Directory:  {}", report.directory),
+        format!("Comparing:  {} \u{2192} {}", report.base, report.head),
+        String::new(),
+        bold("Changed Artifacts"),
+        "-----------------".to_string(),
+        String::new(),
+    ];
+    if !comparison.changes.is_empty() {
+        for change in &comparison.changes {
+            let icon = match change.change {
+                CHANGE_ADDED => "+",
+                CHANGE_MODIFIED => "~",
+                _ => "-",
+            };
+            lines.push(format!("  {icon} {}  ({})", change.path, change.type_name));
+        }
+    } else {
+        lines.push("  No product artifact changes detected.".to_string());
+    }
+
+    let validation = &comparison.validation;
+    lines.push(String::new());
+    lines.push(bold("Validation"));
+    lines.push("----------".to_string());
+    lines.push(String::new());
+    lines.push(format!(
+        "  Valid:    {}",
+        wk_delta(validation.base_valid, validation.head_valid)
+    ));
+    lines.push(format!(
+        "  Invalid:  {}",
+        wk_delta(validation.base_invalid, validation.head_invalid)
+    ));
+    if !validation.newly_invalid.is_empty() {
+        lines.push(String::new());
+        lines.push("  Newly invalid:".to_string());
+        for path in &validation.newly_invalid {
+            lines.push(format!("    {} {path}", red("\u{2717}")));
+        }
+    }
+    if !validation.newly_valid.is_empty() {
+        lines.push(String::new());
+        lines.push("  Newly valid:".to_string());
+        for path in &validation.newly_valid {
+            lines.push(format!("    {} {path}", green("\u{2713}")));
+        }
+    }
+
+    let relationships = &comparison.relationships;
+    lines.push(String::new());
+    lines.push(bold("Relationships"));
+    lines.push("-------------".to_string());
+    lines.push(String::new());
+    lines.push(format!(
+        "  Total:    {}",
+        wk_delta(relationships.base.total, relationships.head.total)
+    ));
+    lines.push(format!(
+        "  Valid:    {}",
+        wk_delta(relationships.base.valid, relationships.head.valid)
+    ));
+    lines.push(format!(
+        "  Broken:   {}",
+        wk_delta(relationships.base.broken, relationships.head.broken)
+    ));
+    if !relationships.new_issues.is_empty() {
+        lines.push(String::new());
+        lines.push("  New issues:".to_string());
+        for issue in &relationships.new_issues {
+            lines.push(format!("    {} {}", yellow("!"), wk_issue_phrase(issue)));
+        }
+    }
+    if !relationships.resolved_issues.is_empty() {
+        lines.push(String::new());
+        lines.push("  Resolved issues:".to_string());
+        for issue in &relationships.resolved_issues {
+            lines.push(format!(
+                "    {} {}",
+                green("\u{2713}"),
+                wk_issue_phrase(issue)
+            ));
+        }
+    }
+
+    let stats = &comparison.stats;
+    lines.push(String::new());
+    lines.push(bold("Repository Changes"));
+    lines.push("------------------".to_string());
+    lines.push(String::new());
+    for (type_name, (base_count, head_count)) in &stats.by_type {
+        if *base_count != 0 || *head_count != 0 {
+            lines.push(format!(
+                "  {} {}",
+                ljust(&py_title(type_name), 14),
+                wk_delta(*base_count, *head_count)
+            ));
+        }
+    }
+    lines.push(format!(
+        "  {} {}",
+        ljust("Total", 14),
+        wk_delta(stats.total.0, stats.total.1)
+    ));
+
+    if !report.findings.is_empty() {
+        lines.push(String::new());
+        lines.push(bold(&format!("Findings ({})", report.findings.len())));
+        lines.push("--------".to_string());
+        for finding in &report.findings {
+            let icon = if finding.severity == WK_SEVERITY_WARNING {
+                yellow("!")
+            } else {
+                "\u{b7}".to_string()
+            };
+            lines.push(String::new());
+            lines.push(format!("  {icon} [{}] {}", finding.code, finding.path));
+            lines.push(format!("      {}", finding.detail));
+            for line in &finding.evidence {
+                lines.push(format!("      {line}"));
+            }
+        }
+    }
+
+    // Review verdict (v0.12.2).
+    lines.push(String::new());
+    lines.push(bold("Review"));
+    lines.push("------".to_string());
+    lines.push(String::new());
+    if report.review_recommended() {
+        lines.push(format!("  {}", yellow("Review recommended.")));
+        lines.push(String::new());
+        lines.push("  Reasons:".to_string());
+        lines.push(String::new());
+        for rec in &report.recommendations {
+            lines.push(format!("    \u{b7} {}  [{}]", rec.reason, rec.code));
+        }
+    } else {
+        lines.push(format!(
+            "  {}",
+            green("\u{2713} Nothing requiring attention.")
+        ));
+    }
+
+    lines.join("\n")
+}
+
+fn wk_summary_value(summary: &crate::relationships::RelationshipSummary) -> Value {
+    let mut m = Map::new();
+    m.insert("total".into(), json!(summary.total));
+    m.insert("valid".into(), json!(summary.valid));
+    m.insert("broken".into(), json!(summary.broken));
+    m.insert("orphaned".into(), json!(summary.orphaned));
+    m.insert("coverage".into(), py_float(summary.coverage));
+    Value::Object(m)
+}
+
+fn wk_issue_value(issue: &RelationshipIssueRef) -> Value {
+    let mut m = Map::new();
+    m.insert("code".into(), json!(issue.code));
+    m.insert("relationship".into(), json!(issue.relationship));
+    m.insert("target".into(), json!(issue.target));
+    m.insert("path".into(), json!(issue.path));
+    m.insert("identifier".into(), json!(issue.identifier));
+    Value::Object(m)
+}
+
+fn wk_finding_value(finding: &IntentFinding) -> Value {
+    let mut m = Map::new();
+    m.insert("code".into(), json!(finding.code));
+    m.insert("severity".into(), json!(finding.severity));
+    m.insert("path".into(), json!(finding.path));
+    m.insert("identifier".into(), json!(finding.identifier));
+    m.insert("detail".into(), json!(finding.detail));
+    m.insert("evidence".into(), json!(finding.evidence));
+    Value::Object(m)
+}
+
+fn wk_requirement_value(r: &Requirement) -> Value {
+    let mut m = Map::new();
+    m.insert("id".into(), json!(r.id));
+    m.insert("text".into(), json!(r.text));
+    m.insert("line".into(), json!(r.line));
+    Value::Object(m)
+}
+
+fn wk_diff_value(diff: &Diff) -> Value {
+    // Mirrors the `rac diff` JSON fields so the requirement-level shape is
+    // the same wherever a diff appears.
+    let mut m = Map::new();
+    m.insert(
+        "added_requirements".into(),
+        Value::Array(diff.added_requirements.iter().map(wk_requirement_value).collect()),
+    );
+    m.insert(
+        "removed_requirements".into(),
+        Value::Array(diff.removed_requirements.iter().map(wk_requirement_value).collect()),
+    );
+    m.insert(
+        "modified_requirements".into(),
+        Value::Array(
+            diff.modified_requirements
+                .iter()
+                .map(|c| {
+                    let mut cm = Map::new();
+                    cm.insert("id".into(), json!(c.id));
+                    cm.insert("old_text".into(), json!(c.old_text));
+                    cm.insert("new_text".into(), json!(c.new_text));
+                    Value::Object(cm)
+                })
+                .collect(),
+        ),
+    );
+    m.insert("added_metrics".into(), json!(diff.added_metrics));
+    m.insert("removed_metrics".into(), json!(diff.removed_metrics));
+    m.insert("added_risks".into(), json!(diff.added_risks));
+    m.insert("removed_risks".into(), json!(diff.removed_risks));
+    Value::Object(m)
+}
+
+fn wk_change_value(change: &crate::compare::ArtifactChange) -> Value {
+    let mut m = Map::new();
+    m.insert("change".into(), json!(change.change));
+    m.insert("type".into(), json!(change.type_name));
+    m.insert("id".into(), json!(change.id));
+    m.insert("title".into(), json!(change.title));
+    m.insert("path".into(), json!(change.path));
+    m.insert("base_status".into(), json!(change.base_status));
+    m.insert("head_status".into(), json!(change.head_status));
+    if let Some(diff) = &change.diff {
+        m.insert("diff".into(), wk_diff_value(diff));
+    }
+    Value::Object(m)
+}
+
+/// JSON `rac watchkeeper` output (stable contract, ADR-007).
+pub fn render_watchkeeper_json(report: &WatchkeeperReport) -> String {
+    let comparison = &report.comparison;
+    let validation = &comparison.validation;
+    let relationships = &comparison.relationships;
+    let stats = &comparison.stats;
+
+    let mut root = Map::new();
+    root.insert("schema_version".into(), json!("1"));
+    root.insert("directory".into(), json!(report.directory));
+    root.insert("base".into(), json!(report.base));
+    root.insert("head".into(), json!(report.head));
+    root.insert(
+        "changes".into(),
+        Value::Array(comparison.changes.iter().map(wk_change_value).collect()),
+    );
+
+    let mut val = Map::new();
+    let mut val_base = Map::new();
+    val_base.insert("valid".into(), json!(validation.base_valid));
+    val_base.insert("invalid".into(), json!(validation.base_invalid));
+    val.insert("base".into(), Value::Object(val_base));
+    let mut val_head = Map::new();
+    val_head.insert("valid".into(), json!(validation.head_valid));
+    val_head.insert("invalid".into(), json!(validation.head_invalid));
+    val.insert("head".into(), Value::Object(val_head));
+    val.insert("newly_invalid".into(), json!(validation.newly_invalid));
+    val.insert("newly_valid".into(), json!(validation.newly_valid));
+    root.insert("validation".into(), Value::Object(val));
+
+    let mut rel = Map::new();
+    rel.insert("base".into(), wk_summary_value(&relationships.base));
+    rel.insert("head".into(), wk_summary_value(&relationships.head));
+    rel.insert(
+        "new_issues".into(),
+        Value::Array(relationships.new_issues.iter().map(wk_issue_value).collect()),
+    );
+    rel.insert(
+        "resolved_issues".into(),
+        Value::Array(
+            relationships
+                .resolved_issues
+                .iter()
+                .map(wk_issue_value)
+                .collect(),
+        ),
+    );
+    root.insert("relationships".into(), Value::Object(rel));
+
+    let mut stats_map = Map::new();
+    let mut total = Map::new();
+    total.insert("base".into(), json!(stats.total.0));
+    total.insert("head".into(), json!(stats.total.1));
+    stats_map.insert("total".into(), Value::Object(total));
+    let mut by_type = Map::new();
+    for (type_name, (base_count, head_count)) in &stats.by_type {
+        let mut counts = Map::new();
+        counts.insert("base".into(), json!(base_count));
+        counts.insert("head".into(), json!(head_count));
+        by_type.insert(type_name.clone(), Value::Object(counts));
+    }
+    stats_map.insert("by_type".into(), Value::Object(by_type));
+    root.insert("stats".into(), Value::Object(stats_map));
+
+    root.insert(
+        "findings".into(),
+        Value::Array(report.findings.iter().map(wk_finding_value).collect()),
+    );
+
+    let mut review = Map::new();
+    review.insert("recommended".into(), json!(report.review_recommended()));
+    review.insert(
+        "reasons".into(),
+        Value::Array(
+            report
+                .recommendations
+                .iter()
+                .map(|rec| {
+                    let mut rm = Map::new();
+                    rm.insert("code".into(), json!(rec.code));
+                    rm.insert("reason".into(), json!(rec.reason));
+                    Value::Object(rm)
+                })
+                .collect(),
+        ),
+    );
+    root.insert("review".into(), Value::Object(review));
+
+    dumps_indent2(&Value::Object(root))
+}
+
+/// Repository-relative annotation path: `PurePosixPath(directory) / rel`.
+fn wk_repo_path(report: &WatchkeeperReport, corpus_relative: &str) -> String {
+    crate::walk::py_join(&report.directory, &[corpus_relative])
+}
+
+/// The Markdown step-summary report (`rac watchkeeper --format github`).
+pub fn render_watchkeeper_github(report: &WatchkeeperReport) -> String {
+    let comparison = &report.comparison;
+    let validation = &comparison.validation;
+    let relationships = &comparison.relationships;
+    let stats = &comparison.stats;
+
+    let mut lines: Vec<String> = vec![
+        "# RAC Watchkeeper".to_string(),
+        String::new(),
+        format!(
+            "Comparing `{}` \u{2192} `{}` in `{}`.",
+            report.base, report.head, report.directory
+        ),
+        String::new(),
+        "## Changed artifacts".to_string(),
+        String::new(),
+    ];
+    if !comparison.changes.is_empty() {
+        lines.push("| Change | Artifact | Type |".to_string());
+        lines.push("| --- | --- | --- |".to_string());
+        for change in &comparison.changes {
+            let label = match change.change {
+                CHANGE_ADDED => "Added",
+                CHANGE_MODIFIED => "Modified",
+                _ => "Removed",
+            };
+            lines.push(format!(
+                "| {label} | `{}` | {} |",
+                change.path, change.type_name
+            ));
+        }
+    } else {
+        lines.push("No product artifact changes detected.".to_string());
+    }
+
+    lines.push(String::new());
+    lines.push("## Repository deltas".to_string());
+    lines.push(String::new());
+    lines.push("| Measure | Base | Head |".to_string());
+    lines.push("| --- | --- | --- |".to_string());
+    lines.push(format!(
+        "| Valid artifacts | {} | {} |",
+        validation.base_valid, validation.head_valid
+    ));
+    lines.push(format!(
+        "| Invalid artifacts | {} | {} |",
+        validation.base_invalid, validation.head_invalid
+    ));
+    lines.push(format!(
+        "| Relationships | {} | {} |",
+        relationships.base.total, relationships.head.total
+    ));
+    lines.push(format!(
+        "| Broken relationships | {} | {} |",
+        relationships.base.broken, relationships.head.broken
+    ));
+    lines.push(format!("| Artifacts | {} | {} |", stats.total.0, stats.total.1));
+    if !validation.newly_invalid.is_empty() {
+        lines.push(String::new());
+        lines.push("Newly invalid:".to_string());
+        lines.push(String::new());
+        for path in &validation.newly_invalid {
+            lines.push(format!("- `{path}`"));
+        }
+    }
+    if !relationships.new_issues.is_empty() {
+        lines.push(String::new());
+        lines.push("New relationship issues:".to_string());
+        lines.push(String::new());
+        for issue in &relationships.new_issues {
+            lines.push(format!(
+                "- `{}` \u{2014} `{}` ({})",
+                issue.path,
+                py_opt_str(&issue.target),
+                issue.code
+            ));
+        }
+    }
+
+    if !report.findings.is_empty() {
+        lines.push(String::new());
+        lines.push(format!("## Findings ({})", report.findings.len()));
+        lines.push(String::new());
+        for finding in &report.findings {
+            let marker = if finding.severity == WK_SEVERITY_WARNING {
+                "\u{26a0}\u{fe0f}"
+            } else {
+                "\u{2139}\u{fe0f}"
+            };
+            lines.push(format!(
+                "- {marker} **{}** \u{2014} `{}`: {}",
+                finding.code, finding.path, finding.detail
+            ));
+        }
+    }
+
+    lines.push(String::new());
+    lines.push("## Verdict".to_string());
+    lines.push(String::new());
+    if report.review_recommended() {
+        lines.push("**Review recommended.**".to_string());
+        lines.push(String::new());
+        lines.push("Reasons:".to_string());
+        lines.push(String::new());
+        for rec in &report.recommendations {
+            lines.push(format!("- {} (`{}`)", rec.reason, rec.code));
+        }
+    } else {
+        lines.push("\u{2705} Nothing requiring attention.".to_string());
+    }
+
+    lines.join("\n")
+}
+
+/// Workflow-command lines for the step log, one annotation per line.
+/// Recommendation triggers annotate as errors; other warnings as warnings;
+/// informational findings as notices. Deterministic order: delta-driven
+/// errors first, then findings in report order.
+pub fn watchkeeper_annotations(report: &WatchkeeperReport) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for path in &report.comparison.validation.newly_invalid {
+        lines.push(format!(
+            "::error file={}::{REASON_VALIDATION_REGRESSION}: Artifact became invalid.",
+            wk_repo_path(report, path)
+        ));
+    }
+    for issue in &report.comparison.relationships.new_issues {
+        // Duplicate-identifier findings can span files; annotate the first.
+        let file_path = issue.path.split(", ").next().unwrap_or(&issue.path);
+        lines.push(format!(
+            "::error file={}::{REASON_BROKEN_RELATIONSHIP}: reference '{}' ({})",
+            wk_repo_path(report, file_path),
+            py_opt_str(&issue.target),
+            issue.code
+        ));
+    }
+    for finding in &report.findings {
+        let command = if is_recommending(finding.code) {
+            "error"
+        } else if finding.severity == WK_SEVERITY_WARNING {
+            "warning"
+        } else {
+            "notice"
+        };
+        lines.push(format!(
+            "::{command} file={}::{}: {}",
+            wk_repo_path(report, &finding.path),
+            finding.code,
+            finding.detail
+        ));
+    }
+    lines
+}

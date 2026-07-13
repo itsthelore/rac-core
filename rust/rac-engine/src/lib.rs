@@ -28,6 +28,10 @@
 //! - `portal`: the vendored Portal shell + export-HTML assembly.
 //! - `agent_rules`: the ADR-067 agent-rules projection and drift gate.
 //! - `okf`: the ADR-048 OKF bundle projection (git-derived recency join).
+//! - `revisions`: ADR-043 git-revision materialization (`git archive` + tar).
+//! - `compare`: repository state comparison (watchkeeper's load/compare).
+//! - `intent`: deterministic intent findings over a comparison.
+//! - `watchkeeper`: the watchkeeper report and review verdict.
 //! - `output`: human/JSON/SARIF renderers per command.
 //! - `commands`: CLI command entry points (argv already parsed).
 //! - `cli`: argv parsing and exit codes matching the oracle's argparse
@@ -71,6 +75,10 @@ pub mod hook;
 pub mod eval;
 pub mod scaffold;
 pub mod rename;
+pub mod revisions;
+pub mod compare;
+pub mod intent;
+pub mod watchkeeper;
 pub mod output;
 pub mod commands;
 pub mod cli;
