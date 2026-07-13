@@ -40,9 +40,11 @@ ported in this series. The fallback-ladder seam stays (the tracker's
 detection is a rung selection), so a later decision can add a watcher
 without reshaping the tracker.
 
-Parallelism for the cold build (ADR-107/108) uses the standard library's
-threads — no rayon, no process pool; the pickling boundary the Python
-oracle fans across does not exist in-process.
+Parallelism for the cold build (ADR-107/108) reuses the workspace's
+existing `rayon` dependency — already adopted for the engine's parallel
+corpus walk (PORT-CONTRACT decision 5) — so the fan-out adds no new
+dependency; the pickling boundary the Python oracle fans across does
+not exist in-process.
 
 ## Consequences
 
@@ -78,10 +80,10 @@ Technical
   Behaviour-neutral to skip (it only ever asserts clean), a second new
   dependency, and Linux-only value; deferred until warm-serving latency
   at scale demands it.
-- **`rayon` for the parallel cold build.** The oracle needed a process
-  pool to escape the GIL; native threads over immutable inputs need no
-  work-stealing framework for a contiguous-chunk fan-out. Standard-library
-  scoped threads keep the dependency set flat.
+- **Standard-library scoped threads for the cold build.** Viable, but
+  `rayon` is already in the workspace for the parallel corpus walk, so
+  hand-rolling a second fan-out mechanism would add code without
+  removing a dependency.
 
 ## Related Decisions
 
