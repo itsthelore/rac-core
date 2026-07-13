@@ -406,15 +406,25 @@ the divergence hunt, not intended behavior.)
 
 ---
 
-## 7. Commands NOT covered by this brief (gap list)
+## 7. Commands NOT ported (gap list — the three fenced surfaces)
 
-Present in the parser but outside the covered set — each needs its own contract section:
-`diff`, `ingest`, `inspect`, `improve`, `rename`, `doctor`, `coverage`, `gate`,
-`watchkeeper`, `portfolio`, `index`, `explorer`, `mcp`, `mcp-stats`, `telemetry`, `usage`,
-`new`, `templates`, `init`, `quickstart`, `decisions-for`, `eval`, `migrate`, `skill`,
-`hook`. Notably `gate`/`watchkeeper`/`doctor` add extra exit-code nuance (fail-on policy,
-malformed-config → stderr `rac:` + exit 1, git-repo requirement → exit 2) and
-`init`/`quickstart` carry the sole interactive prompt.
+Every other subcommand in the parser is ported and refereed: the original covered set
+above plus the roadmap:native-cli-closure batch — `diff`, `inspect`, `improve`,
+`portfolio`, `coverage`, `decisions-for`, `gate`, `doctor`, `usage`, `mcp-stats`,
+`telemetry`, `skill`, `hook`, `eval`, `new`, `templates`, `init`, `quickstart`, `rename`,
+`migrate`, `watchkeeper`, and `export`'s `--html`/`--agent-rules`/`--okf` modes — pinned
+in `rust/parity-cases-closure.json` with per-command contract sections
+PORT-CONTRACT.d/11–18. What remains unported is exactly the three fenced surfaces:
+
+- `explorer` — the TUI delivery surface; out of scope per the native-engine-spike
+  roadmap fence (interactive, no byte-parity referee).
+- `ingest` — fenced by ADR-072 (RAC-KVJK92SM2A1R): the document-ingestion parser IS
+  markitdown, which stays a Python sidecar; the native engine does not reimplement it.
+- `index` — fenced by the native-derived-index roadmap item
+  (`rac/roadmaps/future/native-derived-index.md`), which also gates the ADR-063
+  (RAC-KV6ADYFGC3H4) flip to the native engine as the shipping CLI.
+
+(`mcp` is served by the separate `rac-mcp` binary — PORT-CONTRACT.d/10.)
 
 ---
 
