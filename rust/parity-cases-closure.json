@@ -1981,5 +1981,429 @@
   {"id": "export-okf-version-beats-missing-dir",
    "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["export", "bogus", "--okf", "--version"],
+   "expect_exit": 0},
+
+  {"id": "closure-smoke-compare-stderr-usage-error",
+   "argv": ["gate", "definitely/nope"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-added-human",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-added-json",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--json"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-added-github",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--format", "github"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-added-github-no-annotate",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--format", "github", "--no-annotate"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-added-fail-on-warning",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--fail-on", "warning"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-regression-human",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: valid base",
+        "write": [{"path": "rac/req-001-search.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system should return results eventually.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-regression-json",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: valid base",
+        "write": [{"path": "rac/req-001-search.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system should return results eventually.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--json"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-regression-github",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: valid base",
+        "write": [{"path": "rac/req-001-search.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system should return results eventually.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--format", "github"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-regression-fail-on-none",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: valid base",
+        "write": [{"path": "rac/req-001-search.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system should return results eventually.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--fail-on", "none"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-intent-battery-human",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: intent base",
+        "write": [{"path": "rac/r1.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system must return results within 200 ms.\n- [REQ-002] The importer shall accept CSV files.\n\n## Acceptance Criteria\n\n- Results return in under 200 ms.\n\n## Success Metrics\n\n- p95 latency below 200 ms.\n\n## Risks\n\n- Cache misses hurt latency.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/r1.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system should return results quickly.\n\n## Success Metrics\n\n- p95 latency below 200 ms.\n\n## Risks\n\n- Cache misses hurt latency.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-intent-battery-json",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: intent base",
+        "write": [{"path": "rac/r1.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system must return results within 200 ms.\n- [REQ-002] The importer shall accept CSV files.\n\n## Acceptance Criteria\n\n- Results return in under 200 ms.\n\n## Success Metrics\n\n- p95 latency below 200 ms.\n\n## Risks\n\n- Cache misses hurt latency.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/r1.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system should return results quickly.\n\n## Success Metrics\n\n- p95 latency below 200 ms.\n\n## Risks\n\n- Cache misses hurt latency.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--json"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-dir-vs-dir-removed-human",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "base_dir/adr-001-markdown.md",
+      "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"},
+     {"step": "write", "path": "base_dir/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-001\n"},
+     {"step": "write", "path": "head_dir/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-001\n"},
+     {"step": "write", "path": "head_dir/req-002-import.md",
+      "content": "# REQ-002: Bulk Import\n\n## Problem\n\nManual entry is slow.\n\n## Requirements\n\n- [REQ-002] The importer MUST accept CSV files.\n\n## Related Decisions\n\n- ADR-999\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "head_dir", "--base", "base_dir"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-dir-vs-dir-removed-github",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "base_dir/adr-001-markdown.md",
+      "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"},
+     {"step": "write", "path": "base_dir/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-001\n"},
+     {"step": "write", "path": "head_dir/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-001\n"},
+     {"step": "write", "path": "head_dir/req-002-import.md",
+      "content": "# REQ-002: Bulk Import\n\n## Problem\n\nManual entry is slow.\n\n## Requirements\n\n- [REQ-002] The importer MUST accept CSV files.\n\n## Related Decisions\n\n- ADR-999\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "head_dir", "--base", "base_dir", "--format", "github"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-resolved-issues-human",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: broken base",
+        "write": [{"path": "rac/adr-001-markdown.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"},
+                  {"path": "rac/req-001-search.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-999\n"}]}
+     ]},
+     {"step": "write", "path": "rac/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-001\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-resolved-issues-json",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: broken base",
+        "write": [{"path": "rac/adr-001-markdown.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"},
+                  {"path": "rac/req-001-search.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-999\n"}]}
+     ]},
+     {"step": "write", "path": "rac/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n\n## Related Decisions\n\n- ADR-001\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--json"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-newly-valid-human",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: invalid base",
+        "write": [{"path": "rac/req-001-search.md",
+                   "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system must return results fast.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/req-001-search.md",
+      "content": "# REQ-001: Fast Search\n\n## Problem\n\nSearch is slow today.\n\n## Requirements\n\n- [REQ-001] The system MUST return results within 200 ms.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-dup-identifier-human",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: single id",
+        "write": [{"path": "rac/adr-001-a.md",
+                   "content": "---\nid: ADR-001\n---\n# ADR-001: First\n\n## Status\n\nAccepted\n\n## Context\n\nContext here.\n\n## Decision\n\nDecide things.\n\n## Consequences\n\nThings happen.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/adr-001-b.md",
+      "content": "---\nid: ADR-001\n---\n# ADR-001: Second\n\n## Status\n\nAccepted\n\n## Context\n\nContext here.\n\n## Decision\n\nDecide things.\n\n## Consequences\n\nThings happen.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-dup-identifier-github",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: single id",
+        "write": [{"path": "rac/adr-001-a.md",
+                   "content": "---\nid: ADR-001\n---\n# ADR-001: First\n\n## Status\n\nAccepted\n\n## Context\n\nContext here.\n\n## Decision\n\nDecide things.\n\n## Consequences\n\nThings happen.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/adr-001-b.md",
+      "content": "---\nid: ADR-001\n---\n# ADR-001: Second\n\n## Status\n\nAccepted\n\n## Context\n\nContext here.\n\n## Decision\n\nDecide things.\n\n## Consequences\n\nThings happen.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/", "--format", "github"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-no-changes-head-rev",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: both committed",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"},
+                  {"path": "rac/d2.md",
+                   "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}]}
+     ]}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac", "--head", "main"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-fresh-adoption",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: no corpus yet",
+        "write": [{"path": "README.md", "content": "# Readme\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-dot-corpus",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: root corpus",
+        "write": [{"path": "README.md", "content": "# Readme\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "."],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-default-directory",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]},
+     {"step": "write", "path": "rac/d2.md",
+      "content": "# ADR-002: Add Rust\n\n## Status\n\nAccepted\n\n## Context\n\nSpeed matters.\n\n## Decision\n\nWe will add Rust.\n\n## Consequences\n\nFaster runs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper"],
+   "expect_exit": 0,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-err-unknown-base-rev",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac", "--base", "nosuchrev"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-err-unknown-head-rev",
+   "sandbox": {"setup": [
+     {"step": "git", "commits": [
+       {"date": "2024-03-05T10:00:00+02:00", "message": "pin: base corpus",
+        "write": [{"path": "rac/d1.md",
+                   "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}]}
+     ]}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac", "--head", "nope"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-err-not-a-directory",
+   "sandbox": {"setup": [
+     {"step": "mkdir", "path": "rac"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/nope"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-err-not-a-git-repo",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "rac/d1.md",
+      "content": "# ADR-001: Use Markdown\n\n## Status\n\nAccepted\n\n## Context\n\nWe need a format everyone can read.\n\n## Decision\n\nWe will use Markdown.\n\n## Consequences\n\nSimple diffs.\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["watchkeeper", "rac/"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true},
+
+  {"id": "watchkeeper-err-format-choice-beats-version",
+   "argv": ["watchkeeper", "--format", "bogus", "--version"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true},
+
+  {"id": "watchkeeper-err-fail-on-choice",
+   "argv": ["watchkeeper", "--fail-on", "sometimes"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true},
+
+  {"id": "watchkeeper-err-base-missing-value-beats-version",
+   "argv": ["watchkeeper", "rac", "--base", "--version"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true},
+
+  {"id": "watchkeeper-version-beats-bad-dir",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "argv": ["watchkeeper", "bogusdir", "--version"],
+   "expect_exit": 0},
+
+  {"id": "watchkeeper-version-after-extra-positional",
+   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "argv": ["watchkeeper", "rac/", "extra", "--version"],
    "expect_exit": 0}
 ]
