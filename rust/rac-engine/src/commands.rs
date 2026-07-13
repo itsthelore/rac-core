@@ -579,6 +579,30 @@ pub fn cmd_portfolio(args: &PortfolioArgs) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// cmd_index
+// ---------------------------------------------------------------------------
+
+pub struct IndexArgs {
+    pub directory: String,
+    pub json: bool,
+    pub top_level: bool,
+}
+
+/// `rac index` — the plain-walk inventory; never touches the cache.
+pub fn cmd_index(args: &IndexArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let index = crate::index::build_repository_index(&args.directory, !args.top_level);
+    if args.json {
+        emit(output::render_index_json(&index));
+    } else {
+        emit(output::render_index_human(&index));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
 // cmd_coverage
 // ---------------------------------------------------------------------------
 

@@ -1931,6 +1931,67 @@ pub fn render_portfolio_human(s: &PortfolioSummary) -> String {
     lines.join("\n")
 }
 
+/// Human `rac index` output: the repository manifest (services/index.py).
+pub fn render_index_human(index: &crate::index::RepositoryIndex) -> String {
+    let mut lines = vec![
+        bold("Repository Index"),
+        "================".to_string(),
+        String::new(),
+        format!("Directory:  {}", index.directory),
+        format!("Artifacts:  {}", index.artifacts.len()),
+        String::new(),
+    ];
+    if index.artifacts.is_empty() {
+        lines.push("(none)".to_string());
+        return lines.join("\n");
+    }
+    // Aligned columns: ID, type, title (— when absent), path last.
+    let title_of = |e: &crate::index::IndexEntry| -> String {
+        e.title.clone().unwrap_or_else(|| "\u{2014}".to_string())
+    };
+    let width = |f: &dyn Fn(&crate::index::IndexEntry) -> usize| -> usize {
+        index.artifacts.iter().map(f).max().unwrap_or(0)
+    };
+    let id_w = width(&|e| e.id.chars().count());
+    let type_w = width(&|e| e.artifact_type.chars().count());
+    let title_w = width(&|e| title_of(e).chars().count());
+    for e in &index.artifacts {
+        lines.push(format!(
+            "  {}  {}  {}  {}",
+            ljust(&e.id, id_w),
+            ljust(&e.artifact_type, type_w),
+            ljust(&title_of(e), title_w),
+            e.path
+        ));
+    }
+    lines.join("\n")
+}
+
+/// JSON `rac index` output — `json.dumps(index.to_dict(), indent=2)`
+/// (ensure_ascii default; identity-only contract, ADR-007).
+pub fn render_index_json(index: &crate::index::RepositoryIndex) -> String {
+    let artifacts: Vec<Value> = index
+        .artifacts
+        .iter()
+        .map(|e| {
+            let mut m = Map::new();
+            m.insert("id".into(), json!(e.id));
+            m.insert("type".into(), json!(e.artifact_type));
+            m.insert("title".into(), json!(e.title));
+            m.insert("path".into(), json!(e.path));
+            m.insert("aliases".into(), json!(e.aliases));
+            Value::Object(m)
+        })
+        .collect();
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("directory".into(), json!(index.directory));
+    payload.insert("recursive".into(), json!(index.recursive));
+    payload.insert("artifact_count".into(), json!(index.artifacts.len()));
+    payload.insert("artifacts".into(), Value::Array(artifacts));
+    dumps_indent2(&Value::Object(payload))
+}
+
 /// JSON `rac portfolio` output — `PortfolioSummary.to_dict()` (ADR-007).
 pub fn render_portfolio_json(s: &PortfolioSummary) -> String {
     let mut payload = Map::new();

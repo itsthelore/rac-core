@@ -6,14 +6,14 @@
 
 use crate::commands::{
     cmd_coverage, cmd_decisions_for, cmd_diff, cmd_doctor, cmd_eval, cmd_export, cmd_find,
-    cmd_gate, cmd_hook, cmd_improve, cmd_init, cmd_inspect, cmd_mcp_stats, cmd_migrate, cmd_new,
-    cmd_portfolio, cmd_quickstart, cmd_relationships, cmd_rename, cmd_resolve, cmd_retrieve,
-    cmd_review, cmd_schema, cmd_skill, cmd_stats, cmd_telemetry, cmd_templates, cmd_usage,
-    cmd_validate, CoverageArgs, DecisionsForArgs, DiffArgs, DoctorArgs, EvalArgs, ExportArgs,
-    FindArgs, GateArgs, HookArgs, ImproveArgs, InitArgs, InspectArgs, McpStatsArgs, MigrateArgs,
-    NewArgs, PortfolioArgs, QuickstartArgs, RelationshipsArgs, RenameArgs, ResolveArgs,
-    RetrieveArgs, ReviewArgs, SchemaArgs, SkillArgs, StatsArgs, TelemetryArgs, TemplatesArgs,
-    UsageArgs, ValidateArgs, WatchkeeperArgs,
+    cmd_gate, cmd_hook, cmd_improve, cmd_index, cmd_init, cmd_inspect, cmd_mcp_stats, cmd_migrate,
+    cmd_new, cmd_portfolio, cmd_quickstart, cmd_relationships, cmd_rename, cmd_resolve,
+    cmd_retrieve, cmd_review, cmd_schema, cmd_skill, cmd_stats, cmd_telemetry, cmd_templates,
+    cmd_usage, cmd_validate, CoverageArgs, DecisionsForArgs, DiffArgs, DoctorArgs, EvalArgs,
+    ExportArgs, FindArgs, GateArgs, HookArgs, ImproveArgs, IndexArgs, InitArgs, InspectArgs,
+    McpStatsArgs, MigrateArgs, NewArgs, PortfolioArgs, QuickstartArgs, RelationshipsArgs,
+    RenameArgs, ResolveArgs, RetrieveArgs, ReviewArgs, SchemaArgs, SkillArgs, StatsArgs,
+    TelemetryArgs, TemplatesArgs, UsageArgs, ValidateArgs, WatchkeeperArgs,
 };
 use crate::commands::cmd_watchkeeper;
 use crate::output::rac_version;
@@ -210,6 +210,7 @@ fn run_dispatch(args: &[String]) -> u8 {
         "retrieve" => run_retrieve(&rest),
         "review" => run_review(&rest),
         "export" => run_export(&rest),
+        "index" => run_index(&rest),
         "portfolio" => run_portfolio(&rest),
         "coverage" => run_coverage(&rest),
         "decisions-for" => run_decisions_for(&rest),
@@ -597,6 +598,46 @@ fn run_portfolio(rest: &[&String]) -> u8 {
 
     cmd_portfolio(&PortfolioArgs {
         directory,
+        json,
+        top_level,
+    }) as u8
+}
+
+/// `rac index [directory] [--json] [--top-level]` — optional positional
+/// (default '.', like the sibling export parser), version/json/scope
+/// parents. No cache flags: index never consumes the cache.
+fn run_index(rest: &[&String]) -> u8 {
+    let mut directory: Option<String> = None;
+    let mut json = false;
+    let mut top_level = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    for arg in rest {
+        let arg = arg.as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if directory.is_none() {
+                directory = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--json" => json = true,
+            "--top-level" => top_level = true,
+            "--recursive" => {} // affirmation of the default
+            other => extras.push(other.to_string()),
+        }
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_index(&IndexArgs {
+        directory: directory.unwrap_or_else(|| ".".to_string()),
         json,
         top_level,
     }) as u8
