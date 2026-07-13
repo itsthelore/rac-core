@@ -146,7 +146,7 @@ fn identity_entry_from_item(item: &CorpusItem) -> IndexEntry {
     }
 }
 
-fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
+pub(crate) fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
     IndexEntry {
         search_sections: item.artifact.product.search_sections.clone(),
         inbound_count: inbound,
@@ -333,7 +333,7 @@ pub struct FieldTokens {
 }
 
 impl FieldTokens {
-    fn get(&self, name: &str) -> &Vec<String> {
+    pub(crate) fn get(&self, name: &str) -> &Vec<String> {
         match name {
             "id" => &self.id,
             "title" => &self.title,
@@ -394,6 +394,12 @@ fn tokenize_entry(entry: &IndexEntry) -> EntryTokens {
         },
         sections,
     }
+}
+
+/// The six flat per-field token vectors of one entry — the projection the
+/// derived read-model persists (`field_tokens_for_entries`, INDEX-PLAN B2).
+pub(crate) fn field_tokens_of(entry: &IndexEntry) -> FieldTokens {
+    tokenize_entry(entry).fields
 }
 
 // ---------------------------------------------------------------------------

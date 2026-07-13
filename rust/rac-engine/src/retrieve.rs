@@ -339,16 +339,16 @@ fn normalize_query(path: &str, root: &Path) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /// One live decision's declared `## Applies To` scope (`ScopeRow`).
-struct ScopeRow {
-    id: String,
-    title: String,
-    status: String,
-    path: String,
-    scope_entries: Vec<String>,
+pub struct ScopeRow {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub path: String,
+    pub scope_entries: Vec<String>,
 }
 
 /// `_scope_rows_from_corpus(entries)` — live decisions with declared scope.
-fn scope_rows_from_items(items: &[CorpusItem]) -> Vec<ScopeRow> {
+pub(crate) fn scope_rows_from_items(items: &[CorpusItem]) -> Vec<ScopeRow> {
     let mut rows = Vec::new();
     for item in items {
         let Some(spec) = item.spec else { continue };

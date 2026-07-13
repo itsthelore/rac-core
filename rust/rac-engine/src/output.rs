@@ -1994,6 +1994,13 @@ pub fn render_index_json(index: &crate::index::RepositoryIndex) -> String {
 
 /// JSON `rac portfolio` output — `PortfolioSummary.to_dict()` (ADR-007).
 pub fn render_portfolio_json(s: &PortfolioSummary) -> String {
+    dumps_indent2(&portfolio_summary_value(s))
+}
+
+/// `PortfolioSummary.to_dict()` as a `Value` — shared by the portfolio JSON
+/// renderer and the index store's portfolio segment (ADR-103/104), so the
+/// two cannot drift.
+pub fn portfolio_summary_value(s: &PortfolioSummary) -> Value {
     let mut payload = Map::new();
     payload.insert("schema_version".into(), json!("1"));
     payload.insert("directory".into(), json!(s.directory));
@@ -2057,7 +2064,7 @@ pub fn render_portfolio_json(s: &PortfolioSummary) -> String {
     );
     payload.insert("validation_status".into(), Value::Object(validation_status));
 
-    dumps_indent2(&Value::Object(payload))
+    Value::Object(payload)
 }
 
 // --- coverage ----------------------------------------------------------------
