@@ -1241,6 +1241,286 @@ pub fn cmd_eval(args: &EvalArgs) -> i32 {
     EXIT_OK
 }
 
+// ---------------------------------------------------------------------------
+// cmd_new / cmd_init / cmd_quickstart / cmd_migrate / cmd_rename
+// (scaffold writes — PORT-CONTRACT.d/16)
+// ---------------------------------------------------------------------------
+
+pub struct NewArgs {
+    pub artifact_type: String,
+    pub output_path: String,
+    pub json: bool,
+}
+
+/// `rac new <type> <output_path>` — create one artifact from its canonical
+/// template. Usage errors (bad type, exists, missing parent, no repo
+/// config) exit 2; operational errors (malformed config, id exhaustion)
+/// exit 1 — all stderr `rac: <msg>`.
+pub fn cmd_new(args: &NewArgs) -> i32 {
+    use crate::scaffold::ScaffoldError;
+    let created = match crate::scaffold::create_artifact(&args.artifact_type, &args.output_path) {
+        Ok(created) => created,
+        Err(
+            e @ (ScaffoldError::TemplateNotFound(_)
+            | ScaffoldError::OutputPathExists(_)
+            | ScaffoldError::OutputDirectoryMissing(_)
+            | ScaffoldError::MissingRepositoryConfig(_)),
+        ) => return usage_error(e.message()),
+        Err(e) => {
+            eprintln!("rac: {}", e.message());
+            return EXIT_VALIDATION_FAILED;
+        }
+    };
+    if args.json {
+        emit(output::render_new_json(&created));
+    } else {
+        emit(output::render_new_human(&created));
+    }
+    EXIT_OK
+}
+
+/// `_maybe_ask_usage_sharing()` — the CLI's only interactive prompt
+/// (ADR-041): a real TTY on BOTH ends, no prior answer; either answer is
+/// persisted so the question is asked at most once per machine. Under the
+/// parity harness stdio is piped, so this never fires there; the gate and
+/// bytes are mirrored for real-TTY runs and the answer handling is
+/// unit-tested below.
+fn maybe_ask_usage_sharing() {
+    use std::io::{BufRead, IsTerminal, Write};
+    if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal())
+        || crate::consent::consent_recorded()
+    {
+        return;
+    }
+    {
+        let mut out = std::io::stdout().lock();
+        let _ = out.write_all("\nShare anonymous usage to help shape Lore? [y/N] ".as_bytes());
+        let _ = out.flush();
+    }
+    let mut answer = String::new();
+    let _ = std::io::stdin().lock().read_line(&mut answer); // EOF -> empty
+    if let Some(message) = handle_share_answer(&answer) {
+        emit(message.to_string());
+    }
+}
+
+/// The prompt's answer handling: `y`/`yes` (trimmed, lowercased) opts in
+/// and returns the confirmation line; anything else (including EOF/empty)
+/// declines silently.
+fn handle_share_answer(answer: &str) -> Option<&'static str> {
+    if share_answer_is_yes(answer) {
+        crate::consent::opt_in();
+        Some(
+            "Sharing on \u{2014} one anonymous daily ping. 'rac telemetry status' \
+             shows exactly what; 'rac telemetry off' stops it.",
+        )
+    } else {
+        crate::consent::decline();
+        None
+    }
+}
+
+/// `answer.strip().lower() in ("y", "yes")` — the pure classification the
+/// prompt applies (unit-tested; the prompt itself is TTY-gated and outside
+/// the piped parity harness's reach).
+fn share_answer_is_yes(answer: &str) -> bool {
+    matches!(
+        crate::pycompat::py_strip(answer).to_lowercase().as_str(),
+        "y" | "yes"
+    )
+}
+
+#[cfg(test)]
+mod share_prompt_tests {
+    use super::share_answer_is_yes;
+
+    /// The ADR-041 prompt accepts exactly y/yes (any case, surrounding
+    /// whitespace stripped); empty input and EOF mean No.
+    #[test]
+    fn share_answer_classification() {
+        for yes in ["y", "Y", "yes", "YES", "  y  ", "Yes\n"] {
+            assert!(share_answer_is_yes(yes), "{yes:?} should opt in");
+        }
+        for no in ["", "\n", "n", "no", "yess", "y e s", "ok"] {
+            assert!(!share_answer_is_yes(no), "{no:?} should decline");
+        }
+    }
+}
+
+pub struct InitArgs {
+    pub directory: String,
+    pub key: String,
+    /// argparse-choice-validated ticketing provider.
+    pub ticketing: Option<String>,
+    /// argparse-choice-validated profile name.
+    pub profile: Option<String>,
+    pub json: bool,
+}
+
+/// `rac init [directory] [--key KEY] [--ticketing PROVIDER] [--profile
+/// NAME]` — establish (or confirm) the repository identity namespace.
+/// Invalid key exits 2; conflict/malformed config exit 1. A successful
+/// non-JSON init may ask the one-time sharing question (TTY-gated).
+pub fn cmd_init(args: &InitArgs) -> i32 {
+    use crate::scaffold::ScaffoldError;
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let result = match crate::scaffold::init_repository(
+        &args.directory,
+        &args.key,
+        args.ticketing.as_deref(),
+        args.profile.as_deref(),
+    ) {
+        Ok(result) => result,
+        Err(e @ ScaffoldError::InvalidRepositoryKey(_)) => return usage_error(e.message()),
+        Err(e) => {
+            eprintln!("rac: {}", e.message());
+            return EXIT_VALIDATION_FAILED;
+        }
+    };
+    if args.json {
+        emit(output::render_init_json(&result));
+    } else {
+        emit(output::render_init_human(&result));
+        maybe_ask_usage_sharing();
+    }
+    EXIT_OK
+}
+
+pub struct QuickstartArgs {
+    pub directory: String,
+    pub key: String,
+    /// Free-string starter type (validated by the template registry).
+    pub artifact_type: String,
+    pub json: bool,
+}
+
+/// `rac quickstart [directory] [--key KEY] [--type TYPE]` — identity plus
+/// one starter artifact in one step (ADR-044). Exit routing mirrors the
+/// oracle's except ladder: bad type / bad key / missing parent are usage
+/// (2); a non-empty corpus, key conflict, or occupied starter path are
+/// refusals (1); operational errors are 1.
+pub fn cmd_quickstart(args: &QuickstartArgs) -> i32 {
+    use crate::scaffold::ScaffoldError;
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let result =
+        match crate::scaffold::quickstart(&args.directory, &args.key, &args.artifact_type) {
+            Ok(result) => result,
+            Err(
+                e @ (ScaffoldError::TemplateNotFound(_)
+                | ScaffoldError::InvalidRepositoryKey(_)
+                | ScaffoldError::OutputDirectoryMissing(_)),
+            ) => return usage_error(e.message()),
+            Err(e) => {
+                eprintln!("rac: {}", e.message());
+                return EXIT_VALIDATION_FAILED;
+            }
+        };
+    if args.json {
+        emit(output::render_quickstart_json(&result));
+    } else {
+        emit(output::render_quickstart_human(&result));
+        maybe_ask_usage_sharing();
+    }
+    EXIT_OK
+}
+
+pub struct MigrateArgs {
+    /// Validated positional choice (only `metadata` exists).
+    pub target: String,
+    pub directory: String,
+    pub dry_run: bool,
+    pub top_level: bool,
+    pub json: bool,
+}
+
+/// `rac migrate metadata <directory> [--dry-run]` — canonical frontmatter
+/// identity for every recognized legacy artifact. A completed migration
+/// (or dry run) always exits 0 — nothing to migrate is a valid outcome.
+pub fn cmd_migrate(args: &MigrateArgs) -> i32 {
+    use crate::scaffold::ScaffoldError;
+    let _ = &args.target; // argparse choices guarantee "metadata"
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let report = match crate::scaffold::migrate_metadata(
+        &args.directory,
+        args.dry_run,
+        !args.top_level,
+    ) {
+        Ok(report) => report,
+        Err(e @ ScaffoldError::MissingRepositoryConfig(_)) => return usage_error(e.message()),
+        Err(e) => {
+            eprintln!("rac: {}", e.message());
+            return EXIT_VALIDATION_FAILED;
+        }
+    };
+    if args.json {
+        emit(output::render_migrate_json(&report));
+    } else {
+        emit(output::render_migrate_human(&report));
+    }
+    EXIT_OK
+}
+
+pub struct RenameArgs {
+    pub old: String,
+    pub new: String,
+    pub directory: String,
+    pub apply: bool,
+    pub top_level: bool,
+    pub json: bool,
+}
+
+/// `rac rename <old> <new> <directory> [--apply] [--top-level]` — compute
+/// (and optionally apply) the corpus-wide rename edit set. Refusals exit 1
+/// with the human rendering on STDERR but the JSON plan on STDOUT; a valid
+/// dry run and a successful apply exit 0.
+pub fn cmd_rename(args: &RenameArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let plan =
+        crate::rename::compute_rename(&args.directory, &args.old, &args.new, !args.top_level);
+
+    if !plan.ok {
+        if args.json {
+            emit(output::render_rename_json(&plan));
+        } else {
+            eprintln!("{}", output::render_rename_human(&plan));
+        }
+        return EXIT_VALIDATION_FAILED;
+    }
+
+    if !args.apply {
+        if args.json {
+            emit(output::render_rename_json(&plan));
+        } else {
+            emit(output::render_rename_human(&plan));
+        }
+        return EXIT_OK;
+    }
+
+    let result = match crate::rename::apply_rename(&plan) {
+        Ok(result) => result,
+        Err(message) => {
+            // The oracle's stale-plan ValueError escapes as a traceback
+            // (exit 1, empty stdout); same code, readable stderr.
+            eprintln!("{message}");
+            return EXIT_VALIDATION_FAILED;
+        }
+    };
+    if args.json {
+        emit(output::render_rename_result_json(&result));
+    } else {
+        emit(output::render_rename_result_human(&result));
+    }
+    EXIT_OK
+}
+
 pub struct TelemetryArgs {
     /// Validated positional choice; argparse default is `status`.
     pub action: String,

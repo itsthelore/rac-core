@@ -63,6 +63,8 @@ pub mod sha256;
 pub mod skill;
 pub mod hook;
 pub mod eval;
+pub mod scaffold;
+pub mod rename;
 pub mod output;
 pub mod commands;
 pub mod cli;
