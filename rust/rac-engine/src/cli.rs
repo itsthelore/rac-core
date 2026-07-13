@@ -5,13 +5,14 @@
 //! (decision 9) — stdout stays byte-identical (empty on errors).
 
 use crate::commands::{
-    cmd_coverage, cmd_decisions_for, cmd_diff, cmd_doctor, cmd_export, cmd_find, cmd_gate,
-    cmd_improve, cmd_inspect, cmd_mcp_stats, cmd_portfolio, cmd_relationships, cmd_resolve,
-    cmd_retrieve, cmd_review, cmd_schema, cmd_stats, cmd_telemetry, cmd_templates, cmd_usage,
-    cmd_validate, CoverageArgs, DecisionsForArgs, DiffArgs, DoctorArgs, ExportArgs, FindArgs,
-    GateArgs, ImproveArgs, InspectArgs, McpStatsArgs, PortfolioArgs, RelationshipsArgs,
-    ResolveArgs, RetrieveArgs, ReviewArgs, SchemaArgs, StatsArgs, TelemetryArgs, TemplatesArgs,
-    UsageArgs, ValidateArgs,
+    cmd_coverage, cmd_decisions_for, cmd_diff, cmd_doctor, cmd_eval, cmd_export, cmd_find,
+    cmd_gate, cmd_hook, cmd_improve, cmd_inspect, cmd_mcp_stats, cmd_portfolio,
+    cmd_relationships, cmd_resolve, cmd_retrieve, cmd_review, cmd_schema, cmd_skill, cmd_stats,
+    cmd_telemetry, cmd_templates, cmd_usage, cmd_validate, CoverageArgs, DecisionsForArgs,
+    DiffArgs, DoctorArgs, EvalArgs, ExportArgs, FindArgs, GateArgs, HookArgs, ImproveArgs,
+    InspectArgs, McpStatsArgs, PortfolioArgs, RelationshipsArgs, ResolveArgs, RetrieveArgs,
+    ReviewArgs, SchemaArgs, SkillArgs, StatsArgs, TelemetryArgs, TemplatesArgs, UsageArgs,
+    ValidateArgs,
 };
 use crate::output::rac_version;
 
@@ -162,10 +163,15 @@ fn run_dispatch(args: &[String]) -> u8 {
 
     // `--version` short-circuits on every subcommand (version_parent) —
     // EXCEPT where an earlier argv token can error first at its own
-    // position: telemetry's choice-validated positional and the
-    // usage/mcp-stats immediate mutex. Those three parse order-aware and
-    // fire version/help themselves at the encounter point, like argparse.
-    let order_aware = matches!(first.as_str(), "mcp-stats" | "telemetry" | "usage");
+    // position: choice-validated positionals (telemetry, skill, hook), a
+    // choice-validated option value (hook --style), an immediate mutex
+    // (usage/mcp-stats, eval --check|--update-baseline). Those parse
+    // order-aware and fire version/help at the encounter point, like
+    // argparse.
+    let order_aware = matches!(
+        first.as_str(),
+        "mcp-stats" | "telemetry" | "usage" | "skill" | "hook" | "eval"
+    );
     if !order_aware {
         if rest.iter().any(|a| a.as_str() == "--version") {
             skip_usage_record();
@@ -201,6 +207,9 @@ fn run_dispatch(args: &[String]) -> u8 {
         "mcp-stats" => run_mcp_stats(&rest),
         "usage" => run_usage(&rest),
         "telemetry" => run_telemetry(&rest),
+        "skill" => run_skill(&rest),
+        "hook" => run_hook(&rest),
+        "eval" => run_eval(&rest),
         other => {
             eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
             2
@@ -922,6 +931,273 @@ fn run_telemetry(rest: &[&String]) -> u8 {
         action: action.unwrap_or_else(|| "status".to_string()),
         enterprise,
         unlock,
+    }) as u8
+}
+
+/// `rac skill <action> [name] [--dir DIR] [--json]` — order-aware: the
+/// `action` positional's choice set is validated when the token is
+/// CONSUMED (an invalid action beats a later `--version`; an earlier
+/// `--version` wins), a second positional defers to the end-of-parse
+/// `unrecognized arguments`, exactly like argparse.
+fn run_skill(rest: &[&String]) -> u8 {
+    let prog = "rac skill";
+    let mut action: Option<String> = None;
+    let mut name: Option<String> = None;
+    let mut dir: String = ".".to_string();
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if action.is_none() {
+                if !matches!(arg, "install" | "list") {
+                    return argparse_error(
+                        prog,
+                        &format!(
+                            "argument action: invalid choice: '{arg}' (choose from 'install', 'list')"
+                        ),
+                    );
+                }
+                action = Some(arg.to_string());
+            } else if name.is_none() {
+                name = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--json" => json = true,
+            other if other == "--dir" || other.starts_with("--dir=") => {
+                match take_opt_value(prog, "--dir", other, rest, &mut i) {
+                    Ok(v) => dir = v,
+                    Err(code) => return code,
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    let Some(action) = action else {
+        return argparse_error(prog, "the following arguments are required: action");
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_skill(&SkillArgs {
+        action,
+        name,
+        dir,
+        json,
+    }) as u8
+}
+
+/// `rac hook <action> [--style STYLE] [--dir DIR] [--json]` — order-aware
+/// like skill; additionally `--style`'s choice set is validated when its
+/// VALUE is consumed (so `--style bogus --version` exits 2 while
+/// `--version --style bogus` prints the version), making the service-level
+/// unknown-style error unreachable via the CLI.
+fn run_hook(rest: &[&String]) -> u8 {
+    let prog = "rac hook";
+    let mut action: Option<String> = None;
+    let mut style: String = "post-commit".to_string(); // hooks.DEFAULT_STYLE
+    let mut dir: String = ".".to_string();
+    let mut json = false;
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let style_choice = |prog: &str, v: &str| -> Option<u8> {
+        if matches!(v, "post-commit" | "pre-commit") {
+            None
+        } else {
+            Some(argparse_error(
+                prog,
+                &format!(
+                    "argument --style: invalid choice: '{v}' (choose from 'post-commit', 'pre-commit')"
+                ),
+            ))
+        }
+    };
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            if action.is_none() {
+                if !matches!(arg, "install" | "list") {
+                    return argparse_error(
+                        prog,
+                        &format!(
+                            "argument action: invalid choice: '{arg}' (choose from 'install', 'list')"
+                        ),
+                    );
+                }
+                action = Some(arg.to_string());
+            } else {
+                extras.push(arg.to_string());
+            }
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--json" => json = true,
+            other if other == "--style" || other.starts_with("--style=") => {
+                match take_opt_value(prog, "--style", other, rest, &mut i) {
+                    Ok(v) => {
+                        if let Some(code) = style_choice(prog, &v) {
+                            return code;
+                        }
+                        style = v;
+                    }
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--dir" || other.starts_with("--dir=") => {
+                match take_opt_value(prog, "--dir", other, rest, &mut i) {
+                    Ok(v) => dir = v,
+                    Err(code) => return code,
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    let Some(action) = action else {
+        return argparse_error(prog, "the following arguments are required: action");
+    };
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_hook(&HookArgs {
+        action,
+        style,
+        dir,
+        json,
+    }) as u8
+}
+
+/// `rac eval [--check | --update-baseline] [--json] [--root ROOT]
+/// [--queries QUERIES] [--baseline BASELINE] [--config CONFIG]` — no
+/// positionals; the mode mutex errors at the ENCOUNTER of the conflicting
+/// flag (so it beats a later `--version`), like argparse.
+fn run_eval(rest: &[&String]) -> u8 {
+    let prog = "rac eval";
+    let mut check = false;
+    let mut update_baseline = false;
+    let mut json = false;
+    let mut root: String = "tests/eval/corpus".to_string();
+    let mut queries: String = "tests/eval/queries.json".to_string();
+    let mut baseline: String = "tests/eval/baseline.json".to_string();
+    let mut config: String = "tests/eval/eval-config.json".to_string();
+    let mut extras: Vec<String> = Vec::new();
+    let mut positional_only = false;
+
+    let mut i = 0;
+    while i < rest.len() {
+        let arg = rest[i].as_str();
+        if positional_only || arg == "-" || !arg.starts_with('-') {
+            extras.push(arg.to_string());
+            i += 1;
+            continue;
+        }
+        match arg {
+            "--" => positional_only = true,
+            "--version" => {
+                skip_usage_record();
+                print_stdout(&version_line());
+                return 0;
+            }
+            "-h" | "--help" => {
+                skip_usage_record();
+                print_stdout(&format!("usage: {prog} ..."));
+                return 0;
+            }
+            "--check" => {
+                if let Some(code) =
+                    mutex_check(prog, "--check", "--update-baseline", update_baseline)
+                {
+                    return code;
+                }
+                check = true;
+            }
+            "--update-baseline" => {
+                if let Some(code) = mutex_check(prog, "--update-baseline", "--check", check) {
+                    return code;
+                }
+                update_baseline = true;
+            }
+            "--json" => json = true,
+            other if other == "--root" || other.starts_with("--root=") => {
+                match take_opt_value(prog, "--root", other, rest, &mut i) {
+                    Ok(v) => root = v,
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--queries" || other.starts_with("--queries=") => {
+                match take_opt_value(prog, "--queries", other, rest, &mut i) {
+                    Ok(v) => queries = v,
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--baseline" || other.starts_with("--baseline=") => {
+                match take_opt_value(prog, "--baseline", other, rest, &mut i) {
+                    Ok(v) => baseline = v,
+                    Err(code) => return code,
+                }
+            }
+            other if other == "--config" || other.starts_with("--config=") => {
+                match take_opt_value(prog, "--config", other, rest, &mut i) {
+                    Ok(v) => config = v,
+                    Err(code) => return code,
+                }
+            }
+            other => extras.push(other.to_string()),
+        }
+        i += 1;
+    }
+
+    if !extras.is_empty() {
+        return unrecognized(&extras);
+    }
+
+    cmd_eval(&EvalArgs {
+        check,
+        update_baseline,
+        json,
+        root,
+        queries,
+        baseline,
+        config,
     }) as u8
 }
 

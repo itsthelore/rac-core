@@ -1,0 +1,20 @@
+{
+  "description": "Closure parity fixture: one search case whose must_not_return id is the top hit, so the hard-negative rule fires.",
+  "cases": [
+    {
+      "id": "V01",
+      "tool": "search_artifacts",
+      "category": "decision_lookup",
+      "query": "postgres datastore",
+      "relevant": ["EVAL-1483XGG8THGE"],
+      "must_not_return": ["EVAL-1483XGG8THGE"]
+    },
+    {
+      "id": "V02",
+      "tool": "get_related",
+      "category": "impact_analysis",
+      "query": "EVAL-JTDKWHNVD8GG",
+      "relevant": ["EVAL-Y7Q0PPM3ZDPR"]
+    }
+  ]
+}

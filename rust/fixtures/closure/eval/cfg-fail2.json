@@ -1,0 +1,12 @@
+{
+  "tolerance": 0.0,
+  "floors": {
+    "overall": {
+      "r_at_5": 0.5
+    },
+    "by_category": {
+      "nonexistent_cat": {"p_at_1": 0.5},
+      "supersession": {"p_at_1": 2.0}
+    }
+  }
+}

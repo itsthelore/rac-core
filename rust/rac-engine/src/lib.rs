@@ -21,6 +21,10 @@
 //! - `consent`: the ADR-041/086 sharing-consent record (telemetry.json).
 //! - `telemetry`: Guide telemetry log read-back (ADR-040, mcp-stats).
 //! - `usage`: CLI usage log read-back + consent-gated recorder (ADR-046).
+//! - `sha256`: FIPS 180-4 digest (eval corpus/query-set hashes).
+//! - `skill`: bundled agent skills — registry + embedded-asset install.
+//! - `hook`: bundled git hooks — registry + embedded-asset install.
+//! - `eval`: the ADR-066 grounding retrieval benchmark and gate.
 //! - `output`: human/JSON/SARIF renderers per command.
 //! - `commands`: CLI command entry points (argv already parsed).
 //! - `cli`: argv parsing and exit codes matching the oracle's argparse
@@ -55,6 +59,10 @@ pub mod export;
 pub mod consent;
 pub mod telemetry;
 pub mod usage;
+pub mod sha256;
+pub mod skill;
+pub mod hook;
+pub mod eval;
 pub mod output;
 pub mod commands;
 pub mod cli;

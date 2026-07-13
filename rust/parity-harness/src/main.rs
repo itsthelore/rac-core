@@ -70,10 +70,14 @@ struct Case {
     #[serde(default)]
     sandbox: Option<Sandbox>,
     /// Post-run capture globs/paths, relative to the sandbox root (`*`/`?`
-    /// within a component, `**` across components; `.git` trees are always
-    /// excluded). After both engines run, the captured file SETS must be
-    /// identical and each common file's bytes must match after the case's
-    /// normalizations — written trees are refereed like stdout.
+    /// within a component, `**` across components). `.git` trees are excluded
+    /// UNLESS a capture pattern explicitly names a `.git` component (hook
+    /// install cases referee `.git/hooks/<style>`; git internals like the
+    /// index stat cache stay out of scope because the explicit patterns
+    /// select only the written hook files). After both engines run, the
+    /// captured file SETS must be identical and each common file's bytes must
+    /// match after the case's normalizations — written trees are refereed
+    /// like stdout.
     #[serde(default)]
     capture: Vec<String>,
     /// Also demand identical executable bits on captured files (hook
@@ -676,12 +680,17 @@ fn glob_match(pattern: &str, path: &str) -> bool {
     match_comps(&pat, &comps)
 }
 
-fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
+fn walk_files(
+    root: &Path,
+    dir: &Path,
+    include_git: bool,
+    out: &mut Vec<String>,
+) -> Result<(), String> {
     let entries =
         fs::read_dir(dir).map_err(|e| format!("cannot read dir {}: {e}", dir.display()))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("cannot read dir {}: {e}", dir.display()))?;
-        if entry.file_name() == ".git" {
+        if entry.file_name() == ".git" && !include_git {
             continue; // git internals (index stat cache) are never comparable
         }
         let path = entry.path();
@@ -689,7 +698,7 @@ fn walk_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), Stri
             .file_type()
             .map_err(|e| format!("cannot stat {}: {e}", path.display()))?;
         if ty.is_dir() {
-            walk_files(root, &path, out)?;
+            walk_files(root, &path, include_git, out)?;
         } else {
             let rel = path
                 .strip_prefix(root)
@@ -714,8 +723,14 @@ fn capture_files(
     }
     let root = sandbox
         .ok_or_else(|| format!("case {} declares capture but no sandbox", case.id))?;
+    // `.git` trees are comparable only when a pattern names one explicitly
+    // (hook install referees `.git/hooks/<style>`).
+    let include_git = case
+        .capture
+        .iter()
+        .any(|pat| pat.split('/').any(|comp| comp == ".git"));
     let mut files = Vec::new();
-    walk_files(root, root, &mut files)?;
+    walk_files(root, root, include_git, &mut files)?;
     let mut captured = BTreeMap::new();
     for rel in files {
         if case.capture.iter().any(|pat| glob_match(pat, &rel)) {
