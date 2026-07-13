@@ -958,5 +958,28 @@
    ]
   },
   "expect_exit": 0
+ },
+ {
+  "id": "b5-find-cold-parallel-build-capture",
+  "argv": [
+   "find",
+   "widget",
+   "rac",
+   "--json"
+  ],
+  "cwd": "{SANDBOX}",
+  "env": {
+   "RAC_CACHE_DIR": "{SANDBOX}/cache",
+   "RAC_NO_CACHE": "",
+   "RAC_PARALLEL_BUILD_MIN_FILES": "1"
+  },
+  "sandbox": {
+   "fixture": "rust/fixtures/index/repo"
+  },
+  "capture": [
+   "cache/store/**",
+   "cache/*.json"
+  ],
+  "expect_exit": 0
  }
 ]

@@ -63,6 +63,7 @@ pub mod derived;
 pub mod index_store;
 pub mod derived_cache;
 pub mod read_model;
+pub mod parallel_build;
 pub mod coverage;
 pub mod review;
 pub mod gate;

@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use crate::derived::{build_derived_index, DerivedIndex, SCHEMA_VERSION};
+use crate::derived::{DerivedIndex, SCHEMA_VERSION};
 use crate::index_store::{
     manifest_root_key, open_freshness_manifest, open_store, remove_store, store_dir,
     write_freshness_manifest, write_store, FileState, MmapIndexReader,
@@ -230,8 +230,15 @@ impl DerivedIndexCache {
             // rebuild below writes fresh rather than skipping the dead dir.
             remove_store(&self.cache_dir, &corpus_hash);
         }
-        let derived = build_derived_index(directory, recursive);
+        // Cold miss: build the store from nothing with the parallel fragment
+        // fan-out (ADR-107/108) — byte-identical to the serial build, only
+        // faster to produce; the RAC_TIMING scorecard line rides here.
+        let (derived, mut stats) =
+            crate::parallel_build::build_derived_index_parallel(directory, recursive, None);
+        let write_start = std::time::Instant::now();
         let store_written = write_store(&self.cache_dir, &corpus_hash, SCHEMA_VERSION, &derived);
+        stats.write_ms = write_start.elapsed().as_secs_f64() * 1000.0;
+        crate::parallel_build::emit_build_timing(&stats);
         if write_marker(&self.cache_dir, &corpus_hash, store_written) {
             if let Some(view) = open_store(&self.cache_dir, &corpus_hash, SCHEMA_VERSION) {
                 return ReadModel::View(view);
