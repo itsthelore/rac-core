@@ -8,7 +8,7 @@
 //! - `pyjson`: the Python `json.dumps`-shaped writer (indent=2 and JSONL).
 //! - `frontmatter`: bounded PyYAML-1.1 SafeLoader subset.
 //! - `markdown`: CommonMark block-boundary tokenizer (headings + inline raw).
-//! - `spec`: artifact specs loaded from `rust/spec/artifact-specs.json`.
+//! - `spec`: artifact specs loaded from the shared `src/rac/spec/artifact-specs.json`.
 //! - `walk`: corpus discovery in component-wise sorted-path order.
 //! - `parse`: file -> parsed artifact (frontmatter + sections + fields).
 //! - `classify`: deterministic classification over specs.

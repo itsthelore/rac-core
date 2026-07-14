@@ -75,6 +75,11 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
+# The shared artifact-spec registry ships with the distribution (ADR-063
+# Guard 1): `rac.core.artifacts` loads ARTIFACT_SPECS from it via
+# importlib.resources, and the Rust engine embeds the same file — one shared,
+# language-neutral source of truth both engines read.
+"rac.spec" = ["*.json"]
 # Canonical artifact templates ship with the distribution (v0.7.10, ADR-021):
 # `rac new` loads them via importlib.resources, never from the repository.
 # The vendored Portal shell and its provenance manifest ship the same way
