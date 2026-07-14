@@ -101,7 +101,10 @@ distribution, one platform per wheel:
 4. **Dispatcher.** Land `rac.cli:main` routing behind `RAC_ENGINE`, defaulting
    to Rust for `COVERED` when the binary is present. Cover the routing table
    with tests (each covered subcommand execs Rust; each fenced one stays Python;
-   the escape hatch forces each way).
+   the escape hatch forces each way). CI runs the covered battery with
+   `RAC_ENGINE=rust` forced (maintainer-decided), so a missing or broken binary
+   — or a covered command that silently fell back to Python — fails the build
+   loudly instead of passing on the fallback path.
 5. **Retrieval sequencing.** Adopt the `retrieve` argparse delta only after
    roadmap:grounding-retrieval-surface merges into the reference.
 6. **Docs.** Document the two-engine reality, the covered/fenced split, and the
@@ -172,10 +175,10 @@ from what is actually proven.
   platform matrix, so this must be answered before their wheels ship.)
 - Wheel size: two bundled binaries add ~8 MB; acceptable, or gate the binary
   behind an extra (`rac-core[native]`)?
-- Does `rac mcp` (stdio) route to `rac-mcp` transparently, or stay an explicit
-  opt-in until the HTTP-transport story (ADR-098) is settled?
-- Should CI assert `RAC_ENGINE=rust` on the covered battery so a missing/broken
-  binary fails loudly rather than silently falling back to Python?
+- Does `rac mcp` (stdio) route to `rac-mcp` transparently (no user opt-in, same
+  command), or stay an explicit opt-in until the HTTP-transport story (ADR-098)
+  is settled? (Recommendation: transparent — the stdio surface is 56/76
+  frame-parity proven.)
 
 ## Related Requirements
 
