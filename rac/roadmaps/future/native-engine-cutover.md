@@ -18,8 +18,10 @@ a parity-proven binary sitting unused in `rust/target/`.
 Scope boundary, recorded as maintainer intent: this is the **covered-surface
 default**, not a full authority flip. Python remains installed, remains the
 arbiter, and remains the engine for the fenced surfaces that were never ported
-(Explorer TUI, `ingest`, HTTP MCP transport). Retiring Python is a separate,
-larger decision that ADR-116 deliberately left for later.
+(`ingest`, HTTP MCP transport). The Explorer TUI is explicitly out of scope for
+this cutover — it is not a Python-retention driver and is a candidate for
+separate deprecation, not a surface this work maintains. Retiring Python
+entirely is a separate, larger decision that ADR-116 deliberately left for later.
 
 ## Outcomes
 
@@ -28,7 +30,7 @@ larger decision that ADR-116 deliberately left for later.
   ladder: warm `find` 43 ms vs the Python cache's 446 ms; serving startup
   35 ms vs 2.2 s) without opting in.
 - The experience is one `rac`: covered commands run Rust, fenced commands
-  (Explorer, `ingest`, HTTP MCP) transparently run Python, and the user does not
+  (`ingest`, HTTP MCP) transparently run Python, and the user does not
   choose an engine per command. A documented escape hatch forces Python for
   debugging or parity re-checks.
 - The lockstep guards ADR-116 made permanent are live in CI: the Guard 1 sync
@@ -57,9 +59,9 @@ larger decision that ADR-116 deliberately left for later.
 
 ## Constraints
 
-- Covered-surface only. The fenced surfaces (Explorer TUI ADR-028, `ingest`
-  ADR-072, HTTP MCP transport ADR-098) stay on Python; the cutover must not
-  strand them.
+- Covered-surface only. The fenced surfaces (`ingest` ADR-072, HTTP MCP
+  transport ADR-098) stay on Python; the cutover must not strand them. The
+  Explorer TUI (ADR-028) is out of scope — not preserved as a cutover concern.
 - Byte-parity remains the gate: on every covered command and MCP frame the Rust
   engine must produce identical stdout bytes and exit codes to the Python
   arbiter, cache on or off — this is the property that makes the swap safe.
