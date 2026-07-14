@@ -74,6 +74,11 @@ distribution, one platform per wheel:
   (`rac.bin` = a new bundled subpackage, the ADR-021 packaging pattern already
   used for templates/hooks/skills). The router resolves the binary via
   `importlib.resources`, so it works from an installed wheel with no repo.
+- Platform matrix at cutover (maintainer-decided): **Linux x86_64, macOS arm64,
+  Windows x86_64** get a bundled binary. Every other platform (including Linux
+  aarch64) installs the binary-less form and runs the Python engine via the
+  automatic fallback — correct by construction, just not accelerated, and added
+  later without a code change.
 - A pure-Python sdist (no binary) remains installable everywhere; on a platform
   with no bundled binary the router simply always falls through to Python. The
   native speedup is a platform-availability enhancement, never a hard dependency
@@ -161,11 +166,10 @@ from what is actually proven.
 
 ## Open Questions
 
-- Platform matrix for the binary wheels (linux x86_64/aarch64, macOS
-  arm64/x86_64, Windows?) — which are supported at cutover vs. left to the
-  Python fallback.
-- Binary signing/notarization (macOS, Windows) — required for the bundled binary
-  to run without warnings?
+- Binary signing/notarization (macOS arm64, Windows x86_64) — required for the
+  bundled binary to run without gatekeeper/SmartScreen warnings, and does that
+  add a signing-secret dependency to the release job? (Both are in the decided
+  platform matrix, so this must be answered before their wheels ship.)
 - Wheel size: two bundled binaries add ~8 MB; acceptable, or gate the binary
   behind an extra (`rac-core[native]`)?
 - Does `rac mcp` (stdio) route to `rac-mcp` transparently, or stay an explicit
