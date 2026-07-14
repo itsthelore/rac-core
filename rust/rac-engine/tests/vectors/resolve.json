@@ -100377,7 +100377,7 @@
         "body": 4649773449776675298,
         "tags": 4607213912503705314
       },
-      "match_count": 12,
+      "match_count": 13,
       "matches": [
         {
           "path": "rac/decisions/adr-099-derived-index-cache.md",
@@ -100531,6 +100531,23 @@
           "inbound": 4,
           "bm25_bits": 4609881374605033776,
           "fused_bits": 4581867777127480159
+        },
+        {
+          "path": "rac/decisions/adr-116-native-engine-sanctioned-second-implementation.md",
+          "id": "RAC-KXGVR299XY5E",
+          "type": "decision",
+          "field": "body",
+          "terms": [
+            "cache"
+          ],
+          "tier": 5,
+          "section": "Context",
+          "snippet": "retrieval-branch server, cache-off; 52/52 and 71/71 cache-on; plus a",
+          "lexical_rank": 9,
+          "graph_rank": 16,
+          "inbound": 0,
+          "bm25_bits": 4610599790435907510,
+          "fused_bits": 4581730725711391928
         },
         {
           "path": "rac/decisions/adr-115-shared-artifact-spec-registry.md",

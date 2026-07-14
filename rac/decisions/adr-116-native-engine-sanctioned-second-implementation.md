@@ -171,7 +171,7 @@ wiring is the concrete next step this decision depends on.
 
 ## Status
 
-Proposed
+Accepted
 
 ## Category
 
