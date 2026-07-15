@@ -2462,6 +2462,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Native-engine cutover (ADR-116): route covered commands to the bundled
+    # Rust binary before any parsing (os.execv — never returns on success). No
+    # bundled binary, RAC_ENGINE=python, or a fenced command falls through to
+    # the Python engine below. In the repo and the pure-Python sdist no binary
+    # is bundled, so this is a no-op and behaviour is unchanged.
+    from rac.dispatch import maybe_exec_native
+
+    maybe_exec_native(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
     args = parser.parse_args(argv)
     # CLI usage telemetry (ADR-046, WS-E): record one content-free event per

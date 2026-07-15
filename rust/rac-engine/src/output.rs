@@ -42,7 +42,15 @@ use crate::validate::py_title;
 /// The injectable version string (PORT-CONTRACT decision 6): `RAC_RS_VERSION`
 /// when set, else the spike default.
 pub fn rac_version() -> String {
-    std::env::var("RAC_RS_VERSION").unwrap_or_else(|_| "0.0.0-rs".to_string())
+    // Precedence: a runtime `RAC_RS_VERSION` (the parity harness pins the
+    // oracle's exact string here) > the version compiled in at build time
+    // (`RAC_RS_VERSION` set when the release wheel builds, so a distributed
+    // binary reports the right version with no runtime pin, native-engine
+    // cutover) > the dev fallback.
+    std::env::var("RAC_RS_VERSION")
+        .ok()
+        .or_else(|| option_env!("RAC_RS_VERSION").map(str::to_string))
+        .unwrap_or_else(|| "0.0.0-rs".to_string())
 }
 
 // --- Minimal color (auto-disabled when not writing to a TTY) ----------------
