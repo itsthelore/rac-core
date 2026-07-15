@@ -13,8 +13,9 @@ Proposed
 
 ADR-116 sanctions the Rust engine as the default for the covered surfaces (the
 parity-proven CLI command set and the six-tool stdio MCP), with the Python
-reference as arbiter and as the engine for the fenced surfaces (`ingest`, HTTP
-MCP transport; the Explorer TUI is out of scope, not a retention driver). roadmap:native-engine-cutover records the what
+reference as arbiter and as the engine for the one fenced surface (`ingest`; the
+Explorer TUI is out of scope, not a retention driver; the HTTP MCP transport was
+ported wire-and-audit under this codename, so it is covered). roadmap:native-engine-cutover records the what
 and why. This design records the how: how the compiled Rust binary reaches
 users, how a single `rac` invocation routes to the right engine, and the order
 in which the switch is made safe.
@@ -29,8 +30,8 @@ without changing any output byte.
 
 A user installing RAC wants the fast engine on the surfaces where it is proven,
 without having to know two engines exist, choose one per command, or manage a
-second install. They also need the slow-but-complete surfaces (`ingest`, HTTP
-serving) to keep working, and — when something looks wrong — a
+second install. They also need the fenced `ingest` command to keep working, and
+— when something looks wrong — a
 one-switch way to fall back to the reference engine to check whether the native
 engine is at fault.
 
@@ -53,8 +54,8 @@ a router, not the engine:
   argv/stdin/env (a true process replacement, so exit code, stdout/stderr, and
   signals pass through unchanged). Otherwise it falls through to the existing
   Python `cli:main` logic.
-- The stdio MCP server (`rac mcp`) routes to `rac-mcp` the same way when covered;
-  HTTP transport (ADR-098) stays Python.
+- The MCP server (`rac mcp`) routes to `rac-mcp` the same way — both the stdio
+  and the HTTP transport (ADR-098), which `rac-mcp` now serves natively.
 - Escape hatch: `RAC_ENGINE=python` forces the Python path for any command;
   `RAC_ENGINE=rust` forces Rust and errors if a covered command's binary is
   missing (so CI can assert the binary is really being used). Unset = the
@@ -116,7 +117,7 @@ distribution, one platform per wheel:
   stdout, stderr, exit code, and signals through untouched — `exec`, not a
   captured subprocess that re-emits output.
 - Covered-surface only: the `COVERED` set is exactly the parity-battery command
-  set; fenced surfaces (`ingest`, HTTP MCP) route to Python.
+  set; the one fenced command (`ingest`) routes to Python.
 - Install must never fail for lack of a binary: the Python path is the universal
   fallback, and the sdist has no binary at all.
 - The Python reference stays installed and importable (arbiter, fenced surfaces,
@@ -175,10 +176,10 @@ from what is actually proven.
   platform matrix, so this must be answered before their wheels ship.)
 - Wheel size: two bundled binaries add ~8 MB; acceptable, or gate the binary
   behind an extra (`rac-core[native]`)?
-- Does `rac mcp` (stdio) route to `rac-mcp` transparently (no user opt-in, same
-  command), or stay an explicit opt-in until the HTTP-transport story (ADR-098)
-  is settled? (Recommendation: transparent — the stdio surface is 56/76
-  frame-parity proven.)
+- (Resolved.) `rac mcp` routes to `rac-mcp` transparently for both transports:
+  stdio (56/76 frame-parity) and HTTP (ADR-098, now ported wire-and-audit and
+  byte-parity-proven against both oracles). No opt-in; the HTTP-transport story
+  is settled.
 
 ## Related Requirements
 
