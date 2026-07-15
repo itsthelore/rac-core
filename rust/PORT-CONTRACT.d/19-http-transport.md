@@ -80,7 +80,24 @@ mirrors `transport.ensure_audit_sink` + `audit.load_audit_config`:
   `$XDG_STATE_HOME/rac/audit.jsonl`), `mkdir -p` its parent, and prove it
   append-openable; otherwise exit non-zero ("… requires a writable audit log …").
 
-stdio never calls this — audit stays config-driven and default-absent there.
+stdio never calls this gate — audit stays config-driven and default-absent
+there (no `audit:` stanza ⇒ no recorder ⇒ byte-unchanged, ADR-084's strict
+superset). But when a stdio corpus *does* enable audit, `rac-mcp` records too,
+matching the oracle (`create_recorder(transport="stdio")`).
+
+Per call, `audit::observe` (mirroring `audit.observe`) appends one JSON line to
+the sink: `schema_version`, `ts`, `session`, `principal`, `transport`,
+`attribution` (`asserted` when a per-request principal rode `X-Lore-Principal`,
+else `local`), `tool`, `query` (the args, never content — non-default arguments
+ride only when supplied, per-tool shapes exactly as `server.py`'s `observed(...)`
+calls), `returned` (the surfaced artifact IDs: primary `id` +
+`matches`/`incoming`/`neighborhood` item ids, deduped), `outcome`
+(`ok`/`error`), and `duration_ms`. The line is byte-faithful:
+`pyjson::dumps_compact` == `json.dumps(event, ensure_ascii=False)` (spaced
+separators). On write failure under the shared server's `on_write_error: block`
+the call is refused with a structured `audit-unavailable` payload; stdio's
+`warn` default records-and-continues. The referee compares records
+field-for-field minus the non-deterministic `ts`/`session`/`duration_ms`.
 
 ## 4 — Attribution: `X-Lore-Principal` (ADR-098, ADR-084)
 
@@ -92,10 +109,10 @@ the header). An unasserted call falls back to the recorder's resolution.
 
 ## 5 — Declared gaps (this port)
 
-- **Per-call audit-line writing** rides the existing stubbed audit sidecar
-  (addendum 10 records the Rust `rac-mcp` audit/telemetry sidecars as stubbed,
-  wire-neutral). The HTTP port adds the mandatory-audit-on **startup gate** (§3)
-  faithfully; emitting each call's audit line is the remaining follow-up.
+- **Telemetry** (ADR-040, content-free) stays stubbed: `sidecar::observe` is a
+  passthrough that keeps the `telemetry.observe(audit.observe(...))` nesting so
+  a future telemetry port drops in without touching the protocol layer. Audit
+  (content-bearing, ADR-084) is *not* stubbed — it is fully ported (§3).
 - **GET SSE stream** — not offered (§2); 405 instead of an idle 200 stream.
 - **Batch requests** (JSON array body) — not handled; single requests only.
 - **Keep-alive** — the server sends `connection: close` per response.
@@ -103,8 +120,10 @@ the header). An unasserted call falls back to the recorder's resolution.
 ## 6 — Referee
 
 `rust/tools/mcp_http_parity.py` drives a Python and a Rust `--transport http`
-server over real HTTP against an audit-enabled corpus and checks body bytes for
-every request plus the §2 status map. Run in both modes:
+server over real HTTP against an audit-enabled corpus and checks: body bytes for
+every request, the §2 status map, and the audit log — records field-for-field
+minus `ts`/`session`/`duration_ms`, plus an `X-Lore-Principal` call asserted on
+both. Run in both modes:
 
 ```sh
 python rust/tools/mcp_http_parity.py \

@@ -68,7 +68,8 @@ class HttpServer:
             d = xdg / sub
             d.mkdir(parents=True, exist_ok=True)
             env[name] = str(d)
-        env["RAC_AUDIT_PATH"] = str(xdg / "audit.jsonl")
+        self.audit_path = xdg / "audit.jsonl"
+        env["RAC_AUDIT_PATH"] = str(self.audit_path)
         env["RAC_NO_CACHE"] = "1"
         self.port = port
         self.url = f"http://127.0.0.1:{port}/mcp"
@@ -110,6 +111,15 @@ class HttpServer:
         except urllib.error.HTTPError as e:
             return e.code, e.read()
 
+    def audit_records(self) -> list[dict]:
+        if not self.audit_path.exists():
+            return []
+        return [
+            json.loads(line)
+            for line in self.audit_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
     def close(self) -> None:
         self.proc.terminate()
         try:
@@ -117,6 +127,15 @@ class HttpServer:
         except Exception:
             self.proc.kill()
         self._err.close()
+
+
+# Non-deterministic fields excluded from audit-record parity (a side file, not a
+# wire surface): wall-clock, per-server session tag, measured duration.
+_AUDIT_VOLATILE = {"ts", "session", "duration_ms"}
+
+
+def _norm_audit(rec: dict) -> dict:
+    return {k: v for k, v in rec.items() if k not in _AUDIT_VOLATILE}
 
 
 def rpc(id_: int, method: str, params: dict | None = None) -> str:
@@ -205,17 +224,48 @@ def main() -> int:
         print(f"  {'MATCH ' if ok else 'DIFFER'} status[malformed -> 400]: A={sa} B={sb}")
         if not ok:
             failures.append(f"status[malformed]: A={sa} B={sb}")
+
+        # 3. Attribution: an X-Lore-Principal call is recorded as that principal,
+        #    flagged attribution="asserted" (ADR-098), on both engines.
+        pcall = rpc(50, "tools/call", {"name": "get_summary", "arguments": {}})
+        a.post(pcall, principal="alice@example.com")
+        b.post(pcall, principal="alice@example.com")
+
+        # 4. Audit-log parity: same records in the same order, field-for-field
+        #    minus the volatile trio. (ADR-084 per-call audit-line writing.)
+        ra = [_norm_audit(r) for r in a.audit_records()]
+        rb = [_norm_audit(r) for r in b.audit_records()]
+        if not ra:
+            failures.append("audit: engine A wrote no records")
+        if ra == rb and ra:
+            print(f"  MATCH  audit ({len(ra)} records)")
+            last = ra[-1]
+            if last.get("principal") == "alice@example.com" and last.get("attribution") == "asserted":
+                print("  MATCH  audit[X-Lore-Principal asserted]")
+            else:
+                failures.append(f"audit[principal]: {last.get('principal')}/{last.get('attribution')}")
+        else:
+            failures.append(f"audit: {len(ra)} vs {len(rb)} records differ")
+            for i, (x, y) in enumerate(zip(ra, rb)):
+                if x != y:
+                    print(f"   audit rec {i} A={x}", file=sys.stderr)
+                    print(f"   audit rec {i} B={y}", file=sys.stderr)
+                    break
+    except Exception as exc:  # surface setup/crash into the result file too
+        import traceback
+        failures.append("crash: " + "".join(traceback.format_exception(exc))[-1500:])
     finally:
         a.close()
         b.close()
 
-    if failures:
-        print(f"\nmcp_http_parity: {len(failures)} failure(s):", file=sys.stderr)
-        for f in failures:
-            print(f"  - {f}", file=sys.stderr)
-        return 1
-    print(f"\nmcp_http_parity: all body + status checks passed ({'six-tool' if args.six else 'primary'})")
-    return 0
+    # Write a durable result file (stdout capture is unreliable under some
+    # background/timeout wrappers); the caller reads this.
+    mode = "six-tool" if args.six else "primary"
+    summary = f"mcp_http_parity ({mode}): {'PASS' if not failures else 'FAIL'}"
+    lines = [summary] + [f"  - {f}" for f in failures]
+    (out / "result.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines), flush=True)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

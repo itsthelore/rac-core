@@ -20,28 +20,17 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
 
-use rac_engine::frontmatter::{yaml_load_config, Yaml};
 use serde_json::Value;
 
-use crate::process_request;
+use crate::{audit, process_request};
 
-const CONFIG_DIR: &str = ".rac";
-const CONFIG_FILE: &str = "config.yaml";
-const AUDIT_FILENAME: &str = "audit.jsonl";
-const PATH_ENV: &str = "RAC_AUDIT_PATH";
-
-/// Resolve and validate the audit sink for HTTP serving (ADR-084 fail-loud).
-///
-/// A shared HTTP endpoint serves reads no single developer's git identity can
-/// attribute, so it refuses to start without a *working* audit sink: audit must
-/// be enabled in `.rac/config.yaml` and its path writable. Returns the resolved
-/// path on success, or an error message for the caller to fail loud with. stdio
-/// never calls this — audit stays config-driven and default-absent there.
-pub fn ensure_audit_sink(root: &str) -> Result<PathBuf, String> {
-    let (enabled, configured_path) = load_audit_stanza(root)?;
-    if !enabled {
+/// Prove a working audit sink for HTTP serving (ADR-084 fail-loud). Audit must
+/// be enabled in `.rac/config.yaml` and its resolved path writable, or the
+/// shared endpoint refuses to start. stdio never calls this — audit stays
+/// config-driven and default-absent there.
+pub fn ensure_audit_sink(config: &audit::AuditConfig) -> Result<(), String> {
+    if !config.enabled {
         return Err(
             "HTTP serving requires the read-access audit log, but it is not \
 enabled. Add an `audit:` stanza with `enabled: true` to .rac/config.yaml \
@@ -49,7 +38,7 @@ before serving over HTTP (ADR-084)."
                 .to_string(),
         );
     }
-    let path = resolve_audit_path(configured_path);
+    let path = audit::resolve_audit_path(&config.path);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| audit_unwritable(&path, &e.to_string()))?;
     }
@@ -58,84 +47,16 @@ before serving over HTTP (ADR-084)."
         .append(true)
         .open(&path)
         .map_err(|e| audit_unwritable(&path, &e.to_string()))?;
-    Ok(path)
+    Ok(())
 }
 
-fn audit_unwritable(path: &Path, reason: &str) -> String {
+fn audit_unwritable(path: &std::path::Path, reason: &str) -> String {
     format!(
         "HTTP serving requires a writable audit log, but {} could not be opened \
 for append ({reason}). Fix the audit path or permissions before serving over \
 HTTP (ADR-084).",
         path.display()
     )
-}
-
-/// Read `audit.enabled` / `audit.path` from the nearest `.rac/config.yaml` at or
-/// above `root` (ADR-084). No config or no `audit` section means disabled.
-fn load_audit_stanza(root: &str) -> Result<(bool, String), String> {
-    let Some(config_path) = find_config_file(root) else {
-        return Ok((false, String::new()));
-    };
-    let text = std::fs::read_to_string(&config_path)
-        .map_err(|e| format!("invalid YAML: {e}"))?;
-    let Yaml::Map(pairs) = yaml_load_config(&text).map_err(|p| format!("invalid YAML: {p}"))?
-    else {
-        return Ok((false, String::new()));
-    };
-    let section = pairs.iter().find_map(|(k, v)| match k {
-        Yaml::Str(s) if s == "audit" => Some(v),
-        _ => None,
-    });
-    let Some(section) = section else {
-        return Ok((false, String::new()));
-    };
-    let Yaml::Map(audit) = section else {
-        return Err("'audit' must be a mapping".to_string());
-    };
-    let enabled = match audit.iter().find_map(|(k, v)| match k {
-        Yaml::Str(s) if s == "enabled" => Some(v),
-        _ => None,
-    }) {
-        None => false,
-        Some(Yaml::Bool(b)) => *b,
-        Some(_) => return Err("'audit.enabled' must be true or false".to_string()),
-    };
-    let path = match audit.iter().find_map(|(k, v)| match k {
-        Yaml::Str(s) if s == "path" => Some(v),
-        _ => None,
-    }) {
-        None => String::new(),
-        Some(Yaml::Str(s)) => s.clone(),
-        Some(_) => return Err("'audit.path' must be a string".to_string()),
-    };
-    Ok((enabled, path))
-}
-
-/// `RAC_AUDIT_PATH` > config `path` > `$XDG_STATE_HOME/rac/audit.jsonl`.
-fn resolve_audit_path(configured: String) -> PathBuf {
-    if let Some(env) = std::env::var_os(PATH_ENV) {
-        if !env.is_empty() {
-            return PathBuf::from(env);
-        }
-    }
-    if !configured.is_empty() {
-        return PathBuf::from(configured);
-    }
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-            home.join(".local").join("state")
-        });
-    base.join("rac").join(AUDIT_FILENAME)
-}
-
-fn find_config_file(root: &str) -> Option<PathBuf> {
-    let start = std::fs::canonicalize(root).unwrap_or_else(|_| PathBuf::from(root));
-    std::iter::successors(Some(start.as_path()), |p| p.parent())
-        .map(|dir| dir.join(CONFIG_DIR).join(CONFIG_FILE))
-        .find(|c| c.is_file())
 }
 
 /// Serve `root` over streamable HTTP (stateless JSON mode) until interrupted.
@@ -145,6 +66,7 @@ fn find_config_file(root: &str) -> Option<PathBuf> {
 pub fn serve_http(
     root: &str,
     tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    recorder: &mut Option<audit::Recorder>,
     host: &str,
     port: u16,
     path: &str,
@@ -162,7 +84,7 @@ stateless per call; authentication belongs to the deployment proxy, ADR-085)."
     );
     for stream in listener.incoming() {
         match stream {
-            Ok(s) => handle_connection(root, tracker, path, s),
+            Ok(s) => handle_connection(root, tracker, recorder, path, s),
             Err(_) => continue,
         }
     }
@@ -192,6 +114,7 @@ impl Request {
 fn handle_connection(
     root: &str,
     tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    recorder: &mut Option<audit::Recorder>,
     path: &str,
     stream: TcpStream,
 ) {
@@ -203,7 +126,7 @@ fn handle_connection(
     let Some(req) = read_request(&mut reader) else {
         return;
     };
-    respond(&mut writer, &route(root, tracker, path, &req));
+    respond(&mut writer, &route(root, tracker, recorder, path, &req));
 }
 
 /// Parse one HTTP/1.1 request: request line, headers, and a Content-Length body.
@@ -257,6 +180,7 @@ fn json_response(status: &'static str, body: String) -> Response {
 fn route(
     root: &str,
     tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    recorder: &mut Option<audit::Recorder>,
     path: &str,
     req: &Request,
 ) -> Response {
@@ -270,7 +194,7 @@ fn route(
         // SDK, which opens an idle stream).
         "GET" => Response { status: "405 Method Not Allowed", body: None },
         "DELETE" => Response { status: "405 Method Not Allowed", body: None },
-        "POST" => route_post(root, tracker, req),
+        "POST" => route_post(root, tracker, recorder, req),
         _ => Response { status: "405 Method Not Allowed", body: None },
     }
 }
@@ -278,6 +202,7 @@ fn route(
 fn route_post(
     root: &str,
     tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    recorder: &mut Option<audit::Recorder>,
     req: &Request,
 ) -> Response {
     // Accept must be present and admit JSON (json_response mode): absent -> 406.
@@ -320,9 +245,9 @@ fn route_post(
     };
     // Attribution rides X-Lore-Principal (ADR-098): recorded by audit, never an
     // access-control input — the response is identical whatever it says.
-    let _principal = req.header("x-lore-principal").unwrap_or("");
+    let principal = req.header("x-lore-principal");
     let id_json = serde_json::to_string(id).unwrap_or_else(|_| "null".to_string());
-    let frame = process_request(root, tracker, method, &id_json, &message);
+    let frame = process_request(root, tracker, method, &id_json, &message, recorder.as_mut(), principal);
     json_response("200 OK", frame)
 }
 
