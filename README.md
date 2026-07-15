@@ -81,6 +81,19 @@ recall fuzzily, then verify in Lore.
 
 Requires Python 3.11+. `uv tool install rac-core` also works.
 
+### The native engine
+
+On Linux x86_64, macOS (Apple Silicon), and Windows x86_64, `pip install rac-core`
+also brings a **compiled Rust engine**, and `rac` runs it automatically for the
+CLI and the MCP server — same output, byte-for-byte, much faster (a warm search
+over 5,000 files drops from seconds to tens of milliseconds). It is transparent:
+you run the same `rac` commands. On any other platform, or if you prefer, the
+pure-Python engine runs instead — install never depends on the binary.
+
+Document `ingest` always runs on Python (it wraps a Python converter), and so
+does the terminal `explorer`. To pin an engine explicitly — for debugging, or to
+compare — set `RAC_ENGINE=python` or `RAC_ENGINE=rust` in the environment.
+
 ## How it works
 
 <p align="center">

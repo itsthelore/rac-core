@@ -80,6 +80,52 @@ jobs:
             --engine-b "$(pwd)/target/release/rac-mcp" \
             --exclude-tags six,list --out mcp-parity-out
 
+      - name: MCP HTTP transport parity vs oracle (body + status + audit)
+        working-directory: rust
+        run: |
+          python3 tools/mcp_http_parity.py \
+            --engine-a "$(pwd)/../.venv-oracle/bin/rac mcp" \
+            --engine-b "$(pwd)/target/release/rac-mcp" \
+            --out mcp-http-out
+
+      # ADR-063 Guards, activated (native-engine cutover): the shared spec must
+      # match rac-spec, and both engines must reproduce rac-spec's conformance
+      # goldens. RAC_SPEC_DIR points these gates at a rac-spec checkout.
+      - name: Checkout rac-spec (Guard 1/2)
+        uses: actions/checkout@v4
+        with:
+          repository: itsthelore/rac-spec
+          path: rac-spec
+
+      - name: Guard 1 — vendored spec in sync with rac-spec
+        env:
+          RAC_SPEC_DIR: ${{ github.workspace }}/rac-spec
+        run: python rust/spec/sync_spec.py
+
+      - name: Guard 2 — both engines certified against rac-spec conformance
+        env:
+          RAC_SPEC_DIR: ${{ github.workspace }}/rac-spec
+        run: |
+          python rust/tools/conformance_certify.py \
+            --engine "python=${{ github.workspace }}/.venv-oracle/bin/rac" \
+            --engine "rust=${{ github.workspace }}/rust/target/release/rac"
+
+      # Assert the release dispatcher really execs the native binary: bundle the
+      # freshly built binaries and confirm a covered command under
+      # RAC_ENGINE=rust matches the Python engine byte-for-byte (native-engine
+      # cutover). Bundling happens after the oracle-vs-rust steps above so the
+      # Python oracle path stays unaffected there.
+      - name: Dispatcher — RAC_ENGINE=rust execs the native binary
+        run: |
+          cp rust/target/release/rac rust/target/release/rac-mcp src/rac/bin/
+          rust_out="$(RAC_ENGINE=rust .venv-oracle/bin/rac validate rac/)"
+          py_out="$(RAC_ENGINE=python .venv-oracle/bin/rac validate rac/)"
+          if [ "$rust_out" != "$py_out" ]; then
+            echo "native dispatch diverged from Python"; exit 1
+          fi
+          rm -f src/rac/bin/rac src/rac/bin/rac-mcp
+          echo "native dispatch OK (byte-identical to Python)"
+
       - name: Upload scoreboards on failure
         if: failure()
         uses: actions/upload-artifact@v4
