@@ -9,6 +9,7 @@
 
 mod args;
 mod graph;
+mod http;
 mod provenance;
 mod sidecar;
 mod tools;
@@ -48,11 +49,39 @@ fn main() {
     let mut argv = std::env::args().skip(1);
     let mut root = ".".to_string();
     let mut cache = true;
+    // Transport (ADR-098). stdio is the default and byte-unchanged; http selects
+    // the streamable-HTTP transport (mandatory audit-on, loopback by default).
+    let mut transport = "stdio".to_string();
+    let mut host = "127.0.0.1".to_string();
+    let mut port: u16 = 8000;
+    let mut path = "/mcp".to_string();
     while let Some(a) = argv.next() {
         match a.as_str() {
             "--root" => match argv.next() {
                 Some(v) => root = v,
                 None => usage_error("--root requires a value"),
+            },
+            "--transport" => match argv.next().as_deref() {
+                Some(v @ ("stdio" | "http")) => transport = v.to_string(),
+                Some(v) => usage_error(&format!(
+                    "argument --transport: invalid choice: '{v}' (choose from 'stdio', 'http')"
+                )),
+                None => usage_error("--transport requires a value"),
+            },
+            "--host" => match argv.next() {
+                Some(v) => host = v,
+                None => usage_error("--host requires a value"),
+            },
+            "--port" => match argv.next() {
+                Some(v) => match v.parse::<u16>() {
+                    Ok(p) => port = p,
+                    Err(_) => usage_error(&format!("argument --port: invalid int value: '{v}'")),
+                },
+                None => usage_error("--port requires a value"),
+            },
+            "--path" => match argv.next() {
+                Some(v) => path = v,
+                None => usage_error("--path requires a value"),
             },
             // Cache flags are real since INDEX-PLAN B6 and remain
             // output-neutral (ADR-112: cache-on vs cache-off runs are
@@ -79,6 +108,13 @@ fn main() {
     } else {
         None
     };
+    if transport == "http" {
+        // Mandatory audit-on (ADR-098): refuse to start without a working sink.
+        if let Err(msg) = http::ensure_audit_sink(&root) {
+            usage_error(&msg);
+        }
+        http::serve_http(&root, &mut tracker, &host, port, &path);
+    }
     serve(&root, &mut tracker);
 }
 
@@ -118,25 +154,39 @@ fn serve(root: &str, tracker: &mut Option<rac_engine::freshness::FreshnessTracke
             continue; // notification (e.g. notifications/initialized): no response
         };
         let id_json = serde_json::to_string(id).unwrap_or_else(|_| "null".to_string());
-        let frame = match method {
-            "initialize" => initialize_frame(&id_json, &message),
-            "ping" => format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{}}}}"),
-            "tools/list" => {
-                format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{TOOLS_LIST_RESULT}}}")
-            }
-            "prompts/list" => {
-                format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"prompts\":[]}}}}")
-            }
-            "resources/list" => {
-                format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"resources\":[]}}}}")
-            }
-            "tools/call" => tools_call_frame(root, tracker, &id_json, &message),
-            _ => format!(
-                "{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"error\":{{\"code\":-32602,\"message\":\"Invalid request parameters\",\"data\":\"\"}}}}"
-            ),
-        };
+        let frame = process_request(root, tracker, method, &id_json, &message);
         writeln!(out, "{frame}").ok();
         out.flush().ok();
+    }
+}
+
+/// Produce the JSON-RPC response frame for one request `method` (transport-
+/// agnostic, so stdio and HTTP share exactly one code path — the byte-parity
+/// surface, PORT-CONTRACT.d/10 §2/§4/§5). Callers extract `method`/`id` and the
+/// per-transport envelope; this owns only the payload.
+pub(crate) fn process_request(
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    method: &str,
+    id_json: &str,
+    message: &Value,
+) -> String {
+    match method {
+        "initialize" => initialize_frame(id_json, message),
+        "ping" => format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{}}}}"),
+        "tools/list" => {
+            format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{TOOLS_LIST_RESULT}}}")
+        }
+        "prompts/list" => {
+            format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"prompts\":[]}}}}")
+        }
+        "resources/list" => {
+            format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"resources\":[]}}}}")
+        }
+        "tools/call" => tools_call_frame(root, tracker, id_json, message),
+        _ => format!(
+            "{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"error\":{{\"code\":-32602,\"message\":\"Invalid request parameters\",\"data\":\"\"}}}}"
+        ),
     }
 }
 
