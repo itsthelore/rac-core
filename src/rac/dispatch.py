@@ -76,9 +76,11 @@ def _binary_path(name: str) -> str | None:
         return None
     # Wheels install rac as real files, so the resource is a concrete path; guard
     # the zipimport case (no bundled binary there anyway) by requiring a real file.
+    # `str()` (not os.fspath) because importlib's Traversable is not PathLike-typed;
+    # for a real installed file it is a pathlib.Path whose str() is the path.
     try:
         if resource.is_file():
-            return os.fspath(resource)
+            return str(resource)
     except (FileNotFoundError, TypeError):
         pass
     return None
