@@ -125,9 +125,7 @@ def _spec_from_dict(d: dict) -> ArtifactSpec:
 @lru_cache(maxsize=1)
 def _registry() -> tuple[tuple[ArtifactSpec, ...], dict[str, str]]:
     """Load ``(ARTIFACT_SPECS, RELATIONSHIP_DESCRIPTIONS)`` from the bundled file."""
-    raw = resources.files("rac.spec").joinpath("artifact-specs.json").read_text(
-        encoding="utf-8"
-    )
+    raw = resources.files("rac.spec").joinpath("artifact-specs.json").read_text(encoding="utf-8")
     payload = json.loads(raw)
     specs = tuple(_spec_from_dict(s) for s in payload["artifact_specs"])
     relationship_descriptions = dict(payload["relationship_descriptions"])

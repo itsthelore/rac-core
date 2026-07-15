@@ -179,7 +179,9 @@ def main() -> int:
     ap.add_argument("--out", default=str(REPO_ROOT / "rust" / "mcp-http-out"))
     args = ap.parse_args()
 
-    out = Path(args.out)
+    # Absolute: the servers run with cwd=REPO_ROOT, so a relative --out (e.g. CI's
+    # working-directory: rust) would make --root resolve against the wrong dir.
+    out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     corpus = build_corpus(out)
     a = HttpServer(shlex.split(args.engine_a), corpus, 8991, out / "a")
