@@ -17,13 +17,24 @@ a parity-proven binary sitting unused in `rust/target/`.
 
 Scope boundary, recorded as maintainer intent: this is the **covered-surface
 default**, not a full authority flip. Python remains installed, remains the
-arbiter, and remains the engine for the one fenced surface not yet ported
-(`ingest`). The HTTP MCP transport (ADR-098) was ported as part of this work —
-wire and audit, byte-parity-proven against both oracles — so it is covered, not
-fenced. The Explorer TUI is explicitly out of scope for this cutover — it is not
-a Python-retention driver and is a candidate for separate deprecation, not a
-surface this work maintains. Retiring Python entirely is a separate, larger
-decision that ADR-116 deliberately left for later.
+arbiter, and remains the engine for `ingest` — kept on Python by decision, not
+pending a port. Document conversion is out of scope for the native engine:
+turning a DOCX/PDF/PPTX/XLSX into Markdown is preprocessing, not engine work
+(ADR-010, documents are not artifacts), and it wraps a third-party Python
+library whose output RAC does not own (markitdown, ADR-072). Its accepted end
+state is an optional Python extra (`pip install rac-core[ingest]`) that produces
+Markdown the Rust engine then handles — so a deployment that never ingests
+foreign documents needs no Python for its engine at all. The HTTP MCP transport
+(ADR-098) was ported as part of this work — wire and audit, byte-parity-proven
+against both oracles — so it is covered, not fenced. The Explorer TUI is
+explicitly out of scope for this cutover — not a Python-retention driver and a
+candidate for separate deprecation. Retiring Python entirely is a separate,
+larger decision that ADR-116 deliberately left for later.
+
+The Rust-only end state this defines: Rust serves the engine, the covered CLI,
+and the six-tool MCP (stdio and HTTP); Python survives only as the conformance
+arbiter and the optional `ingest` document-conversion extra — neither on the hot
+path.
 
 ## Outcomes
 
@@ -62,10 +73,11 @@ decision that ADR-116 deliberately left for later.
 
 ## Constraints
 
-- Covered-surface only. The one fenced surface (`ingest` ADR-072) stays on
-  Python; the cutover must not strand it. The HTTP MCP transport (ADR-098) is
-  covered — ported wire-and-audit under this codename. The Explorer TUI
-  (ADR-028) is out of scope — not preserved as a cutover concern.
+- Covered-surface only. `ingest` (ADR-072) stays on Python by decision — an
+  optional document-conversion extra, not a pending port; the cutover routes it
+  to Python and must not strand it. The HTTP MCP transport (ADR-098) is covered
+  — ported wire-and-audit under this codename. The Explorer TUI (ADR-028) is out
+  of scope — not preserved as a cutover concern.
 - Byte-parity remains the gate: on every covered command and MCP frame the Rust
   engine must produce identical stdout bytes and exit codes to the Python
   arbiter, cache on or off — this is the property that makes the swap safe.
@@ -119,6 +131,7 @@ decision that ADR-116 deliberately left for later.
 - ADR-027
 - ADR-098
 - ADR-072
+- ADR-010
 - ADR-028
 
 ## Related Roadmaps
