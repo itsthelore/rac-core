@@ -42,7 +42,15 @@ use crate::validate::py_title;
 /// The injectable version string (PORT-CONTRACT decision 6): `RAC_RS_VERSION`
 /// when set, else the spike default.
 pub fn rac_version() -> String {
-    std::env::var("RAC_RS_VERSION").unwrap_or_else(|_| "0.0.0-rs".to_string())
+    // Precedence: a runtime `RAC_RS_VERSION` (the parity harness pins the
+    // oracle's exact string here) > the version compiled in at build time
+    // (`RAC_RS_VERSION` set when the release wheel builds, so a distributed
+    // binary reports the right version with no runtime pin, native-engine
+    // cutover) > the dev fallback.
+    std::env::var("RAC_RS_VERSION")
+        .ok()
+        .or_else(|| option_env!("RAC_RS_VERSION").map(str::to_string))
+        .unwrap_or_else(|| "0.0.0-rs".to_string())
 }
 
 // --- Minimal color (auto-disabled when not writing to a TTY) ----------------
@@ -1931,8 +1939,76 @@ pub fn render_portfolio_human(s: &PortfolioSummary) -> String {
     lines.join("\n")
 }
 
+/// Human `rac index` output: the repository manifest (services/index.py).
+pub fn render_index_human(index: &crate::index::RepositoryIndex) -> String {
+    let mut lines = vec![
+        bold("Repository Index"),
+        "================".to_string(),
+        String::new(),
+        format!("Directory:  {}", index.directory),
+        format!("Artifacts:  {}", index.artifacts.len()),
+        String::new(),
+    ];
+    if index.artifacts.is_empty() {
+        lines.push("(none)".to_string());
+        return lines.join("\n");
+    }
+    // Aligned columns: ID, type, title (— when absent), path last.
+    let title_of = |e: &crate::index::IndexEntry| -> String {
+        e.title.clone().unwrap_or_else(|| "\u{2014}".to_string())
+    };
+    let width = |f: &dyn Fn(&crate::index::IndexEntry) -> usize| -> usize {
+        index.artifacts.iter().map(f).max().unwrap_or(0)
+    };
+    let id_w = width(&|e| e.id.chars().count());
+    let type_w = width(&|e| e.artifact_type.chars().count());
+    let title_w = width(&|e| title_of(e).chars().count());
+    for e in &index.artifacts {
+        lines.push(format!(
+            "  {}  {}  {}  {}",
+            ljust(&e.id, id_w),
+            ljust(&e.artifact_type, type_w),
+            ljust(&title_of(e), title_w),
+            e.path
+        ));
+    }
+    lines.join("\n")
+}
+
+/// JSON `rac index` output — `json.dumps(index.to_dict(), indent=2)`
+/// (ensure_ascii default; identity-only contract, ADR-007).
+pub fn render_index_json(index: &crate::index::RepositoryIndex) -> String {
+    let artifacts: Vec<Value> = index
+        .artifacts
+        .iter()
+        .map(|e| {
+            let mut m = Map::new();
+            m.insert("id".into(), json!(e.id));
+            m.insert("type".into(), json!(e.artifact_type));
+            m.insert("title".into(), json!(e.title));
+            m.insert("path".into(), json!(e.path));
+            m.insert("aliases".into(), json!(e.aliases));
+            Value::Object(m)
+        })
+        .collect();
+    let mut payload = Map::new();
+    payload.insert("schema_version".into(), json!("1"));
+    payload.insert("directory".into(), json!(index.directory));
+    payload.insert("recursive".into(), json!(index.recursive));
+    payload.insert("artifact_count".into(), json!(index.artifacts.len()));
+    payload.insert("artifacts".into(), Value::Array(artifacts));
+    dumps_indent2(&Value::Object(payload))
+}
+
 /// JSON `rac portfolio` output — `PortfolioSummary.to_dict()` (ADR-007).
 pub fn render_portfolio_json(s: &PortfolioSummary) -> String {
+    dumps_indent2(&portfolio_summary_value(s))
+}
+
+/// `PortfolioSummary.to_dict()` as a `Value` — shared by the portfolio JSON
+/// renderer and the index store's portfolio segment (ADR-103/104), so the
+/// two cannot drift.
+pub fn portfolio_summary_value(s: &PortfolioSummary) -> Value {
     let mut payload = Map::new();
     payload.insert("schema_version".into(), json!("1"));
     payload.insert("directory".into(), json!(s.directory));
@@ -1996,7 +2072,7 @@ pub fn render_portfolio_json(s: &PortfolioSummary) -> String {
     );
     payload.insert("validation_status".into(), Value::Object(validation_status));
 
-    dumps_indent2(&Value::Object(payload))
+    Value::Object(payload)
 }
 
 // --- coverage ----------------------------------------------------------------

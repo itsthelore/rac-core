@@ -136,6 +136,27 @@ enum SetupStep {
         path: String,
         commits: Vec<GitCommit>,
     },
+    /// Remove a file (or an empty directory) inside the sandbox — the
+    /// delete/rename half of cache staleness cases (INDEX-PLAN B4). A
+    /// missing target is a setup error: a case that deletes nothing is
+    /// not testing what it claims.
+    Remove { path: String },
+    /// Run the SIDE'S OWN engine once inside the sandbox before the
+    /// refereed run — the cache-warming step (INDEX-PLAN P0). argv gets
+    /// `{SANDBOX}` resolved; env is the same deterministic base + case
+    /// env the refereed run sees, so a case that points `RAC_CACHE_DIR`
+    /// into the sandbox and clears `RAC_NO_CACHE` warms exactly the
+    /// cache the refereed run then reads. cwd is sandbox-relative
+    /// (default the sandbox root); stdout/stderr are discarded; `expect_exit`
+    /// (default 0) must match or the case errors out loudly — a warm run
+    /// that fails unexpectedly must never referee silently.
+    EngineRun {
+        argv: Vec<String>,
+        #[serde(default = "default_cwd")]
+        cwd: String,
+        #[serde(default)]
+        expect_exit: i32,
+    },
 }
 
 /// One scripted commit: files written first, then `git add -A` + commit.
@@ -588,7 +609,59 @@ fn run_git(dir: &Path, args: &[&str], date: Option<&str>) -> Result<(), String> 
     Ok(())
 }
 
-fn apply_setup_step(step: &SetupStep, root: &Path, repo_root: &Path) -> Result<(), String> {
+/// Everything an `engine-run` setup step needs about the side it warms.
+struct SetupCtx<'a> {
+    engine: &'a Path,
+    case: &'a Case,
+    base: &'a [(String, String)],
+}
+
+fn run_setup_engine(
+    argv: &[String],
+    cwd: &str,
+    expect_exit: i32,
+    root: &Path,
+    ctx: &SetupCtx,
+) -> Result<(), String> {
+    let sandbox_root = root.to_string_lossy().into_owned();
+    let resolve = |s: &str| resolve_token(s, Some(&sandbox_root), &ctx.case.id);
+    let mut cmd = Command::new(ctx.engine);
+    for arg in argv {
+        cmd.arg(resolve(arg)?);
+    }
+    cmd.current_dir(root.join(resolve(cwd)?))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    cmd.env_clear();
+    for (k, v) in ctx.base {
+        cmd.env(k, v);
+    }
+    for (k, v) in &ctx.case.env {
+        cmd.env(k, resolve(v)?);
+    }
+    let out = cmd
+        .output()
+        .map_err(|e| format!("engine-run failed to spawn {}: {e}", ctx.engine.display()))?;
+    let exit = out.status.code().unwrap_or_else(|| {
+        use std::os::unix::process::ExitStatusExt;
+        128 + out.status.signal().unwrap_or(0)
+    });
+    if exit != expect_exit {
+        return Err(format!(
+            "engine-run {argv:?} exited {exit} (expected {expect_exit}); stderr: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(())
+}
+
+fn apply_setup_step(
+    step: &SetupStep,
+    root: &Path,
+    repo_root: &Path,
+    ctx: &SetupCtx,
+) -> Result<(), String> {
     match step {
         SetupStep::Write { path, content } => write_file(root, path, content),
         SetupStep::Mkdir { path } => {
@@ -619,6 +692,20 @@ fn apply_setup_step(step: &SetupStep, root: &Path, repo_root: &Path) -> Result<(
             }
             Ok(())
         }
+        SetupStep::Remove { path } => {
+            let target = root.join(path);
+            let result = if target.is_dir() {
+                fs::remove_dir(&target)
+            } else {
+                fs::remove_file(&target)
+            };
+            result.map_err(|e| format!("cannot remove {}: {e}", target.display()))
+        }
+        SetupStep::EngineRun {
+            argv,
+            cwd,
+            expect_exit,
+        } => run_setup_engine(argv, cwd, *expect_exit, root, ctx),
     }
 }
 
@@ -632,6 +719,7 @@ fn prepare_sandbox(
     side: &str,
     sandbox_area: &Path,
     repo_root: &Path,
+    ctx: &SetupCtx,
 ) -> Result<Option<PathBuf>, String> {
     let Some(spec) = &case.sandbox else {
         return Ok(None);
@@ -648,7 +736,7 @@ fn prepare_sandbox(
             .map_err(|e| format!("case {} fixture: {e}", case.id))?;
     }
     for step in &spec.setup {
-        apply_setup_step(step, &root, repo_root)
+        apply_setup_step(step, &root, repo_root, ctx)
             .map_err(|e| format!("case {} setup: {e}", case.id))?;
     }
     Ok(Some(root))
@@ -887,7 +975,8 @@ fn run_side(
     base: &[(String, String)],
     sandbox_area: &Path,
 ) -> Result<EngineSide, String> {
-    let sandbox = prepare_sandbox(case, side, sandbox_area, repo_root)?;
+    let ctx = SetupCtx { engine, case, base };
+    let sandbox = prepare_sandbox(case, side, sandbox_area, repo_root, &ctx)?;
     let sandbox_root = sandbox.map(|p| p.to_string_lossy().into_owned());
     let out = run_engine(engine, case, repo_root, base, sandbox_root.as_deref())?;
     let captured = capture_files(case, sandbox_root.as_deref().map(Path::new))?;

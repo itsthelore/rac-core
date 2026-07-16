@@ -48,6 +48,8 @@ CLIENT_INFO = {"name": "mcp-parity-harness", "version": "0.0.1"}
 class Server:
     """One MCP server subprocess with the neutralized environment."""
 
+    cache_on = False  # set by --cache-on: leave the servers' caches enabled
+
     def __init__(self, cmd: list[str], root: str, xdg_dir: Path):
         env = dict(os.environ)
         for name, sub in (
@@ -65,7 +67,7 @@ class Server:
         # violation). Pin BOTH servers to the no-cache engine path — the same
         # path every other parity claim in this spike compares against. The
         # Rust server ignores the variable (it re-reads per call, ADR-032).
-        env["RAC_NO_CACHE"] = "1"
+        env["RAC_NO_CACHE"] = "" if Server.cache_on else "1"
         # stderr goes to a temp file, never compared (contract §9) but kept
         # for the crash diagnostic in recv(); a PIPE could deadlock unread.
         self._errfile = tempfile.NamedTemporaryFile(
@@ -264,6 +266,8 @@ def first_diff(a: bytes, b: bytes) -> str:
 def run_parity(args) -> int:
     exclude = {t for t in (args.exclude_tags or "").split(",") if t}
     roots, cases = load_cases(Path(args.cases), exclude, args.filter)
+    if getattr(args, "cache_on", False):
+        cases = [c for c in cases if "duplicate-token" not in c["id"]]
     if not cases:
         print("no cases selected", file=sys.stderr)
         return 2
@@ -375,9 +379,21 @@ def main() -> int:
     p.add_argument("--out", default=str(REPO_ROOT / "rust" / "mcp-parity-out"))
     p.add_argument("--exclude-tags", default="", help="comma-separated tags to skip")
     p.add_argument("--filter", default=None, help="substring filter on case ids")
+    p.add_argument(
+        "--cache-on",
+        action="store_true",
+        help=(
+            "leave RAC_NO_CACHE unset on both servers (INDEX-PLAN B6 cache-on "
+            "referee); duplicate-token cases are skipped — the oracle's warm "
+            "path diverges from its own cold path there (contract §0a) and "
+            "the native engine deliberately keeps warm == cold"
+        ),
+    )
     p.add_argument("--perf", action="store_true", help="perf mode instead of parity")
     p.add_argument("--perf-root", default="live", help="root key for perf mode")
     args = p.parse_args()
+    if args.cache_on:
+        Server.cache_on = True
     if args.perf:
         return run_perf(args)
     return run_parity(args)

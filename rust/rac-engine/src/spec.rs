@@ -1,7 +1,10 @@
-//! Artifact specs, loaded from `rust/spec/artifact-specs.json` (embedded at
-//! build time). Mirrors the Python `ArtifactSpec` dataclass in
-//! `rac.core.artifacts`, preserving field/section/map order everywhere
-//! (PORT-CONTRACT.d/04 §1, PORT-CONTRACT.d/09, PORT-CONTRACT.d/05 §3.1).
+//! Artifact specs, loaded from `src/rac/spec/artifact-specs.json` (embedded at
+//! build time). That file is the one shared, language-neutral registry both
+//! engines read (ADR-063 Guard 1): the Python engine loads `ARTIFACT_SPECS`
+//! from it at import (`rac.core.artifacts`), and this module embeds the very
+//! same bytes via `include_str!`, so the two cannot drift. It mirrors the
+//! Python `ArtifactSpec` dataclass, preserving field/section/map order
+//! everywhere (PORT-CONTRACT.d/04 §1, PORT-CONTRACT.d/09, PORT-CONTRACT.d/05 §3.1).
 //!
 //! The Python registry `ARTIFACT_SPECS` is an ordered tuple of 5 specs:
 //! `requirement, decision, roadmap, prompt, design`. That order is
@@ -13,8 +16,9 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
-/// Embedded spec data — the derived copy generated from `rac.core.artifacts`.
-const SPEC_JSON: &str = include_str!("../../spec/artifact-specs.json");
+/// Embedded spec data — the shared registry `src/rac/spec/artifact-specs.json`,
+/// the same file the Python engine loads at import (ADR-063 Guard 1).
+const SPEC_JSON: &str = include_str!("../../../src/rac/spec/artifact-specs.json");
 
 /// One artifact type's schema. Field names/order mirror the Python dataclass.
 #[derive(Debug, Clone)]

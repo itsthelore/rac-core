@@ -1,0 +1,49 @@
+{
+  "_comment": "Per-module implementation briefs for the native derived-index port (roadmap:native-derived-index), probed from the frozen oracle at 0.1.dev50+g21c8be403 (src/ byte-identical to the branch head). Byte-level format truth lives in spec/index-store-format.md; this file pins the behavioral contracts per oracle module. Referee: parity-cases-index.json + store byte-identity (hash the segment dirs) + the cache-state matrix (cold/warm/stale/bypassed/verify).",
+  "index-command": {
+    "module": "services/index.py + cli.py cmd_index",
+    "argv_shape": "rac index <directory> [--json] [--top-level] [--version]. Parents: version_parent, json_parent, scope_parent (--top-level). No --sarif, no cache flags — the command NEVER consumes or writes the cache (plain walk).",
+    "exit_codes": "0 on any completed inventory (including an empty directory). 2 (EXIT_USAGE) for: not-a-directory -> 'rac: not a directory: <path>' on stderr; argparse errors (missing positional, unknown flag). Never 1.",
+    "human": "render_index_human: 'Repository Index' (bold only under tty) / '================' / '' / 'Directory:  <directory verbatim>' / 'Artifacts:  <count>' / ''; then '(none)' if empty, else one row per entry '  {id:<idw}  {type:<tw}  {title or —:<titw}  {path}' with per-column max-width padding (trailing spaces only where a later column follows; path last, unpadded). Entries in walk order (sorted paths).",
+    "json": "render_index_json: json.dumps(index.to_dict(), indent=2) + newline. Keys: schema_version '1', directory (verbatim argv string), recursive (bool), artifact_count, artifacts[] each {id, type, title (null ok), path, aliases[]}. search_sections/inbound_count/tags are NEVER serialized (identity-only contract).",
+    "identity": "id = artifact_identifier precedence: frontmatter id > '## ID' section first value (list marker stripped) > spec.id_field section > filename-stem <letters>-<digits> prefix > whole stem. aliases = artifact_identifiers: every identifier the artifact answers to, canonical first, deduped, order-preserving.",
+    "notes": "Unknown documents ARE included (type 'unknown', stem identifier). inbound_count computed via relationships_from_corpus when not supplied; irrelevant to serialized output."
+  },
+  "index_format": {
+    "module": "services/index_format.py",
+    "contract": "Framing + primitives per spec/index-store-format.md §2. SEGMENT_MAGIC b'RACIDX01', SEGMENT_FORMAT_VERSION 4. Writer.u32 range-checks and raises (caller degrades to not-written); Reader bounds-checks every read; opt_text flag other than 0/1 is an error; segment_payload demands exact length. write_indexed/IndexedSegment per §2.2.",
+    "negative_cases": "truncated file, trailing garbage, wrong magic, version 3 or 5, empty file, offset table past end, row index out of range, bad opt flag — all IndexFormatError -> miss."
+  },
+  "index_store": {
+    "module": "services/index_store.py",
+    "contract": "12 segments, layouts and gates per spec/index-store-format.md §1–§5. write_store atomic (temp dir + fsync + os.replace); existing dir probed via full reader open, replaced when unopenable; remove_store best-effort. MmapIndexReader validates all 12 framings + header gates on open. Fold over EMPTY_DELTA: base is the whole answer; resolve() reproduces resolve_in_index outcomes (not-found / duplicate with sorted paths / resolved) from the aliasmap; search() reproduces search_index bytes from postings-served candidates; find_decisions = decision-typed search then live-paths filter. ReadModelView lazily materialises; equality is against a FRESH BUILD, never a self round-trip.",
+    "scoring": "BM25F from store integers: n and per-field Σ from header (avglen = one division per query), df from binary-searched prefix ranges over the sorted termdict unioned through postings, tf by counting a doc's forward token ids within the prefix id range [bisect_left(term), bisect_left(successor)) where successor increments the last char's code point. Summation order = FIELDS order = (id,title,path,heading,body,tags). Duplicate-token df dedup is an ORACLE DEFECT (PORT-CONTRACT.d/10 §0a): the native engine keeps walk semantics (per-occurrence df) on both paths.",
+    "negative_cases": "corrupt segment, truncation, bundle-version bump, scoring-fingerprint change, hash mismatch, unwritable cache dir, marker-present-store-missing — every one degrades to fresh build; marker cleared + store removed when marker claimed an unusable store."
+  },
+  "derived_cache": {
+    "module": "services/derived_cache.py",
+    "contract": "SCHEMA_VERSION '3'. DerivedIndex = index_entries + relationships + field_tokens_by_path + live_decision_paths + portfolio_summary + scope_rows, all pure functions of the sorted-path snapshot; build order: resolution_index once -> relationships -> inbound counts -> index -> tokens/live/portfolio/scope. ScopeRow only for live decisions declaring '## Applies To' (SCOPE_SECTIONS) entries, flattened in scan order. governing_decisions matches over precomputed rows byte-identically to scope.decisions_for_path ((id.casefold(), path) sort, first covering entry). load_or_build: manifest root key -> open .fseg (unless verify) -> stat_scan (content_confirm_all when verify or no manifest) -> corpus_hash_from_manifest -> best-effort manifest write -> marker gate -> open store else remove_store + parallel cold build -> write store -> write marker -> reopen view, else return the fresh DerivedIndex itself.",
+    "cache_dir": "RAC_CACHE_DIR > $XDG_CACHE_HOME/rac/derived > ~/.cache/rac/derived > <tmp>/rac-cache/rac/derived. CLI gate: args.cache AND not RAC_NO_CACHE (any non-empty value disables).",
+    "notes": "identity_entries projection elides sections/inbound/tags (fresh path) — the store's identity rows DO carry tags; resolution reads neither."
+  },
+  "freshness": {
+    "module": "services/freshness.py",
+    "contract": "stat_scan(root, root_str, prev_manifest, content_confirm_all, recursive): enumerate find_markdown_files; per file stat; reuse prev hash when (size, mtime_ns) unchanged and not confirm-all (S5 accepted); else read+hash; changed = content-changed or new, plus every prev rel no longer enumerated; vanished-between-enumeration-and-stat files simply drop out. corpus_hash_from_manifest per store-format §6. FreshnessTracker (MCP serving, ADR-105): manifest + parsed snapshot + read model + base hash/generation + delta window; detect: cold or verify -> confirm-all scan; else watcher-clean skip (NATIVE: no watcher — stat rung always, per ADR-114); apply: re-parse changed present files (or full re-parse after a shed), drop removed, hash from manifest; rebuild: serve mapped base when hash==base_hash and no delta, else re-derive from ordered snapshot; compact when delta >= max(10_000, files//100) (or explicit threshold) or on first base: write store + marker, reopen base, bump generation, clear delta, shed snapshot.",
+    "native_notes": "ADR-114 defers inotify: mode is always 'stat'. Behavior-neutral — inotify only ever asserted clean."
+  },
+  "parallel_build": {
+    "module": "services/parallel_build.py + parallel_merge.py",
+    "contract": "Cold build = parse fan-out + per-doc fragment projection + cross-doc merge (reproduce): resolution index and graph from fragment validation rows, inbound filled by merge, everything else read off fragments in sorted-path order. Worker-count invariance: contiguous ordered chunks concatenated in list order; store bytes identical for workers=1 vs N (test hashes segment files). Threshold: DEFAULT_MIN_PARALLEL_FILES 5000, env RAC_PARALLEL_BUILD_MIN_FILES (non-negative int, else default); single-process when cpu<=2 or below threshold or n_files<=1; explicit workers honored up to n_files. Fault (env RAC_PARALLEL_BUILD_FAULT makes workers raise): discard whole result, serial floor rebuilds — partial results never written. RAC_TIMING emits 'rac-timing: build_parse_ms=%.3f build_derive_ms=%.3f build_write_ms=%.3f workers=N files=N' to stderr only.",
+    "native_notes": "std-thread fan-out (ADR-114), no process boundary; the fragment seam is kept so the merge path, thresholds, fault degrade, and timing shape stay pinned."
+  },
+  "validate_incremental": {
+    "module": "services/validate.py validate_directory_incremental + index_store .vseg",
+    "contract": ".vseg layout per store-format §9 keyed by config_hash; open miss (absent/corrupt/config mismatch) -> full recompute; rows keyed by rel path, reused verbatim when content_hash matches (rename included — issues are path-free, path re-attached at assembly in walk order); stat proxy gates re-reads (S5 accepted); --verify forces content-confirm-all; result byte-identical to validate_directory for every non-S5 state. CLI: validate <dir> --cache default-on / --no-cache / RAC_NO_CACHE / --verify.",
+    "probe_note": "Exact config_hash composition and row assembly order to be probed from services/validate.py when B4 lands — recorded there, refereed by the B4 matrix either way."
+  },
+  "cli_seams": {
+    "module": "cli.py",
+    "contract": "find: _cache_enabled -> _find_from_store (load_or_build; ReadModelView -> view.search/find_decisions; fresh DerivedIndex -> search_index/find_decisions_in) else walk; recency annotation joins AFTER ranking either way. validate dir: incremental when cache enabled else validate_directory. index/resolve: never cache. Flags: --cache (default true, affirmation), --no-cache (dest cache false), --verify (find + validate only). mcp: cache_enabled passed to run_server.",
+    "parity_rule": "Cache on/off/verify must be byte-neutral on stdout+exit for every covered command; the referee drives cold, warm, stale, bypassed, and verify states against the oracle in the SAME state, plus warm==cold native assertions. Exception: duplicate-token queries vs oracle warm (oracle defect, excluded)."
+  }
+}

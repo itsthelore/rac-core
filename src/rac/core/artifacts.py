@@ -15,11 +15,21 @@ initiative-focused knowledge, added in v0.6.0), and Prompt (structured AI prompt
 knowledge, added in v0.6.2), and Design (UX and interaction knowledge, added in
 v0.6.3). Meeting is intentionally deferred until its schema is formalized — see
 rac/roadmaps/.
+
+The concrete spec data is not hardcoded here. It is loaded at import time from the
+bundled, language-neutral registry ``rac/spec/artifact-specs.json`` (ADR-063
+Guard 1): the *same* file the Rust engine embeds, so the two engines cannot drift.
+``ARTIFACT_SPECS`` and ``RELATIONSHIP_DESCRIPTIONS`` are reconstructed from that
+file into the exact dataclasses and ordering the engine has always used — the load
+is behavior-neutral (a golden test pins the reconstruction field-for-field).
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from functools import lru_cache
+from importlib import resources
 
 
 @dataclass(frozen=True)
@@ -80,447 +90,61 @@ class ArtifactSpec:
         return self.required + self.recommended
 
 
-# --- Relationship metadata (v0.7.0) -----------------------------------------
+# --- Registry loading (ADR-063 Guard 1) -------------------------------------
 #
-# Relationships are explicit Markdown sections that reference other artifacts
-# (ADR-016). They ride the existing ``optional`` mechanism: recognized and
-# extracted, but never scored, never templated, never reported as missing
-# (REQ-002). v0.7.0 treats them as metadata only — RAC extracts and counts the
-# references but does not resolve, validate, or graph them.
+# ``ARTIFACT_SPECS`` and ``RELATIONSHIP_DESCRIPTIONS`` are the deterministic
+# contract that classification, validation, statistics, and templates read. Their
+# data lives in the bundled ``rac/spec/artifact-specs.json`` — the one shared,
+# language-neutral file the Rust engine embeds too. This module reconstructs the
+# frozen dataclasses (and their declared field / map-key ordering) from that file.
 #
-# The relationship-section vocabulary and its canonical ordering live in
-# :mod:`rac.services.relationships` (the module that owns relationship logic). This module
-# only owns the human-facing ``descriptions`` for those sections, which the specs
-# below consume.
+# Order is load-bearing: the spec tuple order is the classification tie-break and
+# ``available_schemas()`` order, and every map preserves its JSON insertion order
+# (Python dicts are ordered, and ``json.loads`` keeps object order) so iteration
+# matches what the engine has always produced.
+
+
+def _spec_from_dict(d: dict) -> ArtifactSpec:
+    """Rebuild one :class:`ArtifactSpec` from its JSON object, preserving order."""
+    return ArtifactSpec(
+        name=d["name"],
+        display=d["display"],
+        required=tuple(d["required"]),
+        recommended=tuple(d["recommended"]),
+        optional=tuple(d["optional"]),
+        metadata={k: tuple(v) for k, v in d["metadata"].items()},
+        retired_status=tuple(d["retired_status"]),
+        descriptions=dict(d["descriptions"]),
+        guidance={k: tuple(v) for k, v in d["guidance"].items()},
+        synonyms=dict(d["synonyms"]),
+        id_field=d["id_field"],
+        starter_bodies=dict(d["starter_bodies"]),
+    )
+
+
+@lru_cache(maxsize=1)
+def _registry() -> tuple[tuple[ArtifactSpec, ...], dict[str, str]]:
+    """Load ``(ARTIFACT_SPECS, RELATIONSHIP_DESCRIPTIONS)`` from the bundled file."""
+    raw = resources.files("rac.spec").joinpath("artifact-specs.json").read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    specs = tuple(_spec_from_dict(s) for s in payload["artifact_specs"])
+    relationship_descriptions = dict(payload["relationship_descriptions"])
+    return specs, relationship_descriptions
+
 
 # One-line descriptions for every relationship section, surfaced by `rac schema`.
 # Relationship sections deliberately carry no ``guidance`` — guidance gates
-# `rac improve`, and relationships must stay out of improve and templates.
-RELATIONSHIP_DESCRIPTIONS: dict[str, str] = {
-    "related requirements": "Requirement artifacts this artifact references",
-    "related decisions": "Decision artifacts this artifact references",
-    "related roadmaps": "Roadmap artifacts this artifact references",
-    "related prompts": "Prompt artifacts this artifact references",
-    "related designs": "Design artifacts this artifact references",
-    "supersedes": "The artifact this one supersedes",
-    "related tickets": "External tickets this artifact traces to; provider set by"
-    " .rac/config.yaml ticketing.provider (ADR-087)",
-    "verified by": "External tests or traces that verify this capability; targets"
-    " are file paths, not in-corpus artifacts (ADR-096)",
-    "applies to": "Code paths or components this decision governs; path entries are"
-    " existence-checked, component names recorded as labels (ADR-019,"
-    " decision-to-code-proximity)",
-}
+# `rac improve`, and relationships must stay out of improve and templates. The
+# relationship-section vocabulary and its canonical ordering live in
+# :mod:`rac.services.relationships`; this map holds only the human-facing
+# descriptions those sections render, loaded from the shared registry file.
+RELATIONSHIP_DESCRIPTIONS: dict[str, str] = _registry()[1]
 
 
-def _relationship_descriptions(*sections: str) -> dict[str, str]:
-    """Descriptions for the given relationship ``sections`` (declaration order)."""
-    return {section: RELATIONSHIP_DESCRIPTIONS[section] for section in sections}
-
-
-ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
-    ArtifactSpec(
-        name="requirement",
-        display="Requirement",
-        required=("problem", "requirements"),
-        recommended=("success metrics", "risks", "assumptions"),
-        # Relationship sections (v0.7.0): metadata only — extracted and counted,
-        # never scored or templated (REQ-003). ``related requirements`` lets a
-        # requirement reference the requirements it depends on; appended last
-        # because section order is append-only (ADR-007).
-        optional=(
-            "related decisions",
-            "related roadmaps",
-            "related prompts",
-            "related designs",
-            "related requirements",
-            "related tickets",
-            "verified by",
-        ),
-        # Lifecycle status (ADR-051): optional, validated-if-present. Status stays
-        # a knowledge lifecycle (current vs replaced), never work/delivery state.
-        metadata={"status": ("Proposed", "Accepted", "Superseded", "Deprecated")},
-        retired_status=("Superseded", "Deprecated"),
-        descriptions={
-            "problem": "The user or business problem this addresses",
-            "requirements": "Numbered requirement statements, e.g. [REQ-001] ...",
-            "success metrics": "How success will be measured",
-            "risks": "Potential implementation, delivery, or adoption risks",
-            "assumptions": "Assumptions this artifact depends on",
-            **_relationship_descriptions(
-                "related decisions",
-                "related roadmaps",
-                "related prompts",
-                "related designs",
-                "related requirements",
-                "related tickets",
-                "verified by",
-            ),
-        },
-        guidance={
-            "problem": (
-                "What user or business problem does this solve?",
-                "Who is affected, and why does it matter now?",
-            ),
-            "requirements": (
-                "What must the system do?",
-                "Is each one a testable [REQ-NNN] statement?",
-            ),
-            "success metrics": (
-                "How will you know this succeeded?",
-                "What measurable target indicates success?",
-            ),
-            "risks": (
-                "What could prevent successful delivery?",
-                "What dependencies or unknowns exist?",
-            ),
-            "assumptions": (
-                "What are you assuming to be true?",
-                "What would change the approach if it turned out false?",
-            ),
-        },
-        synonyms={
-            "success criteria": "success metrics",
-            "kpis": "success metrics",
-            "kpi": "success metrics",
-        },
-        starter_bodies={
-            "problem": "TODO: describe the problem being solved and who experiences it.",
-            "requirements": "- [REQ-001] TODO: describe a required system behaviour.",
-            "success metrics": "TODO: describe how success will be measured.",
-            "risks": "TODO: describe implementation, delivery, operational, or adoption risks.",
-            "assumptions": "TODO: describe conditions assumed to be true.",
-        },
-    ),
-    ArtifactSpec(
-        name="decision",
-        display="Decision",
-        required=("context", "decision", "consequences"),
-        recommended=("status", "category", "alternatives considered"),
-        # ``supersedes`` stays first (the original v0.4.2 entry). The remaining
-        # relationship sections are added in v0.7.0 (REQ-004). All are metadata
-        # only; ``supersedes`` is also surfaced as a top-level scalar by inspect.
-        # ``applies to`` (decision-to-code-proximity Initiative 1) is appended last
-        # (append-only, ADR-007): the code paths/components a decision governs, a
-        # filesystem-scoped edge whose path entries are existence-checked.
-        optional=(
-            "supersedes",
-            "related requirements",
-            "related roadmaps",
-            "related designs",
-            "related decisions",
-            "related tickets",
-            "applies to",
-        ),
-        metadata={
-            "status": ("Proposed", "Accepted", "Superseded", "Deprecated"),
-            "category": ("Architecture", "Product", "Process", "Technical", "Other"),
-        },
-        retired_status=("Superseded", "Deprecated"),
-        descriptions=_relationship_descriptions(
-            "supersedes",
-            "related requirements",
-            "related roadmaps",
-            "related designs",
-            "related decisions",
-            "related tickets",
-            "applies to",
-        ),
-        guidance={
-            "context": (
-                "What forces, constraints, or problems led to this decision?",
-                "What background does a reader need?",
-            ),
-            "decision": (
-                "What was decided?",
-                "State it as a clear, active choice.",
-            ),
-            "consequences": (
-                "What becomes easier or harder as a result?",
-                "What trade-offs are you accepting?",
-            ),
-            "status": ("Is this Proposed, Accepted, Superseded, or Deprecated?",),
-            "category": ("Which area: Architecture, Product, Process, Technical, or Other?",),
-            "alternatives considered": (
-                "What other options were weighed?",
-                "Why were they not chosen?",
-            ),
-        },
-        synonyms={
-            "alternatives": "alternatives considered",
-            "options considered": "alternatives considered",
-        },
-        # ``status`` and ``category`` are omitted — their starter body comes from
-        # the allowed metadata values (see schema._metadata_default), not this map.
-        starter_bodies={
-            "context": "TODO: describe the situation, constraints, and background.",
-            "decision": "TODO: describe the decision that has been made.",
-            "consequences": "TODO: describe the expected positive and negative consequences.",
-            "alternatives considered": (
-                "TODO: describe the options that were considered and why they were not chosen."
-            ),
-        },
-    ),
-    ArtifactSpec(
-        name="roadmap",
-        display="Roadmap",
-        required=("outcomes", "initiatives"),
-        recommended=("success measures", "assumptions", "risks"),
-        # Relationship sections are recognized but never scored or templated; they
-        # let a roadmap reference Decisions/Requirements/Prompts/Designs as text.
-        # The first two predate v0.7.0; ``related prompts``/``related designs`` are
-        # added in v0.7.0 (REQ-005). Order is append-only (ADR-007).
-        optional=(
-            "related decisions",
-            "related requirements",
-            "related prompts",
-            "related designs",
-            "related roadmaps",
-            "related tickets",
-        ),
-        # Lifecycle status (ADR-051, ADR-061): Planned is the live state and
-        # Achieved is the live terminal state (the intent was delivered, so the
-        # item is now a realized record — still valid to reference, not retired).
-        # Superseded / Abandoned mark replaced or dropped *intent*. All four are
-        # knowledge states, not delivery tracking (ADR-017): a terminal "the
-        # intent was realized" marker set at release is knowledge currency, while
-        # per-milestone work progress stays out.
-        metadata={"status": ("Planned", "Achieved", "Superseded", "Abandoned")},
-        retired_status=("Superseded", "Abandoned"),
-        descriptions={
-            "outcomes": "The user, business, or operational outcomes this roadmap pursues",
-            "initiatives": "The major bodies of work that support those outcomes",
-            "success measures": "How progress toward the outcomes will be measured",
-            "assumptions": "Conditions that must hold for this roadmap to stay valid",
-            "risks": "What could prevent the outcomes from being achieved",
-            **_relationship_descriptions(
-                "related decisions",
-                "related requirements",
-                "related prompts",
-                "related designs",
-                "related roadmaps",
-                "related tickets",
-            ),
-        },
-        guidance={
-            "outcomes": (
-                "What user, business, or operational outcomes matter?",
-                "Why are these outcomes important now?",
-            ),
-            "initiatives": (
-                "What major bodies of work support these outcomes?",
-                "How does each initiative connect to an outcome?",
-            ),
-            "success measures": (
-                "How will the team know the roadmap is succeeding?",
-                "What observable signals would show progress?",
-            ),
-            "assumptions": ("What must be true for this roadmap to remain valid?",),
-            "risks": ("What could prevent these outcomes from being achieved?",),
-        },
-        # Artifact-scoped: this only normalizes "success metrics" when scoring a
-        # document against the Roadmap spec (see rac.core.classification._mapped), so it
-        # never affects the Requirement spec's canonical "success metrics" section.
-        synonyms={
-            "success metrics": "success measures",
-        },
-        starter_bodies={
-            "outcomes": "TODO: describe the outcomes this roadmap is intended to achieve.",
-            "initiatives": "TODO: describe the major initiatives that support the outcomes.",
-            "success measures": "TODO: describe how progress or success will be measured.",
-            "assumptions": "TODO: describe conditions assumed to be true.",
-            "risks": "TODO: describe implementation, delivery, operational, or adoption risks.",
-        },
-    ),
-    ArtifactSpec(
-        name="prompt",
-        display="Prompt",
-        required=("objective", "input", "instructions", "output"),
-        recommended=("constraints", "examples", "evaluation"),
-        # Relationship sections are recognized but never scored or templated; they
-        # let a Prompt reference other artifacts as text. ``related designs`` is
-        # added in v0.7.0 (REQ-006); order is append-only (ADR-007).
-        optional=(
-            "related requirements",
-            "related decisions",
-            "related roadmaps",
-            "related designs",
-            "related tickets",
-        ),
-        # Lifecycle status (ADR-051): Active is the live state, Deprecated retired.
-        metadata={"status": ("Active", "Deprecated")},
-        retired_status=("Deprecated",),
-        descriptions={
-            "objective": "What this prompt is intended to achieve",
-            "input": "The information, context, or source material the prompt expects",
-            "instructions": "The steps, rules, or approach the model should follow",
-            "output": "The expected response format or result",
-            "constraints": "Boundaries or restrictions the response must respect",
-            "examples": "Example inputs and outputs that clarify intended behavior",
-            # Human criteria for judging a response — not automated testing or scoring.
-            "evaluation": "Human criteria for judging whether a response is good",
-            **_relationship_descriptions(
-                "related requirements",
-                "related decisions",
-                "related roadmaps",
-                "related designs",
-                "related tickets",
-            ),
-        },
-        guidance={
-            "objective": (
-                "What task should this prompt help complete?",
-                "What outcome should the model produce?",
-            ),
-            "input": (
-                "What context or source material does the prompt require?",
-                "What assumptions should the model make about the input?",
-            ),
-            "instructions": (
-                "What should the model do first?",
-                "What process should it follow?",
-            ),
-            "output": (
-                "What should the output contain?",
-                "Should the response be structured as bullets, JSON, Markdown, or prose?",
-            ),
-            "constraints": (
-                "What should the model avoid?",
-                "Are there tone, format, safety, or scope constraints?",
-            ),
-            "examples": ("What examples would make the desired behavior clearer?",),
-            "evaluation": (
-                "What makes a good response?",
-                "How can the user tell whether the prompt worked?",
-            ),
-        },
-        # Artifact-scoped (see rac.core.classification._mapped): these only normalize
-        # headings when scoring against the Prompt spec, so they never affect other
-        # artifact types. They aid classification and improve (both synonym-aware);
-        # validation still expects the canonical headings, like Decision/Roadmap.
-        synonyms={
-            "expected output": "output",
-            "output specification": "output",
-            "input specification": "input",
-        },
-        starter_bodies={
-            "objective": "TODO: describe what this prompt is intended to achieve.",
-            "input": (
-                "TODO: describe the information, context, or source material the prompt expects."
-            ),
-            "instructions": (
-                "TODO: describe the steps, rules, or approach the model should follow."
-            ),
-            "output": "TODO: describe the expected response format or result.",
-            "constraints": "TODO: describe any boundaries or restrictions.",
-            "examples": "TODO: provide example inputs and outputs if useful.",
-            "evaluation": "TODO: describe how the output should be judged.",
-        },
-    ),
-    ArtifactSpec(
-        name="design",
-        display="Design",
-        required=("context", "user need", "design", "constraints"),
-        recommended=(
-            "rationale",
-            "alternatives",
-            "accessibility",
-            "style guidance",
-            "open questions",
-        ),
-        # Relationship sections are recognized but never scored or templated; they
-        # let a Design reference other artifacts as text without RAC analyzing
-        # those links (relationship analysis is v0.7.x).
-        optional=(
-            "related requirements",
-            "related decisions",
-            "related roadmaps",
-            "related prompts",
-            "related tickets",
-        ),
-        # Lifecycle status (ADR-051): same spine as decisions/requirements.
-        metadata={"status": ("Proposed", "Accepted", "Superseded", "Deprecated")},
-        retired_status=("Superseded", "Deprecated"),
-        descriptions={
-            "context": "The product area, situation, or experience this design addresses",
-            "user need": "The user, audience, task, pain point, or goal this design supports",
-            "design": "The proposed experience, interaction, layout, flow, or behavior",
-            "constraints": "Technical, product, accessibility, platform, or implementation"
-            " constraints",
-            "rationale": "Why this design approach was chosen",
-            "alternatives": "Other approaches considered and why they were not chosen",
-            "accessibility": "Accessibility needs and expectations for the design",
-            "style guidance": "Visual, tone, layout, or interaction style guidance",
-            "open questions": "Unresolved design questions to validate or decide later",
-            **_relationship_descriptions(
-                "related requirements",
-                "related decisions",
-                "related roadmaps",
-                "related prompts",
-                "related tickets",
-            ),
-        },
-        guidance={
-            "context": (
-                "What situation, product area, or user experience does this design address?",
-                "Why is this design needed now?",
-            ),
-            "user need": (
-                "Who is the user or audience?",
-                "What task, pain point, or goal does this design support?",
-            ),
-            "design": (
-                "What is the proposed design?",
-                "How should the experience work?",
-            ),
-            "constraints": (
-                "What constraints shape this design?",
-                "What must the design respect or avoid?",
-            ),
-            "rationale": (
-                "Why is this the preferred approach?",
-                "What trade-offs does this design make?",
-            ),
-            "alternatives": (
-                "What other approaches were considered?",
-                "Why were they not chosen?",
-            ),
-            "accessibility": (
-                "What accessibility needs should this design support?",
-                "Are there keyboard, contrast, readability, or screen-reader considerations?",
-            ),
-            "style guidance": (
-                "What visual or interaction style should be followed?",
-                "What patterns should remain consistent?",
-            ),
-            "open questions": (
-                "What still needs to be decided?",
-                "What should be validated or explored further?",
-            ),
-        },
-        starter_bodies={
-            "context": "TODO: describe the design context and why this design exists.",
-            "user need": (
-                "TODO: describe who this design is for and what they need to accomplish."
-            ),
-            "design": (
-                "TODO: describe the proposed experience, interaction, layout, flow, "
-                "or system behavior."
-            ),
-            "constraints": (
-                "TODO: describe technical, product, accessibility, platform, or "
-                "implementation constraints."
-            ),
-            "rationale": "TODO: explain why this design approach was chosen.",
-            "alternatives": "TODO: describe alternatives that were considered.",
-            "accessibility": "TODO: describe accessibility considerations.",
-            "style guidance": (
-                "TODO: describe visual, tone, layout, or interaction style guidance."
-            ),
-            "open questions": "TODO: list unresolved design questions.",
-        },
-    ),
-)
+# The ordered artifact-type registry: requirement, decision, roadmap, prompt,
+# design. This tuple order is load-bearing (classification tie-break, registry
+# iteration, ``available_schemas()``).
+ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = _registry()[0]
 
 
 def spec_for(name: str) -> ArtifactSpec | None:

@@ -924,6 +924,7 @@ pub fn build_relationship_report_file(path: &str) -> RelationshipReport {
 // ---------------------------------------------------------------------------
 
 /// One parsed + classified item: `(display path, artifact, spec)`.
+#[derive(Clone)]
 pub struct CorpusItem {
     pub path: String,
     pub artifact: Artifact,

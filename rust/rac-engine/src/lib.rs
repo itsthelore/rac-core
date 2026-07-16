@@ -8,7 +8,7 @@
 //! - `pyjson`: the Python `json.dumps`-shaped writer (indent=2 and JSONL).
 //! - `frontmatter`: bounded PyYAML-1.1 SafeLoader subset.
 //! - `markdown`: CommonMark block-boundary tokenizer (headings + inline raw).
-//! - `spec`: artifact specs loaded from `rust/spec/artifact-specs.json`.
+//! - `spec`: artifact specs loaded from the shared `src/rac/spec/artifact-specs.json`.
 //! - `walk`: corpus discovery in component-wise sorted-path order.
 //! - `parse`: file -> parsed artifact (frontmatter + sections + fields).
 //! - `classify`: deterministic classification over specs.
@@ -57,6 +57,14 @@ pub mod retrieve;
 pub mod gitinfo;
 pub mod budget;
 pub mod portfolio;
+pub mod index;
+pub mod index_format;
+pub mod derived;
+pub mod index_store;
+pub mod derived_cache;
+pub mod read_model;
+pub mod parallel_build;
+pub mod freshness;
 pub mod coverage;
 pub mod review;
 pub mod gate;

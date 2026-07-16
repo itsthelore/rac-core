@@ -21,3 +21,9 @@ htmlcov/
 
 # MkDocs build output (deployed from CI, never committed)
 site/
+
+# Native engine binaries bundled into platform wheels at build time
+# (native-engine cutover); never committed — the package keeps only __init__.py.
+src/rac/bin/rac
+src/rac/bin/rac-mcp
+src/rac/bin/*.exe
