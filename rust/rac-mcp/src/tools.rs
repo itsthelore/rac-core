@@ -11,11 +11,18 @@ use rac_engine::budget::{
 };
 use rac_engine::output;
 use rac_engine::relationships::{corpus_items, relationships_from_corpus};
+use rac_engine::freshness::TrackerModel;
 use rac_engine::resolve::{
     artifact_status, build_index, find_decisions, index_from_items, resolve_in_index,
     search_index_filtered, IndexEntry, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
 };
 use serde_json::{json, Map, Value};
+
+/// The additive empty-corpus guidance the server layers over the summary.
+const EMPTY_GUIDANCE: &str = "This repository has no RAC artifacts yet. The user can create the \
+first one with `rac quickstart`, or with `rac init` then \
+`rac new <type> <path>`. Once artifacts exist, search_artifacts \
+and get_artifact will return them.";
 
 fn opt_str(v: &Option<String>) -> Value {
     match v {
@@ -57,9 +64,37 @@ pub fn effective_budget(server_budget: i64, call_budget: i64) -> i64 {
     }
 }
 
-pub fn get_artifact(root: &str, artifact_id: &str, budget: i64) -> String {
-    let entries = build_index(root, true);
-    let result = resolve_in_index(&entries, artifact_id);
+/// Resolve an id through the serving read-model: the mapped base's alias
+/// map, the delta snapshot's identity rows, or a fresh walk — every arm
+/// byte-identical to `resolve_in_index` (ADR-104).
+fn resolve_for(
+    root: &str,
+    model: Option<&TrackerModel>,
+    artifact_id: &str,
+) -> rac_engine::resolve::ResolutionResult {
+    match model {
+        Some(TrackerModel::View(reader)) => {
+            rac_engine::read_model::store_resolve(reader, artifact_id)
+        }
+        Some(TrackerModel::Snapshot(derived)) => {
+            let mut result = resolve_in_index(&derived.index_entries, artifact_id);
+            if let Some(artifact) = &mut result.artifact {
+                // The oracle resolves over the tag-free identity projection.
+                artifact.tags = Vec::new();
+            }
+            result
+        }
+        None => resolve_in_index(&build_index(root, true), artifact_id),
+    }
+}
+
+pub fn get_artifact(
+    root: &str,
+    model: Option<&TrackerModel>,
+    artifact_id: &str,
+    budget: i64,
+) -> String {
+    let result = resolve_for(root, model, artifact_id);
     let Some(artifact) = result
         .artifact
         .as_ref()
@@ -90,25 +125,69 @@ pub fn get_artifact(root: &str, artifact_id: &str, budget: i64) -> String {
 
 pub fn search_artifacts(
     root: &str,
+    model: Option<&TrackerModel>,
     query: &str,
     artifact_type: Option<&str>,
     tags: &[String],
     live_only: bool,
     budget: i64,
 ) -> String {
-    let entries = build_index(root, true);
-    let mut result = search_index_filtered(&entries, query, artifact_type, tags, live_only);
+    let mut result = match model {
+        Some(TrackerModel::View(reader)) => {
+            rac_engine::read_model::store_search(reader, query, artifact_type, tags, live_only)
+        }
+        Some(TrackerModel::Snapshot(derived)) => {
+            search_index_filtered(&derived.index_entries, query, artifact_type, tags, live_only)
+        }
+        None => {
+            let entries = build_index(root, true);
+            search_index_filtered(&entries, query, artifact_type, tags, live_only)
+        }
+    };
     rac_engine::commands::annotate_search_recency(&mut result.matches, root);
     serialize(&search_result_payload(&result), budget)
 }
 
-pub fn find_decisions_tool(root: &str, topic: &str, path: Option<&str>, budget: i64) -> String {
+pub fn find_decisions_tool(
+    root: &str,
+    model: Option<&TrackerModel>,
+    topic: &str,
+    path: Option<&str>,
+    budget: i64,
+) -> String {
     // Python truthiness: a non-empty `path` selects path mode.
     if let Some(p) = path.filter(|p| !p.is_empty()) {
-        let payload = rac_engine::retrieve::find_decisions_path_payload(root, p);
+        // Path mode builds through the same read-model as every other tool
+        // (ADR-103), served from precomputed scope rows.
+        let payload = match model {
+            Some(TrackerModel::View(reader)) => {
+                let rows = reader.scope_rows().unwrap_or_default();
+                rac_engine::retrieve::scope_lookup_value(
+                    &rac_engine::retrieve::decisions_for_path_with_rows(&rows, root, p),
+                )
+            }
+            Some(TrackerModel::Snapshot(derived)) => rac_engine::retrieve::scope_lookup_value(
+                &rac_engine::retrieve::decisions_for_path_with_rows(
+                    &derived.scope_rows,
+                    root,
+                    p,
+                ),
+            ),
+            None => rac_engine::retrieve::find_decisions_path_payload(root, p),
+        };
         return serialize(&payload, budget);
     }
-    let result = find_decisions(root, topic, true);
+    let result = match model {
+        Some(TrackerModel::View(reader)) => {
+            rac_engine::read_model::store_find_decisions(reader, topic)
+        }
+        Some(TrackerModel::Snapshot(derived)) => rac_engine::read_model::find_decisions_in(
+            &derived.index_entries,
+            &derived.live_decision_paths,
+            topic,
+        ),
+        None => find_decisions(root, topic, true),
+    };
     let mut payload = search_result_payload(&result);
     payload
         .as_object_mut()
@@ -117,11 +196,46 @@ pub fn find_decisions_tool(root: &str, topic: &str, path: Option<&str>, budget: 
     serialize(&payload, budget)
 }
 
-pub fn get_related(root: &str, artifact_id: &str, depth: i64, budget: i64) -> String {
-    // One corpus snapshot feeds resolution, outgoing, and incoming (ADR-032).
-    let corpus = corpus_items(root, true);
-    let entries: Vec<IndexEntry> = index_from_items(&corpus);
-    let relationships = relationships_from_corpus(&corpus);
+pub fn get_related(
+    root: &str,
+    model: Option<&TrackerModel>,
+    artifact_id: &str,
+    depth: i64,
+    budget: i64,
+) -> String {
+    // One read-model feeds resolution, outgoing, and incoming (ADR-032/104).
+    let (entries, relationships): (Vec<IndexEntry>, Vec<rac_engine::relationships::Relationship>) =
+        match model {
+            Some(TrackerModel::View(reader)) => (
+                rac_engine::read_model::store_identity_entries(reader),
+                reader.relationships().unwrap_or_default(),
+            ),
+            Some(TrackerModel::Snapshot(derived)) => (
+                // The oracle resolves get_related over `identity_entries` —
+                // the tag/section/inbound-free projection of the bundle.
+                derived
+                    .index_entries
+                    .iter()
+                    .map(|e| IndexEntry {
+                        id: e.id.clone(),
+                        artifact_type: e.artifact_type.clone(),
+                        title: e.title.clone(),
+                        path: e.path.clone(),
+                        aliases: e.aliases.clone(),
+                        search_sections: Vec::new(),
+                        inbound_count: 0,
+                        tags: Vec::new(),
+                    })
+                    .collect(),
+                derived.relationships.clone(),
+            ),
+            None => {
+                let corpus = corpus_items(root, true);
+                let entries: Vec<IndexEntry> = index_from_items(&corpus);
+                let relationships = relationships_from_corpus(&corpus);
+                (entries, relationships)
+            }
+        };
     let result = resolve_in_index(&entries, artifact_id);
     let identity_by_path: graph::IdentityByPath = entries
         .iter()
@@ -201,7 +315,27 @@ pub fn get_related(root: &str, artifact_id: &str, depth: i64, budget: i64) -> St
     serialize(&Value::Object(payload), budget)
 }
 
-pub fn get_summary(root: &str, budget: i64) -> String {
+pub fn get_summary(root: &str, model: Option<&TrackerModel>, budget: i64) -> String {
+    // Served from the read-model's precomputed portfolio summary when the
+    // tracker is on (ADR-103); the guidance key stays additive (a shallow
+    // copy — the cached bundle is never mutated).
+    if let Some(model) = model {
+        let summary = match model {
+            TrackerModel::View(reader) => reader.portfolio_summary().unwrap_or(Value::Null),
+            TrackerModel::Snapshot(derived) => derived.portfolio_summary.clone(),
+        };
+        if let Value::Object(mut payload) = summary {
+            let empty = payload
+                .get("empty")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if empty {
+                payload.insert("guidance".to_string(), json!(EMPTY_GUIDANCE));
+            }
+            return serialize(&Value::Object(payload), budget);
+        }
+        // A malformed cached summary degrades to the fresh walk below.
+    }
     let corpus = corpus_items(root, true);
     let p = rac_engine::portfolio::portfolio_from_corpus(root, &corpus, true);
     let mut payload = Map::new();
@@ -267,15 +401,7 @@ pub fn get_summary(root: &str, budget: i64) -> String {
     );
     payload.insert("validation_status".to_string(), Value::Object(status));
     if empty {
-        payload.insert(
-            "guidance".to_string(),
-            json!(
-                "This repository has no RAC artifacts yet. The user can create the \
-first one with `rac quickstart`, or with `rac init` then \
-`rac new <type> <path>`. Once artifacts exist, search_artifacts \
-and get_artifact will return them."
-            ),
-        );
+        payload.insert("guidance".to_string(), json!(EMPTY_GUIDANCE));
     }
     serialize(&Value::Object(payload), budget)
 }

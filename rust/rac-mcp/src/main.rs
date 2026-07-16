@@ -8,7 +8,9 @@
 //! superset of PRIMARY's five, §10). Stateless re-read per call (ADR-032).
 
 mod args;
+mod audit;
 mod graph;
+mod http;
 mod provenance;
 mod sidecar;
 mod tools;
@@ -47,16 +49,47 @@ fn usage_error(msg: &str) -> ! {
 fn main() {
     let mut argv = std::env::args().skip(1);
     let mut root = ".".to_string();
+    let mut cache = true;
+    // Transport (ADR-098). stdio is the default and byte-unchanged; http selects
+    // the streamable-HTTP transport (mandatory audit-on, loopback by default).
+    let mut transport = "stdio".to_string();
+    let mut host = "127.0.0.1".to_string();
+    let mut port: u16 = 8000;
+    let mut path = "/mcp".to_string();
     while let Some(a) = argv.next() {
         match a.as_str() {
             "--root" => match argv.next() {
                 Some(v) => root = v,
                 None => usage_error("--root requires a value"),
             },
-            // Cache flags are accepted and output-neutral (ADR-112: cache-on
-            // vs cache-off runs are frame-for-frame byte-identical; this port
-            // re-reads per call, the ADR-032 floor).
-            "--no-cache" | "--cache" => {}
+            "--transport" => match argv.next().as_deref() {
+                Some(v @ ("stdio" | "http")) => transport = v.to_string(),
+                Some(v) => usage_error(&format!(
+                    "argument --transport: invalid choice: '{v}' (choose from 'stdio', 'http')"
+                )),
+                None => usage_error("--transport requires a value"),
+            },
+            "--host" => match argv.next() {
+                Some(v) => host = v,
+                None => usage_error("--host requires a value"),
+            },
+            "--port" => match argv.next() {
+                Some(v) => match v.parse::<u16>() {
+                    Ok(p) => port = p,
+                    Err(_) => usage_error(&format!("argument --port: invalid int value: '{v}'")),
+                },
+                None => usage_error("--port requires a value"),
+            },
+            "--path" => match argv.next() {
+                Some(v) => path = v,
+                None => usage_error("--path requires a value"),
+            },
+            // Cache flags are real since INDEX-PLAN B6 and remain
+            // output-neutral (ADR-112: cache-on vs cache-off runs are
+            // frame-for-frame byte-identical; native warm == cold holds
+            // even for the duplicate-token class, PORT-CONTRACT.d/10 §0a).
+            "--no-cache" => cache = false,
+            "--cache" => cache = true,
             other => usage_error(&format!("unrecognized argument: {other}")),
         }
     }
@@ -64,7 +97,34 @@ fn main() {
         usage_error(&format!("not a directory: {root}"));
     }
     check_corpus(&root);
-    serve(&root);
+    // Server-lifetime freshness (ADR-105): one tracker per server keeps the
+    // derived read-model current by stat-scan detection (ADR-114: no
+    // inotify rung), re-deriving only where files changed.
+    let mut tracker = if rac_engine::derived_cache::cache_enabled(cache) {
+        Some(rac_engine::freshness::FreshnessTracker::new(
+            rac_engine::derived_cache::default_cache_dir(),
+            &root,
+            None,
+        ))
+    } else {
+        None
+    };
+    // Audit recorder (ADR-084): built from the `.rac/config.yaml` audit stanza,
+    // default-absent for stdio (byte-unchanged when off), mandatory for HTTP.
+    let audit_config = match audit::load_audit_config(&root) {
+        Ok(c) => c,
+        Err(reason) => usage_error(&format!("malformed audit config: {reason}")),
+    };
+    if transport == "http" {
+        // Mandatory audit-on (ADR-098): refuse to start without a working sink.
+        if let Err(msg) = http::ensure_audit_sink(&audit_config) {
+            usage_error(&msg);
+        }
+        let mut recorder = audit::build(&root, "http", &audit_config);
+        http::serve_http(&root, &mut tracker, &mut recorder, &host, port, &path);
+    }
+    let mut recorder = audit::build(&root, "stdio", &audit_config);
+    serve(&root, &mut tracker, &mut recorder);
 }
 
 /// Startup diagnostic (stderr only; declared-normalized in parity, §0).
@@ -79,7 +139,11 @@ a new repository. The server is running; get_summary will report the empty state
     }
 }
 
-fn serve(root: &str) {
+fn serve(
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    recorder: &mut Option<audit::Recorder>,
+) {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
@@ -103,25 +167,43 @@ fn serve(root: &str) {
             continue; // notification (e.g. notifications/initialized): no response
         };
         let id_json = serde_json::to_string(id).unwrap_or_else(|_| "null".to_string());
-        let frame = match method {
-            "initialize" => initialize_frame(&id_json, &message),
-            "ping" => format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{}}}}"),
-            "tools/list" => {
-                format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{TOOLS_LIST_RESULT}}}")
-            }
-            "prompts/list" => {
-                format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"prompts\":[]}}}}")
-            }
-            "resources/list" => {
-                format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"resources\":[]}}}}")
-            }
-            "tools/call" => tools_call_frame(root, &id_json, &message),
-            _ => format!(
-                "{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"error\":{{\"code\":-32602,\"message\":\"Invalid request parameters\",\"data\":\"\"}}}}"
-            ),
-        };
+        // stdio has no per-request principal; attribution stays the recorder's
+        // locally resolved identity (ADR-098).
+        let frame = process_request(root, tracker, method, &id_json, &message, recorder.as_mut(), None);
         writeln!(out, "{frame}").ok();
         out.flush().ok();
+    }
+}
+
+/// Produce the JSON-RPC response frame for one request `method` (transport-
+/// agnostic, so stdio and HTTP share exactly one code path — the byte-parity
+/// surface, PORT-CONTRACT.d/10 §2/§4/§5). Callers extract `method`/`id` and the
+/// per-transport envelope; this owns only the payload.
+pub(crate) fn process_request(
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    method: &str,
+    id_json: &str,
+    message: &Value,
+    recorder: Option<&mut audit::Recorder>,
+    principal: Option<&str>,
+) -> String {
+    match method {
+        "initialize" => initialize_frame(id_json, message),
+        "ping" => format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{}}}}"),
+        "tools/list" => {
+            format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{TOOLS_LIST_RESULT}}}")
+        }
+        "prompts/list" => {
+            format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"prompts\":[]}}}}")
+        }
+        "resources/list" => {
+            format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"resources\":[]}}}}")
+        }
+        "tools/call" => tools_call_frame(root, tracker, id_json, message, recorder, principal),
+        _ => format!(
+            "{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"error\":{{\"code\":-32602,\"message\":\"Invalid request parameters\",\"data\":\"\"}}}}"
+        ),
     }
 }
 
@@ -167,14 +249,21 @@ fn call_result_frame(id_json: &str, text: &str, is_error: bool) -> String {
     format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{result_json}}}")
 }
 
-fn tools_call_frame(root: &str, id_json: &str, message: &Value) -> String {
+fn tools_call_frame(
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    id_json: &str,
+    message: &Value,
+    recorder: Option<&mut audit::Recorder>,
+    principal: Option<&str>,
+) -> String {
     let name = message
         .pointer("/params/name")
         .and_then(Value::as_str)
         .unwrap_or("");
     let empty = json!({});
     let arguments = message.pointer("/params/arguments").unwrap_or(&empty);
-    match dispatch(root, name, arguments) {
+    match dispatch(root, tracker, name, arguments, recorder, principal) {
         Ok(payload) => call_result_frame(id_json, &payload, false),
         Err(text) => call_result_frame(id_json, &text, true),
     }
@@ -213,10 +302,25 @@ fn a_bool(args: &[Arg], i: usize, default: bool) -> bool {
     }
 }
 
-fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String> {
+fn dispatch(
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    name: &str,
+    arguments: &Value,
+    recorder: Option<&mut audit::Recorder>,
+    principal: Option<&str>,
+) -> Result<String, String> {
     // ADR-033: the server budget is fixed at construction; the stdio CLI has
     // no flag, so it is always the default.
     let server_budget = budget::DEFAULT_BUDGET;
+    // Freshen the read-model once per call (the corpus-change check every
+    // tool answer rides, ADR-105); without the tracker every arm re-walks.
+    let model = tracker.as_mut().map(|t| t.read_model(false));
+    // Audit args mirror server.py's per-tool `observed(...)` shapes exactly
+    // (insertion order = recorded key order): non-default arguments ride the
+    // record only when supplied. `sidecar::observe` keeps the telemetry seam
+    // (ADR-040), nesting audit inside as the oracle's
+    // `telemetry.observe(audit.observe(...))` does.
     match name {
         "get_artifact" => {
             let params = [
@@ -225,8 +329,11 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             ];
             let a = args::validate(name, "get_artifactArguments", &params, arguments)?;
             let effective = tools::effective_budget(server_budget, a_int(&a, 1, 0));
+            let audit_args = json!({ "id": a_str(&a, 0, "") });
             Ok(sidecar::observe(name, || {
-                tools::get_artifact(root, &a_str(&a, 0, ""), effective)
+                audit::observe(recorder, principal, name, audit_args, || {
+                    tools::get_artifact(root, model, &a_str(&a, 0, ""), effective)
+                })
             }))
         }
         "search_artifacts" => {
@@ -241,15 +348,28 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             let artifact_type = a_opt_str(&a, 1);
             let tags = a_opt_list_str(&a, 2).unwrap_or_default();
             let live_only = a_bool(&a, 3, false);
+            let mut m = Map::new();
+            m.insert("query".into(), Value::String(query.clone()));
+            m.insert("type".into(), artifact_type.clone().map_or(Value::Null, Value::String));
+            if !tags.is_empty() {
+                m.insert("tags".into(), Value::Array(tags.iter().cloned().map(Value::String).collect()));
+            }
+            if live_only {
+                m.insert("live_only".into(), Value::Bool(true));
+            }
+            let audit_args = Value::Object(m);
             Ok(sidecar::observe(name, || {
-                tools::search_artifacts(
-                    root,
-                    &query,
-                    artifact_type.as_deref(),
-                    &tags,
-                    live_only,
-                    server_budget,
-                )
+                audit::observe(recorder, principal, name, audit_args, || {
+                    tools::search_artifacts(
+                        root,
+                        model,
+                        &query,
+                        artifact_type.as_deref(),
+                        &tags,
+                        live_only,
+                        server_budget,
+                    )
+                })
             }))
         }
         "retrieve_grounding" => {
@@ -261,16 +381,31 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
                 Param { name: "live_only", kind: Kind::Bool, required: false },
             ];
             let a = args::validate(name, "retrieve_grounding_toolArguments", &params, arguments)?;
-            let effective = tools::effective_budget(server_budget, a_int(&a, 3, 0));
+            let task = a_str(&a, 0, "");
+            let scope = a_str(&a, 1, "");
+            let top_k = a_int(&a, 2, 5);
+            let raw_budget = a_int(&a, 3, 0);
+            let live_only = a_bool(&a, 4, true);
+            let effective = tools::effective_budget(server_budget, raw_budget);
+            let mut m = Map::new();
+            m.insert("task".into(), Value::String(task.clone()));
+            if !scope.is_empty() {
+                m.insert("scope".into(), Value::String(scope.clone()));
+            }
+            if top_k != 5 {
+                m.insert("top_k".into(), json!(top_k));
+            }
+            if raw_budget > 0 {
+                m.insert("budget".into(), json!(raw_budget));
+            }
+            if !live_only {
+                m.insert("live_only".into(), Value::Bool(false));
+            }
+            let audit_args = Value::Object(m);
             Ok(sidecar::observe(name, || {
-                tools::retrieve_grounding(
-                    root,
-                    &a_str(&a, 0, ""),
-                    &a_str(&a, 1, ""),
-                    a_int(&a, 2, 5),
-                    effective,
-                    a_bool(&a, 4, true),
-                )
+                audit::observe(recorder, principal, name, audit_args, || {
+                    tools::retrieve_grounding(root, &task, &scope, top_k, effective, live_only)
+                })
             }))
         }
         "find_decisions" => {
@@ -281,8 +416,16 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
             let a = args::validate(name, "find_decisions_toolArguments", &params, arguments)?;
             let topic = a_str(&a, 0, "");
             let path = a_opt_str(&a, 1);
+            let mut m = Map::new();
+            m.insert("topic".into(), Value::String(topic.clone()));
+            if let Some(p) = &path {
+                m.insert("path".into(), Value::String(p.clone()));
+            }
+            let audit_args = Value::Object(m);
             Ok(sidecar::observe(name, || {
-                tools::find_decisions_tool(root, &topic, path.as_deref(), server_budget)
+                audit::observe(recorder, principal, name, audit_args, || {
+                    tools::find_decisions_tool(root, model, &topic, path.as_deref(), server_budget)
+                })
             }))
         }
         "get_related" => {
@@ -291,15 +434,23 @@ fn dispatch(root: &str, name: &str, arguments: &Value) -> Result<String, String>
                 Param { name: "depth", kind: Kind::Int, required: false },
             ];
             let a = args::validate(name, "get_relatedArguments", &params, arguments)?;
+            let id = a_str(&a, 0, "");
+            let depth = a_int(&a, 1, 1);
+            let audit_args = json!({ "id": id.clone(), "depth": depth });
             Ok(sidecar::observe(name, || {
-                tools::get_related(root, &a_str(&a, 0, ""), a_int(&a, 1, 1), server_budget)
+                audit::observe(recorder, principal, name, audit_args, || {
+                    tools::get_related(root, model, &id, depth, server_budget)
+                })
             }))
         }
         "get_summary" => {
             let params: [Param; 0] = [];
             args::validate(name, "get_summaryArguments", &params, arguments)?;
+            let audit_args = json!({});
             Ok(sidecar::observe(name, || {
-                tools::get_summary(root, server_budget)
+                audit::observe(recorder, principal, name, audit_args, || {
+                    tools::get_summary(root, model, server_budget)
+                })
             }))
         }
         _ => Err(format!("Unknown tool: {name}")),

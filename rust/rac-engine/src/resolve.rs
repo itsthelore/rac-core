@@ -146,7 +146,7 @@ fn identity_entry_from_item(item: &CorpusItem) -> IndexEntry {
     }
 }
 
-fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
+pub(crate) fn entry_from_item(item: &CorpusItem, inbound: i64) -> IndexEntry {
     IndexEntry {
         search_sections: item.artifact.product.search_sections.clone(),
         inbound_count: inbound,
@@ -259,7 +259,7 @@ pub struct ResolutionResult {
     pub duplicate_paths: Vec<String>,
 }
 
-fn resolved_from_entry(entry: &IndexEntry) -> ResolvedArtifact {
+pub(crate) fn resolved_from_entry(entry: &IndexEntry) -> ResolvedArtifact {
     ResolvedArtifact {
         id: entry.id.clone(),
         artifact_type: entry.artifact_type.clone(),
@@ -333,7 +333,7 @@ pub struct FieldTokens {
 }
 
 impl FieldTokens {
-    fn get(&self, name: &str) -> &Vec<String> {
+    pub(crate) fn get(&self, name: &str) -> &Vec<String> {
         match name {
             "id" => &self.id,
             "title" => &self.title,
@@ -351,12 +351,12 @@ struct SectionTokens {
     lines: Vec<(String, Vec<String>)>,
 }
 
-struct EntryTokens {
-    fields: FieldTokens,
+pub(crate) struct EntryTokens {
+    pub(crate) fields: FieldTokens,
     sections: Vec<SectionTokens>,
 }
 
-fn tokenize_entry(entry: &IndexEntry) -> EntryTokens {
+pub(crate) fn tokenize_entry(entry: &IndexEntry) -> EntryTokens {
     let mut sections: Vec<SectionTokens> = Vec::new();
     let mut heading_tokens: Vec<String> = Vec::new();
     let mut body_tokens: Vec<String> = Vec::new();
@@ -396,11 +396,18 @@ fn tokenize_entry(entry: &IndexEntry) -> EntryTokens {
     }
 }
 
+/// The six flat per-field token vectors of one entry — the projection the
+/// derived read-model persists (`field_tokens_for_entries`, INDEX-PLAN B2).
+pub(crate) fn field_tokens_of(entry: &IndexEntry) -> FieldTokens {
+    tokenize_entry(entry).fields
+}
+
 // ---------------------------------------------------------------------------
 // Tier matching (contract §4)
 // ---------------------------------------------------------------------------
 
-struct TierMatch {
+#[derive(Clone)]
+pub(crate) struct TierMatch {
     rank: i64,
     section: Option<String>,
     snippet: Option<String>,
@@ -408,7 +415,7 @@ struct TierMatch {
     terms: Vec<String>,
 }
 
-fn match_entry(entry_tokens: &EntryTokens, terms: &[String]) -> Option<TierMatch> {
+pub(crate) fn match_entry(entry_tokens: &EntryTokens, terms: &[String]) -> Option<TierMatch> {
     let mut matched_terms: HashSet<&str> = HashSet::new();
     let mut best_rank: Option<i64> = None;
     let mut heading_snippet: Option<(String, String)> = None;
@@ -641,7 +648,7 @@ pub struct SearchResult {
 }
 
 /// `_entry_has_tags`: exact whole-tag comparison, full Unicode casefold.
-fn entry_has_tags(entry: &IndexEntry, wanted: &[String]) -> bool {
+pub(crate) fn entry_has_tags(entry: &IndexEntry, wanted: &[String]) -> bool {
     let have: HashSet<String> = entry.tags.iter().map(|t| py_casefold(t)).collect();
     wanted.iter().all(|w| have.contains(w))
 }
@@ -735,19 +742,33 @@ pub fn search_index_filtered(
         .collect();
     let stats = corpus_stats(&field_tokens, &terms);
 
+    let scored: Vec<(&IndexEntry, &FieldTokens, TierMatch)> = matched
+        .into_iter()
+        .map(|(i, m)| (&entries[i], &field_tokens[i], m))
+        .collect();
+    rank_and_build(query, artifact_type, scored, &terms, &stats)
+}
+
+/// The shared scoring/ranking/build tail of the tiered search — one code
+/// path for the fresh walk and the store-served read-model (ADR-104), so
+/// warm and cold emit identical bytes by construction. `matched` rows are
+/// in entry (walk/docid) order; `stats` carries the corpus-global n/df/
+/// avglen however the caller derived them.
+pub(crate) fn rank_and_build(
+    query: &str,
+    artifact_type: Option<&str>,
+    mut matched: Vec<(&IndexEntry, &FieldTokens, TierMatch)>,
+    terms: &[String],
+    stats: &CorpusStats,
+) -> SearchResult {
     // Score the matched set only.
     let bm25_scores: Vec<(String, f64)> = matched
         .iter()
-        .map(|(i, _)| {
-            (
-                entries[*i].path.clone(),
-                bm25f(&field_tokens[*i], &terms, &stats),
-            )
-        })
+        .map(|(entry, fields, _)| (entry.path.clone(), bm25f(fields, terms, stats)))
         .collect();
     let inbound_scores: Vec<(String, f64)> = matched
         .iter()
-        .map(|(i, _)| (entries[*i].path.clone(), entries[*i].inbound_count as f64))
+        .map(|(entry, _, _)| (entry.path.clone(), entry.inbound_count as f64))
         .collect();
     let lexical_rank = competition_ranks(&bm25_scores);
     let graph_rank = competition_ranks(&inbound_scores);
@@ -765,17 +786,16 @@ pub fn search_index_filtered(
     // Fused score descending (rounded to 12 places inside the key only),
     // ties broken by path: total and byte-stable.
     matched.sort_by(|a, b| {
-        let fa = py_round(fused[&entries[a.0].path], 12);
-        let fb = py_round(fused[&entries[b.0].path], 12);
+        let fa = py_round(fused[&a.0.path], 12);
+        let fb = py_round(fused[&b.0.path], 12);
         fb.partial_cmp(&fa)
             .expect("finite fused")
-            .then_with(|| entries[a.0].path.cmp(&entries[b.0].path))
+            .then_with(|| a.0.path.cmp(&b.0.path))
     });
 
     let matches: Vec<ResolvedArtifact> = matched
         .into_iter()
-        .map(|(i, m)| {
-            let entry = &entries[i];
+        .map(|(entry, _, m)| {
             let path = entry.path.as_str();
             let fused_raw = fused[path];
             let bm25_raw = bm25_by_path[path];

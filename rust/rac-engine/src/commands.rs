@@ -158,6 +158,229 @@ pub fn validate_directory(directory: &str, recursive: bool) -> DirectoryValidati
     }
 }
 
+/// A fingerprint of the ancestor-walked `.rac/config.yaml` governing
+/// `directory` — the per-file cache key's config half (ADR-106).
+fn config_fingerprint(directory: &str) -> String {
+    let mut hasher = crate::sha256::Sha256::new();
+    match crate::validate::find_config_file(directory) {
+        None => hasher.update(b"\x00no-config"),
+        Some(config_path) => {
+            hasher.update(config_path.display().to_string().as_bytes());
+            hasher.update(b"\0");
+            match std::fs::read(&config_path) {
+                Ok(bytes) => hasher.update(&bytes),
+                Err(_) => hasher.update(b"\x00unreadable-config"),
+            }
+        }
+    }
+    hasher.hexdigest()
+}
+
+/// A stable per-corpus-root store key: SHA-256 of the resolved path.
+fn validate_root_key(directory: &str) -> String {
+    let resolved = crate::index_store::py_resolve(directory);
+    crate::sha256::hexdigest(resolved.display().to_string().as_bytes())
+}
+
+/// `validate_directory_incremental(directory, recursive, verify)` — the
+/// ADR-106 changeset-bound path, byte-identical to `validate_directory` for
+/// the same corpus and config. Unchanged files reuse their cached path-free
+/// result verbatim; changed files re-parse and re-validate; assembly runs in
+/// walk order; OKF conformance recomputes over `(artifact_type, path)` shims.
+pub fn validate_directory_incremental(
+    directory: &str,
+    recursive: bool,
+    verify: bool,
+) -> DirectoryValidation {
+    validate_directory_incremental_in(directory, recursive, verify, None)
+}
+
+/// The cache-dir-injectable body (`cache_dir=None` resolves the ladder) —
+/// the seam the S5 pinning test drives without touching process env.
+pub fn validate_directory_incremental_in(
+    directory: &str,
+    recursive: bool,
+    verify: bool,
+    cache_dir: Option<&Path>,
+) -> DirectoryValidation {
+    use crate::index_store::{
+        open_validation_store, write_validation_store, FileState, ValidationCacheRow,
+    };
+    let timing = std::env::var_os("RAC_TIMING").is_some();
+    let cache_dir = cache_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(crate::derived_cache::default_cache_dir);
+    let root_key = validate_root_key(directory);
+    let config_hash = config_fingerprint(directory);
+
+    let prev_rows =
+        open_validation_store(&cache_dir, &root_key, &config_hash).unwrap_or_default();
+    let prev_manifest: Vec<(String, FileState)> = prev_rows
+        .iter()
+        .map(|(rel, row)| {
+            (
+                rel.clone(),
+                FileState {
+                    content_hash: row.content_hash.clone(),
+                    size: row.size,
+                    mtime_ns: row.mtime_ns,
+                },
+            )
+        })
+        .collect();
+    let prev_by_rel: std::collections::HashMap<&str, &ValidationCacheRow> = prev_rows
+        .iter()
+        .map(|(rel, row)| (rel.as_str(), row))
+        .collect();
+
+    let detect_start = std::time::Instant::now();
+    let (new_manifest, changed) =
+        crate::derived_cache::stat_scan(directory, &prev_manifest, verify, recursive);
+    let detect_ms = detect_start.elapsed().as_secs_f64() * 1000.0;
+
+    let overrides = load_overrides(directory);
+    let provider = load_ticketing_provider(directory);
+    let root_display = normalize_root(directory);
+
+    let recompute_start = std::time::Instant::now();
+    let mut new_rows: Vec<(String, ValidationCacheRow)> =
+        Vec::with_capacity(new_manifest.len());
+    for (rel, state) in &new_manifest {
+        if !changed.contains(rel) {
+            if let Some(prev) = prev_by_rel.get(rel.as_str()) {
+                // Unchanged content under an unchanged config: reuse the
+                // path-free result verbatim, refreshing only the stat proxy.
+                new_rows.push((
+                    rel.clone(),
+                    ValidationCacheRow {
+                        size: state.size,
+                        mtime_ns: state.mtime_ns,
+                        content_hash: state.content_hash.clone(),
+                        artifact_type: prev.artifact_type.clone(),
+                        status: prev.status.clone(),
+                        issues: prev.issues.clone(),
+                    },
+                ));
+                continue;
+            }
+        }
+        let path = format!("{root_display}/{rel}");
+        let artifact = parse_file(&path);
+        let spec = crate::spec::spec_for(&crate::classify::classify(&artifact).artifact_type);
+        let artifact_type = spec
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let (status, issues) = if spec.is_none() {
+            (STATUS_SKIPPED.to_string(), Vec::new())
+        } else {
+            let computed = apply_overrides(
+                validate(&artifact, provider.as_deref(), Some(&artifact_type)),
+                &artifact_type,
+                &overrides,
+            );
+            let status = if has_errors(&computed) {
+                STATUS_INVALID
+            } else {
+                STATUS_VALID
+            };
+            (
+                status.to_string(),
+                computed
+                    .into_iter()
+                    .map(|issue| crate::index_store::CachedIssue {
+                        severity: issue.severity.to_string(),
+                        code: issue.code.clone(),
+                        message: issue.message.clone(),
+                        line: issue.line.map(|l| l as u32),
+                    })
+                    .collect(),
+            )
+        };
+        new_rows.push((
+            rel.clone(),
+            ValidationCacheRow {
+                size: state.size,
+                mtime_ns: state.mtime_ns,
+                content_hash: state.content_hash.clone(),
+                artifact_type,
+                status,
+                issues,
+            },
+        ));
+    }
+    let recompute_ms = recompute_start.elapsed().as_secs_f64() * 1000.0;
+
+    // Assemble in walk order — byte-identical file and issue order.
+    let rows_by_rel: std::collections::HashMap<&str, &ValidationCacheRow> = new_rows
+        .iter()
+        .map(|(rel, row)| (rel.as_str(), row))
+        .collect();
+    let mut files: Vec<FileValidation> = Vec::new();
+    let mut okf_entries_owned: Vec<(String, String, String)> = Vec::new();
+    for entry in crate::walk::find_markdown_files(directory, recursive) {
+        let rel = entry.components.join("/");
+        let Some(row) = rows_by_rel.get(rel.as_str()) else {
+            continue; // created between scan and assembly — next run settles it
+        };
+        let status: &'static str = match row.status.as_str() {
+            "valid" => STATUS_VALID,
+            "invalid" => STATUS_INVALID,
+            _ => STATUS_SKIPPED,
+        };
+        files.push(FileValidation {
+            path: entry.display.clone(),
+            artifact_type: row.artifact_type.clone(),
+            status,
+            issues: row
+                .issues
+                .iter()
+                .map(|i| Issue {
+                    severity: match i.severity.as_str() {
+                        "error" => "error",
+                        "warning" => "warning",
+                        _ => "info",
+                    },
+                    code: i.code.clone(),
+                    message: i.message.clone(),
+                    line: i.line.map(i64::from),
+                })
+                .collect(),
+        });
+        let file_name = entry
+            .display
+            .rsplit('/')
+            .next()
+            .unwrap_or(&entry.display)
+            .to_string();
+        okf_entries_owned.push((entry.display.clone(), row.artifact_type.clone(), file_name));
+    }
+    let okf_entries: Vec<OkfEntry> = okf_entries_owned
+        .iter()
+        .map(|(path, artifact_type, file_name)| OkfEntry {
+            path,
+            artifact_type,
+            file_name,
+        })
+        .collect();
+    let okf = check_okf_conformance(&okf_entries, &overrides);
+
+    write_validation_store(&cache_dir, &root_key, &config_hash, &new_rows);
+
+    if timing {
+        eprintln!(
+            "rac-timing: detect_ms={detect_ms:.3} recompute_ms={recompute_ms:.3} files_changed={}",
+            changed.len()
+        );
+    }
+
+    DirectoryValidation {
+        directory: directory.to_string(),
+        recursive,
+        files,
+        okf: Some(okf),
+    }
+}
+
 /// `validate_stdin_against_corpus(product, corpus_dir, source_path)`.
 pub fn validate_stdin_against_corpus(
     artifact: &Artifact,
@@ -185,6 +408,10 @@ pub struct ValidateArgs {
     pub sarif: bool,
     pub top_level: bool,
     pub corpus: Option<String>,
+    /// `--cache` / `--no-cache` (ADR-112: on by default).
+    pub cache: bool,
+    /// `--verify`: full content re-hash of the cache freshness check.
+    pub verify: bool,
 }
 
 /// `str(Path(p))` — PurePosixPath normalization of a CLI path argument.
@@ -241,7 +468,13 @@ pub fn cmd_validate(args: &ValidateArgs) -> i32 {
         if args.corpus.is_some() {
             return usage_error("--corpus applies to stdin ('-') or a single file");
         }
-        let result = validate_directory(&args.file, !args.top_level);
+        // The cache reuses per-file results across runs (ADR-106),
+        // byte-identical to the uncached path; on by default per ADR-112.
+        let result = if crate::derived_cache::cache_enabled(args.cache) {
+            validate_directory_incremental(&args.file, !args.top_level, args.verify)
+        } else {
+            validate_directory(&args.file, !args.top_level)
+        };
         if args.sarif {
             emit(output::render_validate_sarif(&result));
         } else if args.json {
@@ -574,6 +807,30 @@ pub fn cmd_portfolio(args: &PortfolioArgs) -> i32 {
         emit(output::render_portfolio_json(&summary));
     } else {
         emit(output::render_portfolio_human(&summary));
+    }
+    EXIT_OK
+}
+
+// ---------------------------------------------------------------------------
+// cmd_index
+// ---------------------------------------------------------------------------
+
+pub struct IndexArgs {
+    pub directory: String,
+    pub json: bool,
+    pub top_level: bool,
+}
+
+/// `rac index` — the plain-walk inventory; never touches the cache.
+pub fn cmd_index(args: &IndexArgs) -> i32 {
+    if !Path::new(&args.directory).is_dir() {
+        return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    let index = crate::index::build_repository_index(&args.directory, !args.top_level);
+    if args.json {
+        emit(output::render_index_json(&index));
+    } else {
+        emit(output::render_index_human(&index));
     }
     EXIT_OK
 }
@@ -1063,6 +1320,10 @@ pub struct FindArgs {
     pub top_level: bool,
     /// The live-only facet (ADR-113): drop retired matches of every type.
     pub live: bool,
+    /// `--cache` / `--no-cache` (ADR-112: on by default).
+    pub cache: bool,
+    /// `--verify`: force the full-hash freshness floor on the cache path.
+    pub verify: bool,
 }
 
 /// `annotate_search_recency(matches, directory)` — the read-surface join
@@ -1094,11 +1355,60 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
     }
 }
 
+/// Serve `rac find` from the persistent index store (`_find_from_store`,
+/// ADR-112): a warm run against an unchanged corpus reads the mapped base;
+/// a cold run builds fresh, writes the store, and serves either the
+/// reopened view or the fresh structures (ADR-080).
+fn find_from_store(args: &FindArgs) -> crate::resolve::SearchResult {
+    use crate::derived_cache::{DerivedIndexCache, ReadModel};
+    let view = DerivedIndexCache::default().load_or_build(
+        &args.directory,
+        !args.top_level,
+        args.verify,
+    );
+    match view {
+        ReadModel::View(reader) => {
+            if args.decisions {
+                crate::read_model::store_find_decisions(&reader, &args.query)
+            } else {
+                crate::read_model::store_search(
+                    &reader,
+                    &args.query,
+                    args.artifact_type.as_deref(),
+                    &args.tags,
+                    args.live,
+                )
+            }
+        }
+        ReadModel::Fresh(derived) => {
+            if args.decisions {
+                crate::read_model::find_decisions_in(
+                    &derived.index_entries,
+                    &derived.live_decision_paths,
+                    &args.query,
+                )
+            } else {
+                crate::resolve::search_index_filtered(
+                    &derived.index_entries,
+                    &args.query,
+                    args.artifact_type.as_deref(),
+                    &args.tags,
+                    args.live,
+                )
+            }
+        }
+    }
+}
+
 pub fn cmd_find(args: &FindArgs) -> i32 {
     if !Path::new(&args.directory).is_dir() {
         return usage_error(&format!("not a directory: {}", args.directory));
     }
-    let mut result = if args.decisions {
+    let mut result = if crate::derived_cache::cache_enabled(args.cache) {
+        // Default store reuse (ADR-112): serve from the persistent index
+        // store instead of a fresh walk, byte-identical to the walk below.
+        find_from_store(args)
+    } else if args.decisions {
         // The live decision query (ADR-067): decision type filter + the
         // Accepted/non-retired liveness filter; `--tag` is silently ignored.
         crate::resolve::find_decisions(&args.directory, &args.query, !args.top_level)
