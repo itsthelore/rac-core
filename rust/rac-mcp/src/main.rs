@@ -456,3 +456,71 @@ fn dispatch(
         _ => Err(format!("Unknown tool: {name}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // Hermetic frame-processor replay: the stdio/HTTP dispatch contract for the
+    // corpus-independent methods, self-verified without the Python oracle so it
+    // does not regress silently once the oracle retires (COUNCIL-REVIEW B2c).
+    fn call(method: &str, id: &str, message: serde_json::Value) -> String {
+        let mut tracker: Option<rac_engine::freshness::FreshnessTracker> = None;
+        process_request("unused-root", &mut tracker, method, id, &message, None, None)
+    }
+
+    #[test]
+    fn initialize_frame_is_wellformed() {
+        let msg = json!({"params": {"protocolVersion": "2025-06-18"}});
+        let f = call("initialize", "1", msg);
+        assert!(f.starts_with("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":"), "{f}");
+        assert!(f.contains("\"protocolVersion\":\"2025-06-18\""), "{f}");
+        assert!(f.contains("\"serverInfo\""), "{f}");
+    }
+
+    #[test]
+    fn initialize_clamps_unknown_protocol_to_latest() {
+        let msg = json!({"params": {"protocolVersion": "1999-01-01"}});
+        let f = call("initialize", "1", msg);
+        assert!(
+            f.contains(&format!("\"protocolVersion\":\"{LATEST_PROTOCOL_VERSION}\"")),
+            "{f}"
+        );
+    }
+
+    #[test]
+    fn ping_is_empty_result() {
+        assert_eq!(
+            call("ping", "7", json!({})),
+            "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}"
+        );
+    }
+
+    #[test]
+    fn tools_list_is_the_pinned_frame() {
+        assert_eq!(
+            call("tools/list", "2", json!({})),
+            format!("{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{TOOLS_LIST_RESULT}}}")
+        );
+    }
+
+    #[test]
+    fn empty_collections_lists_are_stable() {
+        assert_eq!(
+            call("prompts/list", "3", json!({})),
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"prompts\":[]}}"
+        );
+        assert_eq!(
+            call("resources/list", "4", json!({})),
+            "{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"resources\":[]}}"
+        );
+    }
+
+    #[test]
+    fn unknown_method_is_invalid_params_error() {
+        let f = call("does/not/exist", "9", json!({}));
+        assert!(f.contains("\"code\":-32602"), "{f}");
+        assert!(f.contains("\"id\":9"), "{f}");
+    }
+}

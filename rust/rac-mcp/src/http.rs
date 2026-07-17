@@ -102,13 +102,25 @@ pub fn serve_http(
         "rac mcp: serving over HTTP at http://{host}:{port}{path} (read-only, \
 stateless per call; authentication belongs to the deployment proxy, ADR-085)."
     );
+    serve_listener(&listener, root, tracker, recorder, path);
+    std::process::exit(0);
+}
+
+/// The accept loop, split from the bind/announce so tests can drive it over a
+/// pre-bound `127.0.0.1:0` listener without the diverging `serve_http` wrapper.
+fn serve_listener(
+    listener: &TcpListener,
+    root: &str,
+    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    recorder: &mut Option<audit::Recorder>,
+    path: &str,
+) {
     for stream in listener.incoming() {
         match stream {
             Ok(s) => handle_connection(root, tracker, recorder, path, s),
             Err(_) => continue,
         }
     }
-    std::process::exit(0);
 }
 
 struct Request {
@@ -355,4 +367,111 @@ fn respond(writer: &mut TcpStream, resp: &Response) {
     }
     let _ = writer.write_all(out.as_bytes());
     let _ = writer.flush();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpStream;
+
+    /// Spawn the serial server over an ephemeral port with no tracker/recorder
+    /// (fresh-walk, no audit): this targets the connection layer — the frame
+    /// contents are the oracle parity referee's job. Returns the bound port.
+    fn spawn_server() -> u16 {
+        let root = std::env::temp_dir()
+            .join(format!("rac-mcp-http-test-{}", std::process::id()))
+            .to_string_lossy()
+            .into_owned();
+        let _ = std::fs::create_dir_all(&root);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let mut tracker: Option<rac_engine::freshness::FreshnessTracker> = None;
+            let mut recorder: Option<audit::Recorder> = None;
+            serve_listener(&listener, &root, &mut tracker, &mut recorder, "/mcp");
+        });
+        port
+    }
+
+    /// Send raw bytes, tolerate a mid-write reset (the server may close on a
+    /// hostile request before we finish writing), and return the response bytes.
+    fn send(port: u16, raw: &[u8]) -> Vec<u8> {
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        s.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
+        let _ = s.write_all(raw);
+        let _ = s.flush();
+        let mut buf = Vec::new();
+        let _ = s.read_to_end(&mut buf); // EOF or reset on a dropped connection
+        buf
+    }
+
+    fn status_line(resp: &[u8]) -> String {
+        let end = resp.windows(2).position(|w| w == b"\r\n").unwrap_or(resp.len());
+        String::from_utf8_lossy(&resp[..end]).into_owned()
+    }
+
+    fn post(len_header: &str, body: &[u8]) -> Vec<u8> {
+        let mut req = format!(
+            "POST /mcp HTTP/1.1\r\nhost: x\r\naccept: application/json\r\n\
+content-type: application/json\r\ncontent-length: {len_header}\r\n\r\n"
+        )
+        .into_bytes();
+        req.extend_from_slice(body);
+        req
+    }
+
+    // The hardening paths (timeouts, body cap, header cap, panic isolation) are
+    // NOT covered by the oracle parity referee — no covered request approaches
+    // them — so they would regress silently. This exercises them natively.
+    #[test]
+    fn hardened_http_paths() {
+        let port = spawn_server();
+
+        // 1) A normal initialize POST is served 200 (baseline through the new
+        //    bounded read path). `initialize` needs no corpus.
+        let body = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#;
+        let ok = post(&body.len().to_string(), body);
+        assert!(
+            status_line(&send(port, &ok)).contains("200 OK"),
+            "normal POST should be 200"
+        );
+
+        // 2) An oversized Content-Length is rejected 413 before any allocation.
+        let over = post("999999999999", b"");
+        assert!(
+            status_line(&send(port, &over)).contains("413"),
+            "oversized Content-Length should be 413"
+        );
+
+        // 3) A header flood past MAX_HEADERS drops the connection (no response).
+        let mut flood = b"POST /mcp HTTP/1.1\r\n".to_vec();
+        for i in 0..MAX_HEADERS + 50 {
+            flood.extend_from_slice(format!("x-{i}: {}\r\n", "A".repeat(64)).as_bytes());
+        }
+        flood.extend_from_slice(b"\r\n");
+        assert!(
+            !String::from_utf8_lossy(&send(port, &flood)).contains("200"),
+            "header flood should be dropped, not served"
+        );
+
+        // 4) The server survived every hostile probe and still serves 200.
+        assert!(
+            status_line(&send(port, &ok)).contains("200 OK"),
+            "server should still serve after hostile probes"
+        );
+    }
+
+    #[test]
+    fn request_helpers() {
+        let req = Request {
+            method: "POST".into(),
+            target: "/mcp?q=1&r=2".into(),
+            headers: vec![("Content-Type".into(), "application/json".into())],
+            body: vec![],
+        };
+        assert_eq!(req.path(), "/mcp"); // query stripped
+        assert_eq!(req.header("content-type"), Some("application/json")); // case-insensitive
+        assert_eq!(req.header("x-absent"), None);
+    }
 }
