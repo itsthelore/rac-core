@@ -18,10 +18,18 @@
 //!   the threshold is **not** stale.
 //! - Unknown date -> `Staleness { None, None, None }`.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rayon::prelude::*;
+
+/// Path-count at or above which the batch joins prefer one whole-history
+/// `git log` pass over per-path spawns (COUNCIL-REVIEW B1 step 2). Below it a
+/// narrow query keeps the per-path fan-out, which is already fast and avoids
+/// walking a large history for a handful of paths. Perf-only — both paths
+/// produce byte-identical output — so the exact value is not a contract.
+const RECENCY_BATCH_MIN_PATHS: usize = 16;
 
 /// The default "stale after" window (`DEFAULT_STALE_AFTER_DAYS`).
 pub const DEFAULT_STALE_AFTER_DAYS: i64 = 180;
@@ -119,19 +127,95 @@ pub fn first_committed(repo_root: &Path, path: &Path) -> Option<String> {
     first_committed_in(repo_root, &canonical, path)
 }
 
+/// Whole-repo `path -> (last_committed, first_committed)` maps built from a
+/// single `git log --name-only` pass. Keys are repo-root-relative paths as git
+/// emits them; a path absent from a map has no committed history.
+struct BatchedRecency {
+    /// First occurrence in the newest-first walk = `git log -1 -- path`.
+    last: HashMap<String, String>,
+    /// Last occurrence (oldest) in the newest-first walk =
+    /// `git log --reverse -- path | head -1`. Empty unless creation is wanted.
+    first: HashMap<String, String>,
+}
+
+/// `true` iff the repo at `repo_root` contains a merge commit reachable from
+/// HEAD; `None` when HEAD is unresolvable (empty repo / no git). `git rev-list`
+/// short-circuits at the first merge, so this is cheap.
+fn history_has_merge(repo_root: &Path) -> Option<bool> {
+    let out = run_git(&["rev-list", "--merges", "--max-count=1", "HEAD"], repo_root)?;
+    Some(!out.trim().is_empty())
+}
+
+/// Build the batched recency maps for `repo_root`, or `None` to signal that the
+/// caller must fall back to the per-path join.
+///
+/// Safe **only on a linear history**: with no merge commit, the newest-first
+/// first-occurrence of a path equals `git log -1 -- path` and its oldest
+/// occurrence equals `git log --reverse -- path | head -1`, for every path —
+/// no history-simplification divergence is possible (proven byte-identical to
+/// the per-path oracle over the live corpus and every tracked file; see
+/// `rust/tools` differential). A merge commit could carry an evil-merge whose
+/// per-path simplification disagrees with the whole-history walk, so any merge
+/// returns `None` and per-path is used instead.
+fn batched_recency(repo_root: &Path, with_creation: bool) -> Option<BatchedRecency> {
+    if history_has_merge(repo_root)? {
+        return None;
+    }
+    // `\u{1}` marks a commit's `%cI` record; `-z` NUL-separates records and file
+    // names (so no path quoting); `core.quotePath=false` keeps non-ASCII raw.
+    let out = run_git(
+        &[
+            "-c",
+            "core.quotePath=false",
+            "log",
+            "-z",
+            "--format=\u{1}%cI",
+            "--name-only",
+        ],
+        repo_root,
+    )?;
+    let mut last: HashMap<String, String> = HashMap::new();
+    let mut first: HashMap<String, String> = HashMap::new();
+    let mut cur: Option<String> = None;
+    for tok in out.split('\0') {
+        if let Some(date) = tok.strip_prefix('\u{1}') {
+            cur = Some(date.trim().to_string());
+        } else if let Some(date) = &cur {
+            // The first file after a commit carries a leading '\n' from
+            // `--name-only`'s blank separator line; later files do not.
+            let path = tok.trim_start_matches('\n');
+            if !path.is_empty() {
+                last.entry(path.to_string()).or_insert_with(|| date.clone());
+                if with_creation {
+                    first.insert(path.to_string(), date.clone());
+                }
+            }
+        }
+    }
+    Some(BatchedRecency { last, first })
+}
+
 /// Last-committed time for each of `paths` (the raw recency primitive). Every
 /// path maps to `None` when `directory` is not a repo. Order preserved.
 ///
-/// The per-path `git log` spawns run in parallel: ADR-045 recency is *derived*,
-/// each spawn is independent with identical argv and deterministic stdout, and
-/// the results are re-assembled in input order — so the parallel join is
-/// byte-identical to a serial one, at ~worker-count lower wall time on a broad
-/// query inside a git tree (COUNCIL-REVIEW B1).
+/// On a linear-history repo with enough paths to amortize it, one whole-history
+/// `git log` pass serves the whole join (COUNCIL-REVIEW B1 step 2); otherwise
+/// the per-path `git log` spawns run in parallel (step 1). ADR-045 recency is
+/// *derived* and each spawn is independent with deterministic stdout, so every
+/// path — batched or per-path — is byte-identical to the serial oracle.
 pub fn last_committed_for_paths(directory: &Path, paths: &[PathBuf]) -> Vec<(PathBuf, Option<String>)> {
     match repository_root(directory) {
         None => paths.iter().map(|p| (p.clone(), None)).collect(),
         Some(root) => {
             let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            if paths.len() >= RECENCY_BATCH_MIN_PATHS {
+                if let Some(b) = batched_recency(&root, false) {
+                    return paths
+                        .iter()
+                        .map(|p| (p.clone(), b.last.get(&pathspec_in(&canonical, p)).cloned()))
+                        .collect();
+                }
+            }
             paths
                 .par_iter()
                 .map(|p| (p.clone(), last_committed_in(&root, &canonical, p)))
@@ -140,10 +224,10 @@ pub fn last_committed_for_paths(directory: &Path, paths: &[PathBuf]) -> Vec<(Pat
     }
 }
 
-/// `(path, last_committed, first_committed)` for each of `paths`, parallelized
-/// like [`last_committed_for_paths`]; `first_committed` is `None` unless
-/// `with_creation`. Order preserved. Serves the OKF export's created/updated
-/// join without a per-artifact serial spawn loop.
+/// `(path, last_committed, first_committed)` for each of `paths`;
+/// `first_committed` is `None` unless `with_creation`. Order preserved. Uses
+/// the same batched-vs-parallel choice as [`last_committed_for_paths`]; serves
+/// the OKF export's created/updated join.
 pub fn recency_pairs_for_paths(
     directory: &Path,
     paths: &[PathBuf],
@@ -153,6 +237,19 @@ pub fn recency_pairs_for_paths(
         None => paths.iter().map(|p| (p.clone(), None, None)).collect(),
         Some(root) => {
             let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            if paths.len() >= RECENCY_BATCH_MIN_PATHS {
+                if let Some(b) = batched_recency(&root, with_creation) {
+                    return paths
+                        .iter()
+                        .map(|p| {
+                            let spec = pathspec_in(&canonical, p);
+                            let last = b.last.get(&spec).cloned();
+                            let first = if with_creation { b.first.get(&spec).cloned() } else { None };
+                            (p.clone(), last, first)
+                        })
+                        .collect();
+                }
+            }
             paths
                 .par_iter()
                 .map(|p| {

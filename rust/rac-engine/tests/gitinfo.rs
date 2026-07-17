@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rac_engine::gitinfo::{
-    last_committed, parse_iso8601_epoch, repository_root, staleness, DEFAULT_STALE_AFTER_DAYS,
+    first_committed, last_committed, last_committed_for_paths, parse_iso8601_epoch,
+    recency_pairs_for_paths, repository_root, staleness, DEFAULT_STALE_AFTER_DAYS,
 };
 
 /// Reference "now" for age math: 2027-01-01T00:00:00Z (matches the
@@ -178,4 +179,80 @@ fn iso8601_parse_offsets() {
     // Missing offset / garbage -> unknown.
     assert_eq!(parse_iso8601_epoch("not-a-date"), None);
     assert_eq!(parse_iso8601_epoch("1970-01-01T00:00:00"), None);
+}
+
+/// Build a linear repo with `n` files across three pinned commits (half edited
+/// once, one edited twice) so last != first for some. Returns (dir, paths).
+fn linear_repo(tag: &str, n: usize) -> (PathBuf, Vec<PathBuf>) {
+    let base = std::env::var("CARGO_TARGET_TMPDIR").unwrap_or_else(|_| "/tmp".into());
+    let dir = Path::new(&base).join(format!("gitinfo_{tag}_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"], None);
+    let paths: Vec<PathBuf> = (0..n)
+        .map(|i| {
+            let name = format!("a{i:02}.md");
+            fs::write(dir.join(&name), format!("# {i}\n")).unwrap();
+            dir.join(name)
+        })
+        .collect();
+    git(&dir, &["add", "-A"], None);
+    git(&dir, &["commit", "-q", "-m", "create"], Some("2026-01-01T00:00:00+00:00"));
+    for i in 0..(n / 2) {
+        fs::write(dir.join(format!("a{i:02}.md")), format!("# {i} v2\n")).unwrap();
+    }
+    git(&dir, &["commit", "-q", "-am", "edit"], Some("2026-06-15T12:00:00+00:00"));
+    fs::write(dir.join("a00.md"), "# 0 v3\n").unwrap();
+    git(&dir, &["commit", "-q", "-am", "edit2"], Some("2026-09-09T09:00:00+00:00"));
+    (dir, paths)
+}
+
+#[test]
+fn batched_join_matches_per_path_on_linear_history() {
+    // n >= RECENCY_BATCH_MIN_PATHS forces the public join onto the batched
+    // whole-history pass; every result must equal the per-path oracle.
+    let (dir, paths) = linear_repo("batched", 20);
+    let root = repository_root(&dir).unwrap();
+
+    for (p, got) in last_committed_for_paths(&dir, &paths) {
+        assert_eq!(got, last_committed(&root, &p), "last mismatch for {p:?}");
+    }
+    let pairs = recency_pairs_for_paths(&dir, &paths, true);
+    for (p, last, first) in &pairs {
+        assert_eq!(*last, last_committed(&root, p), "batched last {p:?}");
+        assert_eq!(*first, first_committed(&root, p), "batched first {p:?}");
+    }
+    // a00 was created (Jan), then edited twice (Jun, Sep): last != first proves
+    // the batched newest-first/oldest bookkeeping is real, not a coincidence.
+    let a00 = pairs.iter().find(|(p, _, _)| p.ends_with("a00.md")).unwrap();
+    assert_eq!(a00.1.as_deref(), Some("2026-09-09T09:00:00+00:00"));
+    assert_eq!(a00.2.as_deref(), Some("2026-01-01T00:00:00+00:00"));
+
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn merge_history_falls_back_to_per_path() {
+    // A merge commit makes the batched walk unsafe; the join must detect it and
+    // fall back to the per-path oracle, still byte-correct for every path.
+    let (dir, paths) = linear_repo("merge", 20);
+    // Diverge two disjoint files on two branches, then a clean no-ff merge.
+    git(&dir, &["checkout", "-q", "-b", "side"], None);
+    fs::write(dir.join("a05.md"), "# 5 side\n").unwrap();
+    git(&dir, &["commit", "-q", "-am", "side"], Some("2026-10-01T00:00:00+00:00"));
+    git(&dir, &["checkout", "-q", "main"], None);
+    fs::write(dir.join("a06.md"), "# 6 main\n").unwrap();
+    git(&dir, &["commit", "-q", "-am", "main-edit"], Some("2026-10-02T00:00:00+00:00"));
+    git(&dir, &["merge", "--no-ff", "-m", "merge", "side"], Some("2026-10-03T00:00:00+00:00"));
+
+    let root = repository_root(&dir).unwrap();
+    assert!(
+        !last_committed_for_paths(&dir, &paths).is_empty(),
+        "join returns a row per path"
+    );
+    for (p, got) in last_committed_for_paths(&dir, &paths) {
+        assert_eq!(got, last_committed(&root, &p), "fallback last mismatch for {p:?}");
+    }
+
+    fs::remove_dir_all(&dir).ok();
 }
