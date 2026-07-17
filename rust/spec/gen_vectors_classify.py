@@ -23,7 +23,12 @@ import os
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-os.chdir(REPO / "rust" / "rac-engine")
+# Walk the frozen snapshot (COUNCIL-REVIEW B3), not the live `rac/`/`tests/`, so
+# a docs commit no longer invalidates the cargo suite. Run from the snapshot
+# root and emit "rac/..."/"tests/..." paths — identical to the live tree, so
+# the Rust test (which chdirs here too) reads the same strings.
+CORPUS_ROOT = REPO / "rust" / "fixtures" / "corpus"
+os.chdir(CORPUS_ROOT)
 
 from rac.core.classification import classify, score_artifacts  # noqa: E402
 from rac.core.markdown import parse_file  # noqa: E402
@@ -32,12 +37,12 @@ from rac.core.markdown import parse_file  # noqa: E402
 def corpus_paths() -> list[str]:
     out: list[str] = []
     for root in ("rac", "tests"):
-        base = REPO / root
+        base = CORPUS_ROOT / root
         for p in sorted(base.rglob("*.md")):
-            rel = p.relative_to(REPO)
+            rel = p.relative_to(CORPUS_ROOT)
             if any(part.startswith(".") for part in rel.parts):
                 continue
-            out.append("../../" + rel.as_posix())
+            out.append(rel.as_posix())
     return out
 
 

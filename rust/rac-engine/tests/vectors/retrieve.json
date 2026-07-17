@@ -5,6 +5,7 @@
  "cases": [
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 5,
@@ -15,6 +16,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "search",
    "scope": null,
    "top_k": 5,
@@ -25,6 +27,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "index cache",
    "scope": null,
    "top_k": 5,
@@ -35,6 +38,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "release versioning",
    "scope": null,
    "top_k": 5,
@@ -45,6 +49,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "telemetry",
    "scope": null,
    "top_k": 5,
@@ -55,6 +60,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "guide budget",
    "scope": null,
    "top_k": 5,
@@ -65,6 +71,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "calver",
    "scope": null,
    "top_k": 5,
@@ -75,6 +82,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "calver",
    "scope": null,
    "top_k": 5,
@@ -85,6 +93,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "release versioning calver",
    "scope": null,
    "top_k": 8,
@@ -95,6 +104,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "search",
    "scope": "src/rac/services/resolve.py",
    "top_k": 5,
@@ -105,6 +115,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "budget",
    "scope": "src/rac/mcp/server.py",
    "top_k": 5,
@@ -115,6 +126,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "zzz-no-keyword-hits",
    "scope": "src/rac/services/resolve.py",
    "top_k": 5,
@@ -125,6 +137,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": "does/not/exist.py",
    "top_k": 5,
@@ -135,6 +148,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": "../outside.py",
    "top_k": 5,
@@ -145,6 +159,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": "/etc/passwd",
    "top_k": 5,
@@ -155,6 +170,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": "src/rac/cli.py",
    "top_k": 5,
@@ -165,6 +181,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 1,
@@ -175,6 +192,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 2,
@@ -185,6 +203,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 5,
@@ -195,6 +214,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 5,
@@ -205,6 +225,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 5,
@@ -215,6 +236,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 5,
@@ -225,6 +247,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 25,
@@ -235,6 +258,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "café",
    "scope": null,
    "top_k": 5,
@@ -245,6 +269,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "İstanbul Straße",
    "scope": null,
    "top_k": 5,
@@ -255,6 +280,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "index—cache",
    "scope": null,
    "top_k": 5,
@@ -265,6 +291,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "zzz no such term anywhere",
    "scope": null,
    "top_k": 5,
@@ -275,6 +302,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "",
    "scope": null,
    "top_k": 5,
@@ -285,6 +313,7 @@
   },
   {
    "directory": "rac",
+   "corpus_root": true,
    "task": "it's a 'quoted' task",
    "scope": null,
    "top_k": 5,
@@ -295,6 +324,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "widget",
    "scope": null,
    "top_k": 5,
@@ -305,6 +335,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "widget",
    "scope": null,
    "top_k": 5,
@@ -315,6 +346,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "widget storage",
    "scope": null,
    "top_k": 5,
@@ -325,6 +357,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "storage",
    "scope": "src/api/handlers.py",
    "top_k": 5,
@@ -335,6 +368,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "naming",
    "scope": "docs/guide.md",
    "top_k": 5,
@@ -345,6 +379,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "zzz",
    "scope": "src/api/",
    "top_k": 5,
@@ -355,6 +390,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "zzz",
    "scope": "src/api/deep/nested/mod.py",
    "top_k": 5,
@@ -365,6 +401,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "widget",
    "scope": "src/lib/other.py",
    "top_k": 5,
@@ -375,6 +412,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "widget",
    "scope": null,
    "top_k": 1,
@@ -385,6 +423,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "frobnication pipeline",
    "scope": null,
    "top_k": 5,
@@ -395,6 +434,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/chain",
+   "corpus_root": false,
    "task": "frobnication pipeline",
    "scope": null,
    "top_k": 5,
@@ -405,6 +445,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "gadget",
    "scope": null,
    "top_k": 5,
@@ -415,6 +456,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "gadget",
    "scope": null,
    "top_k": 5,
@@ -425,6 +467,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "gadget sync",
    "scope": null,
    "top_k": 5,
@@ -435,6 +478,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "gadget sync",
    "scope": null,
    "top_k": 5,
@@ -445,6 +489,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "café Straße",
    "scope": null,
    "top_k": 5,
@@ -455,6 +500,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "gadget",
    "scope": null,
    "top_k": 5,
@@ -465,6 +511,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "gadget",
    "scope": null,
    "top_k": 2,
@@ -475,6 +522,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "gadget",
    "scope": null,
    "top_k": 3,
@@ -485,6 +533,7 @@
   },
   {
    "directory": "rust/fixtures/retrieve/mixed",
+   "corpus_root": false,
    "task": "crlf design",
    "scope": null,
    "top_k": 5,
@@ -495,6 +544,7 @@
   },
   {
    "directory": "tests/fixtures/resolve",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 5,
@@ -505,6 +555,7 @@
   },
   {
    "directory": "tests/fixtures/resolve",
+   "corpus_root": true,
    "task": "markdown",
    "scope": "src/anything.py",
    "top_k": 5,
@@ -515,6 +566,7 @@
   },
   {
    "directory": "tests/fixtures/resolve",
+   "corpus_root": true,
    "task": "markdown",
    "scope": null,
    "top_k": 5,

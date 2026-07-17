@@ -4,6 +4,7 @@
 # Virtual environments
 .venv/
 .venv-oracle/
+.venv-oracle-next/
 venv/
 
 # Python

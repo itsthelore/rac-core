@@ -33,6 +33,16 @@ from rac.services.index import build_repository_index
 REPO = Path(__file__).resolve().parents[2]  # /home/user/rac-core
 OUT = Path(__file__).resolve().parents[1] / "rac-engine/tests/vectors/resolve.json"
 
+# Frozen snapshot of the corpus (COUNCIL-REVIEW B3): the vectors pin this
+# checked-in copy, not the live `rac/`, so an ordinary docs commit no longer
+# invalidates the cargo suite. Live-corpus byte-identity stays in the parity
+# tier (both engines walk `rac/` there).
+#
+# The generator (and the Rust test) run from the snapshot ROOT and index the
+# corpus as the relative directory "rac", so the path BM25F field tokenizes to
+# the same "rac/..." strings as the live tree — a longer physical prefix would
+# leak "rust"/"fixtures"/"corpus" tokens into every doc and shift scores.
+CORPUS_ROOT = REPO / "rust" / "fixtures" / "corpus"
 DIRECTORY = "rac"
 
 # Query plan: plain terms, prefix fragments, multi-term AND, duplicate tokens
@@ -120,7 +130,7 @@ def bits(x: float) -> int:
 
 
 def main() -> None:
-    os.chdir(REPO)
+    os.chdir(CORPUS_ROOT)
     entries = build_repository_index(DIRECTORY).artifacts
     field_tokens = {e.path: R._field_tokens(e) for e in entries}
 

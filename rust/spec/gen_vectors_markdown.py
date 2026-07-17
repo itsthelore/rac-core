@@ -771,7 +771,11 @@ with open(os.path.join(VEC_DIR, "markdown.json"), "w", encoding="utf-8") as fh:
 # ---------------------------------------------------------------------------
 
 corpus_cases = []
-corpus_roots = [os.path.join(REPO, "rac"), os.path.join(REPO, "tests")]
+# Frozen snapshot of the corpus (COUNCIL-REVIEW B3), not the live rac//tests/,
+# so a docs commit no longer invalidates the cargo suite; live-corpus coverage
+# stays in the parity tier.
+_CORPUS = os.path.join(REPO, "rust", "fixtures", "corpus")
+corpus_roots = [os.path.join(_CORPUS, "rac"), os.path.join(_CORPUS, "tests")]
 paths = []
 for root in corpus_roots:
     for dirpath, dirnames, filenames in os.walk(root):

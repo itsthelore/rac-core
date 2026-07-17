@@ -32,10 +32,20 @@ from rac.services.retrieve import retrieve_grounding
 REPO = Path(__file__).resolve().parents[2]  # /home/user/rac-core
 OUT = Path(__file__).resolve().parents[1] / "rac-engine/tests/vectors/retrieve.json"
 
+# COUNCIL-REVIEW B3: cases over the live trees (`rac/`, `tests/fixtures/`) now
+# read the frozen snapshot instead, so a docs commit no longer invalidates the
+# cargo suite. Those cases run from the snapshot ROOT with a relative directory
+# ("rac", "tests/fixtures/resolve"), so the path field tokenizes exactly as the
+# live tree — a longer physical prefix would shift scores. The retrieval
+# fixtures under rust/fixtures/retrieve/ are already frozen and keep running
+# from the repo root, byte-identical. Scope args stay repo-root relative
+# (src/...), resolving the same for the snapshot as for `rac/`.
+CORPUS_ROOT = REPO / "rust" / "fixtures" / "corpus"
 RAC = "rac"
 CHAIN = "rust/fixtures/retrieve/chain"
 MIXED = "rust/fixtures/retrieve/mixed"
 RESOLVE_FX = "tests/fixtures/resolve"
+FROM_CORPUS = {RAC, RESOLVE_FX}  # directories resolved under the snapshot root
 
 # (directory, task, scope, top_k, budget, live_only)
 CASES: list[dict] = [
@@ -109,10 +119,11 @@ CASES: list[dict] = [
 def main() -> None:
     import os
 
-    os.chdir(REPO)
     out_cases = []
     for case in CASES:
         directory = case["dir"]
+        from_corpus = directory in FROM_CORPUS
+        os.chdir(CORPUS_ROOT if from_corpus else REPO)
         task = case["task"]
         scope = case.get("scope")
         top_k = case.get("top_k", 5)
@@ -131,6 +142,9 @@ def main() -> None:
         out_cases.append(
             {
                 "directory": directory,
+                # Snapshot-rooted cases (COUNCIL-REVIEW B3) replay from the
+                # frozen corpus root; fixtures replay from the repo root.
+                "corpus_root": from_corpus,
                 "task": task,
                 "scope": scope,
                 "top_k": top_k,

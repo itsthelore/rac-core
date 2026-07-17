@@ -1,10 +1,12 @@
 //! BM25F/RRF search conformance: replay `resolve.json` (oracle-generated over
-//! the live `rac/` corpus) and assert EXACT f64 bit equality on the unrounded
-//! `bm25` and `fused` scores, plus ranks, evidence, snippets, and final
-//! ordering (PORT-CONTRACT.d/06 §7–9: the float operation order is normative;
-//! a 1-ulp divergence must fail here, not round away).
+//! the frozen corpus snapshot `rust/fixtures/corpus/rac`, COUNCIL-REVIEW B3)
+//! and assert EXACT f64 bit equality on the unrounded `bm25` and `fused`
+//! scores, plus ranks, evidence, snippets, and final ordering
+//! (PORT-CONTRACT.d/06 §7–9: the float operation order is normative; a 1-ulp
+//! divergence must fail here, not round away).
 //!
-//! REGENERABLE — any change to `rac/` shifts the vectors; rerun
+//! The snapshot decouples this suite from live `rac/` edits; live-corpus
+//! byte-identity stays in the parity tier. Regenerate after a *snapshot* edit:
 //! `.venv-oracle/bin/python rust/spec/gen_vectors_resolve.py`.
 
 use std::fs;
@@ -19,14 +21,16 @@ fn vectors() -> Value {
     serde_json::from_str(&text).expect("parse resolve.json")
 }
 
-/// The corpus paths in the vectors are relative to the repo root; run the
-/// whole suite from there (one test fn, so no cwd races between threads).
-fn enter_repo_root() {
+/// The vectors index the frozen snapshot as the relative directory "rac"
+/// (COUNCIL-REVIEW B3), so run the suite from the snapshot root — the path
+/// BM25F field then tokenizes to the same "rac/..." strings as the live tree.
+/// One test fn, so no cwd races between threads.
+fn enter_corpus_root() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
+        .join("../fixtures/corpus")
         .canonicalize()
-        .expect("canonicalize repo root");
-    std::env::set_current_dir(&root).expect("chdir to repo root");
+        .expect("canonicalize frozen corpus root");
+    std::env::set_current_dir(&root).expect("chdir to frozen corpus root");
 }
 
 fn opt_str(v: &Value) -> Option<&str> {
@@ -39,7 +43,7 @@ fn opt_str(v: &Value) -> Option<&str> {
 
 #[test]
 fn bm25f_rrf_bits_match_oracle() {
-    enter_repo_root();
+    enter_corpus_root();
     let data = vectors();
     let directory = data["directory"].as_str().unwrap();
     let entries: Vec<IndexEntry> = build_index(directory, true);

@@ -1,769 +1,793 @@
 {
  "cases": [
   {
-   "path": "../../rac/decisions/adr-001-markdown-first.md",
+   "path": "rac/decisions/adr-001-markdown-first.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-002-ai-optional.md",
+   "path": "rac/decisions/adr-002-ai-optional.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-003-structured-outputs-first.md",
+   "path": "rac/decisions/adr-003-structured-outputs-first.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-004-artifact-model.md",
+   "path": "rac/decisions/adr-004-artifact-model.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-005-cli-first.md",
+   "path": "rac/decisions/adr-005-cli-first.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-006-ingest-over-rewrite.md",
+   "path": "rac/decisions/adr-006-ingest-over-rewrite.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-007-json-contract-stability.md",
+   "path": "rac/decisions/adr-007-json-contract-stability.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-008-agent-ready-architecture.md",
+   "path": "rac/decisions/adr-008-agent-ready-architecture.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-009-ai-assisted-development.md",
+   "path": "rac/decisions/adr-009-ai-assisted-development.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-010-documents-are-not-artifacts.md",
+   "path": "rac/decisions/adr-010-documents-are-not-artifacts.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-011-file-first-pipeline.md",
+   "path": "rac/decisions/adr-011-file-first-pipeline.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-012-open-core-strategy.md",
+   "path": "rac/decisions/adr-012-open-core-strategy.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-013-leverage-existing-source-control-systems.md",
+   "path": "rac/decisions/adr-013-leverage-existing-source-control-systems.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-014-viewer-agnostic-knowledge-artifacts.md",
+   "path": "rac/decisions/adr-014-viewer-agnostic-knowledge-artifacts.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-015-explorer-as-consumer.md",
+   "path": "rac/decisions/adr-015-explorer-as-consumer.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-016-relationships-as-structural-references.md",
+   "path": "rac/decisions/adr-016-relationships-as-structural-references.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-017-rac-managed-knowledge-not-work.md",
+   "path": "rac/decisions/adr-017-rac-managed-knowledge-not-work.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-018-rac-directory-as-root.md",
+   "path": "rac/decisions/adr-018-rac-directory-as-root.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-019-asset-management.md",
+   "path": "rac/decisions/adr-019-asset-management.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-020-requirements-as-capabilities.md",
+   "path": "rac/decisions/adr-020-requirements-as-capabilities.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-021-templates-product-contracts.md",
+   "path": "rac/decisions/adr-021-templates-product-contracts.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-022-documentation-boundaries.md",
+   "path": "rac/decisions/adr-022-documentation-boundaries.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-023-clean-break-internal-refactors.md",
+   "path": "rac/decisions/adr-023-clean-break-internal-refactors.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-024-rac-not-content-store.md",
+   "path": "rac/decisions/adr-024-rac-not-content-store.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-025-hybrid-artifact-metadata.md",
+   "path": "rac/decisions/adr-025-hybrid-artifact-metadata.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-026-opaque-artifact-identities.md",
+   "path": "rac/decisions/adr-026-opaque-artifact-identities.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-027-ci-test-topology.md",
+   "path": "rac/decisions/adr-027-ci-test-topology.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-028-explorer-surface.md",
+   "path": "rac/decisions/adr-028-explorer-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-029-guide-delivery-surface.md",
+   "path": "rac/decisions/adr-029-guide-delivery-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-030-guide-tools-only-surface.md",
+   "path": "rac/decisions/adr-030-guide-tools-only-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-031-guide-in-process-core-consumption.md",
+   "path": "rac/decisions/adr-031-guide-in-process-core-consumption.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-032-guide-stateless-reads.md",
+   "path": "rac/decisions/adr-032-guide-stateless-reads.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-033-guide-response-budget.md",
+   "path": "rac/decisions/adr-033-guide-response-budget.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-034-guide-agent-reasoning-boundary.md",
+   "path": "rac/decisions/adr-034-guide-agent-reasoning-boundary.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-035-byo-ai-credentials.md",
+   "path": "rac/decisions/adr-035-byo-ai-credentials.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-036-lore-product-identity.md",
+   "path": "rac/decisions/adr-036-lore-product-identity.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-037-token-boundary-search-matching.md",
+   "path": "rac/decisions/adr-037-token-boundary-search-matching.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-038-body-text-search-tier.md",
+   "path": "rac/decisions/adr-038-body-text-search-tier.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-039-lore-server-identity.md",
+   "path": "rac/decisions/adr-039-lore-server-identity.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-040-guide-local-telemetry.md",
+   "path": "rac/decisions/adr-040-guide-local-telemetry.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-041-anonymous-usage-ping.md",
+   "path": "rac/decisions/adr-041-anonymous-usage-ping.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-042-docs-site-hosting.md",
+   "path": "rac/decisions/adr-042-docs-site-hosting.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-043-watchkeeper-revision-materialization.md",
+   "path": "rac/decisions/adr-043-watchkeeper-revision-materialization.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-044-onboarding-scaffold.md",
+   "path": "rac/decisions/adr-044-onboarding-scaffold.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-045-git-derived-recency.md",
+   "path": "rac/decisions/adr-045-git-derived-recency.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-046-cli-usage-telemetry.md",
+   "path": "rac/decisions/adr-046-cli-usage-telemetry.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-047-agent-guidance-as-prompt-artifacts.md",
+   "path": "rac/decisions/adr-047-agent-guidance-as-prompt-artifacts.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-048-okf-carrier-profile.md",
+   "path": "rac/decisions/adr-048-okf-carrier-profile.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-049-enforcement-is-the-product.md",
+   "path": "rac/decisions/adr-049-enforcement-is-the-product.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-050-okf-frontmatter-superset.md",
+   "path": "rac/decisions/adr-050-okf-frontmatter-superset.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-051-lifecycle-status-generalized.md",
+   "path": "rac/decisions/adr-051-lifecycle-status-generalized.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-052-rac-core-okf-superset-conformance.md",
+   "path": "rac/decisions/adr-052-rac-core-okf-superset-conformance.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-053-validation-severity-overrides.md",
+   "path": "rac/decisions/adr-053-validation-severity-overrides.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-054-sarif-validation-output.md",
+   "path": "rac/decisions/adr-054-sarif-validation-output.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-055-relationship-type-registry-and-graph-integrity.md",
+   "path": "rac/decisions/adr-055-relationship-type-registry-and-graph-integrity.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-056-requirements-quality-standards.md",
+   "path": "rac/decisions/adr-056-requirements-quality-standards.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-057-prompt-dotprompt-alignment.md",
+   "path": "rac/decisions/adr-057-prompt-dotprompt-alignment.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-058-validation-github-action.md",
+   "path": "rac/decisions/adr-058-validation-github-action.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-059-reuse-markdown-parser-instance.md",
+   "path": "rac/decisions/adr-059-reuse-markdown-parser-instance.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-060-shared-structural-validation-helpers.md",
+   "path": "rac/decisions/adr-060-shared-structural-validation-helpers.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-061-roadmap-achieved-status.md",
+   "path": "rac/decisions/adr-061-roadmap-achieved-status.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-062-python-sdk-public-surface.md",
+   "path": "rac/decisions/adr-062-python-sdk-public-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-063-non-python-clients-are-thin.md",
+   "path": "rac/decisions/adr-063-non-python-clients-are-thin.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-064-multi-repo-extraction-strategy.md",
+   "path": "rac/decisions/adr-064-multi-repo-extraction-strategy.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-065-artifact-content-untrusted.md",
+   "path": "rac/decisions/adr-065-artifact-content-untrusted.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-066-deterministic-grounding-eval.md",
+   "path": "rac/decisions/adr-066-deterministic-grounding-eval.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-067-agent-integration-boundary.md",
+   "path": "rac/decisions/adr-067-agent-integration-boundary.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-068-extension-sdk-and-brand-architecture.md",
+   "path": "rac/decisions/adr-068-extension-sdk-and-brand-architecture.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-069-wayfinder-separate-product.md",
+   "path": "rac/decisions/adr-069-wayfinder-separate-product.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-070-prompt-complexity-routing-boundary.md",
+   "path": "rac/decisions/adr-070-prompt-complexity-routing-boundary.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-071-apache-2-relicense-and-dco.md",
+   "path": "rac/decisions/adr-071-apache-2-relicense-and-dco.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-072-ingest-parser-markitdown.md",
+   "path": "rac/decisions/adr-072-ingest-parser-markitdown.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-073-backend-connectors-consolidate.md",
+   "path": "rac/decisions/adr-073-backend-connectors-consolidate.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-074-export-surfaces-typed-edges.md",
+   "path": "rac/decisions/adr-074-export-surfaces-typed-edges.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-075-required-merge-gate.md",
+   "path": "rac/decisions/adr-075-required-merge-gate.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-076-calver-release-versioning.md",
+   "path": "rac/decisions/adr-076-calver-release-versioning.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-077-two-gate-capture-write-model.md",
+   "path": "rac/decisions/adr-077-two-gate-capture-write-model.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-078-deterministic-relevance-ranking.md",
+   "path": "rac/decisions/adr-078-deterministic-relevance-ranking.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-079-note-tool-ingest-sources.md",
+   "path": "rac/decisions/adr-079-note-tool-ingest-sources.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-080-single-source-of-truth-git-not-database.md",
+   "path": "rac/decisions/adr-080-single-source-of-truth-git-not-database.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-081-competitive-positioning.md",
+   "path": "rac/decisions/adr-081-competitive-positioning.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-082-suggested-relationship-edges-advisory.md",
+   "path": "rac/decisions/adr-082-suggested-relationship-edges-advisory.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-083-third-party-artifact-types.md",
+   "path": "rac/decisions/adr-083-third-party-artifact-types.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-084-read-access-audit-recorder.md",
+   "path": "rac/decisions/adr-084-read-access-audit-recorder.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-085-enterprise-configuration-not-mode.md",
+   "path": "rac/decisions/adr-085-enterprise-configuration-not-mode.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-086-air-gap-and-enterprise-telemetry-lock.md",
+   "path": "rac/decisions/adr-086-air-gap-and-enterprise-telemetry-lock.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-087-external-reference-relationships.md",
+   "path": "rac/decisions/adr-087-external-reference-relationships.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-088-enterprise-profile-scaffold.md",
+   "path": "rac/decisions/adr-088-enterprise-profile-scaffold.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-089-corpus-federation.md",
+   "path": "rac/decisions/adr-089-corpus-federation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-090-enterprise-satellite-topology.md",
+   "path": "rac/decisions/adr-090-enterprise-satellite-topology.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-091-engine-observability-boundary.md",
+   "path": "rac/decisions/adr-091-engine-observability-boundary.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-092-repository-topology.md",
+   "path": "rac/decisions/adr-092-repository-topology.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-093-roadmap-execution-in-issues.md",
+   "path": "rac/decisions/adr-093-roadmap-execution-in-issues.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-094-roadmaps-identified-by-codename.md",
+   "path": "rac/decisions/adr-094-roadmaps-identified-by-codename.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-095-rac-connectors-repackage-and-rename.md",
+   "path": "rac/decisions/adr-095-rac-connectors-repackage-and-rename.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-096-external-target-verification-edge.md",
+   "path": "rac/decisions/adr-096-external-target-verification-edge.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-097-benchmark-family-contract.md",
+   "path": "rac/decisions/adr-097-benchmark-family-contract.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-098-shared-http-mcp-serving.md",
+   "path": "rac/decisions/adr-098-shared-http-mcp-serving.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-099-derived-index-cache.md",
+   "path": "rac/decisions/adr-099-derived-index-cache.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-100-desktop-capture-product.md",
+   "path": "rac/decisions/adr-100-desktop-capture-product.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-101-org-docs-site-and-topology.md",
+   "path": "rac/decisions/adr-101-org-docs-site-and-topology.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-102-org-site-brand-direction.md",
+   "path": "rac/decisions/adr-102-org-site-brand-direction.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-103-unified-derived-read-model.md",
+   "path": "rac/decisions/adr-103-unified-derived-read-model.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-104-persistent-mmap-index-store.md",
+   "path": "rac/decisions/adr-104-persistent-mmap-index-store.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-105-event-sourced-serving-freshness.md",
+   "path": "rac/decisions/adr-105-event-sourced-serving-freshness.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-106-incremental-validation.md",
+   "path": "rac/decisions/adr-106-incremental-validation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-107-parallel-cold-build.md",
+   "path": "rac/decisions/adr-107-parallel-cold-build.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-108-term-range-partitioned-parallel-merge.md",
+   "path": "rac/decisions/adr-108-term-range-partitioned-parallel-merge.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-109-tag-search-tier-and-facet.md",
+   "path": "rac/decisions/adr-109-tag-search-tier-and-facet.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-110-one-shot-find-store-reuse.md",
+   "path": "rac/decisions/adr-110-one-shot-find-store-reuse.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-111-revert-to-semver.md",
+   "path": "rac/decisions/adr-111-revert-to-semver.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/decisions/adr-112-cache-on-by-default.md",
+   "path": "rac/decisions/adr-112-cache-on-by-default.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/adoption-opportunity-survey.md",
+   "path": "rac/decisions/adr-113-capture-sibling-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/agent-decision-enforcement.md",
+   "path": "rac/decisions/adr-114-native-index-workspace-dependencies.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/agent-usage-surface.md",
+   "path": "rac/decisions/adr-115-shared-artifact-spec-registry.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/artifact-completeness-diagnostic.md",
+   "path": "rac/decisions/adr-116-native-engine-sanctioned-second-implementation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/ci-action-and-dx.md",
+   "path": "rac/designs/adoption-opportunity-survey.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/code-scope-consumption.md",
+   "path": "rac/designs/agent-decision-enforcement.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/community-alignment/madr-decision-alignment.md",
+   "path": "rac/designs/agent-usage-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/community-alignment/roadmap-design-authority-survey.md",
+   "path": "rac/designs/artifact-completeness-diagnostic.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/corpus-export-shape-contract.md",
+   "path": "rac/designs/ci-action-and-dx.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/corpus-federation-mechanism.md",
+   "path": "rac/designs/code-scope-consumption.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/corpus-status-badge.md",
+   "path": "rac/designs/community-alignment/madr-decision-alignment.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/decision-grounding-thesis.md",
+   "path": "rac/designs/community-alignment/roadmap-design-authority-survey.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/deterministic-relevance-ranking.md",
+   "path": "rac/designs/corpus-export-shape-contract.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/docs-site-scoping.md",
+   "path": "rac/designs/corpus-federation-mechanism.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/evaluator-playground.md",
+   "path": "rac/designs/corpus-status-badge.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-action-workflows.md",
+   "path": "rac/designs/decision-grounding-thesis.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/designs/deterministic-relevance-ranking.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/designs/docs-site-scoping.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/designs/evaluator-playground.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/designs/explorer-action-workflows.md",
    "bare": [
     [
      "error",
@@ -844,13 +868,13 @@
    ]
   },
   {
-   "path": "../../rac/designs/explorer-command-surface.md",
+   "path": "rac/designs/explorer-command-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-editor-integrations.md",
+   "path": "rac/designs/explorer-editor-integrations.md",
    "bare": [
     [
      "error",
@@ -931,49 +955,49 @@
    ]
   },
   {
-   "path": "../../rac/designs/explorer-first-run-experience.md",
+   "path": "rac/designs/explorer-first-run-experience.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-health-model.md",
+   "path": "rac/designs/explorer-health-model.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-import-workflow.md",
+   "path": "rac/designs/explorer-import-workflow.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-knowledge-graph.md",
+   "path": "rac/designs/explorer-knowledge-graph.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-mascot-animations.md",
+   "path": "rac/designs/explorer-mascot-animations.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-mascot-interaction.md",
+   "path": "rac/designs/explorer-mascot-interaction.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-mascot.md",
+   "path": "rac/designs/explorer-mascot.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/explorer-recommendations.md",
+   "path": "rac/designs/explorer-recommendations.md",
    "bare": [
     [
      "error",
@@ -1054,193 +1078,217 @@
    ]
   },
   {
-   "path": "../../rac/designs/explorer-visual-system.md",
+   "path": "rac/designs/explorer-visual-system.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/generalized-lifecycle-status.md",
+   "path": "rac/designs/generalized-lifecycle-status.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/grounding-eval-scorecard.md",
+   "path": "rac/designs/grounding-eval-scorecard.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/growth-demo-gif.md",
+   "path": "rac/designs/growth-demo-gif.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/growth-essay-mapping.md",
+   "path": "rac/designs/growth-essay-mapping.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/guide-grounding-demo.md",
+   "path": "rac/designs/guide-capture-path.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/guide-tool-surface.md",
+   "path": "rac/designs/guide-grounding-demo.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/lean-context-delivery-measurement.md",
+   "path": "rac/designs/guide-tool-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/lore-capture-overlay.md",
+   "path": "rac/designs/lean-context-delivery-measurement.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/lore-capture-surfaces.md",
+   "path": "rac/designs/lore-capture-overlay.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/lore-frontend-optionality.md",
+   "path": "rac/designs/lore-capture-surfaces.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/lore-slack-capture-flow.md",
+   "path": "rac/designs/lore-frontend-optionality.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/lore-supermemory-interplay.md",
+   "path": "rac/designs/lore-slack-capture-flow.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/mcp-registration-helper.md",
+   "path": "rac/designs/lore-supermemory-interplay.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/mentioned-but-unlinked-detection.md",
+   "path": "rac/designs/mcp-registration-helper.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/note-tool-ingest-sources.md",
+   "path": "rac/designs/mentioned-but-unlinked-detection.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/per-type-standards-checks.md",
+   "path": "rac/designs/native-engine-cutover-dispatch.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/pr-decision-surfacing.md",
+   "path": "rac/designs/note-tool-ingest-sources.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/prompt-complexity-routing.md",
+   "path": "rac/designs/paraphrase-recall-response.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/python-sdk-surface.md",
+   "path": "rac/designs/per-type-standards-checks.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/sdk-expansion-strategy.md",
+   "path": "rac/designs/pr-decision-surfacing.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/third-party-artifact-extensibility.md",
+   "path": "rac/designs/prompt-complexity-routing.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/designs/tool-benchmark-harness.md",
+   "path": "rac/designs/python-sdk-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-agent-commit-guidelines.md",
+   "path": "rac/designs/sdk-expansion-strategy.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-agent-compression.md",
+   "path": "rac/designs/spec-driven-handoff.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-agent-pr-guidelines.md",
+   "path": "rac/designs/third-party-artifact-extensibility.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-agent-release-gate-major.md",
+   "path": "rac/designs/tool-benchmark-harness.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-agent-release-gate-minor.md",
+   "path": "rac/prompts/rac-agent-commit-guidelines.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-agent-session-start.md",
+   "path": "rac/prompts/rac-agent-compression.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-agent-simplification-guidelines.md",
+   "path": "rac/prompts/rac-agent-pr-guidelines.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/prompts/rac-v0.23-hardening-brief.md",
+   "path": "rac/prompts/rac-agent-release-gate-major.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-agent-context-guide.md",
+   "path": "rac/prompts/rac-agent-release-gate-minor.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/prompts/rac-agent-session-start.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/prompts/rac-agent-simplification-guidelines.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/prompts/rac-v0.23-hardening-brief.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/requirements/rac-agent-context-guide.md",
    "bare": [
     [
      "error",
@@ -1308,7 +1356,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-agent-usage-readback.md",
+   "path": "rac/requirements/rac-agent-usage-readback.md",
    "bare": [
     [
      "warning",
@@ -1352,7 +1400,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-artifact-completeness-study.md",
+   "path": "rac/requirements/rac-artifact-completeness-study.md",
    "bare": [
     [
      "warning",
@@ -1372,7 +1420,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-artifact-status-vocabulary.md",
+   "path": "rac/requirements/rac-artifact-status-vocabulary.md",
    "bare": [
     [
      "warning",
@@ -1428,7 +1476,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-artifact-trust-model.md",
+   "path": "rac/requirements/rac-artifact-trust-model.md",
    "bare": [
     [
      "warning",
@@ -1484,13 +1532,69 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-cli-first-delivery.md",
+   "path": "rac/requirements/rac-cli-first-delivery.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-corpus-documents-export.md",
+   "path": "rac/requirements/rac-cli-hostile-input-robustness.md",
+   "bare": [
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-001 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     36
+    ],
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-002 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     37
+    ],
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-003 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     38
+    ],
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-004 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     39
+    ]
+   ],
+   "github": [
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-001 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     36
+    ],
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-002 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     37
+    ],
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-003 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     38
+    ],
+    [
+     "warning",
+     "requirement-non-ears",
+     "REQ-004 has no normative keyword (SHALL/SHOULD/MAY); it does not state a testable requirement (EARS).",
+     39
+    ]
+   ],
+   "product": []
+  },
+  {
+   "path": "rac/requirements/rac-corpus-documents-export.md",
    "bare": [
     [
      "warning",
@@ -1510,7 +1614,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-corpus-graph-export.md",
+   "path": "rac/requirements/rac-corpus-graph-export.md",
    "bare": [
     [
      "warning",
@@ -1554,7 +1658,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-cross-artifact-enforcement.md",
+   "path": "rac/requirements/rac-cross-artifact-enforcement.md",
    "bare": [
     [
      "warning",
@@ -1598,7 +1702,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-decision-applies-to-scope.md",
+   "path": "rac/requirements/rac-decision-applies-to-scope.md",
    "bare": [
     [
      "warning",
@@ -1654,13 +1758,13 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-derived-index-cache.md",
+   "path": "rac/requirements/rac-derived-index-cache.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-deterministic-relevance-ranking.md",
+   "path": "rac/requirements/rac-deterministic-relevance-ranking.md",
    "bare": [
     [
      "warning",
@@ -1680,7 +1784,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-docs-site-landing-page.md",
+   "path": "rac/requirements/rac-docs-site-landing-page.md",
    "bare": [
     [
      "warning",
@@ -1700,7 +1804,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-docs-site-platform.md",
+   "path": "rac/requirements/rac-docs-site-platform.md",
    "bare": [
     [
      "warning",
@@ -1756,7 +1860,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-docs-site-publish-pipeline.md",
+   "path": "rac/requirements/rac-docs-site-publish-pipeline.md",
    "bare": [
     [
      "warning",
@@ -1819,7 +1923,7 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-docs-site-readme-doorway.md",
+   "path": "rac/requirements/rac-docs-site-readme-doorway.md",
    "bare": [
     [
      "warning",
@@ -1851,7 +1955,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-doctor-diagnostic-validator.md",
+   "path": "rac/requirements/rac-doctor-diagnostic-validator.md",
    "bare": [
     [
      "warning",
@@ -1907,7 +2011,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-documentation-structure.md",
+   "path": "rac/requirements/rac-documentation-structure.md",
    "bare": [
     [
      "warning",
@@ -2000,7 +2104,7 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-drift-advisory-finding.md",
+   "path": "rac/requirements/rac-drift-advisory-finding.md",
    "bare": [
     [
      "warning",
@@ -2044,13 +2148,13 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-explain-miss-diagnostics.md",
+   "path": "rac/requirements/rac-explain-miss-diagnostics.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-explainable-retrieval.md",
+   "path": "rac/requirements/rac-explainable-retrieval.md",
    "bare": [
     [
      "warning",
@@ -2106,7 +2210,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-export-change-feed.md",
+   "path": "rac/requirements/rac-export-change-feed.md",
    "bare": [
     [
      "warning",
@@ -2150,7 +2254,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-export-contract-schemas.md",
+   "path": "rac/requirements/rac-export-contract-schemas.md",
    "bare": [
     [
      "warning",
@@ -2194,7 +2298,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-export-section-anchors.md",
+   "path": "rac/requirements/rac-export-section-anchors.md",
    "bare": [
     [
      "warning",
@@ -2238,7 +2342,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-export-source-identity.md",
+   "path": "rac/requirements/rac-export-source-identity.md",
    "bare": [
     [
      "warning",
@@ -2258,7 +2362,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-external-and-file-references.md",
+   "path": "rac/requirements/rac-external-and-file-references.md",
    "bare": [
     [
      "warning",
@@ -2314,31 +2418,31 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-family-creation-contract.md",
+   "path": "rac/requirements/rac-family-creation-contract.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-federated-resolution-provenance.md",
+   "path": "rac/requirements/rac-federated-resolution-provenance.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-floor-ratio-boost-gate.md",
+   "path": "rac/requirements/rac-floor-ratio-boost-gate.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-freshness-read-surfaces.md",
+   "path": "rac/requirements/rac-freshness-read-surfaces.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-grounding-baseline-study.md",
+   "path": "rac/requirements/rac-grounding-baseline-study.md",
    "bare": [
     [
      "warning",
@@ -2382,7 +2486,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-grounding-eval-benchmark.md",
+   "path": "rac/requirements/rac-grounding-eval-benchmark.md",
    "bare": [
     [
      "warning",
@@ -2498,7 +2602,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-adoption.md",
+   "path": "rac/requirements/rac-growth-adoption.md",
    "bare": [
     [
      "warning",
@@ -2578,7 +2682,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-agent-memory-positioning.md",
+   "path": "rac/requirements/rac-growth-agent-memory-positioning.md",
    "bare": [
     [
      "error",
@@ -2730,7 +2834,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-agent-skill.md",
+   "path": "rac/requirements/rac-growth-agent-skill.md",
    "bare": [
     [
      "warning",
@@ -2846,7 +2950,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-contribution-policy.md",
+   "path": "rac/requirements/rac-growth-contribution-policy.md",
    "bare": [
     [
      "error",
@@ -2938,7 +3042,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-ecosystem-list.md",
+   "path": "rac/requirements/rac-growth-ecosystem-list.md",
    "bare": [
     [
      "error",
@@ -3042,7 +3146,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-essay-bridge.md",
+   "path": "rac/requirements/rac-growth-essay-bridge.md",
    "bare": [
     [
      "error",
@@ -3110,7 +3214,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-extensibility.md",
+   "path": "rac/requirements/rac-growth-extensibility.md",
    "bare": [
     [
      "error",
@@ -3226,7 +3330,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-growth-positioning.md",
+   "path": "rac/requirements/rac-growth-positioning.md",
    "bare": [
     [
      "error",
@@ -3330,7 +3434,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-honest-changelog-tiered-tests.md",
+   "path": "rac/requirements/rac-honest-changelog-tiered-tests.md",
    "bare": [
     [
      "warning",
@@ -3362,7 +3466,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-idempotent-content-hash-processing.md",
+   "path": "rac/requirements/rac-idempotent-content-hash-processing.md",
    "bare": [
     [
      "warning",
@@ -3406,7 +3510,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-mcp-http-transport.md",
+   "path": "rac/requirements/rac-mcp-http-transport.md",
    "bare": [
     [
      "warning",
@@ -3433,13 +3537,13 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-mcp-surface-budget.md",
+   "path": "rac/requirements/rac-mcp-surface-budget.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-multi-hop-relationship-traversal.md",
+   "path": "rac/requirements/rac-multi-hop-relationship-traversal.md",
    "bare": [
     [
      "warning",
@@ -3483,7 +3587,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-note-tool-ingest-sources.md",
+   "path": "rac/requirements/rac-note-tool-ingest-sources.md",
    "bare": [
     [
      "warning",
@@ -3503,7 +3607,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-obey-demo-grounding-proof.md",
+   "path": "rac/requirements/rac-obey-demo-grounding-proof.md",
    "bare": [
     [
      "warning",
@@ -3547,7 +3651,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-okf-carrier-profile.md",
+   "path": "rac/requirements/rac-okf-carrier-profile.md",
    "bare": [
     [
      "warning",
@@ -3591,7 +3695,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-parent-corpus-inheritance.md",
+   "path": "rac/requirements/rac-parent-corpus-inheritance.md",
    "bare": [
     [
      "warning",
@@ -3611,7 +3715,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-parser-traversal-robustness.md",
+   "path": "rac/requirements/rac-parser-traversal-robustness.md",
    "bare": [
     [
      "warning",
@@ -3679,7 +3783,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-path-decisions-lookup.md",
+   "path": "rac/requirements/rac-path-decisions-lookup.md",
    "bare": [
     [
      "warning",
@@ -3711,7 +3815,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-point-in-time-export.md",
+   "path": "rac/requirements/rac-point-in-time-export.md",
    "bare": [
     [
      "warning",
@@ -3731,7 +3835,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-portal-citation-links.md",
+   "path": "rac/requirements/rac-portal-citation-links.md",
    "bare": [
     [
      "error",
@@ -3823,7 +3927,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-product-intent-ci-watchkeeper.md",
+   "path": "rac/requirements/rac-product-intent-ci-watchkeeper.md",
    "bare": [
     [
      "warning",
@@ -3904,7 +4008,7 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-product-knowledge-navigator-explorer.md",
+   "path": "rac/requirements/rac-product-knowledge-navigator-explorer.md",
    "bare": [
     [
      "warning",
@@ -3973,7 +4077,7 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-provenance-surfacing.md",
+   "path": "rac/requirements/rac-provenance-surfacing.md",
    "bare": [
     [
      "warning",
@@ -4017,13 +4121,13 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-recipe-authoring-contract.md",
+   "path": "rac/requirements/rac-recipe-authoring-contract.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-recipe-verification-gate.md",
+   "path": "rac/requirements/rac-recipe-verification-gate.md",
    "bare": [
     [
      "warning",
@@ -4043,7 +4147,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-relationship-back-references.md",
+   "path": "rac/requirements/rac-relationship-back-references.md",
    "bare": [
     [
      "warning",
@@ -4087,7 +4191,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-release-versioning.md",
+   "path": "rac/requirements/rac-release-versioning.md",
    "bare": [
     [
      "warning",
@@ -4167,7 +4271,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-repository-review-mode.md",
+   "path": "rac/requirements/rac-repository-review-mode.md",
    "bare": [
     [
      "warning",
@@ -4236,13 +4340,13 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-risk-pilot-family.md",
+   "path": "rac/requirements/rac-risk-pilot-family.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-roadmap-supersession.md",
+   "path": "rac/requirements/rac-roadmap-supersession.md",
    "bare": [
     [
      "warning",
@@ -4286,13 +4390,13 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-selective-retrieval-default.md",
+   "path": "rac/requirements/rac-selective-retrieval-default.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-shared-server-audit-identity.md",
+   "path": "rac/requirements/rac-shared-server-audit-identity.md",
    "bare": [
     [
      "warning",
@@ -4319,7 +4423,7 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-single-schema-agreement.md",
+   "path": "rac/requirements/rac-single-schema-agreement.md",
    "bare": [
     [
      "warning",
@@ -4351,7 +4455,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-traceability-coverage-report.md",
+   "path": "rac/requirements/rac-traceability-coverage-report.md",
    "bare": [
     [
      "warning",
@@ -4407,7 +4511,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-traceability-self-relationships.md",
+   "path": "rac/requirements/rac-traceability-self-relationships.md",
    "bare": [
     [
      "warning",
@@ -4475,7 +4579,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-trust-transparency.md",
+   "path": "rac/requirements/rac-trust-transparency.md",
    "bare": [
     [
      "warning",
@@ -4526,7 +4630,7 @@
    ]
   },
   {
-   "path": "../../rac/requirements/rac-typed-relationship-edges.md",
+   "path": "rac/requirements/rac-typed-relationship-edges.md",
    "bare": [
     [
      "warning",
@@ -4582,7 +4686,7 @@
    "product": []
   },
   {
-   "path": "../../rac/requirements/rac-unlinked-reference-detection.md",
+   "path": "rac/requirements/rac-unlinked-reference-detection.md",
    "bare": [
     [
      "warning",
@@ -4602,31 +4706,31 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/agnostic-surfaces.md",
+   "path": "rac/roadmaps/agnostic-surfaces.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/agent-usage-readback.md",
+   "path": "rac/roadmaps/archive/agent-usage-readback.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/complexity-based-model-routing.md",
+   "path": "rac/roadmaps/archive/complexity-based-model-routing.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/repo-extraction-programme.md",
+   "path": "rac/roadmaps/archive/repo-extraction-programme.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.5-decisions.md",
+   "path": "rac/roadmaps/archive/v0.5-decisions.md",
    "bare": [
     [
      "warning",
@@ -4754,7 +4858,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.7-prompts.md",
+   "path": "rac/roadmaps/archive/v0.7-prompts.md",
    "bare": [
     [
      "warning",
@@ -4913,7 +5017,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.7.11-hybrid-metadata-system-identity.md",
+   "path": "rac/roadmaps/archive/v0.7.11-hybrid-metadata-system-identity.md",
    "bare": [
     [
      "error",
@@ -4994,7 +5098,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.7.12-lookup-and-resolution.md",
+   "path": "rac/roadmaps/archive/v0.7.12-lookup-and-resolution.md",
    "bare": [
     [
      "error",
@@ -5075,7 +5179,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.7.6-document-structure.md",
+   "path": "rac/roadmaps/archive/v0.7.6-document-structure.md",
    "bare": [
     [
      "error",
@@ -5156,7 +5260,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.7.7-readme-simplification.md",
+   "path": "rac/roadmaps/archive/v0.7.7-readme-simplification.md",
    "bare": [
     [
      "error",
@@ -5237,7 +5341,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.7.8-repo-trust.md",
+   "path": "rac/roadmaps/archive/v0.7.8-repo-trust.md",
    "bare": [
     [
      "error",
@@ -5318,7 +5422,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.8.0-service-api.md",
+   "path": "rac/roadmaps/archive/v0.8.0-service-api.md",
    "bare": [
     [
      "warning",
@@ -5338,7 +5442,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.8.1-repository-model.md",
+   "path": "rac/roadmaps/archive/v0.8.1-repository-model.md",
    "bare": [
     [
      "warning",
@@ -5358,7 +5462,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.8.2-interactive-runtime-readiness.md",
+   "path": "rac/roadmaps/archive/v0.8.2-interactive-runtime-readiness.md",
    "bare": [
     [
      "warning",
@@ -5378,7 +5482,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.8.3-integration-freeze.md",
+   "path": "rac/roadmaps/archive/v0.8.3-integration-freeze.md",
    "bare": [
     [
      "warning",
@@ -5398,7 +5502,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.9.0-explorer-foundation.md",
+   "path": "rac/roadmaps/archive/v0.9.0-explorer-foundation.md",
    "bare": [
     [
      "warning",
@@ -5418,7 +5522,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.9.1-explorer-experience.md",
+   "path": "rac/roadmaps/archive/v0.9.1-explorer-experience.md",
    "bare": [
     [
      "warning",
@@ -5438,7 +5542,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.9.2-knowledge-operations.md",
+   "path": "rac/roadmaps/archive/v0.9.2-knowledge-operations.md",
    "bare": [
     [
      "warning",
@@ -5458,7 +5562,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/v0.9.3-intelligence-views.md",
+   "path": "rac/roadmaps/archive/v0.9.3-intelligence-views.md",
    "bare": [
     [
      "warning",
@@ -5478,127 +5582,133 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/archive/wayfinder-extraction.md",
+   "path": "rac/roadmaps/archive/wayfinder-extraction.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/artifact-family-factory.md",
+   "path": "rac/roadmaps/artifact-family-factory.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/atlassian/atlassian.md",
+   "path": "rac/roadmaps/atlassian/atlassian.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/benchmarks/tool-benchmarks.md",
+   "path": "rac/roadmaps/benchmarks/tool-benchmarks.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/candidate-discovery.md",
+   "path": "rac/roadmaps/candidate-discovery.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/community-alignment/community-alignment-programme.md",
+   "path": "rac/roadmaps/community-alignment/community-alignment-programme.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/corpus-export-to-rag-backends.md",
+   "path": "rac/roadmaps/corpus-export-to-rag-backends.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/corpus-federation.md",
+   "path": "rac/roadmaps/corpus-federation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/corpus-sync.md",
+   "path": "rac/roadmaps/corpus-sync.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/decision-to-code-proximity.md",
+   "path": "rac/roadmaps/decision-to-code-proximity.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/deterministic-substrate.md",
+   "path": "rac/roadmaps/deterministic-substrate.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/freshness-and-drift-detection.md",
+   "path": "rac/roadmaps/freshness-and-drift-detection.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/artifact-completeness-benchmark.md",
+   "path": "rac/roadmaps/future/agentic-demand-alignment.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/artifact-specs-extraction.md",
+   "path": "rac/roadmaps/future/artifact-completeness-benchmark.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/ci-report-formats.md",
+   "path": "rac/roadmaps/future/artifact-specs-extraction.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/commercial-layer-positioning.md",
+   "path": "rac/roadmaps/future/ci-report-formats.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/conformance-fixtures.md",
+   "path": "rac/roadmaps/future/commercial-layer-positioning.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/corpus-setup-guidance.md",
+   "path": "rac/roadmaps/future/conformance-fixtures.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/decision-grounding-paper.md",
+   "path": "rac/roadmaps/future/corpus-setup-guidance.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/decisions-on-pr.md",
+   "path": "rac/roadmaps/future/decision-grounding-paper.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/explorer-followups.md",
+   "path": "rac/roadmaps/future/decisions-on-pr.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/roadmaps/future/explorer-followups.md",
    "bare": [
     [
      "error",
@@ -5679,373 +5789,391 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/future/external-benchmark-evidence.md",
+   "path": "rac/roadmaps/future/external-benchmark-evidence.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/lore-capture-followups.md",
+   "path": "rac/roadmaps/future/lore-capture-followups.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/lore-overlay.md",
+   "path": "rac/roadmaps/future/lore-overlay.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/lore-slack-bot.md",
+   "path": "rac/roadmaps/future/lore-slack-bot.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/lore-supermemory-grounding.md",
+   "path": "rac/roadmaps/future/lore-supermemory-grounding.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/native-engine-spike.md",
+   "path": "rac/roadmaps/future/native-cli-closure.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/org-site-rac-spec-surface.md",
+   "path": "rac/roadmaps/future/native-derived-index.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/rac-capture-skill.md",
+   "path": "rac/roadmaps/future/native-engine-cutover.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/single-node-scale-residuals.md",
+   "path": "rac/roadmaps/future/native-engine-spike.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/skill-trust-and-surfacing.md",
+   "path": "rac/roadmaps/future/org-site-rac-spec-surface.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/future/ts-sdk-stable-release.md",
+   "path": "rac/roadmaps/future/rac-capture-skill.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/growth-programme.md",
+   "path": "rac/roadmaps/future/single-node-scale-residuals.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/ingest-sources.md",
+   "path": "rac/roadmaps/future/skill-trust-and-surfacing.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/integration-recipe-factory.md",
+   "path": "rac/roadmaps/future/ts-sdk-stable-release.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/lean-context-delivery.md",
+   "path": "rac/roadmaps/growth-programme.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/link-suggestions.md",
+   "path": "rac/roadmaps/ingest-sources.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/lore-at-team-scale.md",
+   "path": "rac/roadmaps/integration-recipe-factory.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/oci-image.md",
+   "path": "rac/roadmaps/lean-context-delivery.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/rac-editors-buildout.md",
+   "path": "rac/roadmaps/link-suggestions.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/rebuild-scale.md",
+   "path": "rac/roadmaps/lore-at-team-scale.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/relationship-vocabulary.md",
+   "path": "rac/roadmaps/oci-image.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/relevance-ranking.md",
+   "path": "rac/roadmaps/rac-editors-buildout.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/repo-topology/rac-benchmarks.md",
+   "path": "rac/roadmaps/rebuild-scale.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/repo-topology/rac-ci.md",
+   "path": "rac/roadmaps/relationship-vocabulary.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/repo-topology/rac-connectors.md",
+   "path": "rac/roadmaps/relevance-ranking.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/repo-topology/rac-editors.md",
+   "path": "rac/roadmaps/repo-topology/rac-benchmarks.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/repo-topology/rac-sdk.md",
+   "path": "rac/roadmaps/repo-topology/rac-ci.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/repo-topology/repo-topology-convergence.md",
+   "path": "rac/roadmaps/repo-topology/rac-connectors.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/retrieval-diagnostics.md",
+   "path": "rac/roadmaps/repo-topology/rac-editors.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.0-guide-foundation.md",
+   "path": "rac/roadmaps/repo-topology/rac-sdk.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.1-guide-onboarding.md",
+   "path": "rac/roadmaps/repo-topology/repo-topology-convergence.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.2-guide-grounding-demo.md",
+   "path": "rac/roadmaps/retrieval-diagnostics.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.3-search-quality.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.0-guide-foundation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.4-guide-telemetry.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.1-guide-onboarding.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.5-bundled-agent-skill.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.2-guide-grounding-demo.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.5-review-and-ingest-skills.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.3-search-quality.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.10.x-guide/v0.10.6-anonymous-usage-sharing.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.4-guide-telemetry.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.11.x-portal/v0.11.0-portal-export.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.5-bundled-agent-skill.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.11.x-portal/v0.11.1-docs-site.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.5-review-and-ingest-skills.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.12.x-watchkeeper/v0.12.0-repository-review.md",
+   "path": "rac/roadmaps/v0.10.x-guide/v0.10.6-anonymous-usage-sharing.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.12.x-watchkeeper/v0.12.1-intent-analysis.md",
+   "path": "rac/roadmaps/v0.11.x-portal/v0.11.0-portal-export.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.12.x-watchkeeper/v0.12.2-watchkeeper.md",
+   "path": "rac/roadmaps/v0.11.x-portal/v0.11.1-docs-site.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.12.x-watchkeeper/v0.12.3-watchkeeper-action.md",
+   "path": "rac/roadmaps/v0.12.x-watchkeeper/v0.12.0-repository-review.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.13.x-welcome/v0.13.0-guided-first-run.md",
+   "path": "rac/roadmaps/v0.12.x-watchkeeper/v0.12.1-intent-analysis.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.13.x-welcome/v0.13.1-friendly-empty-corpus.md",
+   "path": "rac/roadmaps/v0.12.x-watchkeeper/v0.12.2-watchkeeper.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.13.x-welcome/v0.13.2-git-recency.md",
+   "path": "rac/roadmaps/v0.12.x-watchkeeper/v0.12.3-watchkeeper-action.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.13.x-welcome/v0.13.3-cadence-nudge.md",
+   "path": "rac/roadmaps/v0.13.x-welcome/v0.13.0-guided-first-run.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.13.x-welcome/v0.13.4-commit-nudge.md",
+   "path": "rac/roadmaps/v0.13.x-welcome/v0.13.1-friendly-empty-corpus.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.13.x-welcome/v0.13.5-self-type-relationships.md",
+   "path": "rac/roadmaps/v0.13.x-welcome/v0.13.2-git-recency.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.13.x-welcome/v0.13.6-okf-bundle-export.md",
+   "path": "rac/roadmaps/v0.13.x-welcome/v0.13.3-cadence-nudge.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.14.x-enforcement/v0.14.0-enforcement-foundation.md",
+   "path": "rac/roadmaps/v0.13.x-welcome/v0.13.4-commit-nudge.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.14.x-enforcement/v0.14.1-status-consistency.md",
+   "path": "rac/roadmaps/v0.13.x-welcome/v0.13.5-self-type-relationships.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.15.x-interop/v0.15.0-okf-frontmatter-superset.md",
+   "path": "rac/roadmaps/v0.13.x-welcome/v0.13.6-okf-bundle-export.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.15.x-interop/v0.15.1-okf-conformance-check.md",
+   "path": "rac/roadmaps/v0.14.x-enforcement/v0.14.0-enforcement-foundation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.15.x-interop/v0.15.2-validation-overrides-and-sarif.md",
+   "path": "rac/roadmaps/v0.14.x-enforcement/v0.14.1-status-consistency.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.16.x-graph-integrity/v0.16.0-relationship-graph-integrity.md",
+   "path": "rac/roadmaps/v0.15.x-interop/v0.15.0-okf-frontmatter-superset.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.17.x-adoption/v0.17.0-single-document-import-skill.md",
+   "path": "rac/roadmaps/v0.15.x-interop/v0.15.1-okf-conformance-check.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.17.x-adoption/v0.17.1-per-type-standards-enforcement.md",
+   "path": "rac/roadmaps/v0.15.x-interop/v0.15.2-validation-overrides-and-sarif.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.17.x-adoption/v0.17.2-ci-action-and-dx.md",
+   "path": "rac/roadmaps/v0.16.x-graph-integrity/v0.16.0-relationship-graph-integrity.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.18.x-engine-health/v0.18.0-engine-simplification.md",
+   "path": "rac/roadmaps/v0.17.x-adoption/v0.17.0-single-document-import-skill.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.19.x-lifecycle/v0.19.0-roadmap-achieved-status.md",
+   "path": "rac/roadmaps/v0.17.x-adoption/v0.17.1-per-type-standards-enforcement.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.2.x-stats/v0.2-stats.md",
+   "path": "rac/roadmaps/v0.17.x-adoption/v0.17.2-ci-action-and-dx.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/roadmaps/v0.18.x-engine-health/v0.18.0-engine-simplification.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/roadmaps/v0.19.x-lifecycle/v0.19.0-roadmap-achieved-status.md",
+   "bare": [],
+   "github": [],
+   "product": []
+  },
+  {
+   "path": "rac/roadmaps/v0.2.x-stats/v0.2-stats.md",
    "bare": [
     [
      "warning",
@@ -6197,241 +6325,241 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.20.x-sdk/v0.20.0-python-sdk-foundation.md",
+   "path": "rac/roadmaps/v0.20.x-sdk/v0.20.0-python-sdk-foundation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.20.x-sdk/v0.20.1-python-sdk-docs.md",
+   "path": "rac/roadmaps/v0.20.x-sdk/v0.20.1-python-sdk-docs.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.0-typescript-sdk-and-extension.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.0-typescript-sdk-and-extension.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.1-cross-artifact-enforcement.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.1-cross-artifact-enforcement.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.10-marketplace-publish.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.10-marketplace-publish.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.11-first-run-onboarding.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.11-first-run-onboarding.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.12-graph-view-polish.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.12-graph-view-polish.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.13-pr-pipeline-enforcement.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.13-pr-pipeline-enforcement.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.14-security-governance-posture.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.14-security-governance-posture.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.15-agent-context-generation.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.15-agent-context-generation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.16-decision-query-and-guard.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.16-decision-query-and-guard.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.17-claude-code-pre-edit-hook.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.17-claude-code-pre-edit-hook.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.18-safe-rename-refactor.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.18-safe-rename-refactor.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.19-gate-performance.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.19-gate-performance.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.2-authoring-ergonomics.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.2-authoring-ergonomics.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.3-editor-navigation.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.3-editor-navigation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.4-ambient-awareness.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.4-ambient-awareness.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.5-corpus-visualization.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.5-corpus-visualization.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.6-extension-robustness.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.6-extension-robustness.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.7-graph-editor-sync.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.7-graph-editor-sync.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.8-corpus-graph-view.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.8-corpus-graph-view.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.21.x-editor/v0.21.9-extension-test-harness.md",
+   "path": "rac/roadmaps/v0.21.x-editor/v0.21.9-extension-test-harness.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.22.x-housekeeping/v0.22.0-topology-and-release-decision.md",
+   "path": "rac/roadmaps/v0.22.x-housekeeping/v0.22.0-topology-and-release-decision.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.22.x-housekeeping/v0.22.1-rename-viewer-rac-localview.md",
+   "path": "rac/roadmaps/v0.22.x-housekeeping/v0.22.1-rename-viewer-rac-localview.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.22.x-housekeeping/v0.22.2-rac-core-identity.md",
+   "path": "rac/roadmaps/v0.22.x-housekeeping/v0.22.2-rac-core-identity.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.22.x-housekeeping/v0.22.3-ts-sdk-npm-publishable.md",
+   "path": "rac/roadmaps/v0.22.x-housekeeping/v0.22.3-ts-sdk-npm-publishable.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.22.x-housekeeping/v0.22.4-extract-decisiongrounding.md",
+   "path": "rac/roadmaps/v0.22.x-housekeeping/v0.22.4-extract-decisiongrounding.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.22.x-housekeeping/v0.22.5-extract-typescript-stack.md",
+   "path": "rac/roadmaps/v0.22.x-housekeeping/v0.22.5-extract-typescript-stack.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.22.x-housekeeping/v0.22.6-split-actions.md",
+   "path": "rac/roadmaps/v0.22.x-housekeeping/v0.22.6-split-actions.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.23.x-hardening/v0.23.0-hardening.md",
+   "path": "rac/roadmaps/v0.23.x-hardening/v0.23.0-hardening.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.24.x-visibility/v0.24.0-visibility.md",
+   "path": "rac/roadmaps/v0.24.x-visibility/v0.24.0-visibility.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.25.x-connect/v0.25.0-connect.md",
+   "path": "rac/roadmaps/v0.25.x-connect/v0.25.0-connect.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.26.x-tui-revamp/v0.26.0-appearance.md",
+   "path": "rac/roadmaps/v0.26.x-tui-revamp/v0.26.0-appearance.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.26.x-tui-revamp/v0.26.1-legibility.md",
+   "path": "rac/roadmaps/v0.26.x-tui-revamp/v0.26.1-legibility.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.26.x-tui-revamp/v0.26.2-portfolio-list.md",
+   "path": "rac/roadmaps/v0.26.x-tui-revamp/v0.26.2-portfolio-list.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.26.x-tui-revamp/v0.26.3-split-layout.md",
+   "path": "rac/roadmaps/v0.26.x-tui-revamp/v0.26.3-split-layout.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.26.x-tui-revamp/v0.26.4-editor-flow.md",
+   "path": "rac/roadmaps/v0.26.x-tui-revamp/v0.26.4-editor-flow.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.27.x-calver/v0.27.0-calver-cutover.md",
+   "path": "rac/roadmaps/v0.27.x-calver/v0.27.0-calver-cutover.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.3.x-inspect/v0.3-ingest.md",
+   "path": "rac/roadmaps/v0.3.x-inspect/v0.3-ingest.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.3.x-inspect/v0.3.1-formats.md",
+   "path": "rac/roadmaps/v0.3.x-inspect/v0.3.1-formats.md",
    "bare": [
     [
      "warning",
@@ -6523,7 +6651,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.4.x-intelligence/v0.4-inspect.md",
+   "path": "rac/roadmaps/v0.4.x-intelligence/v0.4-inspect.md",
    "bare": [
     [
      "warning",
@@ -6543,7 +6671,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.4.x-intelligence/v0.4.1-expansion.md",
+   "path": "rac/roadmaps/v0.4.x-intelligence/v0.4.1-expansion.md",
    "bare": [
     [
      "warning",
@@ -6563,7 +6691,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.4.x-intelligence/v0.4.1-inspect-expansion.md",
+   "path": "rac/roadmaps/v0.4.x-intelligence/v0.4.1-inspect-expansion.md",
    "bare": [
     [
      "warning",
@@ -6583,7 +6711,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.4.x-intelligence/v0.4.2-decision-metadata.md",
+   "path": "rac/roadmaps/v0.4.x-intelligence/v0.4.2-decision-metadata.md",
    "bare": [
     [
      "warning",
@@ -6603,7 +6731,7 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.5.x-awareness/v0.5.0-artifact-improvement.md",
+   "path": "rac/roadmaps/v0.5.x-awareness/v0.5.0-artifact-improvement.md",
    "bare": [
     [
      "warning",
@@ -6630,7 +6758,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.5.x-awareness/v0.5.1-guided-improvement.md",
+   "path": "rac/roadmaps/v0.5.x-awareness/v0.5.1-guided-improvement.md",
    "bare": [
     [
      "warning",
@@ -6657,7 +6785,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.5.x-awareness/v0.5.2-schema.md",
+   "path": "rac/roadmaps/v0.5.x-awareness/v0.5.2-schema.md",
    "bare": [
     [
      "warning",
@@ -6684,7 +6812,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.6.x-relationships/v0.6.0-roadmap-artifacts.md",
+   "path": "rac/roadmaps/v0.6.x-relationships/v0.6.0-roadmap-artifacts.md",
    "bare": [
     [
      "warning",
@@ -6711,7 +6839,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.6.x-relationships/v0.6.1-roadmap-improvement.md",
+   "path": "rac/roadmaps/v0.6.x-relationships/v0.6.1-roadmap-improvement.md",
    "bare": [
     [
      "warning",
@@ -6738,19 +6866,19 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.6.x-relationships/v0.6.2-prompt-artifact.md",
+   "path": "rac/roadmaps/v0.6.x-relationships/v0.6.2-prompt-artifact.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.6.x-relationships/v0.6.3-design-artifacts.md",
+   "path": "rac/roadmaps/v0.6.x-relationships/v0.6.3-design-artifacts.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.0-relationship-metadata.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.0-relationship-metadata.md",
    "bare": [
     [
      "warning",
@@ -6777,7 +6905,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.1-relationship-inspection.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.1-relationship-inspection.md",
    "bare": [
     [
      "warning",
@@ -6804,25 +6932,25 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.10-artifact-templates.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.10-artifact-templates.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.13-metadata-migration.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.13-metadata-migration.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.14-audit-hardening.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.14-audit-hardening.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.2-relationship-validation.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.2-relationship-validation.md",
    "bare": [
     [
      "warning",
@@ -6849,7 +6977,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.3-repo-intelligence.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.3-repo-intelligence.md",
    "bare": [
     [
      "error",
@@ -6948,7 +7076,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.4-internal-refactor.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.4-internal-refactor.md",
    "bare": [
     [
      "error",
@@ -7011,7 +7139,7 @@
    ]
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.5-repo-indexing.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.5-repo-indexing.md",
    "bare": [
     [
      "warning",
@@ -7031,103 +7159,103 @@
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.7.x-trust/v0.7.9-repository-review.md",
+   "path": "rac/roadmaps/v0.7.x-trust/v0.7.9-repository-review.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.0-explorer-foundation.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.0-explorer-foundation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.1-explorer-navigation.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.1-explorer-navigation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.10-explorer-create-and-stats.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.10-explorer-create-and-stats.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.11-explorer-followups.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.11-explorer-followups.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.12-explorer-mascot-interaction.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.12-explorer-mascot-interaction.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.13-explorer-knowledge-graph-grammar.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.13-explorer-knowledge-graph-grammar.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.2-explorer-health.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.2-explorer-health.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.3-explorer-recommendations.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.3-explorer-recommendations.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.4-explorer-action-workflow.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.4-explorer-action-workflow.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.5-explorer-relationship-navigation.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.5-explorer-relationship-navigation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.6-explorer-maturity.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.6-explorer-maturity.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.7-explorer-visual-overhaul.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.7-explorer-visual-overhaul.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.8-explorer-command-palette.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.8-explorer-command-palette.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/v0.8.x-explorer/v0.8.9-explorer-live-workspace.md",
+   "path": "rac/roadmaps/v0.8.x-explorer/v0.8.9-explorer-live-workspace.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../rac/roadmaps/warm-by-default.md",
+   "path": "rac/roadmaps/warm-by-default.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/README.md",
+   "path": "tests/eval/README.md",
    "bare": [
     [
      "error",
@@ -7208,61 +7336,61 @@
    ]
   },
   {
-   "path": "../../tests/eval/corpus/decision-rate-limiting.md",
+   "path": "tests/eval/corpus/decision-rate-limiting.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/decision-realtime-sync.md",
+   "path": "tests/eval/corpus/decision-realtime-sync.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/decision-storage-backend.md",
+   "path": "tests/eval/corpus/decision-storage-backend.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/decision-token-expiry-v1.md",
+   "path": "tests/eval/corpus/decision-token-expiry-v1.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/decision-token-refresh-v2.md",
+   "path": "tests/eval/corpus/decision-token-refresh-v2.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/design-conflict-resolution.md",
+   "path": "tests/eval/corpus/design-conflict-resolution.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/design-mobile-navigation.md",
+   "path": "tests/eval/corpus/design-mobile-navigation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/design-sidebar-navigation.md",
+   "path": "tests/eval/corpus/design-sidebar-navigation.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/prompt-release-notes.md",
+   "path": "tests/eval/corpus/prompt-release-notes.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/eval/corpus/requirement-offline-editing.md",
+   "path": "tests/eval/corpus/requirement-offline-editing.md",
    "bare": [
     [
      "warning",
@@ -7289,7 +7417,7 @@
    ]
   },
   {
-   "path": "../../tests/eval/corpus/requirement-session-auth.md",
+   "path": "tests/eval/corpus/requirement-session-auth.md",
    "bare": [
     [
      "warning",
@@ -7316,13 +7444,13 @@
    ]
   },
   {
-   "path": "../../tests/eval/corpus/roadmap-v1-launch.md",
+   "path": "tests/eval/corpus/roadmap-v1-launch.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/decision/bad_category.md",
+   "path": "tests/fixtures/decision/bad_category.md",
    "bare": [
     [
      "error",
@@ -7349,7 +7477,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/decision/bad_status.md",
+   "path": "tests/fixtures/decision/bad_status.md",
    "bare": [
     [
      "error",
@@ -7376,43 +7504,43 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/decision/minimal.md",
+   "path": "tests/fixtures/decision/minimal.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/decision/portfolio/01_accepted_arch.md",
+   "path": "tests/fixtures/decision/portfolio/01_accepted_arch.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/decision/portfolio/02_proposed_process.md",
+   "path": "tests/fixtures/decision/portfolio/02_proposed_process.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/decision/portfolio/03_no_metadata.md",
+   "path": "tests/fixtures/decision/portfolio/03_no_metadata.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/decision/with_metadata.md",
+   "path": "tests/fixtures/decision/with_metadata.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/design/minimal.md",
+   "path": "tests/fixtures/design/minimal.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/design/missing_constraints.md",
+   "path": "tests/fixtures/design/missing_constraints.md",
    "bare": [
     [
      "error",
@@ -7439,13 +7567,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/design/valid.md",
+   "path": "tests/fixtures/design/valid.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/diff/new.md",
+   "path": "tests/fixtures/diff/new.md",
    "bare": [
     [
      "warning",
@@ -7489,7 +7617,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/diff/old.md",
+   "path": "tests/fixtures/diff/old.md",
    "bare": [
     [
      "warning",
@@ -7533,31 +7661,31 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/doctor/unlinked/adr-001-alpha.md",
+   "path": "tests/fixtures/doctor/unlinked/adr-001-alpha.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/doctor/unlinked/adr-002-beta.md",
+   "path": "tests/fixtures/doctor/unlinked/adr-002-beta.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/export/adr-001-canonical-format.md",
+   "path": "tests/fixtures/export/adr-001-canonical-format.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/export/notes-raw-html.md",
+   "path": "tests/fixtures/export/notes-raw-html.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/export/random-notes.md",
+   "path": "tests/fixtures/export/random-notes.md",
    "bare": [
     [
      "error",
@@ -7656,25 +7784,25 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/export/v0-portal-roadmap.md",
+   "path": "tests/fixtures/export/v0-portal-roadmap.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/graph/adr-new.md",
+   "path": "tests/fixtures/graph/adr-new.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/graph/adr-old.md",
+   "path": "tests/fixtures/graph/adr-old.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/ingest/sample.md",
+   "path": "tests/fixtures/ingest/sample.md",
    "bare": [
     [
      "warning",
@@ -7731,7 +7859,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/inspect/ambiguous.md",
+   "path": "tests/fixtures/inspect/ambiguous.md",
    "bare": [
     [
      "error",
@@ -7812,13 +7940,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/inspect/decision.md",
+   "path": "tests/fixtures/inspect/decision.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/inspect/nested/another_requirement.md",
+   "path": "tests/fixtures/inspect/nested/another_requirement.md",
    "bare": [
     [
      "warning",
@@ -7875,7 +8003,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/inspect/requirement.md",
+   "path": "tests/fixtures/inspect/requirement.md",
    "bare": [
     [
      "warning",
@@ -7926,7 +8054,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/duplicate_ids.md",
+   "path": "tests/fixtures/invalid/duplicate_ids.md",
    "bare": [
     [
      "error",
@@ -8013,7 +8141,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/empty_req_text.md",
+   "path": "tests/fixtures/invalid/empty_req_text.md",
    "bare": [
     [
      "error",
@@ -8076,7 +8204,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/malformed_id.md",
+   "path": "tests/fixtures/invalid/malformed_id.md",
    "bare": [
     [
      "error",
@@ -8139,7 +8267,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/missing_id.md",
+   "path": "tests/fixtures/invalid/missing_id.md",
    "bare": [
     [
      "error",
@@ -8202,7 +8330,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/missing_problem.md",
+   "path": "tests/fixtures/invalid/missing_problem.md",
    "bare": [
     [
      "error",
@@ -8265,7 +8393,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/missing_requirements.md",
+   "path": "tests/fixtures/invalid/missing_requirements.md",
    "bare": [
     [
      "error",
@@ -8328,7 +8456,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/missing_title.md",
+   "path": "tests/fixtures/invalid/missing_title.md",
    "bare": [
     [
      "error",
@@ -8403,7 +8531,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/invalid/multiple_titles.md",
+   "path": "tests/fixtures/invalid/multiple_titles.md",
    "bare": [
     [
      "error",
@@ -8478,13 +8606,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/mcp/corpus/decision.md",
+   "path": "tests/fixtures/mcp/corpus/decision.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/mcp/corpus/requirement.md",
+   "path": "tests/fixtures/mcp/corpus/requirement.md",
    "bare": [
     [
      "error",
@@ -8547,37 +8675,37 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/mcp/corpus/roadmap.md",
+   "path": "tests/fixtures/mcp/corpus/roadmap.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/mcp/duplicate/first.md",
+   "path": "tests/fixtures/mcp/duplicate/first.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/mcp/duplicate/second.md",
+   "path": "tests/fixtures/mcp/duplicate/second.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/migrate/adr-001-legacy.md",
+   "path": "tests/fixtures/migrate/adr-001-legacy.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/migrate/canonical.md",
+   "path": "tests/fixtures/migrate/canonical.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/migrate/notes.md",
+   "path": "tests/fixtures/migrate/notes.md",
    "bare": [
     [
      "error",
@@ -8658,13 +8786,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/no_relationships/decision.md",
+   "path": "tests/fixtures/no_relationships/decision.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/no_relationships/requirement.md",
+   "path": "tests/fixtures/no_relationships/requirement.md",
    "bare": [
     [
      "warning",
@@ -8684,7 +8812,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/note-ingest/obsidian-golden/Architecture Decision.md",
+   "path": "tests/fixtures/note-ingest/obsidian-golden/Architecture Decision.md",
    "bare": [
     [
      "error",
@@ -8819,7 +8947,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/note-ingest/obsidian-golden/Concepts/Session.md",
+   "path": "tests/fixtures/note-ingest/obsidian-golden/Concepts/Session.md",
    "bare": [
     [
      "error",
@@ -8900,7 +9028,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/note-ingest/obsidian-golden/Login Flow.md",
+   "path": "tests/fixtures/note-ingest/obsidian-golden/Login Flow.md",
    "bare": [
     [
      "error",
@@ -8981,7 +9109,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/note-ingest/obsidian-vault/Architecture Decision.md",
+   "path": "tests/fixtures/note-ingest/obsidian-vault/Architecture Decision.md",
    "bare": [
     [
      "error",
@@ -9116,7 +9244,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/note-ingest/obsidian-vault/Concepts/Session.md",
+   "path": "tests/fixtures/note-ingest/obsidian-vault/Concepts/Session.md",
    "bare": [
     [
      "error",
@@ -9197,7 +9325,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/note-ingest/obsidian-vault/Login Flow.md",
+   "path": "tests/fixtures/note-ingest/obsidian-vault/Login Flow.md",
    "bare": [
     [
      "error",
@@ -9278,13 +9406,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/okf_conformance/clean/adr.md",
+   "path": "tests/fixtures/okf_conformance/clean/adr.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/okf_conformance/clean/notes.md",
+   "path": "tests/fixtures/okf_conformance/clean/notes.md",
    "bare": [
     [
      "error",
@@ -9365,13 +9493,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/okf_conformance/reserved_collision/index.md",
+   "path": "tests/fixtures/okf_conformance/reserved_collision/index.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/okf_conformance/reserved_ok/index.md",
+   "path": "tests/fixtures/okf_conformance/reserved_ok/index.md",
    "bare": [
     [
      "error",
@@ -9452,7 +9580,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio/broken.md",
+   "path": "tests/fixtures/portfolio/broken.md",
    "bare": [
     [
      "error",
@@ -9527,7 +9655,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio/feature_a.md",
+   "path": "tests/fixtures/portfolio/feature_a.md",
    "bare": [
     [
      "warning",
@@ -9559,7 +9687,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/portfolio/feature_b.md",
+   "path": "tests/fixtures/portfolio/feature_b.md",
    "bare": [
     [
      "warning",
@@ -9616,7 +9744,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio/sub/feature_c.md",
+   "path": "tests/fixtures/portfolio/sub/feature_c.md",
    "bare": [
     [
      "warning",
@@ -9697,25 +9825,25 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/all_types/adr.md",
+   "path": "tests/fixtures/portfolio_summary/all_types/adr.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/all_types/design.md",
+   "path": "tests/fixtures/portfolio_summary/all_types/design.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/all_types/prompt.md",
+   "path": "tests/fixtures/portfolio_summary/all_types/prompt.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/all_types/req.md",
+   "path": "tests/fixtures/portfolio_summary/all_types/req.md",
    "bare": [
     [
      "error",
@@ -9735,7 +9863,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/all_types/roadmap.md",
+   "path": "tests/fixtures/portfolio_summary/all_types/roadmap.md",
    "bare": [
     [
      "warning",
@@ -9755,7 +9883,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/all_types/unknown.md",
+   "path": "tests/fixtures/portfolio_summary/all_types/unknown.md",
    "bare": [
     [
      "error",
@@ -9836,7 +9964,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/broken_rels/source.md",
+   "path": "tests/fixtures/portfolio_summary/broken_rels/source.md",
    "bare": [
     [
      "warning",
@@ -9893,7 +10021,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/invalid_known/req-no-title.md",
+   "path": "tests/fixtures/portfolio_summary/invalid_known/req-no-title.md",
    "bare": [
     [
      "error",
@@ -9932,7 +10060,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/unknown_only/unknown.md",
+   "path": "tests/fixtures/portfolio_summary/unknown_only/unknown.md",
    "bare": [
     [
      "error",
@@ -10013,13 +10141,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/valid_clean/adr-001.md",
+   "path": "tests/fixtures/portfolio_summary/valid_clean/adr-001.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/portfolio_summary/valid_clean/req-001.md",
+   "path": "tests/fixtures/portfolio_summary/valid_clean/req-001.md",
    "bare": [
     [
      "warning",
@@ -10051,13 +10179,13 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/prompt/minimal.md",
+   "path": "tests/fixtures/prompt/minimal.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/prompt/missing_output.md",
+   "path": "tests/fixtures/prompt/missing_output.md",
    "bare": [
     [
      "error",
@@ -10084,25 +10212,25 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/prompt/valid.md",
+   "path": "tests/fixtures/prompt/valid.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/ambiguous_target/adr-004-alt.md",
+   "path": "tests/fixtures/relationship_validation/ambiguous_target/adr-004-alt.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/ambiguous_target/adr-004.md",
+   "path": "tests/fixtures/relationship_validation/ambiguous_target/adr-004.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/ambiguous_target/req-001.md",
+   "path": "tests/fixtures/relationship_validation/ambiguous_target/req-001.md",
    "bare": [
     [
      "warning",
@@ -10159,7 +10287,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/broken/search.md",
+   "path": "tests/fixtures/relationship_validation/broken/search.md",
    "bare": [
     [
      "warning",
@@ -10216,25 +10344,25 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/duplicate/adr-004-alt.md",
+   "path": "tests/fixtures/relationship_validation/duplicate/adr-004-alt.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/duplicate/adr-004.md",
+   "path": "tests/fixtures/relationship_validation/duplicate/adr-004.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/resolved/adr-004.md",
+   "path": "tests/fixtures/relationship_validation/resolved/adr-004.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/resolved/req-001.md",
+   "path": "tests/fixtures/relationship_validation/resolved/req-001.md",
    "bare": [
     [
      "warning",
@@ -10291,37 +10419,37 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/resolved/roadmap-q3.md",
+   "path": "tests/fixtures/relationship_validation/resolved/roadmap-q3.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationship_validation/self_reference/adr-004.md",
+   "path": "tests/fixtures/relationship_validation/self_reference/adr-004.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationships/decision_with_links.md",
+   "path": "tests/fixtures/relationships/decision_with_links.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationships/design_with_links.md",
+   "path": "tests/fixtures/relationships/design_with_links.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationships/prompt_with_links.md",
+   "path": "tests/fixtures/relationships/prompt_with_links.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/relationships/requirement_with_links.md",
+   "path": "tests/fixtures/relationships/requirement_with_links.md",
    "bare": [
     [
      "warning",
@@ -10378,19 +10506,19 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/relationships/roadmap_with_links.md",
+   "path": "tests/fixtures/relationships/roadmap_with_links.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/resolve/markdown-first.md",
+   "path": "tests/fixtures/resolve/markdown-first.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/resolve/v0-canonical-format.md",
+   "path": "tests/fixtures/resolve/v0-canonical-format.md",
    "bare": [
     [
      "warning",
@@ -10410,7 +10538,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/roadmap/minimal.md",
+   "path": "tests/fixtures/roadmap/minimal.md",
    "bare": [
     [
      "warning",
@@ -10430,7 +10558,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/roadmap/missing_initiatives.md",
+   "path": "tests/fixtures/roadmap/missing_initiatives.md",
    "bare": [
     [
      "error",
@@ -10469,13 +10597,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/roadmap/valid.md",
+   "path": "tests/fixtures/roadmap/valid.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/valid/bullet_requirements.md",
+   "path": "tests/fixtures/valid/bullet_requirements.md",
    "bare": [
     [
      "warning",
@@ -10507,13 +10635,13 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/valid/feature.md",
+   "path": "tests/fixtures/valid/feature.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/valid/minimal.md",
+   "path": "tests/fixtures/valid/minimal.md",
    "bare": [
     [
      "warning",
@@ -10570,7 +10698,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/valid/warnings.md",
+   "path": "tests/fixtures/valid/warnings.md",
    "bare": [
     [
      "warning",
@@ -10687,13 +10815,13 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/base/decisions/adr-001-payment-provider.md",
+   "path": "tests/fixtures/watchkeeper/base/decisions/adr-001-payment-provider.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/base/requirements/checkout.md",
+   "path": "tests/fixtures/watchkeeper/base/requirements/checkout.md",
    "bare": [
     [
      "error",
@@ -10725,7 +10853,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/base/requirements/legacy-upload.md",
+   "path": "tests/fixtures/watchkeeper/base/requirements/legacy-upload.md",
    "bare": [
     [
      "error",
@@ -10745,7 +10873,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/base/requirements/payouts.md",
+   "path": "tests/fixtures/watchkeeper/base/requirements/payouts.md",
    "bare": [
     [
      "error",
@@ -10765,19 +10893,19 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/base/roadmaps/q3-payments.md",
+   "path": "tests/fixtures/watchkeeper/base/roadmaps/q3-payments.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/head/decisions/adr-001-payment-provider.md",
+   "path": "tests/fixtures/watchkeeper/head/decisions/adr-001-payment-provider.md",
    "bare": [],
    "github": [],
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/head/requirements/billing.md",
+   "path": "tests/fixtures/watchkeeper/head/requirements/billing.md",
    "bare": [
     [
      "warning",
@@ -10797,7 +10925,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/head/requirements/checkout.md",
+   "path": "tests/fixtures/watchkeeper/head/requirements/checkout.md",
    "bare": [
     [
      "error",
@@ -10829,7 +10957,7 @@
    "product": []
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/head/requirements/payouts.md",
+   "path": "tests/fixtures/watchkeeper/head/requirements/payouts.md",
    "bare": [
     [
      "error",
@@ -10880,7 +11008,7 @@
    ]
   },
   {
-   "path": "../../tests/fixtures/watchkeeper/head/roadmaps/q3-payments.md",
+   "path": "tests/fixtures/watchkeeper/head/roadmaps/q3-payments.md",
    "bare": [],
    "github": [],
    "product": []
