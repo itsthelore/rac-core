@@ -11,15 +11,26 @@
 
 name: rust-spike
 
+# The cargo vector suites and the parity/conformance gates read the live `rac/`
+# corpus, the `tests/` fixtures, and the `src/` oracle — so a change to any of
+# them can break this workflow's assertions. They are in the trigger paths until
+# the fixture-corpus snapshot (COUNCIL-REVIEW B3) decouples the suites from the
+# live corpus, after which `rust/**` alone suffices again.
 on:
   pull_request:
     paths:
       - "rust/**"
+      - "rac/**"
+      - "tests/**"
+      - "src/**"
       - ".github/workflows/rust-spike.yml"
   push:
-    branches: [claude/rac-mcp-http-spike] # PR branches are covered by pull_request
+    branches: [main] # re-verify main after merge; PR branches ride pull_request
     paths:
       - "rust/**"
+      - "rac/**"
+      - "tests/**"
+      - "src/**"
       - ".github/workflows/rust-spike.yml"
 
 jobs:
@@ -53,9 +64,9 @@ jobs:
         working-directory: rust
         run: cargo build --release --locked
 
-      - name: cargo test (unit + oracle vector suites)
+      - name: cargo test (whole workspace — unit, oracle vector, rac-mcp)
         working-directory: rust
-        run: cargo test -p rac-engine --release
+        run: cargo test --workspace --release
 
       - name: clippy (strict across the workspace)
         working-directory: rust
@@ -87,6 +98,34 @@ jobs:
             --engine-a "$(pwd)/../.venv-oracle/bin/rac mcp" \
             --engine-b "$(pwd)/target/release/rac-mcp" \
             --out mcp-http-out
+
+      - name: CLI byte-parity vs oracle (391 closure-command cases)
+        working-directory: rust
+        run: |
+          target/release/parity-harness \
+            --engine-a ../.venv-oracle/bin/rac --engine-b target/release/rac \
+            --cases parity-cases-closure.json --scoreboard-dir parity-out-closure
+
+      - name: CLI byte-parity vs oracle (45 cache-on index cases)
+        working-directory: rust
+        # The only end-to-end referee of cache-ON behaviour (the ADR-112 user
+        # default); the cases carry their own per-case cache-warming step.
+        run: |
+          target/release/parity-harness \
+            --engine-a ../.venv-oracle/bin/rac --engine-b target/release/rac \
+            --cases parity-cases-index.json --scoreboard-dir parity-out-index
+
+      - name: MCP wire parity vs oracle (cache-on)
+        working-directory: rust
+        run: |
+          python3 tools/mcp_parity.py \
+            --engine-a "$(pwd)/../.venv-oracle/bin/rac mcp" \
+            --engine-b "$(pwd)/target/release/rac-mcp" \
+            --exclude-tags six,list --cache-on --out mcp-parity-cacheon-out
+
+      - name: MCP mutation-sequence parity vs oracle (cache-on)
+        working-directory: rust
+        run: python3 tools/mcp_mutation_referee.py
 
       # ADR-063 Guards, activated (native-engine cutover): the shared spec must
       # match rac-spec, and both engines must reproduce rac-spec's conformance
@@ -134,6 +173,8 @@ jobs:
           path: |
             rust/parity-out*/
             rust/mcp-parity-out/
+            rust/mcp-parity-cacheon-out/
+            rust/mcp-http-out/
 
   retrieve-parity:
     name: retrieve + six-tool parity (retrieval-branch oracle)
@@ -159,9 +200,14 @@ jobs:
       - name: Build the retrieval-branch oracle
         env:
           SETUPTOOLS_SCM_PRETEND_VERSION: 0.1.dev55+gf2091befd
+        # Build the arbiter at the exact commit the retrieve vectors were authored
+        # against (the `g<sha>` in the version seam), not the branch tip — a
+        # force-push to the branch must not silently shift the arbiter under the
+        # pinned cases. TODO: fold these cases into the blocking job and drop the
+        # branch dependency once claude/rac-mcp-retrieval-spec-vmglox merges.
         run: |
           git fetch origin claude/rac-mcp-retrieval-spec-vmglox
-          git worktree add ../oracle-next FETCH_HEAD
+          git worktree add ../oracle-next f2091befd
           python -m venv .venv-oracle-next
           .venv-oracle-next/bin/pip install --quiet -e ../oracle-next "mcp==1.28.1" "pydantic==2.13.4"
           .venv-oracle-next/bin/rac --version
