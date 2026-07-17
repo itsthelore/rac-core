@@ -43,7 +43,13 @@ fn retrieve_payloads_match_oracle_next() {
     let cases = data["cases"].as_array().expect("cases array");
     assert_eq!(cases.len() as i64, data["case_count"].as_i64().unwrap());
     for case in cases {
-        chdir_for(case["corpus_root"].as_bool().unwrap_or(false));
+        // Every case must carry the flag; defaulting a missing flag to `false`
+        // would silently read the LIVE repo root the snapshot exists to replace.
+        chdir_for(
+            case["corpus_root"]
+                .as_bool()
+                .expect("each retrieve case carries a corpus_root flag"),
+        );
         let directory = case["directory"].as_str().unwrap();
         let task = case["task"].as_str().unwrap();
         let scope = case["scope"].as_str();
