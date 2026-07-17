@@ -21,6 +21,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use rayon::prelude::*;
+
 /// The default "stale after" window (`DEFAULT_STALE_AFTER_DAYS`).
 pub const DEFAULT_STALE_AFTER_DAYS: i64 = 180;
 
@@ -56,23 +58,30 @@ pub fn repository_root(directory: &Path) -> Option<PathBuf> {
     }
 }
 
-/// `path` made relative to `repo_root` (via `canonicalize`, like Python's
-/// `Path.resolve()`); if it lies outside the work tree, the absolute path is
-/// passed through unchanged.
-pub fn pathspec(repo_root: &Path, path: &Path) -> String {
+/// `path` made relative to an already-canonicalized `canonical_root`. Split out
+/// of [`pathspec`] so a batch join canonicalizes the (shared) root once instead
+/// of per path — the root's `canonicalize()` is deterministic, so the resulting
+/// spec is identical either way.
+fn pathspec_in(canonical_root: &Path, path: &Path) -> String {
     let abspath = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
-    match abspath.strip_prefix(&root) {
+    match abspath.strip_prefix(canonical_root) {
         Ok(rel) => rel.to_string_lossy().into_owned(),
         Err(_) => abspath.to_string_lossy().into_owned(),
     }
 }
 
-/// The most recent commit time for `path` as the verbatim `%cI` string
-/// (committer offset preserved), or `None` when the file is untracked /
-/// uncommitted / outside a repo. Mirrors `git log -1 --format=%cI -- <path>`.
-pub fn last_committed(repo_root: &Path, path: &Path) -> Option<String> {
-    let spec = pathspec(repo_root, path);
+/// `path` made relative to `repo_root` (via `canonicalize`, like Python's
+/// `Path.resolve()`); if it lies outside the work tree, the absolute path is
+/// passed through unchanged.
+pub fn pathspec(repo_root: &Path, path: &Path) -> String {
+    let root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
+    pathspec_in(&root, path)
+}
+
+/// `git log -1 --format=%cI` for `path` with a pre-canonicalized root — the
+/// per-path spawn the batch joins fan out in parallel.
+fn last_committed_in(repo_root: &Path, canonical_root: &Path, path: &Path) -> Option<String> {
+    let spec = pathspec_in(canonical_root, path);
     let out = run_git(&["log", "-1", "--format=%cI", "--", &spec], repo_root)?;
     let stamp = out.trim();
     if stamp.is_empty() {
@@ -82,32 +91,81 @@ pub fn last_committed(repo_root: &Path, path: &Path) -> Option<String> {
     }
 }
 
-/// The earliest commit time for `path` as the verbatim `%cI` string of the
-/// first non-blank line (committer offset preserved), or `None` when the
-/// file is untracked / uncommitted / outside a repo. Mirrors
-/// `git log --reverse --format=%cI -- <path>` (oldest first, first line is
-/// the creation commit) — used by the OKF export's `created` field.
-pub fn first_committed(repo_root: &Path, path: &Path) -> Option<String> {
-    let spec = pathspec(repo_root, path);
-    let out = run_git(
-        &["log", "--reverse", "--format=%cI", "--", &spec],
-        repo_root,
-    )?;
+/// `git log --reverse --format=%cI` for `path` with a pre-canonicalized root.
+fn first_committed_in(repo_root: &Path, canonical_root: &Path, path: &Path) -> Option<String> {
+    let spec = pathspec_in(canonical_root, path);
+    let out = run_git(&["log", "--reverse", "--format=%cI", "--", &spec], repo_root)?;
     out.lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
         .map(str::to_string)
 }
 
+/// The most recent commit time for `path` as the verbatim `%cI` string
+/// (committer offset preserved), or `None` when the file is untracked /
+/// uncommitted / outside a repo. Mirrors `git log -1 --format=%cI -- <path>`.
+pub fn last_committed(repo_root: &Path, path: &Path) -> Option<String> {
+    let canonical = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
+    last_committed_in(repo_root, &canonical, path)
+}
+
+/// The earliest commit time for `path` as the verbatim `%cI` string of the
+/// first non-blank line (committer offset preserved), or `None` when the
+/// file is untracked / uncommitted / outside a repo. Mirrors
+/// `git log --reverse --format=%cI -- <path>` (oldest first, first line is
+/// the creation commit) — used by the OKF export's `created` field.
+pub fn first_committed(repo_root: &Path, path: &Path) -> Option<String> {
+    let canonical = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
+    first_committed_in(repo_root, &canonical, path)
+}
+
 /// Last-committed time for each of `paths` (the raw recency primitive). Every
 /// path maps to `None` when `directory` is not a repo. Order preserved.
+///
+/// The per-path `git log` spawns run in parallel: ADR-045 recency is *derived*,
+/// each spawn is independent with identical argv and deterministic stdout, and
+/// the results are re-assembled in input order — so the parallel join is
+/// byte-identical to a serial one, at ~worker-count lower wall time on a broad
+/// query inside a git tree (COUNCIL-REVIEW B1).
 pub fn last_committed_for_paths(directory: &Path, paths: &[PathBuf]) -> Vec<(PathBuf, Option<String>)> {
     match repository_root(directory) {
         None => paths.iter().map(|p| (p.clone(), None)).collect(),
-        Some(root) => paths
-            .iter()
-            .map(|p| (p.clone(), last_committed(&root, p)))
-            .collect(),
+        Some(root) => {
+            let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            paths
+                .par_iter()
+                .map(|p| (p.clone(), last_committed_in(&root, &canonical, p)))
+                .collect()
+        }
+    }
+}
+
+/// `(path, last_committed, first_committed)` for each of `paths`, parallelized
+/// like [`last_committed_for_paths`]; `first_committed` is `None` unless
+/// `with_creation`. Order preserved. Serves the OKF export's created/updated
+/// join without a per-artifact serial spawn loop.
+pub fn recency_pairs_for_paths(
+    directory: &Path,
+    paths: &[PathBuf],
+    with_creation: bool,
+) -> Vec<(PathBuf, Option<String>, Option<String>)> {
+    match repository_root(directory) {
+        None => paths.iter().map(|p| (p.clone(), None, None)).collect(),
+        Some(root) => {
+            let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+            paths
+                .par_iter()
+                .map(|p| {
+                    let last = last_committed_in(&root, &canonical, p);
+                    let first = if with_creation {
+                        first_committed_in(&root, &canonical, p)
+                    } else {
+                        None
+                    };
+                    (p.clone(), last, first)
+                })
+                .collect()
+        }
     }
 }
 

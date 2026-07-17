@@ -1,7 +1,7 @@
 //! Command orchestration: walk -> parse -> classify -> validate -> render.
 //! Output is order-deterministic.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::output;
 use crate::parse::{parse_file, parse_text, Artifact, Issue};
@@ -1341,11 +1341,12 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    let repo_root = gitinfo::repository_root(Path::new(directory));
-    for m in matches.iter_mut() {
-        let last = repo_root
-            .as_ref()
-            .and_then(|root| gitinfo::last_committed(root, Path::new(&m.path)));
+    // One parallel `git log` fan-out over the matched paths, re-joined in match
+    // order — byte-identical to the per-match serial loop, but O(matches) spawns
+    // no longer serialize on a broad query (COUNCIL-REVIEW B1).
+    let paths: Vec<PathBuf> = matches.iter().map(|m| PathBuf::from(&m.path)).collect();
+    let stamps = gitinfo::last_committed_for_paths(Path::new(directory), &paths);
+    for (m, (_, last)) in matches.iter_mut().zip(stamps) {
         let st = gitinfo::staleness(last.as_deref(), threshold, reference);
         m.recency = Some(crate::resolve::Recency {
             last_committed: st.last_committed.as_deref().map(gitinfo::isoformat_roundtrip),

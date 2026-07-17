@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::export::{CorpusExport, ExportArtifact};
 use crate::gitinfo;
@@ -65,23 +65,19 @@ fn parsed(stamp: Option<String>) -> Option<String> {
 /// Outside a repository every value is `None` — no error crosses the
 /// boundary (ADR-045).
 pub fn artifact_recency(directory: &str, export: &CorpusExport) -> Vec<ArtifactRecency> {
-    let repo_root = gitinfo::repository_root(Path::new(directory));
+    // One parallel fan-out of the per-artifact created/updated `git log` spawns,
+    // re-joined in artifact order — byte-identical to the serial loop
+    // (COUNCIL-REVIEW B1).
+    let paths: Vec<PathBuf> = export.artifacts.iter().map(|a| PathBuf::from(&a.path)).collect();
+    let stamps = gitinfo::recency_pairs_for_paths(Path::new(directory), &paths, true);
     export
         .artifacts
         .iter()
-        .map(|art| {
-            let (first, last) = match &repo_root {
-                None => (None, None),
-                Some(root) => (
-                    parsed(gitinfo::first_committed(root, Path::new(&art.path))),
-                    parsed(gitinfo::last_committed(root, Path::new(&art.path))),
-                ),
-            };
-            ArtifactRecency {
-                path: art.path.clone(),
-                first_committed: first,
-                last_committed: last,
-            }
+        .zip(stamps)
+        .map(|(art, (_, last, first))| ArtifactRecency {
+            path: art.path.clone(),
+            first_committed: parsed(first),
+            last_committed: parsed(last),
         })
         .collect()
 }
