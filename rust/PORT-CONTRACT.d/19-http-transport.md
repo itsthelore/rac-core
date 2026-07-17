@@ -116,6 +116,21 @@ the header). An unasserted call falls back to the recorder's resolution.
 - **GET SSE stream** — not offered (§2); 405 instead of an idle 200 stream.
 - **Batch requests** (JSON array body) — not handled; single requests only.
 - **Keep-alive** — the server sends `connection: close` per response.
+- **`Transfer-Encoding: chunked` request bodies** — not decoded (the referee
+  and every covered client send `Content-Length`). A chunked POST is rejected
+  with the `400` parse-error frame rather than misread as an empty body; the
+  oracle, fronted by uvicorn, would decode it and answer `200`. Not a parity
+  surface — no covered case uses chunked framing.
+- **Connection hardening is not a parity surface** (§0). The server bounds each
+  connection defensively — socket read/write timeouts, a capped request line +
+  header block, a capped `Content-Length` body allocation (an oversized body is
+  answered `413`), and per-request panic isolation (a panic becomes a `500` for
+  that client, not a whole-server abort). None of these limits is reachable by a
+  covered request, so the §2 status map and body bytes are unchanged; they exist
+  only to keep the ADR-098 shared endpoint robust against a hostile or slow
+  client. The transport remains single-threaded (one request served to
+  completion before the next); moving connection handling onto a worker pool is a
+  separate, still-open follow-up.
 
 ## 6 — Referee
 

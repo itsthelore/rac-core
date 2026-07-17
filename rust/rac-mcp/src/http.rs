@@ -20,10 +20,27 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::time::Duration;
 
 use serde_json::Value;
 
 use crate::{audit, process_request};
+
+/// Connection-hardening bounds for the ADR-098 shared endpoint. None is a parity
+/// surface: no covered request approaches them, and connection handling is a
+/// declared non-parity concern (PORT-CONTRACT.d/19 §0). They exist so a slow,
+/// idle, or oversized client cannot wedge or exhaust the single-threaded server.
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
+const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_HEADER_BYTES: u64 = 64 * 1024;
+const MAX_HEADERS: usize = 200;
+const MAX_BODY: usize = 8 * 1024 * 1024;
+
+/// The `rac-mcp` parse-error frame for an unreadable body. Only the 400 status
+/// is the parity surface (PORT-CONTRACT.d/19 §2); the body prose is the Rust
+/// server's own (the SDK's Python `JSONDecodeError` text is not reproduced).
+const PARSE_ERROR_FRAME: &str = "{\"jsonrpc\":\"2.0\",\"id\":\"server-error\",\"error\":{\"code\":-32700,\"message\":\"Parse error\"}}";
 
 /// Prove a working audit sink for HTTP serving (ADR-084 fail-loud). Audit must
 /// be enabled in `.rac/config.yaml` and its resolved path writable, or the
@@ -63,6 +80,9 @@ HTTP (ADR-084).",
 /// Single-threaded: one request served to completion before the next, so the
 /// per-server freshness tracker's mutable read-model is accessed serially
 /// without locking (stateless reads are cheap — 28 ms cold on the live corpus).
+/// Each connection's socket I/O is time-bounded and its request size is capped
+/// ([`handle_connection`]), and request handling is panic-isolated, so no single
+/// slow, oversized, or panicking client can wedge or abort the shared loop.
 pub fn serve_http(
     root: &str,
     tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
@@ -111,6 +131,17 @@ impl Request {
     }
 }
 
+/// Outcome of parsing one request off the wire.
+enum ReadOutcome {
+    /// A well-formed request to route.
+    Ok(Request),
+    /// A hardening rejection to answer, then close (e.g. a 413 for an oversized
+    /// body). Distinct from `Abort` so the client gets a status, not a hang.
+    Reject(Response),
+    /// Malformed, truncated, or oversized past recovery: drop the connection.
+    Abort,
+}
+
 fn handle_connection(
     root: &str,
     tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
@@ -118,52 +149,104 @@ fn handle_connection(
     path: &str,
     stream: TcpStream,
 ) {
+    // Bound every socket operation: a client that connects and sends nothing, or
+    // reads its response slowly, must not stall the serial accept loop for every
+    // other client (slowloris). The timeouts are set on the socket before it is
+    // cloned, so both the read half and the write half inherit them.
+    if stream.set_read_timeout(Some(READ_TIMEOUT)).is_err()
+        || stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err()
+    {
+        return;
+    }
     let mut reader = BufReader::new(match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return,
     });
     let mut writer = stream;
-    let Some(req) = read_request(&mut reader) else {
-        return;
+    let resp = match read_request(&mut reader) {
+        ReadOutcome::Ok(req) => {
+            // Isolate any panic reachable from a request (an engine `expect` on a
+            // hostile corpus edge, or a future bug) so it becomes a 500 for this
+            // one client instead of aborting the shared server for all of them —
+            // the isolation uvicorn gives the Python side. Single-threaded, so the
+            // next request re-derives the read-model from the manifest and any
+            // partially-applied tracker mutation is recovered.
+            catch_unwind(AssertUnwindSafe(|| route(root, tracker, recorder, path, &req)))
+                .unwrap_or(Response { status: "500 Internal Server Error", body: None })
+        }
+        ReadOutcome::Reject(resp) => resp,
+        ReadOutcome::Abort => return,
     };
-    respond(&mut writer, &route(root, tracker, recorder, path, &req));
+    respond(&mut writer, &resp);
 }
 
 /// Parse one HTTP/1.1 request: request line, headers, and a Content-Length body.
-fn read_request(reader: &mut BufReader<TcpStream>) -> Option<Request> {
+/// The request line + header block is bounded to `MAX_HEADER_BYTES`/`MAX_HEADERS`
+/// and the body allocation is capped at `MAX_BODY`, so no single client can grow
+/// the server's memory without limit.
+fn read_request(reader: &mut BufReader<TcpStream>) -> ReadOutcome {
+    // Read the request line and headers through a byte-capped view so an
+    // unterminated line or a header flood cannot grow memory without bound.
+    let mut head = reader.by_ref().take(MAX_HEADER_BYTES);
+
     let mut line = String::new();
-    if reader.read_line(&mut line).ok()? == 0 {
-        return None;
+    match head.read_line(&mut line) {
+        Ok(0) => return ReadOutcome::Abort, // EOF before any request
+        Ok(_) => {}
+        Err(_) => return ReadOutcome::Abort,
     }
     let mut parts = line.split_whitespace();
-    let method = parts.next()?.to_string();
-    let target = parts.next()?.to_string();
+    let (Some(method), Some(target)) = (parts.next(), parts.next()) else {
+        return ReadOutcome::Abort;
+    };
+    let method = method.to_string();
+    let target = target.to_string();
 
     let mut headers = Vec::new();
+    let mut terminated = false;
     loop {
         let mut h = String::new();
-        if reader.read_line(&mut h).ok()? == 0 {
-            break;
+        match head.read_line(&mut h) {
+            Ok(0) => break, // EOF or header budget exhausted
+            Ok(_) => {}
+            Err(_) => return ReadOutcome::Abort,
         }
         let trimmed = h.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
+            terminated = true;
             break;
+        }
+        if headers.len() >= MAX_HEADERS {
+            return ReadOutcome::Abort; // header flood
         }
         if let Some((k, v)) = trimmed.split_once(':') {
             headers.push((k.trim().to_string(), v.trim().to_string()));
         }
     }
+    // The header block must close with a blank line; if the budget or the
+    // connection ended first, do not trust a partial parse.
+    if !terminated {
+        return ReadOutcome::Abort;
+    }
+    // The `head` byte-cap borrow ends here (its last use was the header loop),
+    // so the body reads from the now-unbounded `reader` below.
 
     let len: usize = headers
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
         .and_then(|(_, v)| v.trim().parse().ok())
         .unwrap_or(0);
+    // Never size a body buffer from an unbounded client-declared length: reject
+    // oversized bodies before allocating a single byte. Covered MCP frames are
+    // tiny, so no covered request is ever rejected here.
+    if len > MAX_BODY {
+        return ReadOutcome::Reject(Response { status: "413 Payload Too Large", body: None });
+    }
     let mut body = vec![0u8; len];
     if len > 0 && reader.read_exact(&mut body).is_err() {
-        return None;
+        return ReadOutcome::Abort;
     }
-    Some(Request { method, target, headers, body })
+    ReadOutcome::Ok(Request { method, target, headers, body })
 }
 
 struct Response {
@@ -219,16 +302,21 @@ fn route_post(
     if !json_ct {
         return Response { status: "400 Bad Request", body: None };
     }
+    // Chunked bodies are not decoded — every covered client sends Content-Length
+    // (the referee always does), so a chunk-framed body is never read and would
+    // be misread as empty. Reject it explicitly as a parse error, after the
+    // Accept/Content-Type gates so their precedence is unchanged; this yields the
+    // same 400 the empty-body path already produced (unsupported; declared in
+    // PORT-CONTRACT.d/19 §5).
+    if req
+        .header("transfer-encoding")
+        .is_some_and(|te| te.to_ascii_lowercase().contains("chunked"))
+    {
+        return json_response("400 Bad Request", PARSE_ERROR_FRAME.to_string());
+    }
     let message: Value = match serde_json::from_slice(&req.body) {
         Ok(v) => v,
-        Err(_) => {
-            return json_response(
-                "400 Bad Request",
-                "{\"jsonrpc\":\"2.0\",\"id\":\"server-error\",\"error\":{\"code\":-32700,\
-\"message\":\"Parse error\"}}"
-                    .to_string(),
-            );
-        }
+        Err(_) => return json_response("400 Bad Request", PARSE_ERROR_FRAME.to_string()),
     };
     let Some(method) = message.get("method").and_then(Value::as_str) else {
         return json_response(
