@@ -196,14 +196,18 @@ fn linear_repo(tag: &str, n: usize) -> (PathBuf, Vec<PathBuf>) {
             dir.join(name)
         })
         .collect();
+    // Non-UTC offsets on purpose: %cI passes the committer offset through
+    // verbatim, but git >= 2.45 renders a *zero* offset as "Z" while older git
+    // prints "+00:00" — a literal-string assertion on a UTC date is a
+    // green-here/red-on-newer-git flake (VERIFIED LANDMINE, PORT-CONTRACT.d/08).
     git(&dir, &["add", "-A"], None);
-    git(&dir, &["commit", "-q", "-m", "create"], Some("2026-01-01T00:00:00+00:00"));
+    git(&dir, &["commit", "-q", "-m", "create"], Some("2026-01-01T00:00:00+01:00"));
     for i in 0..(n / 2) {
         fs::write(dir.join(format!("a{i:02}.md")), format!("# {i} v2\n")).unwrap();
     }
-    git(&dir, &["commit", "-q", "-am", "edit"], Some("2026-06-15T12:00:00+00:00"));
+    git(&dir, &["commit", "-q", "-am", "edit"], Some("2026-06-15T12:00:00+01:00"));
     fs::write(dir.join("a00.md"), "# 0 v3\n").unwrap();
-    git(&dir, &["commit", "-q", "-am", "edit2"], Some("2026-09-09T09:00:00+00:00"));
+    git(&dir, &["commit", "-q", "-am", "edit2"], Some("2026-09-09T09:00:00+01:00"));
     (dir, paths)
 }
 
@@ -225,34 +229,45 @@ fn batched_join_matches_per_path_on_linear_history() {
     // a00 was created (Jan), then edited twice (Jun, Sep): last != first proves
     // the batched newest-first/oldest bookkeeping is real, not a coincidence.
     let a00 = pairs.iter().find(|(p, _, _)| p.ends_with("a00.md")).unwrap();
-    assert_eq!(a00.1.as_deref(), Some("2026-09-09T09:00:00+00:00"));
-    assert_eq!(a00.2.as_deref(), Some("2026-01-01T00:00:00+00:00"));
+    assert_eq!(a00.1.as_deref(), Some("2026-09-09T09:00:00+01:00"));
+    assert_eq!(a00.2.as_deref(), Some("2026-01-01T00:00:00+01:00"));
 
     fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
-fn merge_history_falls_back_to_per_path() {
-    // A merge commit makes the batched walk unsafe; the join must detect it and
-    // fall back to the per-path oracle, still byte-correct for every path.
+fn merge_history_uses_per_path_and_stays_correct() {
+    // Build an EVIL merge: the merge commit rewrites a05.md to a value differing
+    // from BOTH parents, so `git log -1 -- a05.md` attributes the merge commit.
+    // The batched `--name-only` walk suppresses merge file lists, so if the merge
+    // guard were removed the batched join would return an earlier (side-branch)
+    // date. The guard forces per-path, which is correct — and this test asserts
+    // the merge date, so deleting `if history_has_merge(..) { return None }`
+    // makes it fail (unlike a clean merge, where batched == per-path anyway).
     let (dir, paths) = linear_repo("merge", 20);
-    // Diverge two disjoint files on two branches, then a clean no-ff merge.
     git(&dir, &["checkout", "-q", "-b", "side"], None);
     fs::write(dir.join("a05.md"), "# 5 side\n").unwrap();
-    git(&dir, &["commit", "-q", "-am", "side"], Some("2026-10-01T00:00:00+00:00"));
+    git(&dir, &["commit", "-q", "-am", "side"], Some("2026-10-01T00:00:00+01:00"));
     git(&dir, &["checkout", "-q", "main"], None);
-    fs::write(dir.join("a06.md"), "# 6 main\n").unwrap();
-    git(&dir, &["commit", "-q", "-am", "main-edit"], Some("2026-10-02T00:00:00+00:00"));
-    git(&dir, &["merge", "--no-ff", "-m", "merge", "side"], Some("2026-10-03T00:00:00+00:00"));
+    // main leaves a05.md untouched, so the merge auto-resolves cleanly to side's
+    // version (exit 0); the merge commit then rewrites it to a third value.
+    git(&dir, &["merge", "--no-commit", "--no-ff", "side"], None);
+    fs::write(dir.join("a05.md"), "# 5 evil\n").unwrap();
+    git(&dir, &["add", "a05.md"], None);
+    git(&dir, &["commit", "-q", "-m", "evil-merge"], Some("2026-10-03T00:00:00+01:00"));
 
     let root = repository_root(&dir).unwrap();
-    assert!(
-        !last_committed_for_paths(&dir, &paths).is_empty(),
-        "join returns a row per path"
-    );
+    // Every path is byte-correct vs the per-path oracle (the fallback path).
     for (p, got) in last_committed_for_paths(&dir, &paths) {
         assert_eq!(got, last_committed(&root, &p), "fallback last mismatch for {p:?}");
     }
+    // a05.md's last-committed is the MERGE commit date — the value only per-path
+    // gets right; a guard-less batched walk would return the 2026-10-01 side date.
+    let a05 = last_committed_for_paths(&dir, &paths)
+        .into_iter()
+        .find(|(p, _)| p.ends_with("a05.md"))
+        .and_then(|(_, d)| d);
+    assert_eq!(a05.as_deref(), Some("2026-10-03T00:00:00+01:00"), "evil-merge date via per-path");
 
     fs::remove_dir_all(&dir).ok();
 }

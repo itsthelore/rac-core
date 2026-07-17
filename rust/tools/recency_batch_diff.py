@@ -76,7 +76,11 @@ def main():
               "uses per-path here, batched comparison skipped.")
         return
 
-    paths = git(["ls-files"]).stdout.splitlines()
+    # -z + core.quotePath=false yields RAW, unquoted names — the same key space
+    # batched() uses. With default quoting a non-ASCII name would be octal-quoted
+    # here but raw in the batched map, so both lookups miss and the file is
+    # compared None==None (a vacuous pass that masks a real divergence).
+    paths = [p for p in git(["-c", "core.quotePath=false", "ls-files", "-z"]).stdout.split("\x00") if p]
     print(f"linear history; tracked files: {len(paths)}")
 
     t0 = time.time(); base_last = per_path_last(paths); t_pp = time.time() - t0
