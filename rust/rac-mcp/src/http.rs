@@ -21,7 +21,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -33,6 +33,14 @@ use crate::{audit, process_request};
 /// idle, or oversized client cannot wedge or exhaust the single-threaded server.
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Total wall-clock budget for reading one request. The per-recv timeouts above
+/// bound an *idle* peer, but a slow-trickle client that sends one byte just
+/// inside each window would otherwise hold the single-threaded loop for as long
+/// as it keeps dribbling; this caps the whole read phase so the classic
+/// many-slow-headers slowloris is bounded regardless. (A single never-terminated
+/// header line is still bounded by MAX_HEADER_BYTES; the full fix is the
+/// worker-pool follow-up.)
+const MAX_REQUEST_READ: Duration = Duration::from_secs(60);
 const MAX_HEADER_BYTES: u64 = 64 * 1024;
 const MAX_HEADERS: usize = 200;
 const MAX_BODY: usize = 8 * 1024 * 1024;
@@ -175,16 +183,29 @@ fn handle_connection(
         Err(_) => return,
     });
     let mut writer = stream;
-    let resp = match read_request(&mut reader) {
+    let deadline = Instant::now() + MAX_REQUEST_READ;
+    let resp = match read_request(&mut reader, deadline) {
         ReadOutcome::Ok(req) => {
             // Isolate any panic reachable from a request (an engine `expect` on a
             // hostile corpus edge, or a future bug) so it becomes a 500 for this
             // one client instead of aborting the shared server for all of them —
-            // the isolation uvicorn gives the Python side. Single-threaded, so the
-            // next request re-derives the read-model from the manifest and any
-            // partially-applied tracker mutation is recovered.
-            catch_unwind(AssertUnwindSafe(|| route(root, tracker, recorder, path, &req)))
-                .unwrap_or(Response { status: "500 Internal Server Error", body: None })
+            // the isolation uvicorn gives the Python side.
+            match catch_unwind(AssertUnwindSafe(|| route(root, tracker, recorder, path, &req))) {
+                Ok(r) => r,
+                Err(_) => {
+                    // A panic can leave the server-lifetime FreshnessTracker
+                    // desynced: read_model()'s detect() commits the advanced
+                    // manifest BEFORE apply() parses (freshness.rs), so a parse
+                    // panic advances the manifest without updating the model.
+                    // Diffing against that advanced manifest on the next request
+                    // would find nothing changed and serve the STALE model
+                    // indefinitely. Drop the tracker instead, so the next request
+                    // rebuilds from scratch (or serves a fresh walk) — a loud
+                    // rebuild/500 beats silently serving stale results.
+                    *tracker = None;
+                    Response { status: "500 Internal Server Error", body: None }
+                }
+            }
         }
         ReadOutcome::Reject(resp) => resp,
         ReadOutcome::Abort => return,
@@ -196,7 +217,7 @@ fn handle_connection(
 /// The request line + header block is bounded to `MAX_HEADER_BYTES`/`MAX_HEADERS`
 /// and the body allocation is capped at `MAX_BODY`, so no single client can grow
 /// the server's memory without limit.
-fn read_request(reader: &mut BufReader<TcpStream>) -> ReadOutcome {
+fn read_request(reader: &mut BufReader<TcpStream>, deadline: Instant) -> ReadOutcome {
     // Read the request line and headers through a byte-capped view so an
     // unterminated line or a header flood cannot grow memory without bound.
     let mut head = reader.by_ref().take(MAX_HEADER_BYTES);
@@ -217,6 +238,11 @@ fn read_request(reader: &mut BufReader<TcpStream>) -> ReadOutcome {
     let mut headers = Vec::new();
     let mut terminated = false;
     loop {
+        // Total-read deadline: caps a slow-trickle client that dribbles one
+        // header line per idle-window without ever tripping the per-recv timeout.
+        if Instant::now() >= deadline {
+            return ReadOutcome::Abort;
+        }
         let mut h = String::new();
         match head.read_line(&mut h) {
             Ok(0) => break, // EOF or header budget exhausted
