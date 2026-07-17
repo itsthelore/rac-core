@@ -24,7 +24,15 @@ fn git(dir: &Path, args: &[&str], date: Option<&str>) {
     cmd.env("GIT_AUTHOR_NAME", "Vector Pin")
         .env("GIT_AUTHOR_EMAIL", "vector@example.invalid")
         .env("GIT_COMMITTER_NAME", "Vector Pin")
-        .env("GIT_COMMITTER_EMAIL", "vector@example.invalid");
+        .env("GIT_COMMITTER_EMAIL", "vector@example.invalid")
+        // Isolate from the developer's global/system git config so this scratch
+        // repo stays a pure function of the file — no gpg signing
+        // (commit.gpgsign), no user hooks (core.hooksPath), no init templates —
+        // mirroring parity-harness's run_git. Otherwise a common maintainer
+        // setup makes the suite green on CI but red on their machine.
+        .env("HOME", dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("TZ", "UTC");
     if let Some(d) = date {
         cmd.env("GIT_AUTHOR_DATE", d).env("GIT_COMMITTER_DATE", d);
     }
