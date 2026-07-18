@@ -51,11 +51,16 @@ def _no_duplicates(loader: _StrictLoader, node: yaml.MappingNode) -> dict:
         key = loader.construct_object(key_node, deep=True)
         try:
             duplicate = key in seen
+            if not duplicate:
+                # `in` alone is not the full hashability probe: set.__contains__
+                # coerces a set argument to frozenset, so a `!!set` key passes
+                # the membership test and only add() raises.
+                seen.add(key)
         except TypeError:
-            # An unhashable key (`? []`, `[a]: v`) is malformed input, never a
-            # crash: surface it as YAML-level failure like every other envelope
-            # defect (the fuzz campaign's oracle-crash class, repro pinned at
-            # rust/fuzz/pinned/oracle-crashes/unhashable-key/).
+            # An unhashable key (`? []`, `[a]: v`, `? !!set {a}`) is malformed
+            # input, never a crash: surface it as YAML-level failure like every
+            # other envelope defect (the fuzz campaign's oracle-crash class,
+            # repro pinned at rust/fuzz/pinned/oracle-crashes/unhashable-key/).
             raise yaml.MarkedYAMLError(
                 problem=f"unhashable frontmatter key: {key!r}",
                 problem_mark=key_node.start_mark,
@@ -65,7 +70,6 @@ def _no_duplicates(loader: _StrictLoader, node: yaml.MappingNode) -> dict:
                 problem=f"duplicate frontmatter key: {key!r}",
                 problem_mark=key_node.start_mark,
             )
-        seen.add(key)
     return loader.construct_mapping(node, deep=True)
 
 
