@@ -61,7 +61,7 @@ jobs:
         working-directory: rust
         run: cargo clippy --release --no-deps -- -D warnings
 
-      - name: CLI byte-parity vs oracle (130 mainline cases, twice)
+      - name: CLI byte-parity vs oracle (mainline cases, twice)
         working-directory: rust
         run: |
           target/release/parity-harness \
@@ -71,6 +71,13 @@ jobs:
             --engine-a ../.venv-oracle/bin/rac --engine-b target/release/rac \
             --cases parity-cases.json --scoreboard-dir parity-out-2
           diff -r parity-out parity-out-2
+
+      - name: CLI byte-parity vs oracle (closure battery)
+        working-directory: rust
+        run: |
+          target/release/parity-harness \
+            --engine-a ../.venv-oracle/bin/rac --engine-b target/release/rac \
+            --cases parity-cases-closure.json --scoreboard-dir parity-out-closure
 
       - name: MCP wire parity vs oracle (five-tool cases)
         working-directory: rust
