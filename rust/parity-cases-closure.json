@@ -1305,6 +1305,72 @@
    "expect_exit": 0,
    "capture": ["repo/**", "xdg-config/**"]},
 
+  {"id": "init-org-endpoint-fresh-json",
+   "sandbox": {"setup": [{"step": "mkdir", "path": "repo"}]},
+   "cwd": "{SANDBOX}",
+   "argv": ["init", "repo", "--org-endpoint", "https://lore.example.com/mcp", "--json"],
+   "expect_exit": 0,
+   "capture": ["repo/**"]},
+
+  {"id": "init-org-endpoint-with-profile-human",
+   "sandbox": {"setup": [{"step": "mkdir", "path": "repo"}]},
+   "cwd": "{SANDBOX}",
+   "argv": ["init", "repo", "--profile", "enterprise", "--org-endpoint", "https://lore.example.com/mcp"],
+   "expect_exit": 0,
+   "capture": ["repo/**"]},
+
+  {"id": "init-org-endpoint-already-init-human",
+   "sandbox": {"fixture": "rust/fixtures/closure/mini-repo"},
+   "cwd": "{SANDBOX}",
+   "argv": ["init", "--org-endpoint", "https://lore.example.com/mcp"],
+   "expect_exit": 0,
+   "capture": [".mcp.json", ".cursor/**", ".rac/**"]},
+
+  {"id": "init-org-endpoint-merges-user-config-json",
+   "sandbox": {"setup": [
+     {"step": "mkdir", "path": "repo"},
+     {"step": "write", "path": "repo/.mcp.json",
+      "content": "{\n  \"mcpServers\": {\n    \"mine\": {\n      \"command\": \"other\"\n    }\n  },\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["init", "repo", "--org-endpoint", "https://lore.example.com/mcp", "--json"],
+   "expect_exit": 0,
+   "capture": ["repo/**"]},
+
+  {"id": "init-org-endpoint-idempotent-human",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "repo/.rac/config.yaml", "content": "repository_key: RAC\n"},
+     {"step": "write", "path": "repo/.mcp.json",
+      "content": "{\n  \"mcpServers\": {\n    \"lore-org\": {\n      \"type\": \"http\",\n      \"url\": \"https://lore.example.com/mcp\"\n    }\n  }\n}\n"},
+     {"step": "write", "path": "repo/.cursor/mcp.json",
+      "content": "{\n  \"mcpServers\": {\n    \"lore-org\": {\n      \"type\": \"http\",\n      \"url\": \"https://lore.example.com/mcp\"\n    }\n  }\n}\n"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["init", "repo", "--org-endpoint", "https://lore.example.com/mcp"],
+   "expect_exit": 0,
+   "capture": ["repo/**"]},
+
+  {"id": "init-org-endpoint-err-bad-scheme",
+   "sandbox": {"setup": [{"step": "mkdir", "path": "repo"}]},
+   "cwd": "{SANDBOX}",
+   "argv": ["init", "repo", "--org-endpoint", "lore.example.com/mcp"],
+   "expect_exit": 2,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true,
+   "capture": ["repo/**"]},
+
+  {"id": "init-org-endpoint-err-malformed-mcp-json",
+   "sandbox": {"setup": [
+     {"step": "write", "path": "repo/.rac/config.yaml", "content": "repository_key: RAC\n"},
+     {"step": "write", "path": "repo/.mcp.json", "content": "{not json"}
+   ]},
+   "cwd": "{SANDBOX}",
+   "argv": ["init", "repo", "--org-endpoint", "https://lore.example.com/mcp"],
+   "expect_exit": 1,
+   "expect_nonzero_ok": true,
+   "compare_stderr": true,
+   "capture": ["repo/**"]},
+
   {"id": "quickstart-happy-human",
    "sandbox": {"setup": [{"step": "mkdir", "path": "proj"}]},
    "cwd": "{SANDBOX}",

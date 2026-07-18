@@ -145,8 +145,11 @@ def write_org_endpoint(directory: str, url: str) -> list[str]:
         if path.is_file():
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                raise MalformedClientConfig(str(path), str(exc)) from None
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                # A stable reason, not the parser's prose: the message is part
+                # of the cross-engine output contract (ADR-116), and the two
+                # engines' JSON parsers word their errors differently.
+                raise MalformedClientConfig(str(path), "not valid JSON") from None
             if not isinstance(data, dict):
                 raise MalformedClientConfig(str(path), "top level must be a JSON object")
             servers = data.setdefault("mcpServers", {})

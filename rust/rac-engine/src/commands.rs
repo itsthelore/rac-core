@@ -1811,6 +1811,8 @@ pub struct InitArgs {
     pub ticketing: Option<String>,
     /// argparse-choice-validated profile name.
     pub profile: Option<String>,
+    /// Org endpoint URL (ADR-117); http(s)-validated in the service layer.
+    pub org_endpoint: Option<String>,
     pub json: bool,
 }
 
@@ -1828,9 +1830,12 @@ pub fn cmd_init(args: &InitArgs) -> i32 {
         &args.key,
         args.ticketing.as_deref(),
         args.profile.as_deref(),
+        args.org_endpoint.as_deref(),
     ) {
         Ok(result) => result,
-        Err(e @ ScaffoldError::InvalidRepositoryKey(_)) => return usage_error(e.message()),
+        Err(
+            e @ (ScaffoldError::InvalidRepositoryKey(_) | ScaffoldError::InvalidOrgEndpoint(_)),
+        ) => return usage_error(e.message()),
         Err(e) => {
             eprintln!("rac: {}", e.message());
             return EXIT_VALIDATION_FAILED;
