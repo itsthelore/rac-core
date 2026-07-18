@@ -7,7 +7,7 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
 Maintainer-directed follow-up to the native-engine spike: close the CLI
 gap so command parity is a closed hole, not a covered subset. Measured

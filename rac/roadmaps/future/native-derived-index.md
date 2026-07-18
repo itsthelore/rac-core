@@ -7,7 +7,7 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
 Maintainer-sponsored follow-up to the native-engine spike, unscheduled.
 The spike shipped its v0 posture deliberately cache-free — a fresh
