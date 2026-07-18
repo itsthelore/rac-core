@@ -147,7 +147,15 @@ def test_unhashable_key_is_reported_not_raised():
     # The fuzz campaign's oracle-crash class (rust/fuzz/pinned/oracle-crashes/
     # unhashable-key/): a YAML sequence used as a mapping key must surface as
     # malformed frontmatter, never as an uncaught TypeError.
-    for raw in ("? []\n: v\nid: RAC-KTQ63DPSMF19\n", "[a, b]: v\n", "? {k: v}\n: w\n"):
+    raws = (
+        "? []\n: v\nid: RAC-KTQ63DPSMF19\n",
+        "[a, b]: v\n",
+        "? {k: v}\n: w\n",
+        # A set key passes `in` (set.__contains__ coerces to frozenset) and
+        # only raises at add() — the guard must cover both operations.
+        "? !!set {a}\n: v\n",
+    )
+    for raw in raws:
         metadata, issues = parse_frontmatter(raw)
         assert metadata is None
         assert [i.code for i in issues] == ["malformed-frontmatter"]
