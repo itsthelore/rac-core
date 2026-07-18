@@ -133,6 +133,7 @@ from rac.services.create import (
 )
 from rac.services.init import (
     DEFAULT_KEY,
+    InvalidOrgEndpoint,
     InvalidProfile,
     InvalidRepositoryKey,
     InvalidTicketingProvider,
@@ -140,7 +141,7 @@ from rac.services.init import (
     RepositoryKeyConflict,
     init_repository,
 )
-from rac.services.profiles import PROFILE_NAMES
+from rac.services.profiles import PROFILE_NAMES, MalformedClientConfig
 from rac.services.quickstart import DEFAULT_TYPE, CorpusNotEmpty, quickstart
 from rac.services.review import DEFAULT_STALE_AFTER_DAYS, build_review
 from rac.services.skill import SkillFileExists, install_skills
@@ -1219,11 +1220,20 @@ def cmd_init(args: argparse.Namespace) -> int:
         _usage_error(f"not a directory: {args.directory}")
     try:
         result = init_repository(
-            args.directory, key=args.key, ticketing=args.ticketing, profile=args.profile
+            args.directory,
+            key=args.key,
+            ticketing=args.ticketing,
+            profile=args.profile,
+            org_endpoint=args.org_endpoint,
         )
-    except (InvalidRepositoryKey, InvalidTicketingProvider, InvalidProfile) as exc:
+    except (
+        InvalidRepositoryKey,
+        InvalidTicketingProvider,
+        InvalidProfile,
+        InvalidOrgEndpoint,
+    ) as exc:
         _usage_error(str(exc))
-    except (RepositoryKeyConflict, MalformedRepositoryConfig) as exc:
+    except (RepositoryKeyConflict, MalformedRepositoryConfig, MalformedClientConfig) as exc:
         print(f"rac: {exc}", file=sys.stderr)
         return EXIT_VALIDATION_FAILED
     _emit(
@@ -2188,6 +2198,15 @@ def build_parser() -> argparse.ArgumentParser:
         f"(one of: {', '.join(PROFILE_NAMES)}). Writes .mcp.json client wiring and "
         "(enterprise) an enforcement-policy stanza — configuration only, never "
         "prose; never overwrites an existing file (ADR-088).",
+    )
+    p_init.add_argument(
+        "--org-endpoint",
+        default=None,
+        metavar="URL",
+        help="Wire the shared org Lore endpoint (an http:// or https:// URL, "
+        "ADR-114): ensure a 'lore-org' entry in .mcp.json and .cursor/mcp.json. "
+        "Applies to fresh and already-initialized repositories; merges into an "
+        "existing file, touching only the 'lore-org' key.",
     )
     p_init.set_defaults(func=cmd_init)
 
