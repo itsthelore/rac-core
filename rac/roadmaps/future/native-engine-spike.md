@@ -7,7 +7,7 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
 Maintainer-sponsored experimental spike, unscheduled. This is the
 evidence-gathering path ADR-063's exception clause sanctions: a native
