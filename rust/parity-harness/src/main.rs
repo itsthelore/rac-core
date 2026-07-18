@@ -1357,8 +1357,26 @@ fn run() -> Result<i32, String> {
     for leaf in ["config", "state", "cache"] {
         fs::create_dir_all(xdg_root.join(leaf)).map_err(|e| e.to_string())?;
     }
-    // Per-case, per-engine sandboxes live next to the scoreboard.
-    let sandbox_area = scoreboard_root.join("sandboxes");
+    // Per-case, per-engine sandboxes must live OUTSIDE any repository tree:
+    // engine config discovery and git discovery walk upward from the sandbox
+    // to the filesystem root, so a sandbox under an in-tree scoreboard dir
+    // (e.g. `--scoreboard-dir parity-out` from rust/) inherits the repo's own
+    // `.rac/config.yaml` and `.git`, silently flipping every case that
+    // asserts their absence (new-err-no-repo-config, migrate-err-no-config,
+    // watchkeeper-err-not-a-git-repo). Root them in the system temp dir,
+    // keyed by the scoreboard path so concurrent invocations stay disjoint.
+    let sandbox_area = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        scoreboard_root.hash(&mut h);
+        let leaf = scoreboard_root
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("run");
+        std::env::temp_dir()
+            .join("rac-parity-sandboxes")
+            .join(format!("{leaf}-{:016x}", h.finish()))
+    };
     let base = base_env(&xdg_root);
 
     let mut results = Vec::with_capacity(selected.len());
