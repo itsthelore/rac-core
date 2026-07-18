@@ -9,12 +9,26 @@ type: roadmap
 
 Planned
 
-Unscheduled — captured as future intent, not yet on a release. The graduation of
-the top-ranked net-new adoption lever from `adoption-opportunity-survey`
-(Opportunity 1); the implementation contract — the *how* — lives in the
-`pr-decision-surfacing` design. This records the *what and why* so the work has
-a tracked home; it states positioning already recorded in ADR-036 and ADR-081
-and honours ADR-034/ADR-067, and does not alter them.
+Graduated out of `future/` for execution (epic itsthelore/rac-core#351),
+under the `pr-decision-surfacing` design's contract. The design's three Open
+Questions are settled and recorded ahead of the build landing: **the action
+ships in `rac-ci`** — the CI wrappers' extracted home, not this repository —
+as a "Lore decisions on PR" surface beside the other capabilities, while the
+corpus record and the docs pointer stay here; **changed paths are computed
+action-side** — no engine change and no dual-engine port, since
+`decisions-for` is already a covered command under the ADR-116 dispatcher;
+**noise is tuned** by the engine's live-only scoping plus dedupe-by-id,
+sorted output, an inline cap with a details expander, no comment when
+nothing governs, and update-in-place always (including to the empty state,
+so a stale comment can never outlive its diff). The renderer and its
+determinism battery are built and verified against this corpus; the claim
+check the survey required came back clean.
+
+This roadmap is the graduation of the top-ranked net-new adoption lever from
+`adoption-opportunity-survey` (Opportunity 1); the implementation contract —
+the *how* — lives in the `pr-decision-surfacing` design. It states
+positioning already recorded in ADR-036 and ADR-081 and honours
+ADR-034/ADR-067, and does not alter them.
 
 ## Context
 
@@ -120,3 +134,7 @@ a governed decision that is also suspect can be noted.
 ## Related Requirements
 
 - rac-growth-adoption
+
+## Related Tickets
+
+- itsthelore/rac-core#351
