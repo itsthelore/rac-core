@@ -134,7 +134,7 @@ class InitResult:
     # Additive contract fields (ADR-007): null/empty when no profile was used.
     profile: str | None = None
     files_written: tuple[str, ...] = ()
-    # The shared org endpoint wired into the client configs (ADR-114); null when
+    # The shared org endpoint wired into the client configs (ADR-117); null when
     # --org-endpoint was not given. Additive contract field (ADR-007).
     org_endpoint: str | None = None
 
@@ -363,7 +363,7 @@ def init_repository(
     already-initialized repository is left untouched. A profile writes
     *configuration only*, never authored prose (ADR-024, ADR-044, ADR-085).
 
-    When ``org_endpoint`` is given (an http(s) URL, ADR-114), the ``lore-org``
+    When ``org_endpoint`` is given (an http(s) URL, ADR-117), the ``lore-org``
     client wiring is ensured in ``.mcp.json`` and ``.cursor/mcp.json``. Unlike
     a profile, org wiring is an explicit operator action and therefore applies
     on an already-initialized repository too — merging into an existing file,

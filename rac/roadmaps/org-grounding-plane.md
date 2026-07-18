@@ -10,7 +10,7 @@ type: roadmap
 Achieved
 
 Delivered across all three initiatives (epic itsthelore/rac-core#348), under
-the topology decision ADR-114: the recorded shape (one org-standards corpus
+the topology decision ADR-117: the recorded shape (one org-standards corpus
 served over the shipped ADR-098 HTTP endpoint, co-mounted as `lore-org`
 beside any local `lore` server); the fleet-wiring command (`rac init
 --org-endpoint <url>` emitting and merging the client config entry on fresh
@@ -48,7 +48,7 @@ same corpus becoming a materialised parent.
 - Wiring a repository is one command (`rac init --org-endpoint`), safe on
   fresh and existing repositories alike, so fleet rollout is repo-template
   work rather than per-repo engineering.
-- The topology is recorded (ADR-114) with its boundaries explicit: no
+- The topology is recorded (ADR-117) with its boundaries explicit: no
   cross-corpus resolution, no auth in the engine, no change to the
   federation programme's scope or sequencing.
 - An operator has a runbook that composes the existing shared-server recipe
@@ -57,7 +57,7 @@ same corpus becoming a materialised parent.
 
 ## Initiatives
 
-### Initiative 1 — Record the topology (ADR-114)
+### Initiative 1 — Record the topology (ADR-117)
 
 The decision that org-wide grounding is a serving topology before it is a
 federation mechanism: the co-mount shape, the explicit-act wiring
@@ -140,7 +140,7 @@ unresolved cross-references, and what changes when federation ships.
   without a local corpus, and the surfaces are budgeted (ADR-033) so even
   both together stay lean.
 - The co-mount could be mistaken for federation, or grow toward it by
-  accretion. Mitigation: ADR-114 records the boundary and the handoff;
+  accretion. Mitigation: ADR-117 records the boundary and the handoff;
   cross-corpus semantics are a named non-goal gated on ADR-089's
   programme.
 - Org-endpoint visibility could be over-assumed. Mitigation: the runbook
@@ -162,7 +162,7 @@ unresolved cross-references, and what changes when federation ships.
 - adr-094
 - adr-098
 - adr-099
-- adr-114
+- adr-117
 
 ## Related Roadmaps
 

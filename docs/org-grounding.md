@@ -5,7 +5,7 @@ by every engineer's agent — including in repositories that have no corpus of
 their own. This page is the recipe for standing that up on surfaces that
 already ship: an ordinary corpus, the [shared server](shared-server.md), and
 one line of client wiring
-([ADR-114](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-114-org-grounding-plane-topology.md)).
+([ADR-117](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-117-org-grounding-plane-topology.md)).
 
 It is a deployment topology, not a new engine capability: no cross-corpus
 resolution, no federation semantics, no authentication code. Those boundaries

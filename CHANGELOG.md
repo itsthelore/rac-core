@@ -6,7 +6,7 @@ details, release history over commit history.
 
 ## Unreleased
 
-**The org grounding plane** (ADR-114). One org-standards corpus behind the
+**The org grounding plane** (ADR-117). One org-standards corpus behind the
 shared HTTP endpoint grounds every repository's agents — including
 repositories with no corpus of their own. `rac init --org-endpoint <url>`
 wires a repository to it: the `lore-org` streamable-HTTP entry is ensured in
