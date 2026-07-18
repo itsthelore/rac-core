@@ -45,6 +45,7 @@ nav:
   - Context Cost: context-cost.md
   - Scale & Performance: scale.md
   - Watchkeeper: watchkeeper.md
+  - Decisions on PRs: decisions-on-pr.md
   - Artifacts: artifacts.md
   - Relationships: relationships.md
   - Validation: validation.md
