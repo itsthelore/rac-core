@@ -27,7 +27,12 @@ if TYPE_CHECKING:
 from rac.core.overrides import EMPTY, RULE_VALUES, TYPE_VALUES, SeverityOverrides
 from rac.core.validation import TICKETING_PROVIDER_NAMES
 from rac.errors import RACError
-from rac.services.profiles import PROFILE_NAMES, get_profile, write_mcp_configs
+from rac.services.profiles import (
+    PROFILE_NAMES,
+    get_profile,
+    write_mcp_configs,
+    write_org_endpoint,
+)
 
 # Repository key contract (v0.7.11): uppercase alphanumeric, leading letter,
 # 2-10 characters. The key is the human-recognizable ID prefix, e.g. RAC.
@@ -67,6 +72,17 @@ class InvalidProfile(RACError):
         self.profile = profile
         super().__init__(
             f"invalid profile: {profile!r} (expected one of {', '.join(PROFILE_NAMES)})"
+        )
+
+
+class InvalidOrgEndpoint(RACError):
+    """The requested org endpoint is not an http(s) URL (usage error)."""
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+        super().__init__(
+            f"invalid org endpoint: {url!r} (expected an http:// or https:// URL, "
+            "e.g. https://lore.example.com/mcp)"
         )
 
 
@@ -118,6 +134,9 @@ class InitResult:
     # Additive contract fields (ADR-007): null/empty when no profile was used.
     profile: str | None = None
     files_written: tuple[str, ...] = ()
+    # The shared org endpoint wired into the client configs (ADR-114); null when
+    # --org-endpoint was not given. Additive contract field (ADR-007).
+    org_endpoint: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -127,6 +146,7 @@ class InitResult:
             "created": self.created,
             "profile": self.profile,
             "files_written": list(self.files_written),
+            "org_endpoint": self.org_endpoint,
         }
 
 
@@ -325,6 +345,7 @@ def init_repository(
     key: str = DEFAULT_KEY,
     ticketing: str | None = None,
     profile: str | None = None,
+    org_endpoint: str | None = None,
 ) -> InitResult:
     """Establish (or confirm) the repository identity namespace at ``directory``.
 
@@ -342,12 +363,22 @@ def init_repository(
     already-initialized repository is left untouched. A profile writes
     *configuration only*, never authored prose (ADR-024, ADR-044, ADR-085).
 
+    When ``org_endpoint`` is given (an http(s) URL, ADR-114), the ``lore-org``
+    client wiring is ensured in ``.mcp.json`` and ``.cursor/mcp.json``. Unlike
+    a profile, org wiring is an explicit operator action and therefore applies
+    on an already-initialized repository too — merging into an existing file,
+    touching only the ``lore-org`` key, and never rewriting a file it would
+    leave unchanged. ``.rac/config.yaml`` is untouched by it on either path.
+
     Raises :class:`InvalidRepositoryKey` for a bad key,
     :class:`InvalidTicketingProvider` for an unknown provider,
     :class:`InvalidProfile` for an unknown profile,
+    :class:`InvalidOrgEndpoint` for a non-http(s) org endpoint,
     :class:`RepositoryKeyConflict` when a different key is already established
-    in this exact directory, and :class:`MalformedRepositoryConfig` when an
-    existing file cannot be read.
+    in this exact directory, :class:`MalformedRepositoryConfig` when an
+    existing file cannot be read, and
+    :class:`rac.services.profiles.MalformedClientConfig` when an existing
+    client config cannot be merged into (no partial writes).
     """
     if not KEY_RE.match(key):
         raise InvalidRepositoryKey(key)
@@ -358,12 +389,23 @@ def init_repository(
         resolved_profile = get_profile(profile)
         if resolved_profile is None:
             raise InvalidProfile(profile)
+    if org_endpoint is not None and not org_endpoint.startswith(("http://", "https://")):
+        raise InvalidOrgEndpoint(org_endpoint)
     config_path = Path(directory) / CONFIG_DIR / CONFIG_FILE
     if config_path.is_file():
         existing = _read_config(config_path)
         if existing.repository_key != key:
             raise RepositoryKeyConflict(existing.repository_key, key, str(config_path))
-        return InitResult(repository_key=key, config_path=str(config_path), created=False)
+        org_files: tuple[str, ...] = ()
+        if org_endpoint is not None:
+            org_files = tuple(write_org_endpoint(directory, org_endpoint))
+        return InitResult(
+            repository_key=key,
+            config_path=str(config_path),
+            created=False,
+            files_written=org_files,
+            org_endpoint=org_endpoint,
+        )
     config_path.parent.mkdir(parents=True, exist_ok=True)
     body = f"repository_key: {key}\n"
     if ticketing is not None:
@@ -374,10 +416,14 @@ def init_repository(
     files_written: tuple[str, ...] = ()
     if resolved_profile is not None and resolved_profile.mcp_wiring:
         files_written = tuple(write_mcp_configs(directory))
+    if org_endpoint is not None:
+        org_written = write_org_endpoint(directory, org_endpoint)
+        files_written += tuple(p for p in org_written if p not in files_written)
     return InitResult(
         repository_key=key,
         config_path=str(config_path),
         created=True,
         profile=resolved_profile.name if resolved_profile is not None else None,
         files_written=files_written,
+        org_endpoint=org_endpoint,
     )

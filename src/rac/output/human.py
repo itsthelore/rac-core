@@ -973,6 +973,8 @@ def render_init_human(result: InitResult) -> str:
     lines = [f"{verb} repository key {result.repository_key}", f"Config: {result.config_path}"]
     if result.profile is not None:
         lines.append(f"Profile: {result.profile}")
+    if result.org_endpoint is not None:
+        lines.append(f"Org endpoint: {result.org_endpoint}")
     lines.extend(f"Wrote: {path}" for path in result.files_written)
     return "\n".join(lines)
 
