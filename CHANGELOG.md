@@ -6,6 +6,20 @@ details, release history over commit history.
 
 ## Unreleased
 
+**Decisions on pull requests — the Herald action**
+(`pr-decision-surfacing`). A pull request that edits governed code now gets
+one advisory comment naming the live decisions whose declared `## Applies
+To` scope covers the changed paths — id, title, the matched scope, and a
+link — deduplicated, sorted, and updated in place on re-runs. Facts, never
+a merge gate (ADR-034/067): the check never fails on findings, and on
+forks the comment degrades to the step summary. A thin client over
+`rac decisions-for --json` (ADR-063) with no engine change; the action
+ships in the CI delivery repo as
+`itsthelore/rac-ci/herald/github` beside Watchkeeper, Gatekeeper, and
+Registrar, and is documented on the new
+[Decisions on PRs](https://itsthelore.github.io/rac-core/decisions-on-pr/)
+page.
+
 **The org grounding plane** (ADR-117). One org-standards corpus behind the
 shared HTTP endpoint grounds every repository's agents — including
 repositories with no corpus of their own. `rac init --org-endpoint <url>`
