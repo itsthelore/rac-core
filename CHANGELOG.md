@@ -17,14 +17,18 @@ re-run. The new [Org Grounding](https://itsthelore.github.io/rac-core/org-ground
 page is the operator runbook: the org corpus, the shared-server recipe, fleet
 wiring, boundaries, and the federation handoff (ADR-089 stays untouched — no
 cross-corpus resolution enters the engine). The `rac init --json` contract
-gains an additive `org_endpoint` field.
+gains an additive `org_endpoint` field. The flag ships in both engines:
+`init` stays a covered command, with the native port pinned byte-identical
+by new closure parity cases (ADR-116).
 
 **Unhashable frontmatter keys no longer crash the corpus walk.** A YAML
-sequence or mapping used as a frontmatter key (`? []`, `[a]: v`) — the fuzz
-campaign's pinned oracle-crash class — now surfaces as a structured
-`malformed-frontmatter` finding, so directory walks (`rac new` id-minting,
-`rac decisions-for`, root-scoped `rac find`) keep going instead of dying on
-one hostile file.
+sequence, mapping, or set used as a frontmatter key (`? []`, `[a]: v`,
+`? !!set {a}`) — the fuzz campaign's pinned oracle-crash class — now surfaces
+as a structured `malformed-frontmatter` finding, so directory walks (`rac new`
+id-minting, `rac decisions-for`, root-scoped `rac find`) keep going instead
+of dying on one hostile file. Both engines converge on the identical finding:
+the native engine's former oracle-crash divergence marker for this class is
+retired, pinned by new mainline parity cases.
 
 ## v0.23.0 — the "warm by default" release
 
