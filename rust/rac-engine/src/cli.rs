@@ -2077,6 +2077,7 @@ fn run_init(rest: &[&String]) -> u8 {
     let mut key: String = "RAC".to_string(); // init.DEFAULT_KEY
     let mut ticketing: Option<String> = None;
     let mut profile: Option<String> = None;
+    let mut org_endpoint: Option<String> = None;
     let mut json = false;
     let mut extras: Vec<String> = Vec::new();
     let mut positional_only = false;
@@ -2159,6 +2160,14 @@ fn run_init(rest: &[&String]) -> u8 {
                     Err(code) => return code,
                 }
             }
+            other if other == "--org-endpoint" || other.starts_with("--org-endpoint=") => {
+                // Free string like --key: the http(s) check is the service
+                // layer's `rac:` usage error, not an argparse choice.
+                match take_opt_value(prog, "--org-endpoint", other, rest, &mut i) {
+                    Ok(v) => org_endpoint = Some(v),
+                    Err(code) => return code,
+                }
+            }
             other => extras.push(other.to_string()),
         }
         i += 1;
@@ -2173,6 +2182,7 @@ fn run_init(rest: &[&String]) -> u8 {
         key,
         ticketing,
         profile,
+        org_endpoint,
         json,
     }) as u8
 }

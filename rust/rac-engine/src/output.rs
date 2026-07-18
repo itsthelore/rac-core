@@ -3308,6 +3308,9 @@ pub fn render_init_human(result: &crate::scaffold::InitResult) -> String {
     if let Some(profile) = &result.profile {
         lines.push(format!("Profile: {profile}"));
     }
+    if let Some(url) = &result.org_endpoint {
+        lines.push(format!("Org endpoint: {url}"));
+    }
     lines.extend(result.files_written.iter().map(|p| format!("Wrote: {p}")));
     lines.join("\n")
 }
@@ -3321,6 +3324,7 @@ pub fn render_init_json(result: &crate::scaffold::InitResult) -> String {
         "created": result.created,
         "profile": result.profile,
         "files_written": result.files_written,
+        "org_endpoint": result.org_endpoint,
     }))
 }
 

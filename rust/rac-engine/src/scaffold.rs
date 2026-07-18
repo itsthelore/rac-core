@@ -54,6 +54,10 @@ pub enum ScaffoldError {
     IdGenerationExhausted(String),
     /// `CorpusNotEmpty` — quickstart refuses a non-empty corpus (exit 1).
     CorpusNotEmpty(String),
+    /// `InvalidOrgEndpoint` — non-http(s) org endpoint URL (usage).
+    InvalidOrgEndpoint(String),
+    /// `MalformedClientConfig` — unmergeable MCP client config (exit 1).
+    MalformedClientConfig(String),
 }
 
 impl ScaffoldError {
@@ -67,7 +71,9 @@ impl ScaffoldError {
             | ScaffoldError::RepositoryKeyConflict(m)
             | ScaffoldError::MalformedRepositoryConfig(m)
             | ScaffoldError::IdGenerationExhausted(m)
-            | ScaffoldError::CorpusNotEmpty(m) => m,
+            | ScaffoldError::CorpusNotEmpty(m)
+            | ScaffoldError::InvalidOrgEndpoint(m)
+            | ScaffoldError::MalformedClientConfig(m) => m,
         }
     }
 }
@@ -314,6 +320,84 @@ fn write_mcp_configs(directory: &str) -> std::io::Result<Vec<String>> {
     Ok(written)
 }
 
+/// The shared org endpoint's server name in client configs (ADR-117).
+const ORG_SERVER_KEY: &str = "lore-org";
+
+fn invalid_org_endpoint(url: &str) -> ScaffoldError {
+    ScaffoldError::InvalidOrgEndpoint(format!(
+        "invalid org endpoint: {} (expected an http:// or https:// URL, \
+         e.g. https://lore.example.com/mcp)",
+        py_repr_str(url)
+    ))
+}
+
+fn malformed_client_config(config_path: &str, reason: &str) -> ScaffoldError {
+    ScaffoldError::MalformedClientConfig(format!(
+        "malformed MCP client config {config_path}: {reason}"
+    ))
+}
+
+/// The `lore-org` streamable-HTTP server entry for `url` (ADR-117),
+/// insertion-ordered like the oracle's dict literal.
+fn org_server_entry(url: &str) -> serde_json::Value {
+    let mut entry = serde_json::Map::new();
+    entry.insert("type".to_string(), serde_json::Value::String("http".to_string()));
+    entry.insert("url".to_string(), serde_json::Value::String(url.to_string()));
+    serde_json::Value::Object(entry)
+}
+
+/// `write_org_endpoint(directory, url)` — ensure the `lore-org` entry in
+/// each client config (profiles.write_org_endpoint, ADR-117): merge into an
+/// existing file touching only the `lore-org` key, create absent files,
+/// skip files already carrying the exact entry, and parse every target
+/// before writing any (no partial writes). `serde_json`'s `preserve_order`
+/// keeps user key order exactly as the oracle's `dict` does.
+fn write_org_endpoint(directory: &str, url: &str) -> Result<Vec<String>, ScaffoldError> {
+    let entry = org_server_entry(url);
+    let targets: [&[&str]; 2] = [&[".mcp.json"], &[".cursor", "mcp.json"]];
+    let mut planned: Vec<(String, String)> = Vec::new();
+    for target in targets {
+        let path = py_join(directory, target);
+        if Path::new(&path).is_file() {
+            let text = std::fs::read_to_string(&path)
+                .map_err(|_| malformed_client_config(&path, "not valid JSON"))?;
+            let mut data: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|_| malformed_client_config(&path, "not valid JSON"))?;
+            let obj = data.as_object_mut().ok_or_else(|| {
+                malformed_client_config(&path, "top level must be a JSON object")
+            })?;
+            let servers = obj
+                .entry("mcpServers")
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+            let servers = servers.as_object_mut().ok_or_else(|| {
+                malformed_client_config(&path, "'mcpServers' must be a JSON object")
+            })?;
+            if servers.get(ORG_SERVER_KEY) == Some(&entry) {
+                continue; // already wired to this endpoint: idempotent no-op
+            }
+            servers.insert(ORG_SERVER_KEY.to_string(), entry.clone());
+            planned.push((path, format!("{}\n", crate::pyjson::dumps_indent2_no_ascii(&data))));
+        } else {
+            let mut servers = serde_json::Map::new();
+            servers.insert(ORG_SERVER_KEY.to_string(), entry.clone());
+            let mut payload = serde_json::Map::new();
+            payload.insert("mcpServers".to_string(), serde_json::Value::Object(servers));
+            let payload = serde_json::Value::Object(payload);
+            planned.push((path, format!("{}\n", crate::pyjson::dumps_indent2_no_ascii(&payload))));
+        }
+    }
+    let mut written = Vec::new();
+    for (path, text) in planned {
+        if let Some(parent) = Path::new(&path).parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| malformed_client_config(&path, &e.to_string()))?;
+        }
+        std::fs::write(&path, text).map_err(|e| malformed_client_config(&path, &e.to_string()))?;
+        written.push(path);
+    }
+    Ok(written)
+}
+
 /// Outcome of one `rac init` run (stable JSON contract, ADR-007).
 pub struct InitResult {
     pub repository_key: String,
@@ -321,19 +405,28 @@ pub struct InitResult {
     pub created: bool,
     pub profile: Option<String>,
     pub files_written: Vec<String>,
+    pub org_endpoint: Option<String>,
 }
 
-/// `init_repository(directory, key, ticketing, profile)` — establish (or
-/// confirm) the identity namespace. `ticketing` and `profile` arrive
-/// argparse-choice-validated; both apply only on a FRESH init.
+/// `init_repository(directory, key, ticketing, profile, org_endpoint)` —
+/// establish (or confirm) the identity namespace. `ticketing` and `profile`
+/// arrive argparse-choice-validated; both apply only on a FRESH init.
+/// `org_endpoint` (ADR-117) is an explicit operator action and applies on
+/// fresh AND already-initialized repositories alike.
 pub fn init_repository(
     directory: &str,
     key: &str,
     ticketing: Option<&str>,
     profile: Option<&str>,
+    org_endpoint: Option<&str>,
 ) -> Result<InitResult, ScaffoldError> {
     if !valid_repository_key(key) {
         return Err(invalid_key_error(key));
+    }
+    if let Some(url) = org_endpoint {
+        if !(url.starts_with("http://") || url.starts_with("https://")) {
+            return Err(invalid_org_endpoint(url));
+        }
     }
     let config_path = py_join(directory, &[".rac", "config.yaml"]);
     if Path::new(&config_path).is_file() {
@@ -347,12 +440,17 @@ pub fn init_repository(
                 py_repr_str(key)
             )));
         }
+        let org_files = match org_endpoint {
+            Some(url) => write_org_endpoint(directory, url)?,
+            None => Vec::new(),
+        };
         return Ok(InitResult {
             repository_key: key.to_string(),
             config_path,
             created: false,
             profile: None,
-            files_written: Vec::new(),
+            files_written: org_files,
+            org_endpoint: org_endpoint.map(str::to_string),
         });
     }
     let io_err = |e: std::io::Error| malformed_config(&config_path, &format!("invalid YAML: {e}"));
@@ -366,17 +464,25 @@ pub fn init_repository(
     let (stanza, wiring) = profile.map(profile_parts).unwrap_or(("", false));
     body.push_str(stanza);
     std::fs::write(&config_path, body).map_err(io_err)?;
-    let files_written = if profile.is_some() && wiring {
+    let mut files_written = if profile.is_some() && wiring {
         write_mcp_configs(directory).map_err(io_err)?
     } else {
         Vec::new()
     };
+    if let Some(url) = org_endpoint {
+        for path in write_org_endpoint(directory, url)? {
+            if !files_written.contains(&path) {
+                files_written.push(path);
+            }
+        }
+    }
     Ok(InitResult {
         repository_key: key.to_string(),
         config_path,
         created: true,
         profile: profile.map(str::to_string),
         files_written,
+        org_endpoint: org_endpoint.map(str::to_string),
     })
 }
 
@@ -520,7 +626,7 @@ pub fn quickstart(
         )));
     }
 
-    let init_result = init_repository(directory, key, None, None)?;
+    let init_result = init_repository(directory, key, None, None, None)?;
 
     let family = format!("{artifact_type}s");
     let art_dir = py_join(directory, &["rac", &family]);
