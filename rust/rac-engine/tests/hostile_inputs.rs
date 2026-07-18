@@ -57,17 +57,21 @@ fn parse_and_validate_are_total_over_the_catalog() {
         let issues = validate(&artifact, None, None); // must not panic
 
         if name.starts_with("class-a-") {
-            // Unhashable YAML mapping keys: the crash is mirrored as the
-            // decision-3 marker issue, error severity, TypeError line.
-            let marker = issues
+            // Unhashable YAML mapping keys: the healed oracle reports a
+            // structured envelope failure instead of crashing, and the
+            // native engine converges on the identical issue — the former
+            // decision-3 divergence-marker class is retired here.
+            let issue = issues
                 .iter()
-                .find(|i| i.code == "internal-oracle-divergence")
-                .unwrap_or_else(|| panic!("{name}: expected the oracle-divergence marker"));
-            assert_eq!(marker.severity, "error", "{name}: marker severity");
+                .find(|i| i.code == "malformed-frontmatter")
+                .unwrap_or_else(|| panic!("{name}: expected malformed-frontmatter"));
+            assert_eq!(issue.severity, "error", "{name}: issue severity");
             assert!(
-                marker.message.starts_with("TypeError: unhashable type:"),
-                "{name}: marker message was {:?}",
-                marker.message
+                issue
+                    .message
+                    .starts_with("frontmatter is not valid YAML: unhashable frontmatter key:"),
+                "{name}: issue message was {:?}",
+                issue.message
             );
         }
         if name.starts_with("class-c-") || name.starts_with("class-d-") {

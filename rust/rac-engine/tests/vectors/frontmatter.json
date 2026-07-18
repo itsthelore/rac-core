@@ -13035,11 +13035,45 @@
   },
   {
    "raw": "[1, 2]: x",
-   "crash": "TypeError: unhashable type: 'list'"
+   "data": null,
+   "load_issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: [1, 2]",
+     null
+    ]
+   ],
+   "metadata": null,
+   "issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: [1, 2]",
+     null
+    ]
+   ]
   },
   {
    "raw": "{b: 1}: x",
-   "crash": "TypeError: unhashable type: 'dict'"
+   "data": null,
+   "load_issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: {'b': 1}",
+     null
+    ]
+   ],
+   "metadata": null,
+   "issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: {'b': 1}",
+     null
+    ]
+   ]
   },
   {
    "raw": "a: [x, {y: [z]}, ~]",
@@ -18460,19 +18494,87 @@
   },
   {
    "raw": "? [1, 2]\n: x",
-   "crash": "TypeError: unhashable type: 'list'"
+   "data": null,
+   "load_issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: [1, 2]",
+     null
+    ]
+   ],
+   "metadata": null,
+   "issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: [1, 2]",
+     null
+    ]
+   ]
   },
   {
    "raw": "? {a: 1}\n: x",
-   "crash": "TypeError: unhashable type: 'dict'"
+   "data": null,
+   "load_issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: {'a': 1}",
+     null
+    ]
+   ],
+   "metadata": null,
+   "issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: {'a': 1}",
+     null
+    ]
+   ]
   },
   {
    "raw": "? !!set {a}\n: x",
-   "crash": "TypeError: unhashable type: 'set'"
+   "data": null,
+   "load_issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: {'a'}",
+     null
+    ]
+   ],
+   "metadata": null,
+   "issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: {'a'}",
+     null
+    ]
+   ]
   },
   {
    "raw": "[a]: 1",
-   "crash": "TypeError: unhashable type: 'list'"
+   "data": null,
+   "load_issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: ['a']",
+     null
+    ]
+   ],
+   "metadata": null,
+   "issues": [
+    [
+     "error",
+     "malformed-frontmatter",
+     "frontmatter is not valid YAML: unhashable frontmatter key: ['a']",
+     null
+    ]
+   ]
   },
   {
    "raw": "a: !!int ''",
