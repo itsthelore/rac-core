@@ -1182,7 +1182,7 @@ configuration, not artifact meaning — it never dictates folder structure.
 - **Input:** `rac init [directory]` — defaults to the current directory.
 - **Options:** `--key KEY` (default `RAC`; 2–10 uppercase alphanumeric
   characters starting with a letter) · `--ticketing PROVIDER` · `--profile NAME`
-  · `--json`
+  · `--org-endpoint URL` · `--json`
 - **`--ticketing PROVIDER`** records the external ticketing system for
   `## Related Tickets` references (ADR-087) as `ticketing.provider` in
   `.rac/config.yaml` — one of `jira`, `github`, `linear`, `azure-devops`,
@@ -1203,10 +1203,20 @@ configuration, not artifact meaning — it never dictates folder structure.
   and the [`quickstart`](#quickstart) scaffold. Plain `rac init` (no `--profile`)
   is unchanged. A parent-corpus line is added once corpus federation ships
   (ADR-089); until then the enterprise profile is hollow on it.
+- **`--org-endpoint URL`** wires the shared **org Lore endpoint** (ADR-114): it
+  ensures a `lore-org` entry — `{"type": "http", "url": URL}` — under
+  `mcpServers` in `.mcp.json` and `.cursor/mcp.json`. Unlike a profile, org
+  wiring is an explicit operator action, so it also applies to an
+  **already-initialized** repository: it merges into an existing file, touches
+  only the `lore-org` key, never removes what you wrote, and a re-run with the
+  same URL writes nothing. The URL must start with `http://` or `https://`.
+  Composes with `--profile` (local `lore` and `lore-org` side by side). See
+  [Org Grounding](org-grounding.md).
 - **Exit codes:** `0` initialized, or already initialized with the same key
   (idempotent) · `1` a different key is already established (never silently
-  rewritten) · `2` invalid key, unknown ticketing provider, unknown profile, or
-  not a directory
+  rewritten), or a client config exists but cannot be merged into (malformed
+  JSON; nothing is written) · `2` invalid key, unknown ticketing provider,
+  unknown profile, invalid org endpoint, or not a directory
 
 After a successful init on a real terminal, `rac init` asks one one-time
 question — "Share anonymous usage to help shape Lore? [y/N]" — defaulting to
@@ -1218,6 +1228,7 @@ rac init
 rac init --key PROJ
 rac init --key ACME --ticketing jira
 rac init --key ACME --profile enterprise
+rac init --org-endpoint https://lore.example.com/mcp
 rac init docs/ --json
 ```
 
@@ -1228,7 +1239,8 @@ rac init docs/ --json
   "config_path": ".rac/config.yaml",
   "created": true,
   "profile": "enterprise",
-  "files_written": [".mcp.json", ".cursor/mcp.json"]
+  "files_written": [".mcp.json", ".cursor/mcp.json"],
+  "org_endpoint": null
 }
 ```
 
