@@ -7,22 +7,32 @@ type: roadmap
 
 ## Status
 
-Planned
+Achieved
 
-Graduated out of `future/` for execution (epic itsthelore/rac-core#351),
-under the `pr-decision-surfacing` design's contract. The design's three Open
-Questions are settled and recorded ahead of the build landing: **the action
-ships in `rac-ci`** — the CI wrappers' extracted home, not this repository —
-as a "Lore decisions on PR" surface beside the other capabilities, while the
-corpus record and the docs pointer stay here; **changed paths are computed
-action-side** — no engine change and no dual-engine port, since
-`decisions-for` is already a covered command under the ADR-116 dispatcher;
-**noise is tuned** by the engine's live-only scoping plus dedupe-by-id,
-sorted output, an inline cap with a details expander, no comment when
-nothing governs, and update-in-place always (including to the empty state,
-so a stale comment can never outlive its diff). The renderer and its
-determinism battery are built and verified against this corpus; the claim
-check the survey required came back clean.
+Delivered (epic itsthelore/rac-core#351; itsthelore/rac-ci#3 merged) under
+the `pr-decision-surfacing` design's contract. The **Herald** capability —
+`itsthelore/rac-ci/herald/github` — computes the merge-base diff, runs
+`rac decisions-for --json` per changed path (thin client, ADR-063; the
+engine owns matching and liveness), and posts one deterministic advisory
+comment: id, title, matched `## Applies To` scope, and a head-pinned link
+per governing decision, deduplicated, sorted, updated in place by marker on
+re-runs, with a fork-safe step-summary fallback. Facts, never a verdict or
+merge gate (ADR-034, ADR-067). Its structural contract and behavioral
+renderer battery (join, dedup, empty state, noise cap, byte-determinism)
+run in rac-ci CI, the behavioral tier against the published engine. The
+docs pointer lives here (the Decisions on PRs page); the `v1` tag predates
+Herald, so consumers reference `@main` until a tag that includes it is cut.
+
+The design's three Open Questions closed as delivered: **the action ships
+in `rac-ci`** — the CI wrappers' extracted home — beside Watchkeeper,
+Gatekeeper, and Registrar, while the corpus record and the docs pointer
+stay here; **changed paths are computed action-side** — no engine change
+and no dual-engine port, since `decisions-for` is already a covered command
+under the ADR-116 dispatcher; **noise is tuned** by the engine's live-only
+scoping plus dedupe-by-id, sorted output, an inline cap with a details
+expander, no comment when nothing governs, and update-in-place always
+(including to the empty state, so a stale comment can never outlive its
+diff). The claim check the survey required came back clean.
 
 This roadmap is the graduation of the top-ranked net-new adoption lever from
 `adoption-opportunity-survey` (Opportunity 1); the implementation contract —
