@@ -6,7 +6,25 @@ details, release history over commit history.
 
 ## Unreleased
 
-_Nothing yet._
+**The org grounding plane** (ADR-114). One org-standards corpus behind the
+shared HTTP endpoint grounds every repository's agents — including
+repositories with no corpus of their own. `rac init --org-endpoint <url>`
+wires a repository to it: the `lore-org` streamable-HTTP entry is ensured in
+`.mcp.json` and `.cursor/mcp.json`, on fresh **and** already-initialized
+repositories, merging into existing files (only the `lore-org` key is
+touched, nothing you wrote is removed) and writing nothing on an unchanged
+re-run. The new [Org Grounding](https://itsthelore.github.io/rac-core/org-grounding/)
+page is the operator runbook: the org corpus, the shared-server recipe, fleet
+wiring, boundaries, and the federation handoff (ADR-089 stays untouched — no
+cross-corpus resolution enters the engine). The `rac init --json` contract
+gains an additive `org_endpoint` field.
+
+**Unhashable frontmatter keys no longer crash the corpus walk.** A YAML
+sequence or mapping used as a frontmatter key (`? []`, `[a]: v`) — the fuzz
+campaign's pinned oracle-crash class — now surfaces as a structured
+`malformed-frontmatter` finding, so directory walks (`rac new` id-minting,
+`rac decisions-for`, root-scoped `rac find`) keep going instead of dying on
+one hostile file.
 
 ## v0.23.0 — the "warm by default" release
 
