@@ -143,6 +143,28 @@ def test_duplicate_key_rejection_still_works():
     assert issues[0].code == "duplicate-frontmatter-key"
 
 
+def test_unhashable_key_is_reported_not_raised():
+    # The fuzz campaign's oracle-crash class (rust/fuzz/pinned/oracle-crashes/
+    # unhashable-key/): a YAML sequence used as a mapping key must surface as
+    # malformed frontmatter, never as an uncaught TypeError.
+    for raw in ("? []\n: v\nid: RAC-KTQ63DPSMF19\n", "[a, b]: v\n", "? {k: v}\n: w\n"):
+        metadata, issues = parse_frontmatter(raw)
+        assert metadata is None
+        assert [i.code for i in issues] == ["malformed-frontmatter"]
+        assert "unhashable frontmatter key" in issues[0].message
+
+
+def test_unhashable_key_file_parses_to_issues_not_a_crash(tmp_path):
+    # End to end through the corpus walk: the pinned repro shape must classify
+    # as a parse-issue document, so directory walks (find, new, decisions-for)
+    # keep going instead of dying on one hostile file.
+    doc = tmp_path / "repro.md"
+    doc.write_text("---\n? []\n: v\nid: RAC-KTQ63DPSMF19\n---\n# T\n", encoding="utf-8")
+    product = parse_file(str(doc))
+    assert product.metadata is None
+    assert any(i.code == "malformed-frontmatter" for i in product.metadata_issues)
+
+
 # --- REQ-003: body field caps ------------------------------------------------
 
 
