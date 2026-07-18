@@ -10,6 +10,8 @@
   {"id": "validate-invalid-duplicate-ids-human", "argv": ["validate", "tests/fixtures/invalid/duplicate_ids.md"], "expect_exit": 1, "expect_nonzero_ok": true},
   {"id": "validate-invalid-duplicate-ids-json", "argv": ["validate", "tests/fixtures/invalid/duplicate_ids.md", "--json"], "expect_exit": 1, "expect_nonzero_ok": true},
   {"id": "validate-invalid-missing-id-json", "argv": ["validate", "tests/fixtures/invalid/missing_id.md", "--json"], "expect_exit": 1, "expect_nonzero_ok": true},
+  {"id": "validate-unhashable-frontmatter-key-human", "argv": ["validate", "rust/fuzz/pinned/oracle-crashes/unhashable-key/repro.md"], "expect_exit": 1, "expect_nonzero_ok": true},
+  {"id": "validate-unhashable-frontmatter-key-json", "argv": ["validate", "rust/fuzz/pinned/oracle-crashes/unhashable-key/repro.md", "--json"], "expect_exit": 1, "expect_nonzero_ok": true},
   {"id": "validate-invalid-malformed-id-human", "argv": ["validate", "tests/fixtures/invalid/malformed_id.md"], "expect_exit": 1, "expect_nonzero_ok": true},
   {"id": "validate-invalid-empty-req-text-json", "argv": ["validate", "tests/fixtures/invalid/empty_req_text.md", "--json"], "expect_exit": 1, "expect_nonzero_ok": true},
   {"id": "validate-invalid-multiple-titles-json", "argv": ["validate", "tests/fixtures/invalid/multiple_titles.md", "--json"], "expect_exit": 1, "expect_nonzero_ok": true},

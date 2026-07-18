@@ -3855,13 +3855,15 @@ fn construct_strict_map(node: &Node) -> Result<Yaml, YErr> {
     let mut seen: Vec<Yaml> = Vec::new();
     for (k_node, _) in pairs {
         let key = construct_value(k_node)?;
-        if let Some(name) = unhashable_type_name(&key) {
-            // ORACLE DIVERGENCE (PORT-CONTRACT decision 3): CPython raises an
-            // uncaught TypeError out of parse_frontmatter at the `key in seen`
-            // test. We return a distinguishable internal error instead of
-            // crashing.
-            return Err(YErr::Internal(format!(
-                "TypeError: unhashable type: '{name}'"
+        if unhashable_type_name(&key).is_some() {
+            // The healed oracle reports an unhashable key as a structured
+            // envelope failure (frontmatter.py `_no_duplicates`) instead of
+            // crashing at the `key in seen` test, so the former decision-3
+            // divergence marker converges to the same malformed-frontmatter
+            // issue text. py_repr mirrors the oracle's `{key!r}`.
+            return Err(YErr::Marked(format!(
+                "unhashable frontmatter key: {}",
+                py_repr(&key)?
             )));
         }
         if seen.iter().any(|s| py_eq(s, &key)) {
