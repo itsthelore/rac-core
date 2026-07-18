@@ -3,7 +3,7 @@ schema_version: 1
 id: RAC-KXS19P8363M7
 type: decision
 ---
-# ADR-114: Org-Wide Grounding Is a Serving Topology Before It Is a Federation Mechanism
+# ADR-117: Org-Wide Grounding Is a Serving Topology Before It Is a Federation Mechanism
 
 ## Status
 

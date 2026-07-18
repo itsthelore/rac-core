@@ -2204,7 +2204,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="URL",
         help="Wire the shared org Lore endpoint (an http:// or https:// URL, "
-        "ADR-114): ensure a 'lore-org' entry in .mcp.json and .cursor/mcp.json. "
+        "ADR-117): ensure a 'lore-org' entry in .mcp.json and .cursor/mcp.json. "
         "Applies to fresh and already-initialized repositories; merges into an "
         "existing file, touching only the 'lore-org' key.",
     )

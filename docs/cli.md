@@ -1203,7 +1203,7 @@ configuration, not artifact meaning — it never dictates folder structure.
   and the [`quickstart`](#quickstart) scaffold. Plain `rac init` (no `--profile`)
   is unchanged. A parent-corpus line is added once corpus federation ships
   (ADR-089); until then the enterprise profile is hollow on it.
-- **`--org-endpoint URL`** wires the shared **org Lore endpoint** (ADR-114): it
+- **`--org-endpoint URL`** wires the shared **org Lore endpoint** (ADR-117): it
   ensures a `lore-org` entry — `{"type": "http", "url": URL}` — under
   `mcpServers` in `.mcp.json` and `.cursor/mcp.json`. Unlike a profile, org
   wiring is an explicit operator action, so it also applies to an

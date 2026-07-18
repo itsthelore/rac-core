@@ -106,7 +106,7 @@ def write_mcp_configs(directory: str) -> list[str]:
     return written
 
 
-# The shared org endpoint's server name in client configs (ADR-114). Fixed, so
+# The shared org endpoint's server name in client configs (ADR-117). Fixed, so
 # every repository in a fleet addresses the org corpus under one identity.
 ORG_SERVER_KEY = "lore-org"
 
@@ -120,12 +120,12 @@ class MalformedClientConfig(RACError):
 
 
 def org_server_entry(url: str) -> dict[str, str]:
-    """The ``lore-org`` streamable-HTTP server entry for ``url`` (ADR-114)."""
+    """The ``lore-org`` streamable-HTTP server entry for ``url`` (ADR-117)."""
     return {"type": "http", "url": url}
 
 
 def write_org_endpoint(directory: str, url: str) -> list[str]:
-    """Ensure the ``lore-org`` HTTP entry in each client config (ADR-114).
+    """Ensure the ``lore-org`` HTTP entry in each client config (ADR-117).
 
     Unlike a profile — creation-time by design — org wiring is an explicit
     operator action, so it also merges into existing files: only the

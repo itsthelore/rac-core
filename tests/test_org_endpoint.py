@@ -1,4 +1,4 @@
-"""Tests for org endpoint wiring — `rac init --org-endpoint <url>` (ADR-114).
+"""Tests for org endpoint wiring — `rac init --org-endpoint <url>` (ADR-117).
 
 Org wiring is an explicit operator action, not creation-time configuration: it
 applies on fresh and already-initialized repositories alike, merges into an

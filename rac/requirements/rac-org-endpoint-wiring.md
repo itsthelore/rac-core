@@ -15,7 +15,7 @@ Accepted
 
 ## Problem
 
-The org grounding plane (ADR-114) needs every repository in a fleet wired to
+The org grounding plane (ADR-117) needs every repository in a fleet wired to
 the organisation's shared Lore endpoint, and hand-editing client JSON across
 hundreds of repositories is exactly the per-repo tax the topology exists to
 remove. The engine already emits client wiring at init time (ADR-088), but
@@ -31,7 +31,7 @@ file's other content.
 
 - [REQ-002] With the flag, the engine MUST ensure a `lore-org` entry of the shape `{"type": "http", "url": <url>}` exists under `mcpServers` in both `.mcp.json` and `.cursor/mcp.json`, creating a file (with exactly that entry) when it is absent.
 
-- [REQ-003] The flag MUST apply on a fresh init and on an already-initialized repository alike: org wiring is an explicit operator action (ADR-114), not creation-time configuration, and `.rac/config.yaml` is not touched by it on either path.
+- [REQ-003] The flag MUST apply on a fresh init and on an already-initialized repository alike: org wiring is an explicit operator action (ADR-117), not creation-time configuration, and `.rac/config.yaml` is not touched by it on either path.
 
 - [REQ-004] Merging into an existing client config MUST preserve every byte of meaning the user wrote outside the `lore-org` key: other servers, other top-level keys, and key order are retained; only the `lore-org` entry is added or updated. When the file exists with a different `lore-org` URL, the URL is updated — the operator named the endpoint explicitly.
 
@@ -87,7 +87,7 @@ file's other content.
 - adr-007
 - adr-088
 - adr-098
-- adr-114
+- adr-117
 
 ## Related Roadmaps
 
