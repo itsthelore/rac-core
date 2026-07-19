@@ -415,20 +415,18 @@ pub(crate) struct TierMatch {
     terms: Vec<String>,
 }
 
-pub(crate) fn match_entry(entry_tokens: &EntryTokens, terms: &[String]) -> Option<TierMatch> {
+fn match_fields(fields: &FieldTokens, terms: &[String]) -> Option<(i64, Vec<String>)> {
     let mut matched_terms: HashSet<&str> = HashSet::new();
     let mut best_rank: Option<i64> = None;
-    let mut heading_snippet: Option<(String, String)> = None;
-    let mut body_snippet: Option<(String, String)> = None;
-
-    // Metadata tiers: id, title, tags, path — flat vectors, no snippet.
     for (rank, field) in [
         (RANK_ID, "id"),
         (RANK_TITLE, "title"),
         (RANK_TAGS, "tags"),
         (RANK_PATH, "path"),
+        (RANK_HEADING, "heading"),
+        (RANK_BODY, "body"),
     ] {
-        let tokens = entry_tokens.fields.get(field);
+        let tokens = fields.get(field);
         let mut any = false;
         for term in terms {
             if term_hits_tokens(term, tokens) {
@@ -438,54 +436,6 @@ pub(crate) fn match_entry(entry_tokens: &EntryTokens, terms: &[String]) -> Optio
         }
         if any && best_rank.is_none() {
             best_rank = Some(rank);
-        }
-    }
-
-    // Heading tier: first matching heading in document order.
-    {
-        let mut any = false;
-        for sec in &entry_tokens.sections {
-            let mut hit = false;
-            for term in terms {
-                if term_hits_tokens(term, &sec.heading_tokens) {
-                    matched_terms.insert(term.as_str());
-                    hit = true;
-                }
-            }
-            if hit {
-                any = true;
-                if heading_snippet.is_none() {
-                    heading_snippet = Some((sec.heading.clone(), sec.heading.clone()));
-                }
-            }
-        }
-        if any && best_rank.is_none() {
-            best_rank = Some(RANK_HEADING);
-        }
-    }
-
-    // Body tier: first matching line in document order.
-    {
-        let mut any = false;
-        for sec in &entry_tokens.sections {
-            for (line, line_tokens) in &sec.lines {
-                let mut hit = false;
-                for term in terms {
-                    if term_hits_tokens(term, line_tokens) {
-                        matched_terms.insert(term.as_str());
-                        hit = true;
-                    }
-                }
-                if hit {
-                    any = true;
-                    if body_snippet.is_none() {
-                        body_snippet = Some((sec.heading.clone(), line.clone()));
-                    }
-                }
-            }
-        }
-        if any && best_rank.is_none() {
-            best_rank = Some(RANK_BODY);
         }
     }
 
@@ -504,11 +454,65 @@ pub(crate) fn match_entry(entry_tokens: &EntryTokens, terms: &[String]) -> Optio
             ordered.push(term.clone());
         }
     }
+    Some((best_rank, ordered))
+}
+
+fn any_term_hits(terms: &[String], tokens: &[String]) -> bool {
+    terms.iter().any(|term| term_hits_tokens(term, tokens))
+}
+
+pub(crate) fn match_entry(entry_tokens: &EntryTokens, terms: &[String]) -> Option<TierMatch> {
+    let (best_rank, ordered) = match_fields(&entry_tokens.fields, terms)?;
 
     // Only the winning tier's snippet is surfaced; metadata wins carry none.
     let snippet = match best_rank {
-        RANK_HEADING => heading_snippet,
-        RANK_BODY => body_snippet,
+        RANK_HEADING => entry_tokens
+            .sections
+            .iter()
+            .find(|section| any_term_hits(terms, &section.heading_tokens))
+            .map(|section| (section.heading.clone(), section.heading.clone())),
+        RANK_BODY => entry_tokens.sections.iter().find_map(|section| {
+            section
+                .lines
+                .iter()
+                .find(|(_, tokens)| any_term_hits(terms, tokens))
+                .map(|(line, _)| (section.heading.clone(), line.clone()))
+        }),
+        _ => None,
+    };
+    let (section, snippet) = match snippet {
+        Some((section, line)) => (Some(section), Some(line)),
+        None => (None, None),
+    };
+    Some(TierMatch {
+        rank: best_rank,
+        section,
+        snippet,
+        terms: ordered,
+    })
+}
+
+/// Match a store row using its persisted flat tokens. Raw section text is
+/// tokenized only until the winning heading/body snippet is found; metadata
+/// winners do not rebuild section tokens at all.
+pub(crate) fn match_entry_with_fields(
+    entry: &IndexEntry,
+    fields: &FieldTokens,
+    terms: &[String],
+) -> Option<TierMatch> {
+    let (best_rank, ordered) = match_fields(fields, terms)?;
+    let snippet = match best_rank {
+        RANK_HEADING => entry.search_sections.iter().find_map(|section| {
+            let tokens = tokenize(&section.heading);
+            any_term_hits(terms, &tokens)
+                .then(|| (section.heading.clone(), section.heading.clone()))
+        }),
+        RANK_BODY => entry.search_sections.iter().find_map(|section| {
+            section.lines.iter().find_map(|line| {
+                let tokens = tokenize(line);
+                any_term_hits(terms, &tokens).then(|| (section.heading.clone(), line.clone()))
+            })
+        }),
         _ => None,
     };
     let (section, snippet) = match snippet {
@@ -611,25 +615,26 @@ fn bm25f(fields: &FieldTokens, terms: &[String], stats: &CorpusStats) -> f64 {
     score
 }
 
-/// `_competition_ranks`: 1-based, ties (EXACT f64 equality) share a rank,
-/// ordered by `(-score, path)`.
-fn competition_ranks(scores: &[(String, f64)]) -> HashMap<String, i64> {
-    let mut ordered: Vec<&(String, f64)> = scores.iter().collect();
-    ordered.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
+/// `_competition_ranks`: 1-based ranks aligned with `scores`; ties (EXACT
+/// f64 equality) share a rank, ordered by `(-score, path)`.
+fn competition_ranks(scores: &[f64], paths: &[&str]) -> Vec<i64> {
+    let mut ordered: Vec<usize> = (0..scores.len()).collect();
+    ordered.sort_by(|&a, &b| {
+        scores[b]
+            .partial_cmp(&scores[a])
             .expect("finite score")
-            .then_with(|| a.0.cmp(&b.0))
+            .then_with(|| paths[a].cmp(paths[b]))
     });
-    let mut ranks: HashMap<String, i64> = HashMap::new();
+    let mut ranks = vec![0; scores.len()];
     let mut previous: Option<f64> = None;
     let mut rank = 0i64;
-    for (position, (path, score)) in ordered.iter().enumerate() {
+    for (position, &index) in ordered.iter().enumerate() {
         let position = position as i64 + 1;
-        if Some(*score) != previous {
+        if Some(scores[index]) != previous {
             rank = position;
-            previous = Some(*score);
+            previous = Some(scores[index]);
         }
-        ranks.insert(path.clone(), rank);
+        ranks[index] = rank;
     }
     ranks
 }
@@ -757,15 +762,15 @@ pub fn search_index_filtered(
 pub(crate) fn rank_and_build(
     query: &str,
     artifact_type: Option<&str>,
-    mut matched: Vec<(&IndexEntry, &FieldTokens, TierMatch)>,
+    matched: Vec<(&IndexEntry, &FieldTokens, TierMatch)>,
     terms: &[String],
     stats: &CorpusStats,
 ) -> SearchResult {
     // Score the matched set only.
     let bm25_started = crate::timing::start();
-    let bm25_scores: Vec<(String, f64)> = matched
+    let bm25_scores: Vec<f64> = matched
         .iter()
-        .map(|(entry, fields, _)| (entry.path.clone(), bm25f(fields, terms, stats)))
+        .map(|(_, fields, _)| bm25f(fields, terms, stats))
         .collect();
     crate::timing::emit_since(
         "search.bm25f",
@@ -773,20 +778,19 @@ pub(crate) fn rank_and_build(
         &[("matched", matched.len() as u64)],
     );
     let fusion_started = crate::timing::start();
-    let inbound_scores: Vec<(String, f64)> = matched
+    let inbound_scores: Vec<f64> = matched
         .iter()
-        .map(|(entry, _, _)| (entry.path.clone(), entry.inbound_count as f64))
+        .map(|(entry, _, _)| entry.inbound_count as f64)
         .collect();
-    let lexical_rank = competition_ranks(&bm25_scores);
-    let graph_rank = competition_ranks(&inbound_scores);
-    let bm25_by_path: HashMap<&str, f64> =
-        bm25_scores.iter().map(|(p, s)| (p.as_str(), *s)).collect();
-    let fused: HashMap<String, f64> = bm25_scores
+    let paths: Vec<&str> = matched.iter().map(|(entry, _, _)| entry.path.as_str()).collect();
+    let lexical_rank = competition_ranks(&bm25_scores, &paths);
+    let graph_rank = competition_ranks(&inbound_scores, &paths);
+    let fused: Vec<f64> = bm25_scores
         .iter()
-        .map(|(path, _)| {
-            let f = 1.0 / ((RRF_K + lexical_rank[path]) as f64)
-                + GRAPH_WEIGHT / ((RRF_K + graph_rank[path]) as f64);
-            (path.clone(), f)
+        .enumerate()
+        .map(|(index, _)| {
+            1.0 / ((RRF_K + lexical_rank[index]) as f64)
+                + GRAPH_WEIGHT / ((RRF_K + graph_rank[index]) as f64)
         })
         .collect();
     crate::timing::emit_since(
@@ -798,12 +802,13 @@ pub(crate) fn rank_and_build(
     // Fused score descending (rounded to 12 places inside the key only),
     // ties broken by path: total and byte-stable.
     let sort_started = crate::timing::start();
-    matched.sort_by(|a, b| {
-        let fa = py_round(fused[&a.0.path], 12);
-        let fb = py_round(fused[&b.0.path], 12);
-        fb.partial_cmp(&fa)
+    let fused_sort_keys: Vec<f64> = fused.iter().map(|score| py_round(*score, 12)).collect();
+    let mut order: Vec<usize> = (0..matched.len()).collect();
+    order.sort_by(|&a, &b| {
+        fused_sort_keys[b]
+            .partial_cmp(&fused_sort_keys[a])
             .expect("finite fused")
-            .then_with(|| a.0.path.cmp(&b.0.path))
+            .then_with(|| paths[a].cmp(paths[b]))
     });
     crate::timing::emit_since(
         "search.final_sort",
@@ -812,27 +817,27 @@ pub(crate) fn rank_and_build(
     );
 
     let projection_started = crate::timing::start();
-    let matches: Vec<ResolvedArtifact> = matched
+    let matches: Vec<ResolvedArtifact> = order
         .into_iter()
-        .map(|(entry, _, m)| {
-            let path = entry.path.as_str();
-            let fused_raw = fused[path];
-            let bm25_raw = bm25_by_path[path];
+        .map(|index| {
+            let (entry, _, m) = &matched[index];
+            let fused_raw = fused[index];
+            let bm25_raw = bm25_scores[index];
             ResolvedArtifact {
                 id: entry.id.clone(),
                 artifact_type: entry.artifact_type.clone(),
                 title: entry.title.clone(),
                 path: entry.path.clone(),
-                section: m.section,
-                snippet: m.snippet,
+                section: m.section.clone(),
+                snippet: m.snippet.clone(),
                 evidence: Some(Evidence {
                     field: rank_name(m.rank),
-                    terms: m.terms,
+                    terms: m.terms.clone(),
                     tier: m.rank,
                     score: py_round(fused_raw, 6),
                     bm25: py_round(bm25_raw, 6),
-                    lexical_rank: lexical_rank[path],
-                    graph_rank: graph_rank[path],
+                    lexical_rank: lexical_rank[index],
+                    graph_rank: graph_rank[index],
                     inbound: entry.inbound_count,
                     bm25_raw,
                     fused_raw,
@@ -951,14 +956,53 @@ mod tests {
 
     #[test]
     fn competition_ranks_share_on_exact_equality() {
-        let scores = vec![
-            ("a".to_string(), 2.0),
-            ("b".to_string(), 2.0),
-            ("c".to_string(), 1.0),
-        ];
-        let ranks = competition_ranks(&scores);
-        assert_eq!(ranks["a"], 1);
-        assert_eq!(ranks["b"], 1);
-        assert_eq!(ranks["c"], 3);
+        let scores = vec![2.0, 2.0, 1.0];
+        let paths = vec!["b", "a", "c"];
+        let ranks = competition_ranks(&scores, &paths);
+        assert_eq!(ranks, vec![1, 1, 3]);
+    }
+
+    #[test]
+    fn persisted_field_matching_preserves_tiers_and_snippets() {
+        let entry = IndexEntry {
+            id: "RAC-EXAMPLE1234".to_string(),
+            artifact_type: "requirement".to_string(),
+            title: Some("Search latency".to_string()),
+            path: "requirements/search-latency.md".to_string(),
+            aliases: vec!["RAC-EXAMPLE1234".to_string(), "legacy-search".to_string()],
+            search_sections: vec![
+                SearchSection {
+                    heading: "Acceptance Criteria".to_string(),
+                    lines: vec!["Warm lookup stays below budget".to_string()],
+                },
+                SearchSection {
+                    heading: "Risks".to_string(),
+                    lines: vec!["Corpus growth may affect sorting".to_string()],
+                },
+            ],
+            inbound_count: 2,
+            tags: vec!["performance".to_string()],
+        };
+        let tokenized = tokenize_entry(&entry);
+        for query in [
+            "example1234",
+            "search performance",
+            "acceptance",
+            "warm budget",
+            "growth sorting",
+            "missing",
+            "search search",
+        ] {
+            let terms = tokenize(query);
+            let fresh = match_entry(&tokenized, &terms);
+            let stored = match_entry_with_fields(&entry, &tokenized.fields, &terms);
+            assert_eq!(fresh.is_some(), stored.is_some(), "query {query:?}");
+            if let (Some(fresh), Some(stored)) = (fresh, stored) {
+                assert_eq!(fresh.rank, stored.rank, "query {query:?}: rank");
+                assert_eq!(fresh.section, stored.section, "query {query:?}: section");
+                assert_eq!(fresh.snippet, stored.snippet, "query {query:?}: snippet");
+                assert_eq!(fresh.terms, stored.terms, "query {query:?}: terms");
+            }
+        }
     }
 }

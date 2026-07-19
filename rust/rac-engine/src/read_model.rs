@@ -16,7 +16,7 @@
 
 use crate::index_store::MmapIndexReader;
 use crate::resolve::{
-    entry_has_tags, entry_is_retired, match_entry, rank_and_build, tokenize, tokenize_entry,
+    entry_has_tags, entry_is_retired, match_entry_with_fields, rank_and_build, tokenize,
     CorpusStats, SearchResult,
 };
 
@@ -48,27 +48,39 @@ pub fn store_search(
     }
     let tag_filter: Vec<String> = tags.iter().map(|t| crate::pycompat::py_casefold(t)).collect();
 
-    // Candidate docids: the union of each term's prefix-range postings —
-    // ascending, so the matched set keeps walk (docid) order.
-    let mut candidates: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    // AND matching requires every distinct term somewhere in the document,
+    // so only the intersection of their cross-field postings can match. Keep
+    // the set ascending so matched rows retain walk (docid) order.
+    let mut postings = Vec::new();
+    let mut distinct = std::collections::HashSet::new();
     let mut postings_duration = std::time::Duration::ZERO;
     let mut merge_duration = std::time::Duration::ZERO;
     for term in &terms {
+        if !distinct.insert(term.as_str()) {
+            continue;
+        }
         let started = timing.then(std::time::Instant::now);
         let decoded = reader.prefix_docids(term);
         if let Some(started) = started {
             postings_duration += started.elapsed();
         }
         match decoded {
-            Ok(docids) => {
-                let started = timing.then(std::time::Instant::now);
-                candidates.extend(docids);
-                if let Some(started) = started {
-                    merge_duration += started.elapsed();
-                }
-            }
+            Ok(docids) => postings.push(docids),
             Err(_) => return empty(), // corrupt row mid-read: valid empty, never a crash
         }
+    }
+    postings.sort_by_key(std::collections::BTreeSet::len);
+    let started = timing.then(std::time::Instant::now);
+    let mut postings = postings.into_iter();
+    let mut candidates = postings.next().unwrap_or_default();
+    for docids in postings {
+        candidates.retain(|docid| docids.contains(docid));
+        if candidates.is_empty() {
+            break;
+        }
+    }
+    if let Some(started) = started {
+        merge_duration += started.elapsed();
     }
     crate::timing::emit(
         "search.postings_decode",
@@ -104,17 +116,20 @@ pub fn store_search(
             continue;
         }
         let started = timing.then(std::time::Instant::now);
-        let entry_tokens = tokenize_entry(&entry);
+        let decoded_fields = reader.field_tokens(docid);
         if let Some(started) = started {
             row_tokenize_duration += started.elapsed();
         }
+        let Ok(fields) = decoded_fields else {
+            continue;
+        };
         let started = timing.then(std::time::Instant::now);
-        let matched_entry = match_entry(&entry_tokens, &terms);
+        let matched_entry = match_entry_with_fields(&entry, &fields, &terms);
         if let Some(started) = started {
             matching_duration += started.elapsed();
         }
         if let Some(m) = matched_entry {
-            matched.push((entry, entry_tokens, m));
+            matched.push((entry, fields, m));
         }
     }
     crate::timing::emit(
@@ -163,7 +178,7 @@ pub fn store_search(
 
     let scored: Vec<_> = matched
         .iter()
-        .map(|(entry, tokens, m)| (entry, &tokens.fields, m.clone()))
+        .map(|(entry, fields, m)| (entry, fields, m.clone()))
         .collect();
     rank_and_build(query, artifact_type, scored, &terms, &stats)
 }

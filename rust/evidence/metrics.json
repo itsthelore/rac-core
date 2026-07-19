@@ -237,6 +237,60 @@
     "peak_rss_mib": 21.7,
     "claim_scope": "Inside-Git recency annotation. P2 removes the per-result subprocess explosion; search candidate, tokenization, and sorting costs remain for P4."
   },
+  "p4_search_hotpath": {
+    "measured_at": "2026-07-19T15:20:07Z",
+    "source_base": "c7d5f2624d6565658abae7aa72573680f42c287e plus P4 search-hotpath optimization",
+    "rac_spec": "d47ccd13301a673bb01307ac8bd2f7fb71fb5ba1",
+    "host": "Apple M1, 8 logical CPUs, 16 GiB, Darwin arm64",
+    "profile": "cargo release, rustc 1.94.1, thin LTO, codegen-units=1",
+    "corpus": {
+      "files": 5000,
+      "outside_git_index_bytes": 27652190,
+      "inside_git_index_bytes": 26115237,
+      "generator": "rust/tools/gen_corpus.py default seed"
+    },
+    "runs_per_mode": 5,
+    "inside_git_warm_p50_ms": {
+      "exact_id_before": 173.1,
+      "exact_id_after": 39.9,
+      "exact_id_reduction_percent": 76.9,
+      "common_term_before": 623.2,
+      "common_term_after": 482.3,
+      "common_term_reduction_percent": 22.6,
+      "multi_term_before": 660.1,
+      "multi_term_after": 496.6,
+      "multi_term_reduction_percent": 24.8,
+      "duplicate_term_before": 632.2,
+      "duplicate_term_after": 489.0,
+      "duplicate_term_reduction_percent": 22.7,
+      "no_match_after": 25.7
+    },
+    "outside_git_warm_p50_ms": {
+      "exact_id_after": 36.8,
+      "rare_term_after": 36.2,
+      "common_term_before": 391.0,
+      "common_term_after": 205.2,
+      "common_term_reduction_percent": 47.5,
+      "multi_term_after": 192.6,
+      "duplicate_term_after": 190.0,
+      "no_match_after": 30.2
+    },
+    "diagnostic": {
+      "exact_id_candidates_before": 5000,
+      "exact_id_candidates_after": 1,
+      "common_row_tokenize_before_ms": 117.9,
+      "common_row_tokenize_after_ms": 72.375,
+      "common_final_sort_before_ms": 99.3,
+      "common_final_sort_after_ms": 4.154
+    },
+    "byte_identity": {
+      "response_bytes": 3368660,
+      "p2_sha256": "edb0f2a899c4b9ebf3b3f89b41443d286eea507c3dea195a95b3520fa0cc338a",
+      "p4_sha256": "edb0f2a899c4b9ebf3b3f89b41443d286eea507c3dea195a95b3520fa0cc338a"
+    },
+    "peak_rss_mib": 21.7,
+    "claim_scope": "Store-served candidate selection, row token reuse, rank fusion, and final ordering. Persistent format and response bytes are unchanged."
+  },
   "not_solved": {
     "uncovered_commands": [
       "diff",

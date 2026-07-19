@@ -231,6 +231,30 @@ and about 13 ms for one-result queries. P2 therefore removes the subprocess
 explosion; P4 still owns broad candidate reconstruction, row tokenisation, and
 sorting.
 
+### P4 search-hotpath result
+
+P4 makes the store-served search plan reflect RAC's existing AND contract.
+Distinct per-term posting sets are intersected smallest-first instead of
+unioned, so an exact ID no longer reconstructs every document containing the
+common `RAC` prefix. Store rows reuse their persisted flat field tokens;
+section text is tokenized only far enough to recover a winning heading/body
+snippet. Ranking uses index-aligned vectors instead of path-keyed hash maps,
+and the rounded fused sort key is computed once per result rather than once
+per comparison.
+
+On the same 5,000-file matrices, exact-ID warm p50 fell from the immediately
+preceding inside-Git 173 ms to 39.9 ms (77%) as its candidate set dropped from
+5,000 rows to one. Inside-Git broad p50 moved from 623 to 482 ms for
+common-term, 660 to 497 ms for multi-term, and 632 to 489 ms for the duplicate
+query (23–25%). Outside Git, common-term warm p50 was 205 ms versus the P1/P2
+search-plan baseline of 391 ms (48%); exact-ID was 36.8 ms.
+
+The common-term diagnostic now attributes about 72 ms to persisted-token row
+reconstruction and 4.2 ms to final sorting, versus the P0 observations of 118
+ms and 99 ms. The retained P2 and final P4 3,368,660-byte inside-Git responses
+remain byte-identical with SHA-256
+`edb0f2a899c4b9ebf3b3f89b41443d286eea507c3dea195a95b3520fa0cc338a`.
+
 ## Performance
 
 See the `PERF-REPORT.md` warm-path addendum. Headline (5k synthetic
