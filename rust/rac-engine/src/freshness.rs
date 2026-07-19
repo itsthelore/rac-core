@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::derived::{build_derived_index_from_items, DerivedIndex, SCHEMA_VERSION};
-use crate::derived_cache::{corpus_hash_from_manifest, stat_scan};
+use crate::derived_cache::{corpus_hash_from_complete_manifest, stat_scan};
 use crate::index_store::{open_store, write_store, FileState, MmapIndexReader};
 use crate::relationships::CorpusItem;
 
@@ -178,7 +178,7 @@ impl FreshnessTracker {
         if !changed.is_empty() {
             self.delta_paths.extend(changed.iter().cloned());
         }
-        self.hash = Some(corpus_hash_from_manifest(&self.root_str, &self.manifest, true));
+        self.hash = Some(corpus_hash_from_complete_manifest(&self.manifest));
     }
 
     fn reparse_full(&mut self) {

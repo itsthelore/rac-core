@@ -166,6 +166,37 @@
     "peak_rss_mib": 21.7,
     "interpretation": "The published 647 ms no-cache scale is reproduced by common/multi-term p50. Warm no-match is freshness-bound; broad warm queries are row-tokenization and final-sort bound. Exact-ID search currently unions the common RAC token before AND matching and therefore behaves like a broad query; P4 owns that candidate-plan issue."
   },
+  "p1_freshness": {
+    "measured_at": "2026-07-19T13:26:02Z",
+    "source_base": "aa60efc729a4b44a06555af85e35646230566285 plus P1 freshness optimization",
+    "rac_spec": "d47ccd13301a673bb01307ac8bd2f7fb71fb5ba1",
+    "host": "Apple M1, 8 logical CPUs, 16 GiB, Darwin arm64",
+    "profile": "cargo release, rustc 1.94.1, thin LTO, codegen-units=1",
+    "corpus": {
+      "files": 5000,
+      "location": "outside Git on local temporary storage",
+      "generator": "rust/tools/gen_corpus.py default seed"
+    },
+    "runs_per_mode": 5,
+    "warm_no_match_ms": {
+      "matches": 0,
+      "before_p50": 49.7,
+      "after_p50": 25.7,
+      "p50_reduction_percent": 48.3,
+      "before_p95": 71.7,
+      "after_p95": 27.8,
+      "p95_reduction_percent": 61.2
+    },
+    "diagnostic_phase_ms": {
+      "corpus_hash_before": 11.8,
+      "corpus_hash_after": 2.974,
+      "manifest_write_before": 5.2,
+      "manifest_write_after": 0.046
+    },
+    "index_bytes": 27652190,
+    "peak_rss_mib": 21.5,
+    "claim_scope": "Selective unchanged-corpus warm path only; broad-query samples remain dominated by row tokenization and final sorting and are not used for the P1 improvement claim."
+  },
   "not_solved": {
     "uncovered_commands": [
       "diff",
