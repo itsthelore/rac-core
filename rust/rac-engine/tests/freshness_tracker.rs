@@ -27,10 +27,14 @@ fn base_delta_compaction_lifecycle() {
     // Threshold 2: the second delta path triggers compaction — observable
     // without a 10k-file corpus.
     let mut tracker = FreshnessTracker::new(cache.clone(), &root, Some(2));
+    #[cfg(target_os = "linux")]
+    assert_eq!(tracker.mode(), "inotify");
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(tracker.mode(), "stat");
 
     // Cold: full scan, first base written and served from the map.
     assert!(matches!(tracker.read_model(false), TrackerModel::View(_)));
+    assert!(tracker.last_detect_scanned());
     assert_eq!(tracker.base_generation(), 1);
     assert_eq!(tracker.serving_generation(), 1);
     assert_eq!(tracker.delta_size(), 0);
@@ -38,6 +42,10 @@ fn base_delta_compaction_lifecycle() {
 
     // Unchanged corpus: the cached model is returned, nothing moves.
     assert!(matches!(tracker.read_model(false), TrackerModel::View(_)));
+    #[cfg(target_os = "linux")]
+    assert!(!tracker.last_detect_scanned());
+    #[cfg(not(target_os = "linux"))]
+    assert!(tracker.last_detect_scanned());
     assert_eq!(tracker.base_generation(), 1);
     assert_eq!(tracker.serving_generation(), 1);
 
@@ -45,6 +53,7 @@ fn base_delta_compaction_lifecycle() {
     // re-derived snapshot (no base rewrite below the threshold).
     fs::write(corpus.join("adr-2-two.md"), DOC.replace("ADR-1", "ADR-2")).unwrap();
     assert!(matches!(tracker.read_model(false), TrackerModel::Snapshot(_)));
+    assert!(tracker.last_detect_scanned());
     assert_eq!(tracker.base_generation(), 1);
     assert_eq!(tracker.serving_generation(), 2);
     assert_eq!(tracker.delta_size(), 1);
@@ -69,5 +78,83 @@ fn base_delta_compaction_lifecycle() {
     assert_eq!(tracker.serving_generation(), 4);
 
     let _ = fs::remove_dir_all(&corpus);
+    let _ = fs::remove_dir_all(&cache);
+}
+
+#[test]
+fn stat_fallback_and_verify_never_trust_clean_events() {
+    let corpus = scratch("stat-corpus");
+    let cache = scratch("stat-cache");
+    fs::write(corpus.join("adr-1-base.md"), DOC).unwrap();
+    let root = corpus.to_string_lossy().into_owned();
+    let mut tracker = FreshnessTracker::new_stat(cache.clone(), &root, None);
+
+    assert_eq!(tracker.mode(), "stat");
+    tracker.read_model(false);
+    assert!(tracker.last_detect_scanned());
+    tracker.read_model(false);
+    assert!(tracker.last_detect_scanned());
+
+    let mut watcher = FreshnessTracker::new(cache.clone(), &root, None);
+    watcher.read_model(false);
+    watcher.read_model(true);
+    assert!(watcher.last_detect_scanned());
+
+    let _ = fs::remove_dir_all(&corpus);
+    let _ = fs::remove_dir_all(&cache);
+}
+
+#[test]
+fn detection_barrier_catches_immediate_nested_mutation() {
+    let corpus = scratch("event-corpus");
+    let cache = scratch("event-cache");
+    fs::write(corpus.join("adr-1-base.md"), DOC).unwrap();
+    let root = corpus.to_string_lossy().into_owned();
+    let mut tracker = FreshnessTracker::new(cache.clone(), &root, Some(10));
+    tracker.read_model(false);
+    let generation = tracker.serving_generation();
+
+    let nested = corpus.join("new").join("nested");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(nested.join("adr-2-two.md"), DOC.replace("ADR-1", "ADR-2")).unwrap();
+    match tracker.read_model(false) {
+        TrackerModel::Snapshot(derived) => assert_eq!(derived.index_entries.len(), 2),
+        TrackerModel::View(_) => panic!("nested mutation must open the delta window"),
+    }
+    assert!(tracker.last_detect_scanned());
+    assert_eq!(tracker.serving_generation(), generation + 1);
+
+    tracker.read_model(false);
+    #[cfg(target_os = "linux")]
+    assert!(!tracker.last_detect_scanned());
+    #[cfg(not(target_os = "linux"))]
+    assert!(tracker.last_detect_scanned());
+
+    let _ = fs::remove_dir_all(&corpus);
+    let _ = fs::remove_dir_all(&cache);
+}
+
+#[test]
+fn watcher_setup_and_runtime_failure_degrade_to_stat() {
+    let missing = scratch("missing-root");
+    let _ = fs::remove_dir_all(&missing);
+    let cache = scratch("missing-cache");
+    let missing_root = missing.to_string_lossy().into_owned();
+    let missing_tracker = FreshnessTracker::new(cache.clone(), &missing_root, None);
+    assert_eq!(missing_tracker.mode(), "stat");
+
+    let corpus = scratch("removed-corpus");
+    fs::write(corpus.join("adr-1-base.md"), DOC).unwrap();
+    let root = corpus.to_string_lossy().into_owned();
+    let mut tracker = FreshnessTracker::new(cache.clone(), &root, Some(10));
+    tracker.read_model(false);
+    fs::remove_dir_all(&corpus).unwrap();
+    match tracker.read_model(false) {
+        TrackerModel::Snapshot(derived) => assert!(derived.index_entries.is_empty()),
+        TrackerModel::View(_) => panic!("root removal must be served as an empty snapshot"),
+    }
+    assert_eq!(tracker.mode(), "stat");
+    assert!(tracker.last_detect_scanned());
+
     let _ = fs::remove_dir_all(&cache);
 }
