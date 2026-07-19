@@ -408,6 +408,7 @@ pub fn get_summary(root: &str, model: Option<&TrackerModel>, budget: i64) -> Str
 
 pub fn retrieve_grounding(
     root: &str,
+    model: Option<&TrackerModel>,
     task: &str,
     scope: &str,
     top_k: i64,
@@ -416,8 +417,18 @@ pub fn retrieve_grounding(
 ) -> String {
     // Python passes `scope or None`; the engine's own empty filter matches.
     let scope_opt = if scope.is_empty() { None } else { Some(scope) };
-    let payload = rac_engine::retrieve::retrieve_grounding(
-        root, task, scope_opt, top_k, effective, live_only,
-    );
+    let payload = match model {
+        Some(TrackerModel::View(reader)) => rac_engine::retrieve::retrieve_grounding_from_store(
+            root, task, scope_opt, top_k, effective, live_only, reader,
+        ),
+        Some(TrackerModel::Snapshot(derived)) => {
+            rac_engine::retrieve::retrieve_grounding_from_derived(
+                root, task, scope_opt, top_k, effective, live_only, derived,
+            )
+        }
+        None => rac_engine::retrieve::retrieve_grounding(
+            root, task, scope_opt, top_k, effective, live_only,
+        ),
+    };
     serialize(&payload, effective)
 }

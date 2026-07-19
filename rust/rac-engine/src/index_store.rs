@@ -598,6 +598,36 @@ impl MmapIndexReader {
         reader.text() // path
     }
 
+    /// The first non-empty line of this document's `## Status` section.
+    /// Status is already present in the searchable-section segment, so
+    /// grounding can determine lifecycle without reopening and reparsing the
+    /// Markdown file.
+    pub fn entry_status(&self, docid: u32) -> Result<String, IndexFormatError> {
+        let mut reader = self.indexed(SEG_SECTIONS)?.row(docid)?;
+        let count = reader.u32()?;
+        for _ in 0..count {
+            let is_status = {
+                let heading = reader.text_ref()?;
+                crate::pycompat::py_casefold(crate::pycompat::py_strip(heading)) == "status"
+            };
+            let line_count = reader.u32()?;
+            if is_status {
+                let mut status = String::new();
+                for _ in 0..line_count {
+                    let line = crate::pycompat::py_strip(reader.text_ref()?);
+                    if status.is_empty() && !line.is_empty() {
+                        status = line.to_string();
+                    }
+                }
+                return Ok(status);
+            }
+            for _ in 0..line_count {
+                reader.text_ref()?;
+            }
+        }
+        Ok(String::new())
+    }
+
     /// Per-field token counts for one doc, FIELDS order.
     pub fn field_lengths(&self, docid: u32) -> Result<[u64; 6], IndexFormatError> {
         let mut reader = self.indexed(SEG_ENTRIES)?.row(docid)?;

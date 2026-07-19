@@ -12,7 +12,11 @@ use std::path::Path;
 
 use rac_engine::output::render_retrieve_human;
 use rac_engine::budget::serialize;
-use rac_engine::retrieve::retrieve_grounding;
+use rac_engine::derived::{build_derived_index, SCHEMA_VERSION};
+use rac_engine::index_store::{corpus_content_hash, open_store, write_store};
+use rac_engine::retrieve::{
+    retrieve_grounding, retrieve_grounding_from_derived, retrieve_grounding_from_store,
+};
 use serde_json::Value;
 
 fn vectors() -> Value {
@@ -63,5 +67,52 @@ fn retrieve_payloads_match_oracle_next() {
             case["human"].as_str().unwrap(),
             "human rendering diverged: {label}"
         );
+    }
+}
+
+#[test]
+fn fresh_snapshot_and_mapped_grounding_are_identical() {
+    enter_repo_root();
+    let data = vectors();
+    let cases = data["cases"].as_array().expect("cases array");
+    let directories: std::collections::BTreeSet<&str> = cases
+        .iter()
+        .map(|case| case["directory"].as_str().unwrap())
+        .collect();
+
+    for (directory_index, directory) in directories.into_iter().enumerate() {
+        let derived = build_derived_index(directory, true);
+        let corpus_hash = corpus_content_hash(directory, true);
+        let cache = std::env::temp_dir().join(format!(
+            "rac-grounding-model-{}-{directory_index}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&cache);
+        assert!(write_store(&cache, &corpus_hash, SCHEMA_VERSION, &derived));
+        let reader =
+            open_store(&cache, &corpus_hash, SCHEMA_VERSION).expect("open grounding store");
+
+        for case in cases
+            .iter()
+            .filter(|case| case["directory"].as_str() == Some(directory))
+        {
+            let task = case["task"].as_str().unwrap();
+            let scope = case["scope"].as_str();
+            let top_k = case["top_k"].as_i64().unwrap();
+            let budget = case["budget"].as_i64().unwrap();
+            let live_only = case["live_only"].as_bool().unwrap();
+            let fresh = retrieve_grounding(directory, task, scope, top_k, budget, live_only);
+            let snapshot = retrieve_grounding_from_derived(
+                directory, task, scope, top_k, budget, live_only, &derived,
+            );
+            let mapped = retrieve_grounding_from_store(
+                directory, task, scope, top_k, budget, live_only, &reader,
+            );
+            let label = format!("dir={directory} task={task:?} scope={scope:?}");
+            assert_eq!(snapshot, fresh, "snapshot mismatch: {label}");
+            assert_eq!(mapped, fresh, "mapped mismatch: {label}");
+        }
+        drop(reader);
+        let _ = fs::remove_dir_all(&cache);
     }
 }

@@ -324,6 +324,17 @@ fn dispatch(
     recorder: Option<&mut audit::Recorder>,
     principal: Option<&str>,
 ) -> Result<String, String> {
+    if !matches!(
+        name,
+        "get_artifact"
+            | "search_artifacts"
+            | "retrieve_grounding"
+            | "find_decisions"
+            | "get_related"
+            | "get_summary"
+    ) {
+        return Err(format!("Unknown tool: {name}"));
+    }
     // ADR-033: the server budget is fixed at construction; the stdio CLI has
     // no flag, so it is always the default.
     let server_budget = budget::DEFAULT_BUDGET;
@@ -418,7 +429,9 @@ fn dispatch(
             let audit_args = Value::Object(m);
             Ok(sidecar::observe(name, || {
                 audit::observe(recorder, principal, name, audit_args, || {
-                    tools::retrieve_grounding(root, &task, &scope, top_k, effective, live_only)
+                    tools::retrieve_grounding(
+                        root, model, &task, &scope, top_k, effective, live_only,
+                    )
                 })
             }))
         }
@@ -467,6 +480,30 @@ fn dispatch(
                 })
             }))
         }
-        _ => Err(format!("Unknown tool: {name}")),
+        _ => unreachable!("known tool guard and dispatch arms must stay aligned"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_tool_does_not_freshen_tracker() {
+        let mut tracker = Some(rac_engine::freshness::FreshnessTracker::new(
+            std::path::PathBuf::from("/definitely-not-a-rac-cache"),
+            "/definitely-not-a-rac-corpus",
+            None,
+        ));
+        let result = dispatch(
+            "/definitely-not-a-rac-corpus",
+            &mut tracker,
+            "not_a_tool",
+            &json!({}),
+            None,
+            None,
+        );
+        assert_eq!(result, Err("Unknown tool: not_a_tool".to_string()));
+        assert_eq!(tracker.as_ref().and_then(|t| t.corpus_hash()), None);
     }
 }

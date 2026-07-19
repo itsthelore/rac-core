@@ -158,9 +158,15 @@ impl<'a> Reader<'a> {
     }
 
     pub fn text(&mut self) -> Result<String, IndexFormatError> {
+        Ok(self.text_ref()?.to_string())
+    }
+
+    /// Bounds-checked UTF-8 text borrowed directly from the segment. Callers
+    /// must keep the value within the mapped reader's lifetime.
+    pub fn text_ref(&mut self) -> Result<&'a str, IndexFormatError> {
         let raw = self.blob()?;
         match std::str::from_utf8(raw) {
-            Ok(s) => Ok(s.to_string()),
+            Ok(s) => Ok(s),
             Err(_) => err("segment text is not valid UTF-8"),
         }
     }

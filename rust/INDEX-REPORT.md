@@ -149,6 +149,7 @@ operation names are:
   `search.matching`, `search.bm25f`, `search.rank_fusion`,
   `search.final_sort`, and `search.response_projection`;
 - `git.recency_join` and `cli.response_serialize`;
+- `grounding.search` and `grounding.projections`;
 - `tracker.detect`, `tracker.recompute`, `mcp.dispatch`, and
   `mcp.response_serialize`.
 
@@ -230,6 +231,33 @@ corresponding diagnostic Git joins were 293–320 ms for the broad result sets
 and about 13 ms for one-result queries. P2 therefore removes the subprocess
 explosion; P4 still owns broad candidate reconstruction, row tokenisation, and
 sorting.
+
+### P3 read-model grounding result
+
+P3 moves MCP `retrieve_grounding` onto the tracker model already freshened for
+the call. The mapped arm searches postings, reads governing-scope and
+relationship projections only when requested, resolves successors through the
+path map, and derives lifecycle status from the persisted section row. The
+mutation-window arm consumes the same derived snapshot. Neither arm walks or
+reparses the corpus; disk reads are limited to final selected excerpts and a
+safe fallback when a requested model row cannot be decoded. Unknown tool names
+are rejected before tracker freshening.
+
+One equivalence test now replays every recorded grounding vector through fresh,
+snapshot, and mapped arms and compares the complete pre-serialization payload.
+It covers empty and broad queries, scope paths, supersession chains,
+`live_only`, Unicode, CRLF, and budget/top-k variants.
+
+On the release-profile 5,000-file outside-Git corpus, an exact-ID grounding call
+fell from 430–573 ms warm p50 on the P4 parent to 23–28 ms across P3 runs. A
+broad `markdown` call fell from a 395 ms earlier parent run to 271 ms p50 in the
+corresponding P3 run. Payload SHA-256 values were identical before and after:
+`7fad45dae749bf8f6f1a98f07cd5460d8b7f8987498f8ef8dbc5e7fc67f441e9`
+for exact-ID and
+`865918b0f90a0918facfe4cc27200b9d402b365c492c40ff0e02222d221da3df`
+for broad grounding. The exact-ID result is below the programme's initial
+50 ms p95 target in all seven measured warm samples (22.6–31.0 ms across two
+P3 runs); broad queries remain governed by P4's matched-row work.
 
 ### P4 search-hotpath result
 
