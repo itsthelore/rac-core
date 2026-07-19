@@ -18,6 +18,7 @@
 //!   the threshold is **not** stale.
 //! - Unknown date -> `Staleness { None, None, None }`.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -101,13 +102,101 @@ pub fn first_committed(repo_root: &Path, path: &Path) -> Option<String> {
 
 /// Last-committed time for each of `paths` (the raw recency primitive). Every
 /// path maps to `None` when `directory` is not a repo. Order preserved.
-pub fn last_committed_for_paths(directory: &Path, paths: &[PathBuf]) -> Vec<(PathBuf, Option<String>)> {
+pub fn last_committed_for_paths(
+    directory: &Path,
+    paths: &[PathBuf],
+) -> Vec<(PathBuf, Option<String>)> {
     match repository_root(directory) {
         None => paths.iter().map(|p| (p.clone(), None)).collect(),
-        Some(root) => paths
-            .iter()
-            .map(|p| (p.clone(), last_committed(&root, p)))
-            .collect(),
+        Some(root) => last_committed_for_paths_in_repo(&root, paths),
+    }
+}
+
+/// Batched form of [`last_committed_for_paths`] for callers that already
+/// resolved the repository root. A newest-first `git log --name-only` walk
+/// assigns the first observed commit stamp to each path, reproducing
+/// `git log -1 --format=%cI -- <path>` without one subprocess per artifact.
+pub fn last_committed_for_paths_in_repo(
+    repo_root: &Path,
+    paths: &[PathBuf],
+) -> Vec<(PathBuf, Option<String>)> {
+    const MAX_PATHSPEC_BYTES: usize = 64 * 1024;
+    const MAX_PATHS_PER_RUN: usize = 2_048;
+
+    let specs: Vec<String> = paths.iter().map(|path| pathspec(repo_root, path)).collect();
+    let mut unique = Vec::new();
+    let mut seen = HashSet::new();
+    for spec in &specs {
+        // `pathspec` passes an absolute path through when it lies outside the
+        // work tree. An individual git call returns no history for it; omit it
+        // here so it cannot make the whole batch fail.
+        if !Path::new(spec).is_absolute() && seen.insert(spec.clone()) {
+            unique.push(spec.clone());
+        }
+    }
+
+    let mut committed: HashMap<String, String> = HashMap::new();
+    let mut start = 0;
+    while start < unique.len() {
+        let mut end = start;
+        let mut bytes = 0;
+        while end < unique.len() && end - start < MAX_PATHS_PER_RUN {
+            let next = unique[end].len() + 1;
+            if end > start && bytes + next > MAX_PATHSPEC_BYTES {
+                break;
+            }
+            bytes += next;
+            end += 1;
+        }
+        collect_last_committed(repo_root, &unique[start..end], &mut committed);
+        start = end;
+    }
+
+    paths
+        .iter()
+        .zip(specs)
+        .map(|(path, spec)| (path.clone(), committed.get(&spec).cloned()))
+        .collect()
+}
+
+fn collect_last_committed(
+    repo_root: &Path,
+    specs: &[String],
+    committed: &mut HashMap<String, String>,
+) {
+    if specs.is_empty() {
+        return;
+    }
+    let mut args = vec!["log", "-z", "--format=%x1e%cI", "--name-only", "--"];
+    args.extend(specs.iter().map(String::as_str));
+    let Some(output) = run_git(&args, repo_root) else {
+        return;
+    };
+    let wanted: HashSet<&str> = specs.iter().map(String::as_str).collect();
+    let mut stamp: Option<&str> = None;
+    let mut first_name = false;
+    for token in output.split('\0') {
+        if let Some(value) = token.strip_prefix('\x1e') {
+            stamp = Some(value.trim());
+            first_name = true;
+            continue;
+        }
+        let Some(current) = stamp else {
+            continue;
+        };
+        // Git places one formatting newline before the first name in each
+        // commit. `-z` keeps the filename itself otherwise byte-delimited.
+        let name = if first_name {
+            first_name = false;
+            token.strip_prefix('\n').unwrap_or(token)
+        } else {
+            token
+        };
+        if wanted.contains(name) {
+            committed
+                .entry(name.to_string())
+                .or_insert_with(|| current.to_string());
+        }
     }
 }
 

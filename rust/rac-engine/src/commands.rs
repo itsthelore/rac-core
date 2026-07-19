@@ -1,7 +1,7 @@
 //! Command orchestration: walk -> parse -> classify -> validate -> render.
 //! Output is order-deterministic.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::output;
 use crate::parse::{parse_file, parse_text, Artifact, Issue};
@@ -1343,13 +1343,18 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let repo_root = gitinfo::repository_root(Path::new(directory));
-    for m in matches.iter_mut() {
-        let last = repo_root
-            .as_ref()
-            .and_then(|root| gitinfo::last_committed(root, Path::new(&m.path)));
+    let paths: Vec<PathBuf> = matches.iter().map(|m| PathBuf::from(&m.path)).collect();
+    let committed = match &repo_root {
+        Some(root) => gitinfo::last_committed_for_paths_in_repo(root, &paths),
+        None => paths.into_iter().map(|path| (path, None)).collect(),
+    };
+    for (m, (_, last)) in matches.iter_mut().zip(committed) {
         let st = gitinfo::staleness(last.as_deref(), threshold, reference);
         m.recency = Some(crate::resolve::Recency {
-            last_committed: st.last_committed.as_deref().map(gitinfo::isoformat_roundtrip),
+            last_committed: st
+                .last_committed
+                .as_deref()
+                .map(gitinfo::isoformat_roundtrip),
             age_days: st.age_days,
             stale: st.stale,
         });
@@ -1357,7 +1362,10 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
     crate::timing::emit_since(
         "git.recency_join",
         timing_started,
-        &[("matches", matches.len() as u64), ("repository", u64::from(repo_root.is_some()))],
+        &[
+            ("matches", matches.len() as u64),
+            ("repository", u64::from(repo_root.is_some())),
+        ],
     );
 }
 
