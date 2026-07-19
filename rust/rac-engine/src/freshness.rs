@@ -87,14 +87,26 @@ impl FreshnessTracker {
     /// unchanged corpus returns the cached model with no re-derive.
     pub fn read_model(&mut self, verify: bool) -> &TrackerModel {
         let cold = self.model.is_none();
+        let detect_started = crate::timing::start();
         let changed = self.detect(verify);
+        crate::timing::emit_since(
+            "tracker.detect",
+            detect_started,
+            &[("files", self.manifest.len() as u64), ("changed", changed.len() as u64)],
+        );
         if changed.is_empty() && !cold {
             return self.model.as_ref().expect("warm model");
         }
         if !cold {
+            let recompute_started = crate::timing::start();
             self.apply(&changed);
             self.rebuild_model();
             self.maybe_compact();
+            crate::timing::emit_since(
+                "tracker.recompute",
+                recompute_started,
+                &[("changed", changed.len() as u64), ("cold", 0)],
+            );
             return self.model.as_ref().expect("rebuilt model");
         }
         // Cold start: the whole corpus parsed from nothing; the three cold
@@ -106,6 +118,11 @@ impl FreshnessTracker {
         let write_start = std::time::Instant::now();
         self.maybe_compact();
         let end = std::time::Instant::now();
+        crate::timing::emit_since(
+            "tracker.recompute",
+            Some(parse_start),
+            &[("changed", changed.len() as u64), ("cold", 1)],
+        );
         crate::parallel_build::emit_build_timing(&crate::parallel_build::BuildStats {
             files: self.manifest.len(),
             workers: self.last_parse_workers,

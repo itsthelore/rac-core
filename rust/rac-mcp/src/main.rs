@@ -263,10 +263,24 @@ fn tools_call_frame(
         .unwrap_or("");
     let empty = json!({});
     let arguments = message.pointer("/params/arguments").unwrap_or(&empty);
-    match dispatch(root, tracker, name, arguments, recorder, principal) {
+    let dispatch_started = rac_engine::timing::start();
+    let dispatched = dispatch(root, tracker, name, arguments, recorder, principal);
+    rac_engine::timing::emit_since(
+        "mcp.dispatch",
+        dispatch_started,
+        &[("success", u64::from(dispatched.is_ok()))],
+    );
+    let serialize_started = rac_engine::timing::start();
+    let frame = match dispatched {
         Ok(payload) => call_result_frame(id_json, &payload, false),
         Err(text) => call_result_frame(id_json, &text, true),
-    }
+    };
+    rac_engine::timing::emit_since(
+        "mcp.response_serialize",
+        serialize_started,
+        &[("bytes", frame.len() as u64)],
+    );
+    frame
 }
 
 // Argument accessors over the coerced vector (defaults applied here, matching

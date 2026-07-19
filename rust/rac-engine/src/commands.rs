@@ -1336,6 +1336,7 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
     if matches.is_empty() {
         return;
     }
+    let timing_started = crate::timing::start();
     let threshold = crate::validate::load_freshness_threshold(directory);
     let reference = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1353,6 +1354,11 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
             stale: st.stale,
         });
     }
+    crate::timing::emit_since(
+        "git.recency_join",
+        timing_started,
+        &[("matches", matches.len() as u64), ("repository", u64::from(repo_root.is_some()))],
+    );
 }
 
 /// Serve `rac find` from the persistent index store (`_find_from_store`,
@@ -1423,11 +1429,18 @@ pub fn cmd_find(args: &FindArgs) -> i32 {
         )
     };
     annotate_search_recency(&mut result.matches, &args.directory);
-    if args.json {
-        emit(output::render_find_json(&result, args.explain));
+    let render_started = crate::timing::start();
+    let rendered = if args.json {
+        output::render_find_json(&result, args.explain)
     } else {
-        emit(output::render_find_human(&result, args.explain));
-    }
+        output::render_find_human(&result, args.explain)
+    };
+    crate::timing::emit_since(
+        "cli.response_serialize",
+        render_started,
+        &[("matches", result.matches.len() as u64), ("bytes", rendered.len() as u64)],
+    );
+    emit(rendered);
     // An empty result is a valid outcome, not an error.
     EXIT_OK
 }

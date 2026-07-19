@@ -8,7 +8,10 @@ Measures, per configured engine, over repeated runs:
   (d) cold-walk throughput      — files/s at each corpus size present
   (e) peak RSS                  — /usr/bin/time -v, getrusage fallback
 
-Reports median/min of >=7 runs (>=3 for the 20k size). Writes plain-text and
+  (f) search matrix              — no-cache, cold-cache, warm-cache
+  (g) RAC_TIMING phase records  — one warm diagnostic run per query
+
+Reports p50/p95/p99 and min/max over repeated runs. Writes plain-text and
 JSON to a results dir (gitignored). Deterministic invocation env: stdio to
 pipes (color off), XDG dirs pointed at a scratch dir so the oracle's usage
 ping / consent writes are neutralized and no run touches the network
@@ -32,6 +35,12 @@ from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG = os.path.join(HERE, "perf.config.json")
+DEFAULT_QUERIES = (
+    ("common_term", "artifact"),
+    ("no_match", "zzzz-no-such-term"),
+    ("multi_term", "artifact validation"),
+    ("duplicate_term", "artifact artifact"),
+)
 
 
 def _scratch_env(scratch):
@@ -58,6 +67,43 @@ def _time_run(bin_path, args, env):
     return dt, proc.returncode
 
 
+def _time_run_capture(bin_path, args, env):
+    """Run once with captured streams for match counts and RAC_TIMING."""
+    t0 = time.perf_counter()
+    proc = subprocess.run(
+        [bin_path] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env=env, text=True)
+    dt = (time.perf_counter() - t0) * 1000.0
+    return dt, proc.returncode, proc.stdout, proc.stderr
+
+
+def _percentile(values, quantile):
+    """Deterministic linear percentile over an already-small run sample."""
+    ordered = sorted(values)
+    if not ordered:
+        return None
+    position = (len(ordered) - 1) * quantile
+    lo = int(position)
+    hi = min(lo + 1, len(ordered) - 1)
+    fraction = position - lo
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * fraction
+
+
+def _summary(times, codes):
+    return {
+        "runs": len(times),
+        "p50_ms": round(_percentile(times, 0.50), 3),
+        "p95_ms": round(_percentile(times, 0.95), 3),
+        "p99_ms": round(_percentile(times, 0.99), 3),
+        # Kept for compatibility with the existing evidence renderer.
+        "median_ms": round(statistics.median(times), 3),
+        "min_ms": round(min(times), 3),
+        "max_ms": round(max(times), 3),
+        "returncodes": sorted(codes),
+        "raw_ms": [round(t, 3) for t in times],
+    }
+
+
 def _measure(bin_path, args, env, runs):
     times = []
     codes = set()
@@ -65,14 +111,71 @@ def _measure(bin_path, args, env, runs):
         dt, rc = _time_run(bin_path, args, env)
         times.append(dt)
         codes.add(rc)
-    return {
-        "runs": runs,
-        "median_ms": round(statistics.median(times), 3),
-        "min_ms": round(min(times), 3),
-        "max_ms": round(max(times), 3),
-        "returncodes": sorted(codes),
-        "raw_ms": [round(t, 3) for t in times],
-    }
+    return _summary(times, codes)
+
+
+def _measure_query(bin_path, args, env, runs, cache_dir, mode):
+    times = []
+    codes = set()
+    query_env = dict(env)
+    query_env["RAC_CACHE_DIR"] = cache_dir
+    for _ in range(runs):
+        if mode == "cold_cache":
+            shutil.rmtree(cache_dir, ignore_errors=True)
+        dt, rc = _time_run(bin_path, args, query_env)
+        times.append(dt)
+        codes.add(rc)
+    return _summary(times, codes)
+
+
+def _tree_size(path):
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
+
+
+def _first_artifact_id(corpus_dir):
+    path = _pick_single_file(corpus_dir)
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="surrogateescape") as fh:
+            for line in fh:
+                if line.startswith("id:"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:
+        return None
+    return None
+
+
+def _parse_timing(stderr):
+    """Parse numeric, content-free `rac-timing:` records."""
+    records = []
+    for line in stderr.splitlines():
+        if not line.startswith("rac-timing: "):
+            continue
+        record = {}
+        for field in line[len("rac-timing: "):].split():
+            if "=" not in field:
+                continue
+            key, value = field.split("=", 1)
+            if key == "op":
+                record[key] = value
+                continue
+            try:
+                record[key] = float(value) if "." in value else int(value)
+            except ValueError:
+                # Legacy scorecard fields may be non-numeric in future; omit
+                # rather than copying unexpected text into benchmark evidence.
+                continue
+        if record:
+            records.append(record)
+    return records
 
 
 def _peak_rss_kib(bin_path, args, env):
@@ -95,7 +198,11 @@ def _peak_rss_kib(bin_path, args, env):
     after = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     # RUSAGE_CHILDREN is a high-water mark across all children; use `after`
     # as the peak observed after this child (best-effort without time -v).
-    return max(after, before), "getrusage-children"
+    # Linux reports KiB; macOS reports bytes.
+    peak = max(after, before)
+    if sys.platform == "darwin":
+        peak //= 1024
+    return peak, "getrusage-children"
 
 
 def _pick_single_file(corpus_dir):
@@ -120,6 +227,9 @@ def main(argv=None):
     ap.add_argument("--engines", default=None, help="comma list subset")
     ap.add_argument("--sizes", default=None, help="comma list subset")
     ap.add_argument("--runs", type=int, default=None, help="override run count")
+    ap.add_argument(
+        "--contexts", default="outside-git",
+        help="comma list: outside-git,inside-git (default: outside-git)")
     args = ap.parse_args(argv)
 
     with open(args.config, encoding="utf-8") as fh:
@@ -141,6 +251,10 @@ def main(argv=None):
     for sub in ("state", "config", "cache"):
         os.makedirs(os.path.join(scratch, sub), exist_ok=True)
     env = _scratch_env(scratch)
+    requested_contexts = [c.strip() for c in args.contexts.split(",") if c.strip()]
+    unknown_contexts = set(requested_contexts) - {"outside-git", "inside-git"}
+    if unknown_contexts:
+        ap.error("unknown contexts: " + ", ".join(sorted(unknown_contexts)))
 
     def runs_for(size):
         if args.runs:
@@ -149,8 +263,12 @@ def main(argv=None):
 
     # Resolve corpus dirs (relative to repo/tools) and existence + counts.
     present = {}
+    corpus_root = os.environ.get("RAC_PERF_CORPUS_ROOT")
     for size, path in corpora.items():
-        p = path if os.path.isabs(path) else os.path.join(HERE, path)
+        if corpus_root:
+            p = os.path.join(corpus_root, "c" + str(size))
+        else:
+            p = path if os.path.isabs(path) else os.path.join(HERE, path)
         if os.path.isdir(p):
             present[size] = {"dir": p, "count": _count_md(p)}
 
@@ -167,8 +285,13 @@ def main(argv=None):
         smallest = min(present, key=lambda s: present[s]["count"])
 
     for ename, ecfg in engines.items():
-        bin_path = ecfg["bin"]
-        if not (os.path.isabs(bin_path) and os.path.exists(bin_path)):
+        override = "RAC_PERF_" + ename.upper().replace("-", "_") + "_BIN"
+        bin_path = os.environ.get(override, ecfg["bin"])
+        if not os.path.isabs(bin_path):
+            local = os.path.abspath(os.path.join(HERE, bin_path))
+            if os.path.exists(local):
+                bin_path = local
+        if not os.path.exists(bin_path):
             resolved = shutil.which(bin_path)
             if resolved:
                 bin_path = resolved
@@ -213,6 +336,73 @@ def main(argv=None):
                          "peak_rss_mib": round(kib / 1024.0, 1),
                          "method": method, "files": info["count"]}
         edata["measures"]["peak_rss"] = rss
+
+        # (f)+(g) query/cache matrix. Engines without a `find` template keep
+        # the historical walk-only harness behavior.
+        if "find" in ecfg:
+            search = {}
+            for size in sorted(present, key=lambda s: present[s]["count"]):
+                info = present[size]
+                contexts = {}
+                if "outside-git" in requested_contexts:
+                    outside = os.path.join(scratch, "outside-git", str(size))
+                    shutil.rmtree(outside, ignore_errors=True)
+                    shutil.copytree(info["dir"], outside)
+                    contexts["outside-git"] = outside
+                if "inside-git" in requested_contexts:
+                    contexts["inside-git"] = info["dir"]
+                size_data = {}
+                for context_name, corpus_dir in contexts.items():
+                    exact_id = _first_artifact_id(corpus_dir)
+                    identity_queries = []
+                    if exact_id:
+                        identity_queries = [
+                            ("exact_id_search", exact_id),
+                            ("rare_term", exact_id.rsplit("-", 1)[-1]),
+                        ]
+                    queries = identity_queries + list(DEFAULT_QUERIES)
+                    context_data = {}
+                    for query_name, query in queries:
+                        command = _fmt(ecfg["find"], query=query, dir=corpus_dir)
+                        mode_data = {}
+                        base = os.path.join(
+                            scratch, "query-cache", ename, str(size),
+                            context_name, query_name)
+
+                        no_cache_env = dict(env)
+                        no_cache_env["RAC_NO_CACHE"] = "1"
+                        mode_data["no_cache"] = _measure(
+                            bin_path, command, no_cache_env, runs_for(size))
+
+                        mode_data["cold_cache"] = _measure_query(
+                            bin_path, command, env, runs_for(size), base, "cold_cache")
+
+                        shutil.rmtree(base, ignore_errors=True)
+                        warm_env = dict(env)
+                        warm_env["RAC_CACHE_DIR"] = base
+                        _time_run(bin_path, command, warm_env)  # unmeasured prime
+                        mode_data["warm_cache"] = _measure_query(
+                            bin_path, command, env, runs_for(size), base, "warm_cache")
+
+                        timed_env = dict(warm_env)
+                        timed_env["RAC_TIMING"] = "1"
+                        _dt, rc, stdout, stderr = _time_run_capture(
+                            bin_path, command, timed_env)
+                        try:
+                            payload = json.loads(stdout)
+                            match_count = len(payload.get("matches", []))
+                        except (json.JSONDecodeError, AttributeError):
+                            match_count = None
+                        mode_data["diagnostic"] = {
+                            "returncode": rc,
+                            "match_count": match_count,
+                            "index_bytes": _tree_size(base),
+                            "timing": _parse_timing(stderr),
+                        }
+                        context_data[query_name] = mode_data
+                    size_data[context_name] = context_data
+                search[size] = size_data
+            edata["measures"]["search"] = search
 
         results["engines"][ename] = edata
 
@@ -270,6 +460,22 @@ def _render_text(results):
         for size, r in m.get("peak_rss", {}).items():
             out.append(f"    {size:>6} ({r['files']:>5} files)  "
                        f"{r['peak_rss_mib']:>8.1f} MiB  ({r['method']})")
+        if m.get("search"):
+            out.append("  search matrix (p50 / p95 / p99 ms):")
+            for size, contexts in m["search"].items():
+                for context_name, queries in contexts.items():
+                    out.append(f"    {size:>6} context={context_name}")
+                    for query_name, modes in queries.items():
+                        diag = modes["diagnostic"]
+                        out.append(
+                            f"      {query_name:<14} matches={diag['match_count']} "
+                            f"index={diag['index_bytes']} bytes")
+                        for mode in ("no_cache", "cold_cache", "warm_cache"):
+                            q = modes[mode]
+                            out.append(
+                                f"        {mode:<10} {q['p50_ms']:>9.1f} / "
+                                f"{q['p95_ms']:>9.1f} / {q['p99_ms']:>9.1f} "
+                                f"(n={q['runs']}, rc={q['returncodes']})")
         out.append("")
     return "\n".join(out) + "\n"
 

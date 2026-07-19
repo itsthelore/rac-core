@@ -223,15 +223,40 @@ impl DerivedIndexCache {
             open_freshness_manifest(&self.cache_dir, &root_key)
         };
         let confirm_all = verify || prev.is_none();
-        let (manifest, _changed) =
+        let scan_started = crate::timing::start();
+        let (manifest, changed) =
             stat_scan(directory, &prev.unwrap_or_default(), confirm_all, recursive);
+        crate::timing::emit_since(
+            "cache.discovery_stat",
+            scan_started,
+            &[("files", manifest.len() as u64), ("changed", changed.len() as u64)],
+        );
+        let hash_started = crate::timing::start();
         let corpus_hash = corpus_hash_from_manifest(directory, &manifest, recursive);
+        crate::timing::emit_since(
+            "cache.corpus_hash",
+            hash_started,
+            &[("files", manifest.len() as u64)],
+        );
         // Best-effort persistence: the manifest is a latency structure only.
+        let manifest_started = crate::timing::start();
         write_freshness_manifest(&self.cache_dir, &root_key, &manifest);
+        crate::timing::emit_since(
+            "cache.manifest_write",
+            manifest_started,
+            &[("files", manifest.len() as u64)],
+        );
         if marker_valid(&self.cache_dir, &corpus_hash) {
+            let open_started = crate::timing::start();
             if let Some(view) = open_store(&self.cache_dir, &corpus_hash, SCHEMA_VERSION) {
+                crate::timing::emit_since(
+                    "cache.store_open",
+                    open_started,
+                    &[("hit", 1), ("documents", u64::from(view.doc_count))],
+                );
                 return ReadModel::View(view);
             }
+            crate::timing::emit_since("cache.store_open", open_started, &[("hit", 0)]);
             // Marker claimed a store but it is unusable: clear it so the
             // rebuild below writes fresh rather than skipping the dead dir.
             remove_store(&self.cache_dir, &corpus_hash);
@@ -239,10 +264,22 @@ impl DerivedIndexCache {
         // Cold miss: build the store from nothing with the parallel fragment
         // fan-out (ADR-107/108) — byte-identical to the serial build, only
         // faster to produce; the RAC_TIMING scorecard line rides here.
+        let build_started = crate::timing::start();
         let (derived, mut stats) =
             crate::parallel_build::build_derived_index_parallel(directory, recursive, None);
+        crate::timing::emit_since(
+            "cache.cold_build",
+            build_started,
+            &[("documents", derived.index_entries.len() as u64)],
+        );
         let write_start = std::time::Instant::now();
+        let store_write_started = crate::timing::start();
         let store_written = write_store(&self.cache_dir, &corpus_hash, SCHEMA_VERSION, &derived);
+        crate::timing::emit_since(
+            "cache.store_write",
+            store_write_started,
+            &[("written", u64::from(store_written))],
+        );
         stats.write_ms = write_start.elapsed().as_secs_f64() * 1000.0;
         crate::parallel_build::emit_build_timing(&stats);
         if write_marker(&self.cache_dir, &corpus_hash, store_written) {
