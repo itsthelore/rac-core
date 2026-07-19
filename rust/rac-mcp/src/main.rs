@@ -37,6 +37,11 @@ const LATEST_PROTOCOL_VERSION: &str = "2025-06-18";
 /// `retrieve_grounding_toolArguments`; §4).
 const TOOLS_LIST_RESULT: &str = include_str!("tools_list_result.json");
 
+pub(crate) struct ServerState {
+    tracker: Option<rac_engine::freshness::FreshnessTracker>,
+    graph_cache: graph::GraphCache,
+}
+
 /// The SDK's logging notification for an unparseable input line (§1) —
 /// note the field order: method, params, jsonrpc.
 const PARSE_ERROR_NOTIFICATION: &str = "{\"method\":\"notifications/message\",\"params\":{\"level\":\"error\",\"logger\":\"mcp.server.exception_handler\",\"data\":\"Internal Server Error\"},\"jsonrpc\":\"2.0\"}";
@@ -100,7 +105,7 @@ fn main() {
     // Server-lifetime freshness (ADR-105): one tracker per server keeps the
     // derived read-model current by stat-scan detection (ADR-114: no
     // inotify rung), re-deriving only where files changed.
-    let mut tracker = if rac_engine::derived_cache::cache_enabled(cache) {
+    let tracker = if rac_engine::derived_cache::cache_enabled(cache) {
         Some(rac_engine::freshness::FreshnessTracker::new(
             rac_engine::derived_cache::default_cache_dir(),
             &root,
@@ -108,6 +113,10 @@ fn main() {
         ))
     } else {
         None
+    };
+    let mut state = ServerState {
+        tracker,
+        graph_cache: graph::GraphCache::default(),
     };
     // Audit recorder (ADR-084): built from the `.rac/config.yaml` audit stanza,
     // default-absent for stdio (byte-unchanged when off), mandatory for HTTP.
@@ -121,10 +130,10 @@ fn main() {
             usage_error(&msg);
         }
         let mut recorder = audit::build(&root, "http", &audit_config);
-        http::serve_http(&root, &mut tracker, &mut recorder, &host, port, &path);
+        http::serve_http(&root, &mut state, &mut recorder, &host, port, &path);
     }
     let mut recorder = audit::build(&root, "stdio", &audit_config);
-    serve(&root, &mut tracker, &mut recorder);
+    serve(&root, &mut state, &mut recorder);
 }
 
 /// Startup diagnostic (stderr only; declared-normalized in parity, §0).
@@ -141,7 +150,7 @@ a new repository. The server is running; get_summary will report the empty state
 
 fn serve(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     recorder: &mut Option<audit::Recorder>,
 ) {
     let stdin = std::io::stdin();
@@ -169,7 +178,7 @@ fn serve(
         let id_json = serde_json::to_string(id).unwrap_or_else(|_| "null".to_string());
         // stdio has no per-request principal; attribution stays the recorder's
         // locally resolved identity (ADR-098).
-        let frame = process_request(root, tracker, method, &id_json, &message, recorder.as_mut(), None);
+        let frame = process_request(root, state, method, &id_json, &message, recorder.as_mut(), None);
         writeln!(out, "{frame}").ok();
         out.flush().ok();
     }
@@ -181,7 +190,7 @@ fn serve(
 /// per-transport envelope; this owns only the payload.
 pub(crate) fn process_request(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     method: &str,
     id_json: &str,
     message: &Value,
@@ -200,7 +209,7 @@ pub(crate) fn process_request(
         "resources/list" => {
             format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"result\":{{\"resources\":[]}}}}")
         }
-        "tools/call" => tools_call_frame(root, tracker, id_json, message, recorder, principal),
+        "tools/call" => tools_call_frame(root, state, id_json, message, recorder, principal),
         _ => format!(
             "{{\"jsonrpc\":\"2.0\",\"id\":{id_json},\"error\":{{\"code\":-32602,\"message\":\"Invalid request parameters\",\"data\":\"\"}}}}"
         ),
@@ -251,7 +260,7 @@ fn call_result_frame(id_json: &str, text: &str, is_error: bool) -> String {
 
 fn tools_call_frame(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     id_json: &str,
     message: &Value,
     recorder: Option<&mut audit::Recorder>,
@@ -264,7 +273,7 @@ fn tools_call_frame(
     let empty = json!({});
     let arguments = message.pointer("/params/arguments").unwrap_or(&empty);
     let dispatch_started = rac_engine::timing::start();
-    let dispatched = dispatch(root, tracker, name, arguments, recorder, principal);
+    let dispatched = dispatch(root, state, name, arguments, recorder, principal);
     rac_engine::timing::emit_since(
         "mcp.dispatch",
         dispatch_started,
@@ -318,7 +327,7 @@ fn a_bool(args: &[Arg], i: usize, default: bool) -> bool {
 
 fn dispatch(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     name: &str,
     arguments: &Value,
     recorder: Option<&mut audit::Recorder>,
@@ -340,7 +349,13 @@ fn dispatch(
     let server_budget = budget::DEFAULT_BUDGET;
     // Freshen the read-model once per call (the corpus-change check every
     // tool answer rides, ADR-105); without the tracker every arm re-walks.
-    let model = tracker.as_mut().map(|t| t.read_model(false));
+    let (generation, model) = match state.tracker.as_mut() {
+        Some(tracker) => {
+            let (generation, model) = tracker.read_model_with_generation(false);
+            (Some(generation), Some(model))
+        }
+        None => (None, None),
+    };
     // Audit args mirror server.py's per-tool `observed(...)` shapes exactly
     // (insertion order = recorded key order): non-default arguments ride the
     // record only when supplied. `sidecar::observe` keeps the telemetry seam
@@ -464,9 +479,17 @@ fn dispatch(
             let id = a_str(&a, 0, "");
             let depth = a_int(&a, 1, 1);
             let audit_args = json!({ "id": id.clone(), "depth": depth });
+            let fresh_graph;
+            let graph_view = match (generation, model) {
+                (Some(generation), Some(model)) => state.graph_cache.view_for(generation, model),
+                _ => {
+                    fresh_graph = graph::GraphView::fresh(root);
+                    &fresh_graph
+                }
+            };
             Ok(sidecar::observe(name, || {
                 audit::observe(recorder, principal, name, audit_args, || {
-                    tools::get_related(root, model, &id, depth, server_budget)
+                    tools::get_related(graph_view, &id, depth, server_budget)
                 })
             }))
         }
@@ -488,22 +511,87 @@ fn dispatch(
 mod tests {
     use super::*;
 
+    const DECISION: &str = "---\nschema_version: 1\nid: FIX-0DEC1GRAPH00\ntype: decision\n---\n# Graph Decision\n\n## Context\n\nGraph context.\n\n## Decision\n\nKeep the graph indexed.\n\n## Consequences\n\nFast reads.\n\n## Status\n\nAccepted\n";
+
+    fn requirement(id: &str) -> String {
+        format!(
+            "---\nschema_version: 1\nid: {id}\ntype: requirement\n---\n# Graph Requirement\n\n## Status\n\nAccepted\n\n## Problem\n\nGraph reads scale with corpus size.\n\n## Requirements\n\n- [REQ-001] Graph reads are indexed.\n\n## Related Decisions\n\n- FIX-0DEC1GRAPH00\n"
+        )
+    }
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let directory = std::env::temp_dir().join(format!(
+            "rac-mcp-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("scratch");
+        directory
+    }
+
     #[test]
     fn unknown_tool_does_not_freshen_tracker() {
-        let mut tracker = Some(rac_engine::freshness::FreshnessTracker::new(
-            std::path::PathBuf::from("/definitely-not-a-rac-cache"),
-            "/definitely-not-a-rac-corpus",
-            None,
-        ));
+        let mut state = ServerState {
+            tracker: Some(rac_engine::freshness::FreshnessTracker::new(
+                std::path::PathBuf::from("/definitely-not-a-rac-cache"),
+                "/definitely-not-a-rac-corpus",
+                None,
+            )),
+            graph_cache: graph::GraphCache::default(),
+        };
         let result = dispatch(
             "/definitely-not-a-rac-corpus",
-            &mut tracker,
+            &mut state,
             "not_a_tool",
             &json!({}),
             None,
             None,
         );
         assert_eq!(result, Err("Unknown tool: not_a_tool".to_string()));
-        assert_eq!(tracker.as_ref().and_then(|t| t.corpus_hash()), None);
+        assert_eq!(state.tracker.as_ref().and_then(|t| t.corpus_hash()), None);
+    }
+
+    #[test]
+    fn graph_view_reuses_generation_and_rebuilds_after_mutation() {
+        let corpus = scratch("graph-corpus");
+        let cache = scratch("graph-cache");
+        std::fs::write(corpus.join("decision.md"), DECISION).unwrap();
+        std::fs::write(corpus.join("requirement-1.md"), requirement("FIX-0REQ1GRAPH00")).unwrap();
+        let root = corpus.to_string_lossy().into_owned();
+        let mut state = ServerState {
+            tracker: Some(rac_engine::freshness::FreshnessTracker::new(
+                cache.clone(),
+                &root,
+                Some(10),
+            )),
+            graph_cache: graph::GraphCache::default(),
+        };
+        let arguments = json!({"id": "FIX-0DEC1GRAPH00", "depth": 2});
+
+        let first = dispatch(&root, &mut state, "get_related", &arguments, None, None).unwrap();
+        assert!(first.contains("FIX-0REQ1GRAPH00"), "{first}");
+        assert_eq!(state.graph_cache.builds(), 1);
+        let first_generation = state.tracker.as_ref().unwrap().serving_generation();
+
+        let second = dispatch(&root, &mut state, "get_related", &arguments, None, None).unwrap();
+        assert_eq!(second, first);
+        assert_eq!(state.graph_cache.builds(), 1);
+        assert_eq!(
+            state.tracker.as_ref().unwrap().serving_generation(),
+            first_generation
+        );
+
+        std::fs::write(corpus.join("requirement-2.md"), requirement("FIX-0REQ2GRAPH00")).unwrap();
+        let changed = dispatch(&root, &mut state, "get_related", &arguments, None, None).unwrap();
+        assert!(changed.contains("FIX-0REQ1GRAPH00"));
+        assert!(changed.contains("FIX-0REQ2GRAPH00"));
+        assert_eq!(state.graph_cache.builds(), 2);
+        assert_eq!(
+            state.tracker.as_ref().unwrap().serving_generation(),
+            first_generation + 1
+        );
+
+        let _ = std::fs::remove_dir_all(&corpus);
+        let _ = std::fs::remove_dir_all(&cache);
     }
 }

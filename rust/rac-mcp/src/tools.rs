@@ -10,11 +10,11 @@ use rac_engine::budget::{
     serialize, HINT_RELATED, MARKER_HINT, MARKER_OMITTED, MARKER_TRUNCATED,
 };
 use rac_engine::output;
-use rac_engine::relationships::{corpus_items, relationships_from_corpus};
+use rac_engine::relationships::corpus_items;
 use rac_engine::freshness::TrackerModel;
 use rac_engine::resolve::{
-    artifact_status, build_index, find_decisions, index_from_items, resolve_in_index,
-    search_index_filtered, IndexEntry, ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
+    artifact_status, build_index, find_decisions, resolve_in_index, search_index_filtered,
+    ResolvedArtifact, SearchResult, OUTCOME_RESOLVED,
 };
 use serde_json::{json, Map, Value};
 
@@ -197,55 +197,13 @@ pub fn find_decisions_tool(
 }
 
 pub fn get_related(
-    root: &str,
-    model: Option<&TrackerModel>,
+    graph_view: &graph::GraphView,
     artifact_id: &str,
     depth: i64,
     budget: i64,
 ) -> String {
-    // One read-model feeds resolution, outgoing, and incoming (ADR-032/104).
-    let (entries, relationships): (Vec<IndexEntry>, Vec<rac_engine::relationships::Relationship>) =
-        match model {
-            Some(TrackerModel::View(reader)) => (
-                rac_engine::read_model::store_identity_entries(reader),
-                reader.relationships().unwrap_or_default(),
-            ),
-            Some(TrackerModel::Snapshot(derived)) => (
-                // The oracle resolves get_related over `identity_entries` —
-                // the tag/section/inbound-free projection of the bundle.
-                derived
-                    .index_entries
-                    .iter()
-                    .map(|e| IndexEntry {
-                        id: e.id.clone(),
-                        artifact_type: e.artifact_type.clone(),
-                        title: e.title.clone(),
-                        path: e.path.clone(),
-                        aliases: e.aliases.clone(),
-                        search_sections: Vec::new(),
-                        inbound_count: 0,
-                        tags: Vec::new(),
-                    })
-                    .collect(),
-                derived.relationships.clone(),
-            ),
-            None => {
-                let corpus = corpus_items(root, true);
-                let entries: Vec<IndexEntry> = index_from_items(&corpus);
-                let relationships = relationships_from_corpus(&corpus);
-                (entries, relationships)
-            }
-        };
-    let result = resolve_in_index(&entries, artifact_id);
-    let identity_by_path: graph::IdentityByPath = entries
-        .iter()
-        .map(|e| {
-            (
-                e.path.as_str(),
-                (e.id.as_str(), e.artifact_type.as_str(), e.title.as_deref()),
-            )
-        })
-        .collect();
+    let graph_started = rac_engine::timing::start();
+    let result = graph_view.resolve(artifact_id);
     let Some(artifact) = result
         .artifact
         .as_ref()
@@ -253,9 +211,8 @@ pub fn get_related(
     else {
         return serialize(&output::resolution_error_value(&result), budget);
     };
-    let outgoing = graph::outgoing_references(&relationships, &artifact.path);
-    let incoming_result =
-        graph::incoming_references(&relationships, &identity_by_path, &artifact.path);
+    let outgoing = graph_view.outgoing(&artifact.path);
+    let incoming_result = graph_view.incoming(&artifact.path);
     let incoming: Vec<Value> = incoming_result
         .items
         .iter()
@@ -283,7 +240,7 @@ pub fn get_related(
     payload.insert("incoming".to_string(), Value::Array(incoming));
     let mut neighborhood_truncated = false;
     if depth > 1 {
-        let hood = graph::neighborhood(&relationships, &identity_by_path, &artifact.path, depth);
+        let hood = graph_view.neighborhood(&artifact.path, depth);
         let nodes: Vec<Value> = hood
             .nodes
             .iter()
@@ -312,6 +269,15 @@ pub fn get_related(
         payload.insert(MARKER_OMITTED.to_string(), json!(edge_overflow as i64));
         payload.insert(MARKER_HINT.to_string(), json!(HINT_RELATED));
     }
+    rac_engine::timing::emit_since(
+        "graph.lookup",
+        graph_started,
+        &[
+            ("incoming", incoming_result.total as u64),
+            ("outgoing", outgoing.total as u64),
+            ("depth", depth.max(0) as u64),
+        ],
+    );
     serialize(&Value::Object(payload), budget)
 }
 
