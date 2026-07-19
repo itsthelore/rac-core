@@ -9,6 +9,11 @@ type: roadmap
 
 Planned
 
+This historical covered-surface plan remains resolvable for its implementation
+evidence, but its permanent Python-arbiter end state is replaced by
+`rust-authority-and-python-retirement` under ADR-118. ADR-118 is normative where
+the two roadmaps differ.
+
 The native-engine phase after native-derived-index. ADR-116 is ratified: the
 Rust engine is a sanctioned second implementation, and the Python reference
 stays the arbiter. This item makes the sanctioned arrangement real for users —
