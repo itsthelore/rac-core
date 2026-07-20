@@ -190,6 +190,25 @@ P3/P5 read-model consumers, P4 candidate reconstruction/tokenisation/sort, P6
 incremental recompute, and P7 cold encode/write construction. The 10k matrix
 remains the product-gate run required before an optimisation claims completion.
 
+### P1 freshness result
+
+P1 removes two unchanged-corpus costs without weakening freshness: corpus-hash
+recomposition now consumes the complete scan-order manifest directly instead
+of walking the directory a second time, and an identical persisted manifest is
+not rewritten. Missing/corrupt manifests and `--verify` still take the original
+content-confirming and persistence path.
+
+On the same release-profile 5,000-file, outside-Git matrix, warm no-match fell
+from 49.7 ms to 25.7 ms p50 and from 71.7 ms to 27.8 ms p95: 48% and 61%
+reductions respectively. The diagnostic trace moved corpus-hash work from about
+12 ms to 3.0 ms and unchanged manifest persistence from about 5 ms to 0.05 ms.
+Mapped-index bytes remained 27,652,190 and peak RSS was effectively unchanged
+(21.7 MiB before, 21.5 MiB after).
+
+Broad-query timings remain workload- and host-load-sensitive; their phase
+traces still identify row tokenisation and final sorting as the next search
+hotspots. P1 therefore claims the selective unchanged-corpus result only.
+
 ## Performance
 
 See the `PERF-REPORT.md` warm-path addendum. Headline (5k synthetic

@@ -134,6 +134,19 @@ pub fn corpus_hash_from_manifest(
     hasher.hexdigest()
 }
 
+/// Recompose the corpus hash from a complete scan-order manifest without a
+/// second filesystem walk. `stat_scan` always returns exactly this shape.
+pub fn corpus_hash_from_complete_manifest(manifest: &[(String, FileState)]) -> String {
+    let mut hasher = crate::sha256::Sha256::new();
+    for (rel, state) in manifest {
+        hasher.update(rel.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(state.content_hash.as_bytes());
+        hasher.update(b"\0");
+    }
+    hasher.hexdigest()
+}
+
 // ---------------------------------------------------------------------------
 // Marker file — the fail-closed schema gate beside the store.
 // ---------------------------------------------------------------------------
@@ -222,17 +235,21 @@ impl DerivedIndexCache {
         } else {
             open_freshness_manifest(&self.cache_dir, &root_key)
         };
-        let confirm_all = verify || prev.is_none();
+        let manifest_missing = prev.is_none();
+        let confirm_all = verify || manifest_missing;
+        let prev_manifest = prev.unwrap_or_default();
         let scan_started = crate::timing::start();
-        let (manifest, changed) =
-            stat_scan(directory, &prev.unwrap_or_default(), confirm_all, recursive);
+        let (manifest, changed) = stat_scan(directory, &prev_manifest, confirm_all, recursive);
         crate::timing::emit_since(
             "cache.discovery_stat",
             scan_started,
-            &[("files", manifest.len() as u64), ("changed", changed.len() as u64)],
+            &[
+                ("files", manifest.len() as u64),
+                ("changed", changed.len() as u64),
+            ],
         );
         let hash_started = crate::timing::start();
-        let corpus_hash = corpus_hash_from_manifest(directory, &manifest, recursive);
+        let corpus_hash = corpus_hash_from_complete_manifest(&manifest);
         crate::timing::emit_since(
             "cache.corpus_hash",
             hash_started,
@@ -240,11 +257,17 @@ impl DerivedIndexCache {
         );
         // Best-effort persistence: the manifest is a latency structure only.
         let manifest_started = crate::timing::start();
-        write_freshness_manifest(&self.cache_dir, &root_key, &manifest);
+        let manifest_dirty = manifest_missing || manifest != prev_manifest;
+        let manifest_written =
+            !manifest_dirty || write_freshness_manifest(&self.cache_dir, &root_key, &manifest);
         crate::timing::emit_since(
             "cache.manifest_write",
             manifest_started,
-            &[("files", manifest.len() as u64)],
+            &[
+                ("files", manifest.len() as u64),
+                ("dirty", u64::from(manifest_dirty)),
+                ("success", u64::from(manifest_written)),
+            ],
         );
         if marker_valid(&self.cache_dir, &corpus_hash) {
             let open_started = crate::timing::start();
@@ -293,5 +316,45 @@ impl DerivedIndexCache {
     /// Whether a store directory currently exists for `corpus_hash`.
     pub fn store_present(&self, corpus_hash: &str) -> bool {
         store_dir(&self.cache_dir, corpus_hash).is_dir()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn complete_manifest_hash_uses_scan_order_and_content_only() {
+        let manifest = vec![
+            (
+                "a.md".to_string(),
+                FileState {
+                    content_hash: "hash-a".to_string(),
+                    size: 10,
+                    mtime_ns: 20,
+                },
+            ),
+            (
+                "nested/b.md".to_string(),
+                FileState {
+                    content_hash: "hash-b".to_string(),
+                    size: 30,
+                    mtime_ns: 40,
+                },
+            ),
+        ];
+
+        assert_eq!(
+            corpus_hash_from_complete_manifest(&manifest),
+            crate::sha256::hexdigest(b"a.md\0hash-a\0nested/b.md\0hash-b\0")
+        );
+
+        let mut stat_only_change = manifest.clone();
+        stat_only_change[0].1.size += 1;
+        stat_only_change[0].1.mtime_ns += 1;
+        assert_eq!(
+            corpus_hash_from_complete_manifest(&manifest),
+            corpus_hash_from_complete_manifest(&stat_only_change)
+        );
     }
 }
