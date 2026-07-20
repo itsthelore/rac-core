@@ -1788,6 +1788,7 @@ fn share_answer_is_yes(answer: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod share_prompt_tests {
     use super::share_answer_is_yes;
 
