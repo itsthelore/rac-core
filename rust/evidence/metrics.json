@@ -197,6 +197,46 @@
     "peak_rss_mib": 21.5,
     "claim_scope": "Selective unchanged-corpus warm path only; broad-query samples remain dominated by row tokenization and final sorting and are not used for the P1 improvement claim."
   },
+  "p2_git_recency": {
+    "measured_at": "2026-07-19T14:43:42Z",
+    "source_base": "df88ac17b185c4e8fdadfcc40e7f18e6c087b8ca plus P2 batched Git recency",
+    "rac_spec": "d47ccd13301a673bb01307ac8bd2f7fb71fb5ba1",
+    "host": "Apple M1, 8 logical CPUs, 16 GiB, Darwin arm64",
+    "profile": "cargo release, rustc 1.94.1, thin LTO, codegen-units=1",
+    "corpus": {
+      "files": 5000,
+      "location": "inside a local Git repository on temporary storage",
+      "generator": "rust/tools/gen_corpus.py default seed",
+      "history": "one commit containing all 5000 artifacts"
+    },
+    "common_term_before_after": {
+      "matches": 4990,
+      "git_recency_join_before_ms": 34104.274,
+      "git_recency_join_after_ms": 315.534,
+      "git_recency_speedup": 108.08,
+      "total_before_s": 34.49,
+      "total_after_s": 1.09,
+      "total_speedup": 31.64,
+      "before_sample_kind": "single pinned release run",
+      "after_sample_kind": "single like-for-like release run"
+    },
+    "after_warm_p50_ms": {
+      "exact_id_search": 173.1,
+      "rare_term": 41.6,
+      "common_term": 623.2,
+      "no_match": 26.2,
+      "multi_term": 660.1,
+      "duplicate_term": 632.2
+    },
+    "after_runs_per_mode": 5,
+    "byte_identity": {
+      "response_bytes": 3368660,
+      "before_sha256": "edb0f2a899c4b9ebf3b3f89b41443d286eea507c3dea195a95b3520fa0cc338a",
+      "after_sha256": "edb0f2a899c4b9ebf3b3f89b41443d286eea507c3dea195a95b3520fa0cc338a"
+    },
+    "peak_rss_mib": 21.7,
+    "claim_scope": "Inside-Git recency annotation. P2 removes the per-result subprocess explosion; search candidate, tokenization, and sorting costs remain for P4."
+  },
   "not_solved": {
     "uncovered_commands": [
       "diff",

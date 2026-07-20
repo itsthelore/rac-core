@@ -209,6 +209,28 @@ Broad-query timings remain workload- and host-load-sensitive; their phase
 traces still identify row tokenisation and final sorting as the next search
 hotspots. P1 therefore claims the selective unchanged-corpus result only.
 
+### P2 Git-recency result
+
+P2 replaces the per-result `git log -1 --format=%cI -- <path>` loop with a
+bounded batched history traversal. Each batch asks Git for newest-first `%cI`
+commit stamps plus NUL-delimited changed paths; the first stamp observed for a
+path is the same value the single-path command returned. Input order,
+duplicates, untracked files, paths outside the work tree, timezone offsets,
+and all-null non-repository behavior remain pinned.
+
+On a 5,000-file corpus committed in a local Git repository, the 4,990-match
+common-term query spent 34,104 ms in `git.recency_join` before P2 and 316 ms
+after P2: a 108x reduction. Like-for-like total warm wall time fell from 34.49
+seconds to 1.09 seconds. The before and after 3,368,660-byte JSON responses had
+the same SHA-256 (`edb0f2a899c4b9ebf3b3f89b41443d286eea507c3dea195a95b3520fa0cc338a`).
+
+The five-run after-matrix measured warm p50 of 623 ms for common-term, 660 ms
+for multi-term, 632 ms for duplicate-term, and 26.2 ms for no-match. The
+corresponding diagnostic Git joins were 293–320 ms for the broad result sets
+and about 13 ms for one-result queries. P2 therefore removes the subprocess
+explosion; P4 still owns broad candidate reconstruction, row tokenisation, and
+sorting.
+
 ## Performance
 
 See the `PERF-REPORT.md` warm-path addendum. Headline (5k synthetic

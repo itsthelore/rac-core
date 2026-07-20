@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rac_engine::gitinfo::{
-    last_committed, parse_iso8601_epoch, repository_root, staleness, DEFAULT_STALE_AFTER_DAYS,
+    last_committed, last_committed_for_paths, parse_iso8601_epoch, repository_root, staleness,
+    DEFAULT_STALE_AFTER_DAYS,
 };
 
 /// Reference "now" for age math: 2027-01-01T00:00:00Z (matches the
@@ -127,6 +128,20 @@ fn recency_matches_pinned_semantics() {
     assert_eq!(stn.last_committed, None);
     assert_eq!(stn.age_days, None);
     assert_eq!(stn.stale, None);
+
+    // The batched history traversal is byte-identical to the single-path
+    // primitive and preserves input order, duplicates, and unknowns.
+    let batch_paths = vec![
+        repo.join("future.md"),
+        repo.join("committed.md"),
+        repo.join("untracked.md"),
+        repo.join("committed.md"),
+    ];
+    let batch = last_committed_for_paths(&repo, &batch_paths);
+    assert_eq!(batch[0].1.as_deref(), fut.as_deref());
+    assert_eq!(batch[1].1.as_deref(), last.as_deref());
+    assert_eq!(batch[2].1, None);
+    assert_eq!(batch[3].1.as_deref(), last.as_deref());
 
     fs::remove_dir_all(&repo).ok();
 }
