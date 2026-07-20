@@ -32,7 +32,7 @@ use crate::relationships::{
 };
 use crate::resolve::{
     artifact_status, index_from_items, is_live_decision, is_retired_status, search_index,
-    IndexEntry,
+    IndexEntry, SearchResult,
 };
 
 // Defaults pinned by the grounding-retrieval-surface design.
@@ -665,12 +665,188 @@ pub fn retrieve_grounding(
             }
         }
     };
-    let is_retired = |path: &str| -> bool {
-        let artifact_type = entry_by_path
+    let keyword = search_index(&entries, task, None, &[]);
+    let relationships = relationships_from_corpus(&corpus);
+    let scope_rows = scope_rows_from_items(&corpus);
+    retrieve_grounding_from_parts(
+        directory,
+        task,
+        scope,
+        top_k,
+        budget,
+        live_only,
+        keyword,
+        &scope_rows,
+        &relationships,
+        |path| entry_by_path.get(path).map(|entry| (*entry).clone()),
+        status_of,
+    )
+}
+
+/// Grounding over an already-derived mutation-window snapshot. Only matched,
+/// governing, and successor paths are read from disk for status/excerpts; the
+/// corpus itself is never walked or parsed again.
+pub fn retrieve_grounding_from_derived(
+    directory: &str,
+    task: &str,
+    scope: Option<&str>,
+    top_k: i64,
+    budget: i64,
+    live_only: bool,
+    derived: &crate::derived::DerivedIndex,
+) -> Value {
+    let keyword = search_index(&derived.index_entries, task, None, &[]);
+    let entry_by_path: HashMap<&str, &IndexEntry> = derived
+        .index_entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect();
+    let status_cache = std::cell::RefCell::new(HashMap::<String, String>::new());
+    let status_of = |path: &str| {
+        entry_by_path
             .get(path)
-            .map(|e| e.artifact_type.as_str())
-            .unwrap_or(DECISION_TYPE);
-        is_retired_status(artifact_type, &status_of(path))
+            .map(|entry| status_from_entry(entry))
+            .unwrap_or_else(|| cached_status(&status_cache, path))
+    };
+    retrieve_grounding_from_parts(
+        directory,
+        task,
+        scope,
+        top_k,
+        budget,
+        live_only,
+        keyword,
+        &derived.scope_rows,
+        &derived.relationships,
+        |path| entry_by_path.get(path).map(|entry| (*entry).clone()),
+        status_of,
+    )
+}
+
+/// Grounding over the immutable mmap store. Search uses postings, path lookup
+/// uses the persisted path map, and only the relationship/scope projections
+/// required by grounding are decoded.
+pub fn retrieve_grounding_from_store(
+    directory: &str,
+    task: &str,
+    scope: Option<&str>,
+    top_k: i64,
+    budget: i64,
+    live_only: bool,
+    reader: &crate::index_store::MmapIndexReader,
+) -> Value {
+    let search_started = crate::timing::start();
+    let keyword = crate::read_model::store_search(reader, task, None, &[], false);
+    crate::timing::emit_since(
+        "grounding.search",
+        search_started,
+        &[("matches", keyword.matches.len() as u64)],
+    );
+    let decode_started = crate::timing::start();
+    let scope_rows = if scope.is_some_and(|value| !value.is_empty()) {
+        reader.scope_rows().unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let relationships = if live_only {
+        reader.relationships().unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    crate::timing::emit_since(
+        "grounding.projections",
+        decode_started,
+        &[
+            ("scope_rows", scope_rows.len() as u64),
+            ("relationships", relationships.len() as u64),
+        ],
+    );
+    let status_cache = std::cell::RefCell::new(HashMap::<String, String>::new());
+    let status_of = |path: &str| {
+        reader
+            .docid_for_path(path)
+            .ok()
+            .flatten()
+            .and_then(|docid| reader.entry_status(docid).ok())
+            .unwrap_or_else(|| cached_status(&status_cache, path))
+    };
+    retrieve_grounding_from_parts(
+        directory,
+        task,
+        scope,
+        top_k,
+        budget,
+        live_only,
+        keyword,
+        &scope_rows,
+        &relationships,
+        |path| {
+            reader
+                .docid_for_path(path)
+                .ok()
+                .flatten()
+                .and_then(|docid| reader.identity_entry(docid).ok())
+        },
+        status_of,
+    )
+}
+
+fn cached_status(
+    cache: &std::cell::RefCell<HashMap<String, String>>,
+    path: &str,
+) -> String {
+    if let Some(status) = cache.borrow().get(path) {
+        return status.clone();
+    }
+    let status = if Path::new(path).is_file() {
+        artifact_status(&crate::parse::parse_file(path))
+    } else {
+        String::new()
+    };
+    cache.borrow_mut().insert(path.to_string(), status.clone());
+    status
+}
+
+fn status_from_entry(entry: &IndexEntry) -> String {
+    entry
+        .search_sections
+        .iter()
+        .find(|section| py_casefold(py_strip(&section.heading)) == "status")
+        .and_then(|section| {
+            section
+                .lines
+                .iter()
+                .map(|line| py_strip(line))
+                .find(|line| !line.is_empty())
+        })
+        .unwrap_or("")
+        .to_string()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn retrieve_grounding_from_parts<EntryForPath, StatusOf>(
+    directory: &str,
+    task: &str,
+    scope: Option<&str>,
+    top_k: i64,
+    budget: i64,
+    live_only: bool,
+    keyword: SearchResult,
+    scope_rows: &[ScopeRow],
+    relationships: &[Relationship],
+    entry_for_path: EntryForPath,
+    status_of: StatusOf,
+) -> Value
+where
+    EntryForPath: Fn(&str) -> Option<IndexEntry>,
+    StatusOf: Fn(&str) -> String,
+{
+    let top_k = top_k.max(1);
+    let is_retired = |path: &str| -> bool {
+        let artifact_type = entry_for_path(path)
+            .map(|entry| entry.artifact_type)
+            .unwrap_or_else(|| DECISION_TYPE.to_string());
+        is_retired_status(&artifact_type, &status_of(path))
     };
 
     let mut items: Vec<ItemBuilder> = Vec::new();
@@ -680,8 +856,7 @@ pub fn retrieve_grounding(
     // keyword match; the rows are live by construction.
     let scope = scope.filter(|s| !s.is_empty()); // Python `if scope:` truthiness
     if let Some(scope_path) = scope {
-        let rows = scope_rows_from_items(&corpus);
-        for governing in governing_decisions(&rows, directory, scope_path) {
+        for governing in governing_decisions(scope_rows, directory, scope_path) {
             add_item(
                 &mut items,
                 &mut index_of,
@@ -703,9 +878,8 @@ pub fn retrieve_grounding(
     }
 
     // Keyword stratum.
-    let keyword = search_index(&entries, task, None, &[]);
     let by_target = if live_only {
-        successor_map(&relationships_from_corpus(&corpus))
+        successor_map(relationships)
     } else {
         HashMap::new()
     };
@@ -716,7 +890,7 @@ pub fn retrieve_grounding(
             visited.insert(m.path.clone());
             for successor_path in live_successors(&m.path, &by_target, &is_retired, &mut visited)
             {
-                let Some(successor) = entry_by_path.get(successor_path.as_str()) else {
+                let Some(successor) = entry_for_path(&successor_path) else {
                     continue;
                 };
                 add_item(
@@ -789,4 +963,3 @@ pub fn retrieve_grounding(
     payload.insert("items".to_string(), Value::Array(shaped));
     Value::Object(payload)
 }
-
