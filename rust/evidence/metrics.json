@@ -116,6 +116,56 @@
     "rust_loc_breakdown": "the YAML-1.1 SafeLoader port (scanner/parser/composer/resolver) is ~4k lines alone; python gets it free from PyYAML",
     "rewrite_authenticity": "total by construction (different language); the meaningful fidelity axis is semantic: the 130-case byte-parity suite + ~10 MB of oracle-generated vector suites"
   },
+  "p0_phase_baseline": {
+    "measured_at": "2026-07-19T12:50:27Z",
+    "source_base": "ffb8ffcd6e4efbd9619340fab039989a7aab9e5a plus P0 observational instrumentation",
+    "rac_spec": "d47ccd13301a673bb01307ac8bd2f7fb71fb5ba1",
+    "host": "Apple M1, 8 logical CPUs, 16 GiB, Darwin arm64",
+    "profile": "cargo release, rustc 1.94.1, thin LTO, codegen-units=1",
+    "corpus": {
+      "files": 5000,
+      "location": "outside Git on local temporary storage",
+      "generator": "rust/tools/gen_corpus.py default seed"
+    },
+    "runs_per_mode": 5,
+    "startup_ms": {
+      "p50": 6.8,
+      "min": 4.9
+    },
+    "search_ms": {
+      "common_term": {
+        "matches": 4990,
+        "no_cache_p50": 576.2,
+        "no_cache_p95": 697.9,
+        "warm_p50": 404.1,
+        "warm_p95": 482.2
+      },
+      "no_match": {
+        "matches": 0,
+        "no_cache_p50": 422.3,
+        "no_cache_p95": 521.7,
+        "warm_p50": 49.7,
+        "warm_p95": 71.7
+      },
+      "multi_term": {
+        "matches": 4979,
+        "no_cache_p50": 666.0,
+        "no_cache_p95": 748.5,
+        "warm_p50": 911.9,
+        "warm_p95": 1253.3
+      },
+      "duplicate_term": {
+        "matches": 4990,
+        "no_cache_p50": 1653.9,
+        "no_cache_p95": 1814.2,
+        "warm_p50": 738.1,
+        "warm_p95": 992.2
+      }
+    },
+    "index_bytes": 27652190,
+    "peak_rss_mib": 21.7,
+    "interpretation": "The published 647 ms no-cache scale is reproduced by common/multi-term p50. Warm no-match is freshness-bound; broad warm queries are row-tokenization and final-sort bound. Exact-ID search currently unions the common RAC token before AND matching and therefore behaves like a broad query; P4 owns that candidate-plan issue."
+  },
   "not_solved": {
     "uncovered_commands": [
       "diff",

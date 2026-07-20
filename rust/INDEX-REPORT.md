@@ -131,6 +131,65 @@ ported on both cold-build paths with the oracle's exact shape:
 cache cold miss and the tracker cold start, and
 `detect_ms/recompute_ms/files_changed` on incremental validate.
 
+P0 extends that opt-in surface with content-free operation records:
+
+```text
+rac-timing: op=<stable-name> duration_ms=<milliseconds> <numeric counters...>
+```
+
+The records remain absent by default and stderr-only. They never include a
+path, query, identifier, tag, document field, or response content. The stable
+operation names are:
+
+- `cache.discovery_stat`, `cache.corpus_hash`, `cache.manifest_write`,
+  `cache.store_open`, `cache.cold_build`, and `cache.store_write`;
+- `store.encode`, `store.segment_write`, and `store.segment_sync`;
+- `search.query_tokenize`, `search.postings_decode`,
+  `search.candidate_merge`, `search.row_decode`, `search.row_tokenize`,
+  `search.matching`, `search.bm25f`, `search.rank_fusion`,
+  `search.final_sort`, and `search.response_projection`;
+- `git.recency_join` and `cli.response_serialize`;
+- `tracker.detect`, `tracker.recompute`, `mcp.dispatch`, and
+  `mcp.response_serialize`.
+
+`tools/perf.py` now exercises exact-ID, rare, common, no-match, multi-term,
+and duplicate-term queries across no-cache, cold-cache, and warm-cache modes.
+It records p50/p95/p99, match count, mapped-index bytes, peak RSS, and one
+phase trace per query. Synthetic corpora are copied outside Git by default so
+the published out-of-Git case is reproducible; `--contexts inside-git` makes
+the deliberately expensive Git-recency case explicit.
+
+### P0 release baseline
+
+The first release-profile matrix ran on this Apple Silicon host against 5,000
+generated files in `/private/tmp` (outside Git), five measured runs per mode.
+It reproduced the published no-cache scale: common-term p50 was 576 ms and
+multi-term p50 was 666 ms, bracketing the recorded 647 ms scenario. Warm
+no-match was 49.7 ms p50 / 71.7 ms p95, close to the published 43 ms single
+warm observation while making the run-count distinction explicit.
+
+Selectivity changes the picture materially:
+
+- warm no-match: 49.7 ms p50 / 71.7 ms p95, with no row decoding;
+- warm common-term (4,990 matches): 404 ms p50 / 482 ms p95;
+- warm multi-term (4,979 matches): 912 ms p50 / 1,253 ms p95;
+- warm duplicate-term (4,990 matches): 738 ms p50 / 992 ms p95;
+- cold-cache queries: 1.3–2.4 seconds p50, including store construction;
+- mapped index size: 27,652,190 bytes; measured peak RSS: 21.7 MiB.
+
+One diagnostic common-term trace attributed 118 ms to row tokenisation and
+99 ms to final sort. The multi-term trace attributed 446 ms to row
+tokenisation and 501 ms to final sort. The no-match trace spent its useful
+time in freshness: discovery 21 ms, corpus-hash recomposition 12 ms, and
+manifest write 5 ms. These are phase observations, not independent benchmark
+samples; the p50/p95 figures above remain the comparison surface.
+
+This validates the seven-workstream order: P1 owns the redundant warm
+freshness work, P2 the per-result Git join,
+P3/P5 read-model consumers, P4 candidate reconstruction/tokenisation/sort, P6
+incremental recompute, and P7 cold encode/write construction. The 10k matrix
+remains the product-gate run required before an optimisation claims completion.
+
 ## Performance
 
 See the `PERF-REPORT.md` warm-path addendum. Headline (5k synthetic

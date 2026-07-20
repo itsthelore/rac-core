@@ -762,10 +762,17 @@ pub(crate) fn rank_and_build(
     stats: &CorpusStats,
 ) -> SearchResult {
     // Score the matched set only.
+    let bm25_started = crate::timing::start();
     let bm25_scores: Vec<(String, f64)> = matched
         .iter()
         .map(|(entry, fields, _)| (entry.path.clone(), bm25f(fields, terms, stats)))
         .collect();
+    crate::timing::emit_since(
+        "search.bm25f",
+        bm25_started,
+        &[("matched", matched.len() as u64)],
+    );
+    let fusion_started = crate::timing::start();
     let inbound_scores: Vec<(String, f64)> = matched
         .iter()
         .map(|(entry, _, _)| (entry.path.clone(), entry.inbound_count as f64))
@@ -782,9 +789,15 @@ pub(crate) fn rank_and_build(
             (path.clone(), f)
         })
         .collect();
+    crate::timing::emit_since(
+        "search.rank_fusion",
+        fusion_started,
+        &[("matched", matched.len() as u64)],
+    );
 
     // Fused score descending (rounded to 12 places inside the key only),
     // ties broken by path: total and byte-stable.
+    let sort_started = crate::timing::start();
     matched.sort_by(|a, b| {
         let fa = py_round(fused[&a.0.path], 12);
         let fb = py_round(fused[&b.0.path], 12);
@@ -792,7 +805,13 @@ pub(crate) fn rank_and_build(
             .expect("finite fused")
             .then_with(|| a.0.path.cmp(&b.0.path))
     });
+    crate::timing::emit_since(
+        "search.final_sort",
+        sort_started,
+        &[("matched", matched.len() as u64)],
+    );
 
+    let projection_started = crate::timing::start();
     let matches: Vec<ResolvedArtifact> = matched
         .into_iter()
         .map(|(entry, _, m)| {
@@ -823,6 +842,11 @@ pub(crate) fn rank_and_build(
             }
         })
         .collect();
+    crate::timing::emit_since(
+        "search.response_projection",
+        projection_started,
+        &[("matches", matches.len() as u64)],
+    );
 
     SearchResult {
         query: query.to_string(),

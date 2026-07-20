@@ -7,19 +7,22 @@
       "walk": ["validate", "{dir}", "--no-cache"]
     },
     "rust": {
-      "bin": "/home/user/rac-core/rust/target/release/rac",
+      "bin": "../target/release/rac",
       "version": ["--version"],
       "single_validate": ["validate", "{file}"],
-      "walk": ["validate", "{dir}"]
+      "walk": ["validate", "{dir}"],
+      "find": ["find", "{query}", "{dir}", "--json"]
     }
   },
   "corpora": {
     "1000": ".corpora/c1000",
     "5000": ".corpora/c5000",
-    "20000": ".corpora/c20000"
+    "10000": ".corpora/c10000",
+    "100000": ".corpora/c100000"
   },
   "runs": {
     "default": 7,
-    "20000": 3
+    "10000": 5,
+    "100000": 3
   }
 }

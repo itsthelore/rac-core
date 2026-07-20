@@ -305,14 +305,41 @@ fn encode_segments(
     Ok(out)
 }
 
-fn write_file_synced(path: &Path, payload: &[u8]) -> std::io::Result<()> {
+fn write_file_synced_measured(
+    path: &Path,
+    payload: &[u8],
+    timing: bool,
+    write_duration: &mut std::time::Duration,
+    sync_duration: &mut std::time::Duration,
+) -> std::io::Result<()> {
+    let write_started = timing.then(std::time::Instant::now);
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
         .open(path)?;
     file.write_all(payload)?;
-    file.sync_all()
+    if let Some(started) = write_started {
+        *write_duration += started.elapsed();
+    }
+    let sync_started = timing.then(std::time::Instant::now);
+    let result = file.sync_all();
+    if let Some(started) = sync_started {
+        *sync_duration += started.elapsed();
+    }
+    result
+}
+
+fn write_file_synced(path: &Path, payload: &[u8]) -> std::io::Result<()> {
+    let mut write_duration = std::time::Duration::ZERO;
+    let mut sync_duration = std::time::Duration::ZERO;
+    write_file_synced_measured(
+        path,
+        payload,
+        false,
+        &mut write_duration,
+        &mut sync_duration,
+    )
 }
 
 fn fsync_dir(path: &Path) {
@@ -352,19 +379,50 @@ pub fn write_store(
         }
         remove_tree(&final_dir);
     }
+    let encode_started = crate::timing::start();
     let Ok(segments) = encode_segments(corpus_hash, bundle_version, derived) else {
+        crate::timing::emit_since("store.encode", encode_started, &[("success", 0)]);
         return false;
     };
+    crate::timing::emit_since(
+        "store.encode",
+        encode_started,
+        &[("success", 1), ("segments", segments.len() as u64)],
+    );
     let tmp = root.join(format!(".{corpus_hash}.tmp-{}", temp_suffix()));
-    let write_all = || -> std::io::Result<()> {
+    let timing = crate::timing::enabled();
+    let mut write_duration = std::time::Duration::ZERO;
+    let mut sync_duration = std::time::Duration::ZERO;
+    let mut write_all = || -> std::io::Result<()> {
         fs::create_dir_all(&tmp)?;
         for (name, payload) in &segments {
-            write_file_synced(&tmp.join(name), payload)?;
+            write_file_synced_measured(
+                &tmp.join(name),
+                payload,
+                timing,
+                &mut write_duration,
+                &mut sync_duration,
+            )?;
         }
+        let sync_started = timing.then(std::time::Instant::now);
         fsync_dir(&tmp);
+        if let Some(started) = sync_started {
+            sync_duration += started.elapsed();
+        }
         Ok(())
     };
-    if write_all().is_err() {
+    let write_result = write_all();
+    crate::timing::emit(
+        "store.segment_write",
+        write_duration,
+        &[("segments", segments.len() as u64)],
+    );
+    crate::timing::emit(
+        "store.segment_sync",
+        sync_duration,
+        &[("segments", segments.len() as u64)],
+    );
+    if write_result.is_err() {
         remove_tree(&tmp);
         return false;
     }

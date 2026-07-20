@@ -28,7 +28,16 @@ pub fn store_search(
     tags: &[String],
     live_only: bool,
 ) -> SearchResult {
+    let timing = crate::timing::enabled();
+    let tokenize_started = timing.then(std::time::Instant::now);
     let terms = tokenize(query);
+    if let Some(started) = tokenize_started {
+        crate::timing::emit(
+            "search.query_tokenize",
+            started.elapsed(),
+            &[("terms", terms.len() as u64)],
+        );
+    }
     let empty = || SearchResult {
         query: query.to_string(),
         artifact_type: artifact_type.map(str::to_string),
@@ -42,16 +51,48 @@ pub fn store_search(
     // Candidate docids: the union of each term's prefix-range postings —
     // ascending, so the matched set keeps walk (docid) order.
     let mut candidates: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    let mut postings_duration = std::time::Duration::ZERO;
+    let mut merge_duration = std::time::Duration::ZERO;
     for term in &terms {
-        match reader.prefix_docids(term) {
-            Ok(docids) => candidates.extend(docids),
+        let started = timing.then(std::time::Instant::now);
+        let decoded = reader.prefix_docids(term);
+        if let Some(started) = started {
+            postings_duration += started.elapsed();
+        }
+        match decoded {
+            Ok(docids) => {
+                let started = timing.then(std::time::Instant::now);
+                candidates.extend(docids);
+                if let Some(started) = started {
+                    merge_duration += started.elapsed();
+                }
+            }
             Err(_) => return empty(), // corrupt row mid-read: valid empty, never a crash
         }
     }
+    crate::timing::emit(
+        "search.postings_decode",
+        postings_duration,
+        &[("terms", terms.len() as u64)],
+    );
+    crate::timing::emit(
+        "search.candidate_merge",
+        merge_duration,
+        &[("candidates", candidates.len() as u64)],
+    );
 
     let mut matched = Vec::new();
+    let candidate_count = candidates.len() as u64;
+    let mut row_decode_duration = std::time::Duration::ZERO;
+    let mut row_tokenize_duration = std::time::Duration::ZERO;
+    let mut matching_duration = std::time::Duration::ZERO;
     for docid in candidates {
-        let Ok(entry) = reader.full_entry(docid) else {
+        let started = timing.then(std::time::Instant::now);
+        let decoded = reader.full_entry(docid);
+        if let Some(started) = started {
+            row_decode_duration += started.elapsed();
+        }
+        let Ok(entry) = decoded else {
             continue;
         };
         if let Some(t) = artifact_type {
@@ -62,11 +103,35 @@ pub fn store_search(
         if !tag_filter.is_empty() && !entry_has_tags(&entry, &tag_filter) {
             continue;
         }
+        let started = timing.then(std::time::Instant::now);
         let entry_tokens = tokenize_entry(&entry);
-        if let Some(m) = match_entry(&entry_tokens, &terms) {
+        if let Some(started) = started {
+            row_tokenize_duration += started.elapsed();
+        }
+        let started = timing.then(std::time::Instant::now);
+        let matched_entry = match_entry(&entry_tokens, &terms);
+        if let Some(started) = started {
+            matching_duration += started.elapsed();
+        }
+        if let Some(m) = matched_entry {
             matched.push((entry, entry_tokens, m));
         }
     }
+    crate::timing::emit(
+        "search.row_decode",
+        row_decode_duration,
+        &[("candidates", candidate_count)],
+    );
+    crate::timing::emit(
+        "search.row_tokenize",
+        row_tokenize_duration,
+        &[("candidates", candidate_count)],
+    );
+    crate::timing::emit(
+        "search.matching",
+        matching_duration,
+        &[("matched", matched.len() as u64)],
+    );
     if live_only && !matched.is_empty() {
         matched.retain(|(entry, _, _)| !entry_is_retired(entry));
     }
