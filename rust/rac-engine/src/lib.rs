@@ -64,6 +64,7 @@ pub mod index_store;
 pub mod derived_cache;
 pub mod read_model;
 pub mod parallel_build;
+pub mod delta_generation;
 pub mod freshness;
 mod freshness_watch;
 pub mod coverage;

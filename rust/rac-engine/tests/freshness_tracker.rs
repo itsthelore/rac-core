@@ -4,9 +4,11 @@
 //! fresh base, bumps the generation, and sheds the resident snapshot.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use rac_engine::derived::{build_derived_index, SCHEMA_VERSION};
 use rac_engine::freshness::{FreshnessTracker, TrackerModel};
+use rac_engine::index_store::{store_dir, write_store};
 
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("rac-tracker-{tag}-{}", std::process::id()));
@@ -74,6 +76,7 @@ fn base_delta_compaction_lifecycle() {
             assert_eq!(derived.index_entries.len(), 2);
         }
         TrackerModel::View(_) => panic!("one change below threshold must serve the snapshot"),
+        TrackerModel::Delta(_) => panic!("default tracker must not serve the P6 preview"),
     }
     assert_eq!(tracker.serving_generation(), 4);
 
@@ -120,6 +123,7 @@ fn detection_barrier_catches_immediate_nested_mutation() {
     match tracker.read_model(false) {
         TrackerModel::Snapshot(derived) => assert_eq!(derived.index_entries.len(), 2),
         TrackerModel::View(_) => panic!("nested mutation must open the delta window"),
+        TrackerModel::Delta(_) => panic!("default tracker must not serve the P6 preview"),
     }
     assert!(tracker.last_detect_scanned());
     assert_eq!(tracker.serving_generation(), generation + 1);
@@ -152,9 +156,123 @@ fn watcher_setup_and_runtime_failure_degrade_to_stat() {
     match tracker.read_model(false) {
         TrackerModel::Snapshot(derived) => assert!(derived.index_entries.is_empty()),
         TrackerModel::View(_) => panic!("root removal must be served as an empty snapshot"),
+        TrackerModel::Delta(_) => panic!("default tracker must not serve the P6 preview"),
     }
     assert_eq!(tracker.mode(), "stat");
     assert!(tracker.last_detect_scanned());
 
+    let _ = fs::remove_dir_all(&cache);
+}
+
+fn store_hashes(cache_dir: &Path, corpus_hash: &str) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = fs::read_dir(store_dir(cache_dir, corpus_hash))
+        .unwrap()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            let bytes = fs::read(entry.path()).unwrap();
+            (
+                entry.file_name().to_string_lossy().into_owned(),
+                rac_engine::sha256::hexdigest(&bytes),
+            )
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
+    let TrackerModel::Delta(generation) = model else {
+        panic!("expected a preview delta generation");
+    };
+    let candidate_cache = scratch(&format!("{tag}-candidate"));
+    let fresh_cache = scratch(&format!("{tag}-fresh"));
+    let key = "referee";
+    assert!(write_store(
+        &candidate_cache,
+        key,
+        SCHEMA_VERSION,
+        &generation.derived,
+    ));
+    assert!(write_store(
+        &fresh_cache,
+        key,
+        SCHEMA_VERSION,
+        &build_derived_index(root, true),
+    ));
+    assert_eq!(
+        store_hashes(&candidate_cache, key),
+        store_hashes(&fresh_cache, key),
+        "preview generation must be byte-identical to a fresh derivation"
+    );
+    let _ = fs::remove_dir_all(candidate_cache);
+    let _ = fs::remove_dir_all(fresh_cache);
+}
+
+#[test]
+fn delta_preview_stages_mutations_compacts_and_keeps_parsed_base() {
+    let corpus = scratch("p6-corpus");
+    let cache = scratch("p6-cache");
+    fs::write(corpus.join("adr-1-base.md"), DOC).unwrap();
+    fs::write(corpus.join("adr-2-two.md"), DOC.replace("ADR-1", "ADR-2")).unwrap();
+    let root = corpus.to_string_lossy().into_owned();
+    let mut tracker = FreshnessTracker::new_delta_preview(cache.clone(), &root, Some(3));
+
+    assert!(tracker.delta_preview_enabled());
+    assert!(matches!(tracker.read_model(false), TrackerModel::View(_)));
+    assert_eq!(tracker.base_generation(), 1);
+    assert_eq!(tracker.delta_base_documents(), 2);
+    assert_eq!(tracker.delta_size(), 0);
+    assert_eq!(tracker.last_parse_files(), 2);
+
+    fs::write(
+        corpus.join("adr-1-base.md"),
+        DOC.replace("Keep.", "Keep the edited base."),
+    )
+    .unwrap();
+    let serving = tracker.serving_generation() + 1;
+    let base = tracker.base_generation();
+    let model = tracker.read_model(false);
+    let TrackerModel::Delta(generation) = model else {
+        panic!("one edit must open the preview delta");
+    };
+    assert_eq!(generation.base_generation, base);
+    assert_eq!(generation.serving_generation, serving);
+    assert_eq!(generation.changed_paths, vec!["adr-1-base.md"]);
+    assert_delta_matches_fresh(model, &root, "p6-edit");
+    assert_eq!(tracker.last_parse_files(), 1);
+    assert_eq!(tracker.delta_upserts(), 1);
+    assert_eq!(tracker.delta_tombstones(), 0);
+
+    fs::remove_file(corpus.join("adr-2-two.md")).unwrap();
+    let model = tracker.read_model(false);
+    assert_delta_matches_fresh(model, &root, "p6-delete");
+    assert_eq!(tracker.last_parse_files(), 0);
+    assert_eq!(tracker.delta_upserts(), 1);
+    assert_eq!(tracker.delta_tombstones(), 1);
+
+    fs::rename(
+        corpus.join("adr-1-base.md"),
+        corpus.join("adr-3-renamed.md"),
+    )
+    .unwrap();
+    assert!(matches!(tracker.read_model(false), TrackerModel::View(_)));
+    assert_eq!(tracker.base_generation(), 2);
+    assert_eq!(tracker.delta_base_documents(), 1);
+    assert_eq!(tracker.delta_size(), 0);
+
+    // Unlike the default ADR-107 snapshot shed, the first edit following a
+    // P6 compaction parses only the changed document.
+    fs::write(
+        corpus.join("adr-3-renamed.md"),
+        DOC.replace("Keep.", "Keep after compaction."),
+    )
+    .unwrap();
+    let model = tracker.read_model(false);
+    assert_delta_matches_fresh(model, &root, "p6-post-compact");
+    assert_eq!(tracker.last_parse_files(), 1);
+    assert_eq!(tracker.delta_upserts(), 1);
+    assert_eq!(tracker.delta_tombstones(), 0);
+
+    let _ = fs::remove_dir_all(&corpus);
     let _ = fs::remove_dir_all(&cache);
 }
