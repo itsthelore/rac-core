@@ -37,6 +37,9 @@ pub struct FreshnessTracker {
     hash: Option<String>,
     base_hash: Option<String>,
     base_generation: u64,
+    /// Logical served-corpus generation. Unlike `base_generation`, this also
+    /// advances for mutation-window snapshots that have not compacted.
+    serving_generation: u64,
     delta_paths: HashSet<String>,
     /// ADR-107 RSS finalization: after compaction the resident parsed
     /// snapshot is shed and the mapped base is the whole answer; the next
@@ -57,6 +60,7 @@ impl FreshnessTracker {
             hash: None,
             base_hash: None,
             base_generation: 0,
+            serving_generation: 0,
             delta_paths: HashSet::new(),
             snapshot_shed: false,
             last_parse_workers: 1,
@@ -71,6 +75,10 @@ impl FreshnessTracker {
 
     pub fn base_generation(&self) -> u64 {
         self.base_generation
+    }
+
+    pub fn serving_generation(&self) -> u64 {
+        self.serving_generation
     }
 
     pub fn delta_size(&self) -> usize {
@@ -131,6 +139,16 @@ impl FreshnessTracker {
             write_ms: (end - write_start).as_secs_f64() * 1000.0,
         });
         self.model.as_ref().expect("cold model")
+    }
+
+    /// Freshen and return the logical corpus generation with its model. Server
+    /// lifetime derived views use the generation as their invalidation key.
+    pub fn read_model_with_generation(&mut self, verify: bool) -> (u64, &TrackerModel) {
+        self.read_model(verify);
+        (
+            self.serving_generation,
+            self.model.as_ref().expect("freshened model"),
+        )
     }
 
     // --- detection ----------------------------------------------------------
@@ -211,6 +229,7 @@ impl FreshnessTracker {
         let derived =
             build_derived_index_from_items(&self.root_str, &self.ordered_items(), true);
         self.model = Some(TrackerModel::Snapshot(derived));
+        self.serving_generation += 1;
     }
 
     // --- compaction -----------------------------------------------------------

@@ -23,7 +23,7 @@ use std::net::{TcpListener, TcpStream};
 
 use serde_json::Value;
 
-use crate::{audit, process_request};
+use crate::{audit, process_request, ServerState};
 
 /// Prove a working audit sink for HTTP serving (ADR-084 fail-loud). Audit must
 /// be enabled in `.rac/config.yaml` and its resolved path writable, or the
@@ -65,7 +65,7 @@ HTTP (ADR-084).",
 /// without locking (stateless reads are cheap — 28 ms cold on the live corpus).
 pub fn serve_http(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     recorder: &mut Option<audit::Recorder>,
     host: &str,
     port: u16,
@@ -84,7 +84,7 @@ stateless per call; authentication belongs to the deployment proxy, ADR-085)."
     );
     for stream in listener.incoming() {
         match stream {
-            Ok(s) => handle_connection(root, tracker, recorder, path, s),
+            Ok(s) => handle_connection(root, state, recorder, path, s),
             Err(_) => continue,
         }
     }
@@ -113,7 +113,7 @@ impl Request {
 
 fn handle_connection(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     recorder: &mut Option<audit::Recorder>,
     path: &str,
     stream: TcpStream,
@@ -126,7 +126,7 @@ fn handle_connection(
     let Some(req) = read_request(&mut reader) else {
         return;
     };
-    respond(&mut writer, &route(root, tracker, recorder, path, &req));
+    respond(&mut writer, &route(root, state, recorder, path, &req));
 }
 
 /// Parse one HTTP/1.1 request: request line, headers, and a Content-Length body.
@@ -179,7 +179,7 @@ fn json_response(status: &'static str, body: String) -> Response {
 /// hand valid requests to the shared frame processor.
 fn route(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     recorder: &mut Option<audit::Recorder>,
     path: &str,
     req: &Request,
@@ -194,14 +194,14 @@ fn route(
         // SDK, which opens an idle stream).
         "GET" => Response { status: "405 Method Not Allowed", body: None },
         "DELETE" => Response { status: "405 Method Not Allowed", body: None },
-        "POST" => route_post(root, tracker, recorder, req),
+        "POST" => route_post(root, state, recorder, req),
         _ => Response { status: "405 Method Not Allowed", body: None },
     }
 }
 
 fn route_post(
     root: &str,
-    tracker: &mut Option<rac_engine::freshness::FreshnessTracker>,
+    state: &mut ServerState,
     recorder: &mut Option<audit::Recorder>,
     req: &Request,
 ) -> Response {
@@ -247,7 +247,7 @@ fn route_post(
     // access-control input — the response is identical whatever it says.
     let principal = req.header("x-lore-principal");
     let id_json = serde_json::to_string(id).unwrap_or_else(|_| "null".to_string());
-    let frame = process_request(root, tracker, method, &id_json, &message, recorder.as_mut(), principal);
+    let frame = process_request(root, state, method, &id_json, &message, recorder.as_mut(), principal);
     json_response("200 OK", frame)
 }
 

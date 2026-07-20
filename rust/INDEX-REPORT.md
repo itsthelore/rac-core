@@ -150,6 +150,7 @@ operation names are:
   `search.final_sort`, and `search.response_projection`;
 - `git.recency_join` and `cli.response_serialize`;
 - `grounding.search` and `grounding.projections`;
+- `graph.view_build` and `graph.lookup`;
 - `tracker.detect`, `tracker.recompute`, `mcp.dispatch`, and
   `mcp.response_serialize`.
 
@@ -284,6 +285,42 @@ reconstruction and 4.2 ms to final sorting, versus the P0 observations of 118
 ms and 99 ms. The retained P2 and final P4 3,368,660-byte inside-Git responses
 remain byte-identical with SHA-256
 `edb0f2a899c4b9ebf3b3f89b41443d286eea507c3dea195a95b3520fa0cc338a`.
+
+### P5 indexed-graph result
+
+P5 adds a server-lifetime `GraphView` keyed by the freshness tracker's logical
+serving generation. The complete replacement view is built before publication
+and indexes aliases, identities, outgoing edges, incoming resolved targets,
+and docid-based adjacency. Unchanged calls reuse it; any add, edit, rename, or
+delete that changes the served corpus advances the generation and replaces the
+view. The persistent store format is unchanged.
+
+The mutation test proves two unchanged calls build once and return identical
+bytes, then adding a relationship-bearing artifact advances the generation,
+builds exactly one replacement, and returns the new incoming edge. The complete
+MCP parity basket is 76/76 byte-identical against the P4/P3 parent, including
+depth 0/1/2/3/5, duplicate IDs, missing IDs, truncation, and mixed artifact
+types. HTTP body/status/audit parity also passes.
+
+On the 5,000-file outside-Git corpus, repeated depth-1 `get_related` warm p50
+fell from 28.4 ms to 17.2 ms (40%), with the same payload SHA-256
+`399e537b21b3674b1a3a676d8c1b79a441f34ebd752ece26f611f1990edda550`.
+
+At 100,000 artifacts and 399,905 relationships, the parent took 587.3 ms warm
+p50 and P5 took 330.7 ms, with byte-identical payload SHA-256
+`a800aa319647bf561a2216f555a8964fa53424a7940fca5722fb4627615fc255`.
+The indexed graph lookup itself took 0.039-0.060 ms after construction for an
+artifact with six incoming and four outgoing edges; the remaining 324 ms in the
+observed call was the unchanged-corpus stat scan. P5 therefore meets the 30 ms
+graph-operation budget, but the end-to-end 100k MCP call does not: freshness is
+now the measured limiting phase.
+
+The one-time 100k graph build took 721-806 ms. Its estimated owned payload was
+140,130,245 bytes and observed resident growth after an already-warm summary
+was 159,264 KiB. This is bounded and approximately linear in identities and
+edges, but substantial enough that persistent adjacency is not justified as an
+additional co-resident copy; a later store-native borrowed view should replace,
+not duplicate, this structure if 100k server memory becomes a product gate.
 
 ## Performance
 
