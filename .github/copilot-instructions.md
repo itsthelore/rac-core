@@ -1,4 +1,4 @@
-<!-- BEGIN RAC MANAGED BLOCK (digest: 5b7166c3ab7e68d1ed2e28f8c85b0d745b270f393fd344ffbd20e191e52586aa) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: ee8950d9f6605cf5dcba48271d67ba60633c95325e47bc1332fd9ccf7bbe2e05) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -87,4 +87,5 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KXE0M2QBF2MP** — ADR-114: Native Index Workspace Dependencies — memmap2 In, inotify Deferred _(Technical)_
 - **RAC-KXFK11FQDN1Y** — ADR-115: The Shared Artifact-Spec Registry Both Engines Read (ADR-063 Guard 1) _(Architecture)_
 - **RAC-KXGVR299XY5E** — ADR-116: The Native Rust Engine Is a Sanctioned Second Implementation Under Lockstep Guards _(Architecture)_
+- **RAC-PYRE71RECER7** — ADR-120: Rust CI Uses Contract Fixtures and Live-Corpus Invariants
 <!-- END RAC MANAGED BLOCK -->
