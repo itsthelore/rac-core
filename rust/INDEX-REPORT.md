@@ -243,10 +243,12 @@ reparses the corpus; disk reads are limited to final selected excerpts and a
 safe fallback when a requested model row cannot be decoded. Unknown tool names
 are rejected before tracker freshening.
 
-One equivalence test now replays every recorded grounding vector through fresh,
-snapshot, and mapped arms and compares the complete pre-serialization payload.
-It covers empty and broad queries, scope paths, supersession chains,
-`live_only`, Unicode, CRLF, and budget/top-k variants.
+A bounded internal regression suite replays stable synthetic grounding cases
+through fresh, snapshot, and mapped arms and compares the complete
+pre-serialization payload. It covers scope paths, supersession chains,
+`live_only`, Unicode, CRLF, and budget/top-k variants. Cross-engine contract
+bytes remain owned by `rac-spec`, and the evolving live corpus remains covered
+by ADR-120 invariants rather than snapshots.
 
 On the release-profile 5,000-file outside-Git corpus, an exact-ID grounding call
 fell from 430–573 ms warm p50 on the P4 parent to 23–28 ms across P3 runs. A
