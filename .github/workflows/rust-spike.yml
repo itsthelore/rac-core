@@ -43,9 +43,9 @@ jobs:
         working-directory: rust
         run: cargo build --release --locked
 
-      - name: Rust unit and bounded regression suites
+      - name: Rust workspace unit and bounded regression suites
         working-directory: rust
-        run: cargo test -p rac-engine --release
+        run: cargo test --workspace --release
 
       - name: Clippy (strict across native targets)
         working-directory: rust
