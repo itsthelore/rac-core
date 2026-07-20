@@ -53,6 +53,12 @@ jobs:
         working-directory: rust
         run: cargo build --release --locked
 
+      # Keep the Linux-only inotify correctness gate independently visible
+      # before the broader oracle-vector suite.
+      - name: freshness tracker (Linux inotify + stat fallback)
+        working-directory: rust
+        run: cargo test -p rac-engine --test freshness_tracker --release
+
       - name: cargo test (unit + oracle vector suites)
         working-directory: rust
         run: cargo test -p rac-engine --release
