@@ -208,6 +208,27 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
         "preview generation must be byte-identical to a fresh derivation"
     );
     let fresh_items = rac_engine::relationships::corpus_items(root, true);
+    let relationship_signature = |edges: Vec<rac_engine::relationships::Relationship>| {
+        edges
+            .into_iter()
+            .map(|edge| {
+                (
+                    edge.source_path,
+                    edge.relationship,
+                    edge.target,
+                    edge.resolved_path,
+                    edge.issue,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        relationship_signature(generation.graph.relationships()),
+        relationship_signature(rac_engine::relationships::relationships_from_corpus(
+            &fresh_items,
+        )),
+        "graph generation must equal fresh relationship resolution"
+    );
     let fresh_index = rac_engine::resolve::index_from_items(&fresh_items);
     for entry in &fresh_index {
         for alias in &entry.aliases {
@@ -269,7 +290,7 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
             artifact_type,
             &[],
             live_only,
-            &generation.derived.index_entries,
+            &generation.graph,
         );
         assert_eq!(
             rac_engine::output::search_result_value(&actual, true),

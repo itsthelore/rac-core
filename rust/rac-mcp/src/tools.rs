@@ -145,7 +145,7 @@ pub fn search_artifacts(
             artifact_type,
             tags,
             live_only,
-            &generation.derived.index_entries,
+            &generation.graph,
         ),
         None => {
             let entries = build_index(root, true);
@@ -467,6 +467,10 @@ mod tests {
             identity,
             search: rac_engine::delta_generation::SearchGeneration::from_items(
                 items.iter().map(|item| ("decision.md", item)),
+            ),
+            graph: rac_engine::delta_generation::GraphGeneration::from_items(
+                items.iter().map(|item| ("decision.md", item)),
+                &IdentityGeneration::from_items(items.iter().map(|item| ("decision.md", item))),
             ),
             derived: stale_derived,
         }));
