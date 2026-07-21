@@ -54,7 +54,10 @@ fn base_delta_compaction_lifecycle() {
     // One change: the delta window opens; serving switches to the
     // re-derived snapshot (no base rewrite below the threshold).
     fs::write(corpus.join("adr-2-two.md"), DOC.replace("ADR-1", "ADR-2")).unwrap();
-    assert!(matches!(tracker.read_model(false), TrackerModel::Snapshot(_)));
+    assert!(matches!(
+        tracker.read_model(false),
+        TrackerModel::Snapshot(_)
+    ));
     assert!(tracker.last_detect_scanned());
     assert_eq!(tracker.base_generation(), 1);
     assert_eq!(tracker.serving_generation(), 2);
@@ -204,6 +207,48 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
         store_hashes(&fresh_cache, key),
         "preview generation must be byte-identical to a fresh derivation"
     );
+    let fresh_items = rac_engine::relationships::corpus_items(root, true);
+    let fresh_index = rac_engine::resolve::index_from_items(&fresh_items);
+    for entry in &fresh_index {
+        for alias in &entry.aliases {
+            let expected = rac_engine::resolve::resolve_in_index(&fresh_index, alias);
+            let actual = generation.identity.resolve(alias);
+            assert_eq!(
+                actual.outcome, expected.outcome,
+                "identity outcome for {alias}"
+            );
+            assert_eq!(actual.duplicate_paths, expected.duplicate_paths);
+            assert_eq!(
+                actual.artifact.as_ref().map(|artifact| (
+                    artifact.id.as_str(),
+                    artifact.artifact_type.as_str(),
+                    artifact.title.as_deref(),
+                    artifact.path.as_str(),
+                )),
+                expected.artifact.as_ref().map(|artifact| (
+                    artifact.id.as_str(),
+                    artifact.artifact_type.as_str(),
+                    artifact.title.as_deref(),
+                    artifact.path.as_str(),
+                )),
+                "identity row for {alias}"
+            );
+        }
+    }
+    let root_path = Path::new(root);
+    for item in &fresh_items {
+        let relative = Path::new(&item.path)
+            .strip_prefix(root_path)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let expected_status = rac_engine::resolve::artifact_status(&item.artifact);
+        assert_eq!(
+            generation.identity.status_for_path(&relative),
+            Some(expected_status.as_str()),
+            "status row for {relative}"
+        );
+    }
     let _ = fs::remove_dir_all(candidate_cache);
     let _ = fs::remove_dir_all(fresh_cache);
 }

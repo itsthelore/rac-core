@@ -129,7 +129,7 @@ pub struct IndexEntry {
 /// `_identity_index` never reads tags/sections/graph, so those stay at their
 /// empty defaults — the resolved artifact matches the oracle's shape exactly
 /// and the discarded clones never happen.
-fn identity_entry_from_item(item: &CorpusItem) -> IndexEntry {
+pub(crate) fn identity_entry_from_item(item: &CorpusItem) -> IndexEntry {
     let artifact_type = item
         .spec
         .map(|s| s.name.clone())

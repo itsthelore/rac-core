@@ -84,13 +84,7 @@ fn resolve_for(
             }
             result
         }
-        Some(TrackerModel::Delta(generation)) => {
-            let mut result = resolve_in_index(&generation.derived.index_entries, artifact_id);
-            if let Some(artifact) = &mut result.artifact {
-                artifact.tags = Vec::new();
-            }
-            result
-        }
+        Some(TrackerModel::Delta(generation)) => generation.identity.resolve(artifact_id),
         None => resolve_in_index(&build_index(root, true), artifact_id),
     }
 }
@@ -437,4 +431,51 @@ pub fn retrieve_grounding(
         ),
     };
     serialize(&payload, effective)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rac_engine::delta_generation::{DeltaGeneration, IdentityGeneration};
+    use rac_engine::freshness::TrackerModel;
+
+    fn decision(id: &str) -> String {
+        format!(
+            "---\nschema_version: 1\nid: {id}\ntype: decision\n---\n# {id}: Identity\n\n## Context\n\nTest.\n\n## Decision\n\nKeep.\n\n## Consequences\n\nNone.\n\n## Status\n\nAccepted\n"
+        )
+    }
+
+    #[test]
+    fn delta_point_resolution_uses_identity_generation() {
+        let root =
+            std::env::temp_dir().join(format!("rac-p6-identity-route-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("decision.md");
+        std::fs::write(&path, decision("RAC-111111111111")).unwrap();
+        let root_str = root.to_string_lossy().into_owned();
+        let stale_derived = rac_engine::derived::build_derived_index(&root_str, true);
+
+        std::fs::write(&path, decision("RAC-222222222222")).unwrap();
+        let items = rac_engine::relationships::corpus_items(&root_str, true);
+        let identity =
+            IdentityGeneration::from_items(items.iter().map(|item| ("decision.md", item)));
+        let model = TrackerModel::Delta(DeltaGeneration {
+            base_generation: 1,
+            serving_generation: 2,
+            changed_paths: vec!["decision.md".to_string()],
+            identity,
+            derived: stale_derived,
+        });
+
+        assert_eq!(
+            resolve_for(&root_str, Some(&model), "RAC-222222222222").outcome,
+            rac_engine::resolve::OUTCOME_RESOLVED
+        );
+        assert_eq!(
+            resolve_for(&root_str, Some(&model), "RAC-111111111111").outcome,
+            rac_engine::resolve::OUTCOME_NOT_FOUND
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

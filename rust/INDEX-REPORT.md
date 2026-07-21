@@ -350,6 +350,27 @@ small-corpus band (19.2 ms p50 observed versus P5's 17.2 ms), so no 5k win is
 claimed. Linux clean latency is gated by the inotify integration tests and
 must be benchmarked on the CI/reference Linux host.
 
+### P6.2 incremental-identity result
+
+P6.2 adds the first independently maintained derived family behind ADR-119's
+preview-only publication boundary. Compacted identity and casefolded-alias maps
+are immutable shared bases. A candidate generation stages only changed identity
+and status rows plus tombstones; exact resolution masks replaced base rows,
+uses the compacted alias lookup, and scans only the bounded overlay. Compaction
+reuses unchanged rows by shared ownership rather than rebuilding them.
+
+The mutation referee compares canonical IDs, aliases, artifact type, title,
+status, exact-resolution outcomes, and duplicate-path ordering against a fresh
+whole-corpus build across edit, add, delete, rename, and compaction. A routing
+test deliberately gives the preview a stale full derived index and a current
+identity generation, proving MCP point resolution consumes the incremental
+identity projection.
+
+This changes identity staging from corpus-bound to changeset/overlay-bound, but
+does not claim an end-to-end mutation-latency win: P6.2 intentionally retains
+the complete derived rebuild as a referee while postings, graph, scope, and
+summary remain future slices. The default CLI and MCP paths are unchanged.
+
 ## Performance
 
 See the `PERF-REPORT.md` warm-path addendum. Headline (5k synthetic
