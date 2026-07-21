@@ -208,6 +208,35 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
         "preview generation must be byte-identical to a fresh derivation"
     );
     let fresh_items = rac_engine::relationships::corpus_items(root, true);
+    assert_eq!(
+        generation.summary.value(root, true),
+        rac_engine::output::portfolio_summary_value(
+            &rac_engine::portfolio::portfolio_from_corpus(root, &fresh_items, true)
+        ),
+        "summary generation must equal a fresh portfolio reduction"
+    );
+    let scope_signature = |rows: Vec<rac_engine::retrieve::ScopeRow>| {
+        rows.into_iter()
+            .map(|row| (row.id, row.title, row.status, row.path, row.scope_entries))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        scope_signature(generation.scope.rows()),
+        scope_signature(rac_engine::retrieve::scope_rows_from_items(&fresh_items)),
+        "scope generation must equal fresh scope rows"
+    );
+    let fresh_live: Vec<String> = build_derived_index(root, true)
+        .live_decision_paths
+        .into_iter()
+        .map(|path| {
+            Path::new(&path)
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(generation.scope.live_paths(), fresh_live);
     let relationship_signature = |edges: Vec<rac_engine::relationships::Relationship>| {
         edges
             .into_iter()

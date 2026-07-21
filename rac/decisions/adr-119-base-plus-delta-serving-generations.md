@@ -74,6 +74,15 @@ an affected identifier. Inbound counts are adjusted by subtracting replaced
 edges and adding their replacements. Preview graph reads and search graph
 scoring now consume this generation rather than the complete referee.
 
+P6.5 implements item 4. Live-decision membership and declared scope rows use
+immutable bases with changed-row overlays. Portfolio parsing, structural
+validation, completeness classification, and attention projections are stored
+as immutable per-document rows; only changed rows are rebuilt. Exact portfolio
+JSON is reduced from those compact rows at publication/read time because
+relationship integrity, orphan counts, global ordering, and health scoring are
+corpus-global. Preview scope lookup, topic-mode live-decision filtering, and
+summary reads consume these generations rather than the complete referee.
+
 No slice becomes the default until mutation referees show byte-identical output
 against a fresh whole-corpus rebuild and scale tests show bounded regression.
 
@@ -99,6 +108,13 @@ across source edits, deletion, identity changes, unresolved-to-resolved and
 resolved-to-ambiguous transitions, and compaction. Staging shares the compacted
 row, edge, reverse-target, and inbound-count bases; its work is bounded by the
 changed documents plus sources in affected raw-target buckets.
+
+P6.5 extends it to scope rows, live-decision membership, and the complete
+portfolio JSON payload across scope/status/type/validity changes, add, delete,
+rename, and compaction. Staging shares validated portfolio and scope bases and
+rebuilds only changed document projections. The final compact-row portfolio
+reduction remains corpus-linear; scale gates must measure it before the full
+referee can be removed or preview serving becomes the default.
 
 The first slice does not claim mutation-latency improvement for derivation: it
 still materializes live documents and rebuilds all derived structures. Its
