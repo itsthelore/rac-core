@@ -9,8 +9,8 @@
 //! resolution over the overlay. P6.3 adds token rows, postings, filters, and
 //! exact global search statistics. P6.4 adds relationship rows, reverse target
 //! buckets, resolved edges, and inbound counts. P6.5 adds scope/live-decision
-//! rows and validated portfolio projections. The complete derived model remains
-//! as the mutation referee until durable compaction and default-adoption gates.
+//! rows and validated portfolio projections. P6.6 materializes durable store
+//! segments from those projections; fresh derivation remains test-only.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
@@ -656,6 +656,25 @@ impl SearchGeneration {
             .collect()
     }
 
+    fn entries_and_fields(&self, graph: &GraphGeneration) -> (Vec<IndexEntry>, Vec<FieldTokens>) {
+        let inbound = graph.inbound_counts();
+        let mut entries = Vec::new();
+        let mut fields = Vec::new();
+        for path in self
+            .base
+            .keys()
+            .chain(self.upserts.keys())
+            .collect::<BTreeSet<_>>()
+        {
+            let Some(row) = self.row(path) else { continue };
+            let mut entry = row.entry.clone();
+            entry.inbound_count = inbound.get(&entry.path).copied().unwrap_or(0);
+            entries.push(entry);
+            fields.push(row.fields.clone());
+        }
+        (entries, fields)
+    }
+
     fn row(&self, path: &str) -> Option<&SearchRow> {
         self.upserts.get(path).map(AsRef::as_ref).or_else(|| {
             (!self.tombstones.contains(path))
@@ -806,9 +825,9 @@ fn postings_for(rows: &BTreeMap<String, Arc<SearchRow>>) -> BTreeMap<String, Vec
 #[derive(Clone, Default)]
 pub struct ScopeGeneration {
     base_scope: Arc<BTreeMap<String, Arc<ScopeRow>>>,
-    base_live: Arc<BTreeSet<String>>,
+    base_live: Arc<BTreeMap<String, String>>,
     scope_upserts: BTreeMap<String, Arc<ScopeRow>>,
-    live_upserts: BTreeSet<String>,
+    live_upserts: BTreeMap<String, String>,
     tombstones: BTreeSet<String>,
 }
 
@@ -819,10 +838,10 @@ impl ScopeGeneration {
 
     pub fn from_items<'a>(items: impl IntoIterator<Item = (&'a str, &'a CorpusItem)>) -> Self {
         let mut scope = BTreeMap::new();
-        let mut live = BTreeSet::new();
+        let mut live = BTreeMap::new();
         for (path, item) in items {
             if is_live_decision_item(item) {
-                live.insert(path.to_string());
+                live.insert(path.to_string(), item.path.clone());
             }
             if let Some(row) = scope_row(item) {
                 scope.insert(path.to_string(), Arc::new(row));
@@ -832,7 +851,7 @@ impl ScopeGeneration {
             base_scope: Arc::new(scope),
             base_live: Arc::new(live),
             scope_upserts: BTreeMap::new(),
-            live_upserts: BTreeSet::new(),
+            live_upserts: BTreeMap::new(),
             tombstones: BTreeSet::new(),
         }
     }
@@ -848,17 +867,17 @@ impl ScopeGeneration {
             next.live_upserts.remove(path);
             if let Some(item) = parsed.get(path) {
                 if is_live_decision_item(item) {
-                    next.live_upserts.insert(path.clone());
+                    next.live_upserts.insert(path.clone(), item.path.clone());
                 }
                 if let Some(row) = scope_row(item) {
                     next.scope_upserts.insert(path.clone(), Arc::new(row));
                 }
-                if next.base_scope.contains_key(path) || next.base_live.contains(path) {
+                if next.base_scope.contains_key(path) || next.base_live.contains_key(path) {
                     next.tombstones.insert(path.clone());
                 } else {
                     next.tombstones.remove(path);
                 }
-            } else if next.base_scope.contains_key(path) || next.base_live.contains(path) {
+            } else if next.base_scope.contains_key(path) || next.base_live.contains_key(path) {
                 next.tombstones.insert(path.clone());
             } else {
                 next.tombstones.remove(path);
@@ -877,14 +896,14 @@ impl ScopeGeneration {
         for path in self.scope_upserts.keys() {
             scope.remove(path);
         }
-        for path in self.live_upserts.iter() {
+        for path in self.live_upserts.keys() {
             live.remove(path);
         }
         for (path, row) in &self.scope_upserts {
             scope.insert(path.clone(), Arc::clone(row));
         }
-        for path in &self.live_upserts {
-            live.insert(path.clone());
+        for (path, display_path) in &self.live_upserts {
+            live.insert(path.clone(), display_path.clone());
         }
         self.base_scope = Arc::new(scope);
         self.base_live = Arc::new(live);
@@ -912,15 +931,18 @@ impl ScopeGeneration {
 
     pub fn live_paths(&self) -> Vec<String> {
         self.base_live
-            .iter()
-            .chain(self.live_upserts.iter())
-            .filter(|path| {
-                self.live_upserts.contains(*path)
-                    || (!self.tombstones.contains(*path) && self.base_live.contains(*path))
-            })
-            .cloned()
+            .keys()
+            .chain(self.live_upserts.keys())
             .collect::<BTreeSet<_>>()
             .into_iter()
+            .filter_map(|path| {
+                self.live_upserts.get(path).or_else(|| {
+                    (!self.tombstones.contains(path))
+                        .then(|| self.base_live.get(path))
+                        .flatten()
+                })
+            })
+            .cloned()
             .collect()
     }
 
@@ -1157,7 +1179,23 @@ pub struct DeltaGeneration {
     pub graph: GraphGeneration,
     pub scope: ScopeGeneration,
     pub summary: SummaryGeneration,
-    pub derived: DerivedIndex,
+}
+
+impl DeltaGeneration {
+    /// Assemble the persisted/read-model bundle from the already-published
+    /// incremental projections. This performs no parsing or artifact
+    /// validation and is therefore suitable for durable compaction.
+    pub fn materialize_derived(&self, directory: &str, recursive: bool) -> DerivedIndex {
+        let (index_entries, field_tokens) = self.search.entries_and_fields(&self.graph);
+        DerivedIndex {
+            index_entries,
+            field_tokens,
+            relationships: self.graph.relationships(),
+            live_decision_paths: self.scope.live_paths(),
+            portfolio_summary: self.summary.value(directory, recursive),
+            scope_rows: self.scope.rows(),
+        }
+    }
 }
 
 #[cfg(test)]

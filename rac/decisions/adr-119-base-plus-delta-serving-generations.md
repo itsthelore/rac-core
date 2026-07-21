@@ -83,6 +83,14 @@ relationship integrity, orphan counts, global ordering, and health scoring are
 corpus-global. Preview scope lookup, topic-mode live-decision filtering, and
 summary reads consume these generations rather than the complete referee.
 
+P6.6 implements item 5. The served delta generation no longer owns or builds a
+fresh whole-corpus `DerivedIndex`. Compaction assembles the persisted bundle
+directly from the published search rows/field vectors, graph edges and inbound
+counts, scope/live-decision rows, and validated portfolio projections. Fresh
+whole-corpus derivation remains only in bounded certification tests. Failed
+writes or failed reopen still leave the complete in-memory delta generation
+served unchanged.
+
 No slice becomes the default until mutation referees show byte-identical output
 against a fresh whole-corpus rebuild and scale tests show bounded regression.
 
@@ -115,6 +123,12 @@ rename, and compaction. Staging shares validated portfolio and scope bases and
 rebuilds only changed document projections. The final compact-row portfolio
 reduction remains corpus-linear; scale gates must measure it before the full
 referee can be removed or preview serving becomes the default.
+
+P6.6 removes that referee from runtime mutation publication. Certification now
+serializes a delta-native materialization beside a fresh rebuild and compares
+every persisted segment byte-for-byte across edit, delete, rename, compaction,
+and first-edit-after-compaction transitions. Below-threshold mutations perform
+no full corpus parse, validation, or derived-index build.
 
 The first slice does not claim mutation-latency improvement for derivation: it
 still materializes live documents and rebuilds all derived structures. Its

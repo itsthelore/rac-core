@@ -6,7 +6,7 @@
 //! provide a synchronous barrier, otherwise the stat-manifest scan. Events
 //! never compute the changed set: any dirty or uncertain signal falls back to
 //! the authoritative scan. Whatever the rung, the served read-model is
-//! re-derived from the tracker's incrementally maintained parsed snapshot,
+//! built from the tracker's incrementally maintained generations,
 //! byte-identical to a fresh whole-corpus walk at the current corpus state.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -28,8 +28,8 @@ pub enum TrackerModel {
     View(MmapIndexReader),
     Snapshot(DerivedIndex),
     /// P6 preview generation. The document overlay is immutable for the
-    /// lifetime of this served model and is published only after its complete
-    /// derived referee has been built.
+    /// lifetime of this served model and is published only after every
+    /// incremental projection has been staged successfully.
     Delta(Box<DeltaGeneration>),
 }
 
@@ -361,8 +361,8 @@ impl FreshnessTracker {
         self.serving_generation += 1;
     }
 
-    /// Build a complete candidate generation from a staged document overlay,
-    /// then swap every serving field only after derivation succeeds.
+    /// Build a complete candidate generation from staged overlays, then swap
+    /// every serving field only after all projections succeed.
     fn rebuild_delta_preview(&mut self, changed: &BTreeSet<String>) {
         let current: HashSet<&str> = self.manifest.iter().map(|(rel, _)| rel.as_str()).collect();
         let root = PathBuf::from(&self.root_str);
@@ -447,7 +447,6 @@ impl FreshnessTracker {
             } else {
                 self.full_delta_candidate()
             };
-        let ordered_items = candidate.ordered_items(ordered_paths.iter().map(String::as_str));
         let hash = corpus_hash_from_complete_manifest(&self.manifest);
         let serving_generation = self.serving_generation + 1;
         let generation = DeltaGeneration {
@@ -459,7 +458,6 @@ impl FreshnessTracker {
             graph: graph_candidate.clone(),
             scope: scope_candidate.clone(),
             summary: summary_candidate.clone(),
-            derived: build_derived_index_from_items(&self.root_str, &ordered_items, true),
         };
 
         self.delta_documents = Some(candidate);
@@ -540,7 +538,10 @@ impl FreshnessTracker {
         let derived_owned;
         let derived = match &self.model {
             Some(TrackerModel::Snapshot(derived)) => derived,
-            Some(TrackerModel::Delta(generation)) => &generation.derived,
+            Some(TrackerModel::Delta(generation)) => {
+                derived_owned = generation.materialize_derived(&self.root_str, true);
+                &derived_owned
+            }
             _ => {
                 derived_owned =
                     build_derived_index_from_items(&self.root_str, &self.ordered_items(), true);

@@ -190,11 +190,12 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
     let candidate_cache = scratch(&format!("{tag}-candidate"));
     let fresh_cache = scratch(&format!("{tag}-fresh"));
     let key = "referee";
+    let materialized = generation.materialize_derived(root, true);
     assert!(write_store(
         &candidate_cache,
         key,
         SCHEMA_VERSION,
-        &generation.derived,
+        &materialized,
     ));
     assert!(write_store(
         &fresh_cache,
@@ -228,13 +229,6 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
     let fresh_live: Vec<String> = build_derived_index(root, true)
         .live_decision_paths
         .into_iter()
-        .map(|path| {
-            Path::new(&path)
-                .strip_prefix(root)
-                .unwrap()
-                .to_string_lossy()
-                .into_owned()
-        })
         .collect();
     assert_eq!(generation.scope.live_paths(), fresh_live);
     let relationship_signature = |edges: Vec<rac_engine::relationships::Relationship>| {
