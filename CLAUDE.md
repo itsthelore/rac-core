@@ -23,7 +23,7 @@ to the corpus artifact and they load through the imports below.
 - Previous series: `rac/roadmaps/v0.21.x-editor/` (complete)
 - Decisions (ADRs): `rac/decisions/`
 
-<!-- BEGIN RAC MANAGED BLOCK (digest: bdd5cad7ff7dec636178f8578d83376f16675220a2896694d134105952553e3d) -->
+<!-- BEGIN RAC MANAGED BLOCK (digest: 85425bcf952c265e10a1016ee63073a5ba3e17ec4c43f3ffb9aaca019c3f3562) -->
 <!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
 ## Settled decisions (RAC)
 
@@ -113,5 +113,6 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KXFK11FQDN1Y** — ADR-115: The Shared Artifact-Spec Registry Both Engines Read (ADR-063 Guard 1) _(Architecture)_
 - **RAC-KXGVR299XY5E** — ADR-116: The Native Rust Engine Is a Sanctioned Second Implementation Under Lockstep Guards _(Architecture)_
 - **RAC-P55FRE5HNE55** — ADR-118: Native Event Freshness Acceleration
+- **RAC-P61BA5EDE7A0** — ADR-119: Base-Plus-Delta Serving Generations
 - **RAC-PYRE71RECER7** — ADR-120: Rust CI Uses Contract Fixtures and Live-Corpus Invariants
 <!-- END RAC MANAGED BLOCK -->

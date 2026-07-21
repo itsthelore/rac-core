@@ -9,10 +9,11 @@
 //! re-derived from the tracker's incrementally maintained parsed snapshot,
 //! byte-identical to a fresh whole-corpus walk at the current corpus state.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::derived::{build_derived_index_from_items, DerivedIndex, SCHEMA_VERSION};
+use crate::delta_generation::{DeltaDocuments, DeltaGeneration};
 use crate::derived_cache::{corpus_hash_from_complete_manifest, stat_scan};
 use crate::freshness_watch::EventWatch;
 use crate::index_store::{open_store, write_store, FileState, MmapIndexReader};
@@ -23,6 +24,10 @@ use crate::relationships::CorpusItem;
 pub enum TrackerModel {
     View(MmapIndexReader),
     Snapshot(DerivedIndex),
+    /// P6 preview generation. The document overlay is immutable for the
+    /// lifetime of this served model and is published only after its complete
+    /// derived referee has been built.
+    Delta(DeltaGeneration),
 }
 
 pub struct FreshnessTracker {
@@ -41,11 +46,16 @@ pub struct FreshnessTracker {
     /// advances for mutation-window snapshots that have not compacted.
     serving_generation: u64,
     delta_paths: HashSet<String>,
+    /// Present only for the opt-in P6 preview. Default serving retains the
+    /// established snapshot lifecycle until the later delta slices pass the
+    /// referee and scale gates.
+    delta_documents: Option<DeltaDocuments>,
     /// ADR-107 RSS finalization: after compaction the resident parsed
     /// snapshot is shed and the mapped base is the whole answer; the next
     /// change repopulates by a full re-parse on demand.
     snapshot_shed: bool,
     last_parse_workers: usize,
+    last_parse_files: usize,
     last_detect_scanned: bool,
 }
 
@@ -79,10 +89,25 @@ impl FreshnessTracker {
             base_generation: 0,
             serving_generation: 0,
             delta_paths: HashSet::new(),
+            delta_documents: None,
             snapshot_shed: false,
             last_parse_workers: 1,
+            last_parse_files: 0,
             last_detect_scanned: false,
         }
+    }
+
+    /// Opt in to the P6.1 generation boundary. This is intentionally a
+    /// separate constructor so normal MCP serving cannot adopt the preview by
+    /// accident.
+    pub fn new_delta_preview(
+        cache_dir: PathBuf,
+        root: &str,
+        threshold: Option<usize>,
+    ) -> Self {
+        let mut tracker = Self::new_with_watcher(cache_dir, root, threshold, true);
+        tracker.delta_documents = Some(DeltaDocuments::empty());
+        tracker
     }
 
     // --- observable state (scorecards and pinning tests) ------------------
@@ -100,7 +125,35 @@ impl FreshnessTracker {
     }
 
     pub fn delta_size(&self) -> usize {
-        self.delta_paths.len()
+        self.delta_documents
+            .as_ref()
+            .map_or_else(|| self.delta_paths.len(), DeltaDocuments::delta_len)
+    }
+
+    pub fn delta_preview_enabled(&self) -> bool {
+        self.delta_documents.is_some()
+    }
+
+    pub fn delta_base_documents(&self) -> usize {
+        self.delta_documents
+            .as_ref()
+            .map_or(0, DeltaDocuments::base_len)
+    }
+
+    pub fn delta_upserts(&self) -> usize {
+        self.delta_documents
+            .as_ref()
+            .map_or(0, DeltaDocuments::upsert_len)
+    }
+
+    pub fn delta_tombstones(&self) -> usize {
+        self.delta_documents
+            .as_ref()
+            .map_or(0, DeltaDocuments::tombstone_len)
+    }
+
+    pub fn last_parse_files(&self) -> usize {
+        self.last_parse_files
     }
 
     pub fn corpus_hash(&self) -> Option<&str> {
@@ -134,8 +187,12 @@ impl FreshnessTracker {
         }
         if !cold {
             let recompute_started = crate::timing::start();
-            self.apply(&changed);
-            self.rebuild_model();
+            if self.delta_documents.is_some() {
+                self.rebuild_delta_preview(&changed);
+            } else {
+                self.apply(&changed);
+                self.rebuild_model();
+            }
             self.maybe_compact();
             crate::timing::emit_since(
                 "tracker.recompute",
@@ -147,9 +204,15 @@ impl FreshnessTracker {
         // Cold start: the whole corpus parsed from nothing; the three cold
         // phases feed the RAC_TIMING scorecard (ADR-107).
         let parse_start = std::time::Instant::now();
-        self.apply(&changed);
+        if self.delta_documents.is_some() {
+            self.rebuild_delta_preview(&changed);
+        } else {
+            self.apply(&changed);
+        }
         let derive_start = std::time::Instant::now();
-        self.rebuild_model();
+        if self.delta_documents.is_none() {
+            self.rebuild_model();
+        }
         let write_start = std::time::Instant::now();
         self.maybe_compact();
         let end = std::time::Instant::now();
@@ -228,6 +291,7 @@ impl FreshnessTracker {
             }
             let (parsed, workers) = crate::parallel_build::parallel_parse_paths(&present);
             self.last_parse_workers = workers;
+            self.last_parse_files = present.len();
             for item in parsed {
                 let rel = rel_of(&self.root_str, &item.path);
                 self.items.insert(rel, item);
@@ -250,6 +314,7 @@ impl FreshnessTracker {
         let paths: Vec<PathBuf> = self.manifest.iter().map(|(rel, _)| root.join(rel)).collect();
         let (parsed, workers) = crate::parallel_build::parallel_parse_paths(&paths);
         self.last_parse_workers = workers;
+        self.last_parse_files = paths.len();
         self.items = parsed
             .into_iter()
             .map(|item| (rel_of(&self.root_str, &item.path), item))
@@ -278,6 +343,72 @@ impl FreshnessTracker {
         self.serving_generation += 1;
     }
 
+    /// Build a complete candidate generation from a staged document overlay,
+    /// then swap every serving field only after derivation succeeds.
+    fn rebuild_delta_preview(&mut self, changed: &BTreeSet<String>) {
+        let current: HashSet<&str> = self.manifest.iter().map(|(rel, _)| rel.as_str()).collect();
+        let root = PathBuf::from(&self.root_str);
+        let present: Vec<PathBuf> = changed
+            .iter()
+            .filter(|rel| current.contains(rel.as_str()))
+            .map(|rel| root.join(rel))
+            .collect();
+        let (parsed, workers) = crate::parallel_build::parallel_parse_paths(&present);
+        self.last_parse_workers = workers;
+        self.last_parse_files = present.len();
+        let parsed: BTreeMap<String, CorpusItem> = parsed
+            .into_iter()
+            .map(|item| (rel_of(&self.root_str, &item.path), item))
+            .collect();
+
+        // A parser omission would make the staged generation incomplete.
+        // Reparse the current corpus from an empty base instead of publishing
+        // a partial overlay.
+        let candidate = if parsed.len() == present.len() {
+            self.delta_documents
+                .as_ref()
+                .expect("preview documents")
+                .stage(changed, parsed)
+        } else {
+            self.full_delta_candidate()
+        };
+        let ordered_paths: Vec<String> = self.manifest.iter().map(|(rel, _)| rel.clone()).collect();
+        let ordered_items = candidate.ordered_items(ordered_paths.iter().map(String::as_str));
+        let candidate = if ordered_items.len() == self.manifest.len() {
+            candidate
+        } else {
+            self.full_delta_candidate()
+        };
+        let ordered_items = candidate.ordered_items(ordered_paths.iter().map(String::as_str));
+        let hash = corpus_hash_from_complete_manifest(&self.manifest);
+        let serving_generation = self.serving_generation + 1;
+        let generation = DeltaGeneration {
+            base_generation: self.base_generation,
+            serving_generation,
+            changed_paths: candidate.changed_paths(),
+            derived: build_derived_index_from_items(&self.root_str, &ordered_items, true),
+        };
+
+        self.delta_documents = Some(candidate);
+        self.hash = Some(hash);
+        self.serving_generation = serving_generation;
+        self.model = Some(TrackerModel::Delta(generation));
+    }
+
+    fn full_delta_candidate(&mut self) -> DeltaDocuments {
+        let root = PathBuf::from(&self.root_str);
+        let paths: Vec<PathBuf> = self.manifest.iter().map(|(rel, _)| root.join(rel)).collect();
+        let (parsed, workers) = crate::parallel_build::parallel_parse_paths(&paths);
+        self.last_parse_workers = workers;
+        self.last_parse_files = paths.len();
+        let parsed: BTreeMap<String, CorpusItem> = parsed
+            .into_iter()
+            .map(|item| (rel_of(&self.root_str, &item.path), item))
+            .collect();
+        let changed = self.manifest.iter().map(|(rel, _)| rel.clone()).collect();
+        DeltaDocuments::empty().stage(&changed, parsed)
+    }
+
     // --- compaction -----------------------------------------------------------
 
     fn threshold_for(&self, base_count: usize) -> usize {
@@ -289,7 +420,7 @@ impl FreshnessTracker {
             self.compact(); // cold: establish the first base
             return;
         }
-        if self.delta_paths.len() >= self.threshold_for(self.manifest.len()) {
+        if self.delta_size() >= self.threshold_for(self.manifest.len()) {
             self.compact();
         }
     }
@@ -299,6 +430,7 @@ impl FreshnessTracker {
         let derived_owned;
         let derived = match &self.model {
             Some(TrackerModel::Snapshot(derived)) => derived,
+            Some(TrackerModel::Delta(generation)) => &generation.derived,
             _ => {
                 derived_owned =
                     build_derived_index_from_items(&self.root_str, &self.ordered_items(), true);
@@ -316,9 +448,17 @@ impl FreshnessTracker {
         self.base_hash = Some(hash);
         self.base_generation += 1;
         self.delta_paths.clear();
-        // ADR-107 RSS finalization: shed the resident parsed snapshot.
-        self.items = HashMap::new();
-        self.snapshot_shed = true;
+        if let Some(documents) = self.delta_documents.as_mut() {
+            let ordered_paths: Vec<&str> = self.manifest.iter().map(|(rel, _)| rel.as_str()).collect();
+            documents.promote(ordered_paths);
+            // P6 removes snapshot shedding for its parsed document base so
+            // the first post-compaction edit remains change-bound.
+            self.snapshot_shed = false;
+        } else {
+            // ADR-107 RSS finalization for the established default path.
+            self.items = HashMap::new();
+            self.snapshot_shed = true;
+        }
     }
 }
 

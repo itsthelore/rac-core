@@ -84,6 +84,13 @@ fn resolve_for(
             }
             result
         }
+        Some(TrackerModel::Delta(generation)) => {
+            let mut result = resolve_in_index(&generation.derived.index_entries, artifact_id);
+            if let Some(artifact) = &mut result.artifact {
+                artifact.tags = Vec::new();
+            }
+            result
+        }
         None => resolve_in_index(&build_index(root, true), artifact_id),
     }
 }
@@ -139,6 +146,13 @@ pub fn search_artifacts(
         Some(TrackerModel::Snapshot(derived)) => {
             search_index_filtered(&derived.index_entries, query, artifact_type, tags, live_only)
         }
+        Some(TrackerModel::Delta(generation)) => search_index_filtered(
+            &generation.derived.index_entries,
+            query,
+            artifact_type,
+            tags,
+            live_only,
+        ),
         None => {
             let entries = build_index(root, true);
             search_index_filtered(&entries, query, artifact_type, tags, live_only)
@@ -173,6 +187,15 @@ pub fn find_decisions_tool(
                     p,
                 ),
             ),
+            Some(TrackerModel::Delta(generation)) => {
+                rac_engine::retrieve::scope_lookup_value(
+                    &rac_engine::retrieve::decisions_for_path_with_rows(
+                        &generation.derived.scope_rows,
+                        root,
+                        p,
+                    ),
+                )
+            }
             None => rac_engine::retrieve::find_decisions_path_payload(root, p),
         };
         return serialize(&payload, budget);
@@ -184,6 +207,11 @@ pub fn find_decisions_tool(
         Some(TrackerModel::Snapshot(derived)) => rac_engine::read_model::find_decisions_in(
             &derived.index_entries,
             &derived.live_decision_paths,
+            topic,
+        ),
+        Some(TrackerModel::Delta(generation)) => rac_engine::read_model::find_decisions_in(
+            &generation.derived.index_entries,
+            &generation.derived.live_decision_paths,
             topic,
         ),
         None => find_decisions(root, topic, true),
@@ -289,6 +317,7 @@ pub fn get_summary(root: &str, model: Option<&TrackerModel>, budget: i64) -> Str
         let summary = match model {
             TrackerModel::View(reader) => reader.portfolio_summary().unwrap_or(Value::Null),
             TrackerModel::Snapshot(derived) => derived.portfolio_summary.clone(),
+            TrackerModel::Delta(generation) => generation.derived.portfolio_summary.clone(),
         };
         if let Value::Object(mut payload) = summary {
             let empty = payload
@@ -390,6 +419,17 @@ pub fn retrieve_grounding(
         Some(TrackerModel::Snapshot(derived)) => {
             rac_engine::retrieve::retrieve_grounding_from_derived(
                 root, task, scope_opt, top_k, effective, live_only, derived,
+            )
+        }
+        Some(TrackerModel::Delta(generation)) => {
+            rac_engine::retrieve::retrieve_grounding_from_derived(
+                root,
+                task,
+                scope_opt,
+                top_k,
+                effective,
+                live_only,
+                &generation.derived,
             )
         }
         None => rac_engine::retrieve::retrieve_grounding(
