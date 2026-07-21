@@ -14,6 +14,7 @@
 //!   components, each compared by Unicode scalar (== UTF-8 byte order).
 
 use std::path::{Path, PathBuf};
+use rayon::prelude::*;
 
 /// One discovered markdown file.
 #[derive(Debug, Clone)]
@@ -39,8 +40,13 @@ impl WalkEntry {
 /// direct children (`root.glob` instead of `root.rglob`).
 pub fn find_markdown_files(directory: &str, recursive: bool) -> Vec<WalkEntry> {
     let root = Path::new(directory);
-    let mut found: Vec<(Vec<String>, PathBuf)> = Vec::new();
-    collect(root, &mut Vec::new(), recursive, &mut found);
+    let mut found: Vec<(Vec<String>, PathBuf)> = if recursive {
+        collect_root_parallel(root)
+    } else {
+        let mut found = Vec::new();
+        collect(root, &mut Vec::new(), false, &mut found);
+        found
+    };
 
     // Component-wise sort: compare the tuple of relative components. Rust's
     // `Vec<String>` Ord is lexicographic, and `String` Ord is UTF-8 byte order
@@ -58,6 +64,48 @@ pub fn find_markdown_files(directory: &str, recursive: bool) -> Vec<WalkEntry> {
                 display,
             }
         })
+        .collect()
+}
+
+/// Split a recursive walk across the root's immediate children. Results are
+/// sorted after collection, so scheduling cannot affect the oracle-visible
+/// component order. Deeper recursion stays serial within each shard, avoiding
+/// task creation per directory.
+fn collect_root_parallel(root: &Path) -> Vec<(Vec<String>, PathBuf)> {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+    let roots: Vec<(String, PathBuf, bool, bool)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            if name.starts_with('.') {
+                return None;
+            }
+            let file_type = entry.file_type().ok();
+            Some((
+                name,
+                entry.path(),
+                file_type.as_ref().is_some_and(|kind| kind.is_dir()),
+                file_type.as_ref().is_some_and(|kind| kind.is_symlink()),
+            ))
+        })
+        .collect();
+    roots
+        .into_par_iter()
+        .map(|(name, path, is_dir, is_symlink)| {
+            let mut local = Vec::new();
+            if name.ends_with(".md") {
+                local.push((vec![name.clone()], path.clone()));
+            }
+            if is_dir && !is_symlink {
+                let mut rel = vec![name];
+                collect(&path, &mut rel, true, &mut local);
+            }
+            local
+        })
+        .flatten()
         .collect()
 }
 

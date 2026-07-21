@@ -102,9 +102,9 @@ fn main() {
         usage_error(&format!("not a directory: {root}"));
     }
     check_corpus(&root);
-    // Server-lifetime freshness (ADR-105): one tracker per server keeps the
-    // derived read-model current by stat-scan detection (ADR-114: no
-    // inotify rung), re-deriving only where files changed.
+    // Server-lifetime freshness (ADR-105/118): one tracker per server keeps
+    // the derived read-model current through Linux inotify-clean detection or
+    // the authoritative stat fallback, re-deriving only where files changed.
     let tracker = if rac_engine::derived_cache::cache_enabled(cache) {
         Some(rac_engine::freshness::FreshnessTracker::new(
             rac_engine::derived_cache::default_cache_dir(),

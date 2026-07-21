@@ -48,10 +48,12 @@ invocation, `RAC_NO_CACHE=1` per environment:
 | `rac validate` | on | A per-file result cache, so re-validation is incremental (ADR-106). |
 
 For the long-lived `rac mcp` server, freshness is tracked **incrementally** by
-an event-sourced watcher (ADR-105) rather than re-hashing the whole corpus on
-every call, so a warm endpoint answers without re-reading files that did not
-change. A one-shot `rac find` has no long-lived process to hold that watcher,
-so it verifies freshness through a **persisted stat manifest** (ADR-112): every
+an event-sourced watcher on Linux (ADR-105/118), so a clean warm endpoint can
+answer without walking the corpus. Platforms without a synchronous
+completed-write barrier use the parallel stat-manifest fallback; this preserves
+freshness but remains O(files). A one-shot `rac find` has no long-lived process
+to hold that watcher, so it verifies freshness through a **persisted stat
+manifest** (ADR-112): every
 enumerated file is stat'ed and only stat-changed files are re-read, so an
 unchanged corpus is confirmed at O(files) stat cost with zero artifact-byte
 reads. The one rewrite shape stats cannot see — a size- and mtime-preserving

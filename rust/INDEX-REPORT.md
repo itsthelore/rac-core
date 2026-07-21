@@ -151,6 +151,7 @@ operation names are:
 - `git.recency_join` and `cli.response_serialize`;
 - `grounding.search` and `grounding.projections`;
 - `graph.view_build` and `graph.lookup`;
+- `stat.discovery` and `stat.metadata`;
 - `tracker.detect`, `tracker.recompute`, `mcp.dispatch`, and
   `mcp.response_serialize`.
 
@@ -321,6 +322,33 @@ was 159,264 KiB. This is bounded and approximately linear in identities and
 edges, but substantial enough that persistent adjacency is not justified as an
 additional co-resident copy; a later store-native borrowed view should replace,
 not duplicate, this structure if 100k server memory becomes a product gate.
+
+### P5.5 serving-freshness result
+
+P5.5 activates ADR-105's synchronous clean accelerator on Linux. The tracker
+installs inotify watches before its initial scan and drains the non-blocking
+kernel queue at every request boundary. Only a completely drained empty queue
+under a complete watch set skips detection. Any event, overflow, watch failure,
+or read failure rebuilds the watch set and runs the authoritative stat/content
+differ; an event racing with that scan forces another bracketed scan. The
+active rung and whether a scan occurred are timing-visible.
+
+macOS FSEvents was rejected as a clean oracle after both callback flushes and
+the system journal watermark missed a pinned immediately completed write. The
+native engine therefore retains stat correctness on macOS and parallelizes its
+fallback: root-sharded discovery preserves the final component-wise order, and
+metadata/content probes collect through an indexed parallel iterator that
+preserves manifest order.
+
+On the same macOS 100,000-artifact corpus, five post-warm `get_related` calls
+measured a fallback p50 of 199.9 ms (195.2-278.2 ms observed), down from P5's
+approximately 324 ms limiting scan. A representative p50-near trace spent
+96.1 ms in discovery and 68.3 ms in parallel metadata, while indexed graph
+lookup remained 0.068 ms. This is a 38% safe-fallback improvement, not a claim
+that macOS warm latency is flat. At 5k the fallback stayed within the same
+small-corpus band (19.2 ms p50 observed versus P5's 17.2 ms), so no 5k win is
+claimed. Linux clean latency is gated by the inotify integration tests and
+must be benchmarked on the CI/reference Linux host.
 
 ## Performance
 

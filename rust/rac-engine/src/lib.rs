@@ -65,6 +65,7 @@ pub mod derived_cache;
 pub mod read_model;
 pub mod parallel_build;
 pub mod freshness;
+mod freshness_watch;
 pub mod coverage;
 pub mod review;
 pub mod gate;

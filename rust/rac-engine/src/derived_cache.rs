@@ -8,6 +8,7 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use rayon::prelude::*;
 
 use crate::derived::{DerivedIndex, SCHEMA_VERSION};
 use crate::index_store::{
@@ -67,18 +68,26 @@ pub fn stat_scan(
         .iter()
         .map(|(rel, state)| (rel.as_str(), state))
         .collect();
-    let mut changed: BTreeSet<String> = BTreeSet::new();
-    let mut new_manifest: Vec<(String, FileState)> = Vec::new();
-    for entry in find_markdown_files(root_str, recursive) {
+    let discovery_started = crate::timing::start();
+    let entries = find_markdown_files(root_str, recursive);
+    crate::timing::emit_since(
+        "stat.discovery",
+        discovery_started,
+        &[("files", entries.len() as u64)],
+    );
+    // Metadata probes dominate the warm scan at large corpus sizes and are
+    // independent. Indexed parallel collection preserves walk order, which is
+    // part of the manifest/hash contract.
+    let metadata_started = crate::timing::start();
+    let scan_entry = |entry: &crate::walk::WalkEntry| {
         let rel = entry.components.join("/");
         let Some((size, mtime_ns)) = stat_pair(&entry.abs) else {
-            continue; // vanished between enumeration and stat
+            return None; // vanished between enumeration and stat
         };
         if !content_confirm_all {
             if let Some(prev_state) = prev.get(rel.as_str()) {
                 if prev_state.size == size && prev_state.mtime_ns == mtime_ns {
-                    new_manifest.push((rel, (*prev_state).clone())); // S5 accepted
-                    continue;
+                    return Some((rel, (*prev_state).clone(), false)); // S5 accepted
                 }
             }
         }
@@ -87,17 +96,30 @@ pub fn stat_scan(
             Some(prev_state) => prev_state.content_hash != digest,
             None => true,
         };
-        new_manifest.push((
+        Some((
             rel.clone(),
             FileState {
                 content_hash: digest,
                 size,
                 mtime_ns,
             },
-        ));
+            changed_content,
+        ))
+    };
+    let scanned: Vec<Option<(String, FileState, bool)>> =
+        entries.par_iter().map(scan_entry).collect();
+    crate::timing::emit_since(
+        "stat.metadata",
+        metadata_started,
+        &[("files", entries.len() as u64)],
+    );
+    let mut changed: BTreeSet<String> = BTreeSet::new();
+    let mut new_manifest: Vec<(String, FileState)> = Vec::with_capacity(scanned.len());
+    for (rel, state, changed_content) in scanned.into_iter().flatten() {
         if changed_content {
-            changed.insert(rel);
+            changed.insert(rel.clone());
         }
+        new_manifest.push((rel, state));
     }
     let present: std::collections::HashSet<&str> =
         new_manifest.iter().map(|(rel, _)| rel.as_str()).collect();

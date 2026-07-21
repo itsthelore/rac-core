@@ -64,6 +64,10 @@ not exist in-process.
 
 Accepted
 
+Partially superseded by ADR-118: Linux now adopts the target-specific inotify
+rung after the measured 100k stat floor reached 324 ms. Other platforms retain
+this decision's stat fallback.
+
 ## Category
 
 Technical

@@ -2,22 +2,21 @@
 //! `services/freshness.py` `FreshnessTracker` for the long-lived MCP server
 //! (INDEX-PLAN B6).
 //!
-//! Detection rests on the stat-manifest scan (ADR-114 defers the inotify
-//! accelerator — it only ever asserted *clean*, so its absence is
-//! behavior-neutral; `mode()` reports `"stat"`). Whatever the rung, the
-//! served read-model is re-derived from the tracker's incrementally
-//! maintained parsed snapshot, byte-identical to a fresh whole-corpus walk
-//! at the current corpus state.
+//! Detection uses an event-driven clean accelerator where the platform can
+//! provide a synchronous barrier, otherwise the stat-manifest scan. Events
+//! never compute the changed set: any dirty or uncertain signal falls back to
+//! the authoritative scan. Whatever the rung, the served read-model is
+//! re-derived from the tracker's incrementally maintained parsed snapshot,
+//! byte-identical to a fresh whole-corpus walk at the current corpus state.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::derived::{build_derived_index_from_items, DerivedIndex, SCHEMA_VERSION};
 use crate::derived_cache::{corpus_hash_from_complete_manifest, stat_scan};
+use crate::freshness_watch::EventWatch;
 use crate::index_store::{open_store, write_store, FileState, MmapIndexReader};
 use crate::relationships::CorpusItem;
-
-pub const MODE_STAT: &str = "stat";
 
 /// What the tracker currently serves: the memory-mapped base (delta-empty),
 /// or the re-derived snapshot bundle (the delta window).
@@ -30,6 +29,7 @@ pub struct FreshnessTracker {
     cache_dir: PathBuf,
     root_str: String,
     threshold: Option<usize>,
+    watcher: EventWatch,
 
     manifest: Vec<(String, FileState)>,
     items: HashMap<String, CorpusItem>, // rel -> parsed snapshot entry
@@ -46,14 +46,31 @@ pub struct FreshnessTracker {
     /// change repopulates by a full re-parse on demand.
     snapshot_shed: bool,
     last_parse_workers: usize,
+    last_detect_scanned: bool,
 }
 
 impl FreshnessTracker {
     pub fn new(cache_dir: PathBuf, root: &str, threshold: Option<usize>) -> Self {
+        Self::new_with_watcher(cache_dir, root, threshold, true)
+    }
+
+    /// Force the authoritative stat rung. Used by fallback/parity tests and
+    /// remains the behavior on platforms without a synchronous watcher.
+    pub fn new_stat(cache_dir: PathBuf, root: &str, threshold: Option<usize>) -> Self {
+        Self::new_with_watcher(cache_dir, root, threshold, false)
+    }
+
+    fn new_with_watcher(
+        cache_dir: PathBuf,
+        root: &str,
+        threshold: Option<usize>,
+        watcher_enabled: bool,
+    ) -> Self {
         Self {
             cache_dir,
             root_str: root.to_string(),
             threshold,
+            watcher: EventWatch::new(root, watcher_enabled),
             manifest: Vec::new(),
             items: HashMap::new(),
             model: None,
@@ -64,13 +81,14 @@ impl FreshnessTracker {
             delta_paths: HashSet::new(),
             snapshot_shed: false,
             last_parse_workers: 1,
+            last_detect_scanned: false,
         }
     }
 
     // --- observable state (scorecards and pinning tests) ------------------
 
     pub fn mode(&self) -> &'static str {
-        MODE_STAT
+        self.watcher.mode()
     }
 
     pub fn base_generation(&self) -> u64 {
@@ -89,6 +107,10 @@ impl FreshnessTracker {
         self.hash.as_deref()
     }
 
+    pub fn last_detect_scanned(&self) -> bool {
+        self.last_detect_scanned
+    }
+
     // --- the serving surface ----------------------------------------------
 
     /// The current read-model, freshened through the detection ladder. An
@@ -96,11 +118,16 @@ impl FreshnessTracker {
     pub fn read_model(&mut self, verify: bool) -> &TrackerModel {
         let cold = self.model.is_none();
         let detect_started = crate::timing::start();
-        let changed = self.detect(verify);
+        let (changed, scanned) = self.detect(verify);
+        self.last_detect_scanned = scanned;
         crate::timing::emit_since(
             "tracker.detect",
             detect_started,
-            &[("files", self.manifest.len() as u64), ("changed", changed.len() as u64)],
+            &[
+                ("files", self.manifest.len() as u64),
+                ("changed", changed.len() as u64),
+                ("scanned", u64::from(scanned)),
+            ],
         );
         if changed.is_empty() && !cold {
             return self.model.as_ref().expect("warm model");
@@ -153,12 +180,31 @@ impl FreshnessTracker {
 
     // --- detection ----------------------------------------------------------
 
-    fn detect(&mut self, verify: bool) -> std::collections::BTreeSet<String> {
+    fn detect(&mut self, verify: bool) -> (std::collections::BTreeSet<String>, bool) {
         let confirm_all = self.model.is_none() || verify;
-        let (new_manifest, changed) =
-            stat_scan(&self.root_str, &self.manifest, confirm_all, true);
-        self.manifest = new_manifest;
-        changed
+        if !confirm_all && self.watcher.is_clean() {
+            return (std::collections::BTreeSet::new(), false);
+        }
+
+        let mut all_changed = std::collections::BTreeSet::new();
+        // A stable bracket is the barrier: if an event arrives while scanning,
+        // scan again. Under continuous writes, leave the watcher unacknowledged
+        // after the bounded retries so the next call scans again.
+        for _ in 0..3 {
+            self.watcher.prepare_scan();
+            let before = self.watcher.checkpoint();
+            let (new_manifest, changed) =
+                stat_scan(&self.root_str, &self.manifest, confirm_all, true);
+            self.manifest = new_manifest;
+            all_changed.extend(changed);
+            let Some(before) = before else {
+                return (all_changed, true);
+            };
+            if self.watcher.acknowledge_if_stable(before) {
+                return (all_changed, true);
+            }
+        }
+        (all_changed, true)
     }
 
     // --- applying the changed set -------------------------------------------
