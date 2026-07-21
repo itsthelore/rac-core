@@ -8,14 +8,17 @@
 //! P6.2 adds an independently staged identity/status projection and exact
 //! resolution over the overlay. P6.3 adds token rows, postings, filters, and
 //! exact global search statistics. P6.4 adds relationship rows, reverse target
-//! buckets, resolved edges, and inbound counts. The complete derived model
-//! remains as the mutation referee while later slices move scope and summary
-//! structures behind the same publication boundary.
+//! buckets, resolved edges, and inbound counts. P6.5 adds scope/live-decision
+//! rows and validated portfolio projections. The complete derived model remains
+//! as the mutation referee until durable compaction and default-adoption gates.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
+use serde_json::Value;
+
 use crate::derived::DerivedIndex;
+use crate::portfolio::{portfolio_from_rows, portfolio_row, PortfolioRow};
 use crate::pycompat::{py_casefold, py_strip};
 use crate::relationships::{
     edge_spec, rows_from_corpus_items, CorpusItem, Relationship, ValidationRow,
@@ -27,6 +30,7 @@ use crate::resolve::{
     CorpusStats, FieldTokens, IndexEntry, ResolutionResult, SearchResult, OUTCOME_DUPLICATE,
     OUTCOME_NOT_FOUND, OUTCOME_RESOLVED,
 };
+use crate::retrieve::{scope_rows_from_items, ScopeRow};
 
 /// The identity/status projection for one parsed artifact. Rows are shared by
 /// `Arc` so compaction promotes unchanged identities without rebuilding them.
@@ -636,6 +640,22 @@ impl SearchGeneration {
         rank_and_build(query, artifact_type, matched, &terms, &stats)
     }
 
+    pub fn entries(&self, graph: &GraphGeneration) -> Vec<IndexEntry> {
+        let inbound = graph.inbound_counts();
+        self.base
+            .keys()
+            .chain(self.upserts.keys())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|path| self.row(path))
+            .map(|row| {
+                let mut entry = row.entry.clone();
+                entry.inbound_count = inbound.get(&entry.path).copied().unwrap_or(0);
+                entry
+            })
+            .collect()
+    }
+
     fn row(&self, path: &str) -> Option<&SearchRow> {
         self.upserts.get(path).map(AsRef::as_ref).or_else(|| {
             (!self.tombstones.contains(path))
@@ -780,6 +800,242 @@ fn postings_for(rows: &BTreeMap<String, Arc<SearchRow>>) -> BTreeMap<String, Vec
         .collect()
 }
 
+/// Per-document scope and live-decision projections. An entry is present in
+/// `scope` only when the document is a live decision with declared scope;
+/// `live` independently tracks every live decision for topic-mode filtering.
+#[derive(Clone, Default)]
+pub struct ScopeGeneration {
+    base_scope: Arc<BTreeMap<String, Arc<ScopeRow>>>,
+    base_live: Arc<BTreeSet<String>>,
+    scope_upserts: BTreeMap<String, Arc<ScopeRow>>,
+    live_upserts: BTreeSet<String>,
+    tombstones: BTreeSet<String>,
+}
+
+impl ScopeGeneration {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn from_items<'a>(items: impl IntoIterator<Item = (&'a str, &'a CorpusItem)>) -> Self {
+        let mut scope = BTreeMap::new();
+        let mut live = BTreeSet::new();
+        for (path, item) in items {
+            if is_live_decision_item(item) {
+                live.insert(path.to_string());
+            }
+            if let Some(row) = scope_row(item) {
+                scope.insert(path.to_string(), Arc::new(row));
+            }
+        }
+        Self {
+            base_scope: Arc::new(scope),
+            base_live: Arc::new(live),
+            scope_upserts: BTreeMap::new(),
+            live_upserts: BTreeSet::new(),
+            tombstones: BTreeSet::new(),
+        }
+    }
+
+    pub fn stage(
+        &self,
+        changed: &BTreeSet<String>,
+        parsed: &BTreeMap<String, CorpusItem>,
+    ) -> Self {
+        let mut next = self.clone();
+        for path in changed {
+            next.scope_upserts.remove(path);
+            next.live_upserts.remove(path);
+            if let Some(item) = parsed.get(path) {
+                if is_live_decision_item(item) {
+                    next.live_upserts.insert(path.clone());
+                }
+                if let Some(row) = scope_row(item) {
+                    next.scope_upserts.insert(path.clone(), Arc::new(row));
+                }
+                if next.base_scope.contains_key(path) || next.base_live.contains(path) {
+                    next.tombstones.insert(path.clone());
+                } else {
+                    next.tombstones.remove(path);
+                }
+            } else if next.base_scope.contains_key(path) || next.base_live.contains(path) {
+                next.tombstones.insert(path.clone());
+            } else {
+                next.tombstones.remove(path);
+            }
+        }
+        next
+    }
+
+    pub fn promote(&mut self) {
+        let mut scope = self.base_scope.as_ref().clone();
+        let mut live = self.base_live.as_ref().clone();
+        for path in &self.tombstones {
+            scope.remove(path);
+            live.remove(path);
+        }
+        for path in self.scope_upserts.keys() {
+            scope.remove(path);
+        }
+        for path in self.live_upserts.iter() {
+            live.remove(path);
+        }
+        for (path, row) in &self.scope_upserts {
+            scope.insert(path.clone(), Arc::clone(row));
+        }
+        for path in &self.live_upserts {
+            live.insert(path.clone());
+        }
+        self.base_scope = Arc::new(scope);
+        self.base_live = Arc::new(live);
+        self.scope_upserts.clear();
+        self.live_upserts.clear();
+        self.tombstones.clear();
+    }
+
+    pub fn rows(&self) -> Vec<ScopeRow> {
+        self.base_scope
+            .keys()
+            .chain(self.scope_upserts.keys())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|path| {
+                self.scope_upserts.get(path).or_else(|| {
+                    (!self.tombstones.contains(path))
+                        .then(|| self.base_scope.get(path))
+                        .flatten()
+                })
+            })
+            .map(|row| row.as_ref().clone())
+            .collect()
+    }
+
+    pub fn live_paths(&self) -> Vec<String> {
+        self.base_live
+            .iter()
+            .chain(self.live_upserts.iter())
+            .filter(|path| {
+                self.live_upserts.contains(*path)
+                    || (!self.tombstones.contains(*path) && self.base_live.contains(*path))
+            })
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn base_scope_len(&self) -> usize {
+        self.base_scope.len()
+    }
+    pub fn scope_upsert_len(&self) -> usize {
+        self.scope_upserts.len()
+    }
+}
+
+fn is_live_decision_item(item: &CorpusItem) -> bool {
+    item.spec
+        .is_some_and(|spec| spec.name == crate::derived::DECISION_TYPE)
+        && crate::resolve::is_live_decision(&item.artifact)
+}
+
+fn scope_row(item: &CorpusItem) -> Option<ScopeRow> {
+    scope_rows_from_items(std::slice::from_ref(item))
+        .into_iter()
+        .next()
+}
+
+/// Incrementally validated per-document portfolio projections. Global summary
+/// fields reduce these compact rows at publication time; parsing, structural
+/// validation, and completeness classification remain change-bound.
+#[derive(Clone, Default)]
+pub struct SummaryGeneration {
+    base: Arc<BTreeMap<String, Arc<PortfolioRow>>>,
+    upserts: BTreeMap<String, Arc<PortfolioRow>>,
+    tombstones: BTreeSet<String>,
+}
+
+impl SummaryGeneration {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn from_items<'a>(items: impl IntoIterator<Item = (&'a str, &'a CorpusItem)>) -> Self {
+        Self {
+            base: Arc::new(
+                items
+                    .into_iter()
+                    .map(|(path, item)| (path.to_string(), Arc::new(portfolio_row(item))))
+                    .collect(),
+            ),
+            upserts: BTreeMap::new(),
+            tombstones: BTreeSet::new(),
+        }
+    }
+
+    pub fn stage(
+        &self,
+        changed: &BTreeSet<String>,
+        parsed: &BTreeMap<String, CorpusItem>,
+    ) -> Self {
+        let mut next = self.clone();
+        for path in changed {
+            if let Some(item) = parsed.get(path) {
+                next
+                    .upserts
+                    .insert(path.clone(), Arc::new(portfolio_row(item)));
+                next.tombstones.remove(path);
+            } else {
+                next.upserts.remove(path);
+                if next.base.contains_key(path) {
+                    next.tombstones.insert(path.clone());
+                } else {
+                    next.tombstones.remove(path);
+                }
+            }
+        }
+        next
+    }
+
+    pub fn value(&self, directory: &str, recursive: bool) -> Value {
+        let rows: Vec<PortfolioRow> = self
+            .base
+            .keys()
+            .chain(self.upserts.keys())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|path| {
+                self.upserts.get(path).or_else(|| {
+                    (!self.tombstones.contains(path))
+                        .then(|| self.base.get(path))
+                        .flatten()
+                })
+            })
+            .map(|row| row.as_ref().clone())
+            .collect();
+        crate::output::portfolio_summary_value(&portfolio_from_rows(directory, &rows, recursive))
+    }
+
+    pub fn promote(&mut self) {
+        let mut base = self.base.as_ref().clone();
+        for path in &self.tombstones {
+            base.remove(path);
+        }
+        for (path, row) in &self.upserts {
+            base.insert(path.clone(), Arc::clone(row));
+        }
+        self.base = Arc::new(base);
+        self.upserts.clear();
+        self.tombstones.clear();
+    }
+
+    pub fn base_len(&self) -> usize {
+        self.base.len()
+    }
+    pub fn upsert_len(&self) -> usize {
+        self.upserts.len()
+    }
+}
+
 /// Parsed documents for an immutable base plus one cumulative overlay.
 #[derive(Clone, Default)]
 pub struct DeltaDocuments {
@@ -899,6 +1155,8 @@ pub struct DeltaGeneration {
     pub identity: IdentityGeneration,
     pub search: SearchGeneration,
     pub graph: GraphGeneration,
+    pub scope: ScopeGeneration,
+    pub summary: SummaryGeneration,
     pub derived: DerivedIndex,
 }
 
@@ -950,6 +1208,29 @@ mod tests {
             artifact,
             spec,
         }
+    }
+
+    fn scoped_item(path: &str, id: &str, status: &str, scope: Option<&str>) -> CorpusItem {
+        let scope = scope
+            .map(|value| format!("\n\n## Applies To\n\n- {value}"))
+            .unwrap_or_default();
+        let text = DOC
+            .replace("ADR-1", id)
+            .replace("Accepted", status)
+            .replace("\n## Status", &format!("{scope}\n\n## Status"));
+        let artifact = crate::parse::parse_text(&text, path);
+        let spec = crate::spec::spec_for(&crate::classify::classify(&artifact).artifact_type);
+        CorpusItem {
+            path: path.to_string(),
+            artifact,
+            spec,
+        }
+    }
+
+    fn scope_signature(rows: Vec<ScopeRow>) -> Vec<(String, String, String, String, Vec<String>)> {
+        rows.into_iter()
+            .map(|row| (row.id, row.title, row.status, row.path, row.scope_entries))
+            .collect()
     }
 
     fn edge_signature(edges: Vec<Relationship>) -> Vec<EdgeSignature> {
@@ -1225,6 +1506,131 @@ mod tests {
         items.remove("a.md");
         assert_graph_matches_fresh(&graph, &items);
         assert!(graph.relationships().is_empty());
+    }
+
+    #[test]
+    fn scope_overlay_tracks_live_status_scope_delete_and_promote() {
+        let mut items = BTreeMap::from([
+            (
+                "b.md".to_string(),
+                scoped_item(
+                    "b.md",
+                    "RAC-111111111111",
+                    "Accepted",
+                    Some("src/**"),
+                ),
+            ),
+            (
+                "d.md".to_string(),
+                scoped_item("d.md", "RAC-222222222222", "Accepted", None),
+            ),
+        ]);
+        let mut scope = ScopeGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+        );
+        assert_eq!(scope.live_paths(), vec!["b.md", "d.md"]);
+        assert_eq!(scope.rows().len(), 1);
+
+        let shared_scope = Arc::clone(&scope.base_scope);
+        let shared_live = Arc::clone(&scope.base_live);
+        let changed = BTreeSet::from(["a.md".to_string(), "b.md".to_string()]);
+        let parsed = BTreeMap::from([
+            (
+                "a.md".to_string(),
+                scoped_item(
+                    "a.md",
+                    "RAC-333333333333",
+                    "Accepted",
+                    Some("docs/**"),
+                ),
+            ),
+            (
+                "b.md".to_string(),
+                scoped_item(
+                    "b.md",
+                    "RAC-111111111111",
+                    "Superseded",
+                    Some("src/**"),
+                ),
+            ),
+        ]);
+        scope = scope.stage(&changed, &parsed);
+        items.extend(parsed.clone());
+        assert!(Arc::ptr_eq(&shared_scope, &scope.base_scope));
+        assert!(Arc::ptr_eq(&shared_live, &scope.base_live));
+        assert_eq!(scope.live_paths(), vec!["a.md", "d.md"]);
+        assert_eq!(
+            scope_signature(scope.rows()),
+            scope_signature(scope_rows_from_items(
+                &items.values().cloned().collect::<Vec<_>>()
+            ))
+        );
+
+        let changed = BTreeSet::from(["d.md".to_string()]);
+        scope = scope.stage(&changed, &BTreeMap::new());
+        items.remove("d.md");
+        assert_eq!(scope.live_paths(), vec!["a.md"]);
+        assert_eq!(
+            scope_signature(scope.rows()),
+            scope_signature(scope_rows_from_items(
+                &items.values().cloned().collect::<Vec<_>>()
+            ))
+        );
+
+        scope.promote();
+        assert_eq!(scope.base_scope_len(), 1);
+        assert_eq!(scope.scope_upsert_len(), 0);
+        assert_eq!(scope.live_paths(), vec!["a.md"]);
+    }
+
+    #[test]
+    fn summary_overlay_reuses_validated_base_rows_and_matches_fresh() {
+        let directory = ".";
+        let mut items = BTreeMap::from([
+            (
+                "b.md".to_string(),
+                item("b.md", "RAC-111111111111", "Accepted"),
+            ),
+            (
+                "d.md".to_string(),
+                tagged_item("d.md", "RAC-222222222222", "Accepted", "alpha"),
+            ),
+        ]);
+        let mut summary = SummaryGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+        );
+        let fresh = |items: &BTreeMap<String, CorpusItem>| {
+            crate::output::portfolio_summary_value(&crate::portfolio::portfolio_from_corpus(
+                directory,
+                &items.values().cloned().collect::<Vec<_>>(),
+                true,
+            ))
+        };
+        assert_eq!(summary.value(directory, true), fresh(&items));
+
+        let shared = Arc::clone(&summary.base);
+        let changed = BTreeSet::from(["a.md".to_string(), "b.md".to_string()]);
+        let parsed = BTreeMap::from([
+            (
+                "a.md".to_string(),
+                item("a.md", "RAC-333333333333", "Proposed"),
+            ),
+            (
+                "b.md".to_string(),
+                item("b.md", "RAC-111111111111", "Superseded"),
+            ),
+        ]);
+        summary = summary.stage(&changed, &parsed);
+        items.extend(parsed);
+        assert!(Arc::ptr_eq(&shared, &summary.base));
+        assert_eq!(summary.value(directory, true), fresh(&items));
+        assert_eq!(summary.base_len(), 2);
+        assert_eq!(summary.upsert_len(), 2);
+
+        summary.promote();
+        assert_eq!(summary.base_len(), 3);
+        assert_eq!(summary.upsert_len(), 0);
+        assert_eq!(summary.value(directory, true), fresh(&items));
     }
 
     #[test]

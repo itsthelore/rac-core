@@ -82,7 +82,8 @@ impl PortfolioSummary {
 }
 
 /// Per-artifact projection matching `PortfolioRow`.
-struct Row {
+#[derive(Clone)]
+pub struct PortfolioRow {
     path: String,
     artifact_type: String,
     identifier: String,
@@ -92,7 +93,7 @@ struct Row {
     missing_recommended: Vec<String>,
 }
 
-fn portfolio_row(item: &CorpusItem) -> Row {
+pub fn portfolio_row(item: &CorpusItem) -> PortfolioRow {
     let path = item.path.clone();
     let artifact_type = item
         .spec
@@ -100,7 +101,7 @@ fn portfolio_row(item: &CorpusItem) -> Row {
         .unwrap_or_else(|| "unknown".to_string());
     let vrow = validation_row(&path, &item.artifact, item.spec);
     match item.spec {
-        None => Row {
+        None => PortfolioRow {
             path,
             artifact_type,
             identifier: vrow.canonical_id.clone(),
@@ -113,7 +114,7 @@ fn portfolio_row(item: &CorpusItem) -> Row {
             let (_, missing_rec) = missing_sections(&item.artifact, spec);
             let identifier =
                 crate::identity::artifact_identifier(&item.artifact, item.spec, &path);
-            Row {
+            PortfolioRow {
                 path,
                 artifact_type: artifact_type.clone(),
                 identifier,
@@ -141,7 +142,15 @@ pub fn portfolio_from_corpus(
     items: &[CorpusItem],
     recursive: bool,
 ) -> PortfolioSummary {
-    let rows: Vec<Row> = items.iter().map(portfolio_row).collect();
+    let rows: Vec<PortfolioRow> = items.iter().map(portfolio_row).collect();
+    portfolio_from_rows(directory, &rows, recursive)
+}
+
+pub fn portfolio_from_rows(
+    directory: &str,
+    rows: &[PortfolioRow],
+    recursive: bool,
+) -> PortfolioSummary {
     let validation_rows: Vec<ValidationRow> = rows.iter().map(|r| r.validation.clone()).collect();
     let overrides: SeverityOverrides = load_overrides(directory);
 
@@ -164,7 +173,7 @@ pub fn portfolio_from_corpus(
     let mut path_to_identifier: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
 
-    for row in &rows {
+    for row in rows {
         bump(&mut by_type, &row.artifact_type);
         if row.validation.spec_name.is_none() {
             unknown_paths.push(row.path.clone());

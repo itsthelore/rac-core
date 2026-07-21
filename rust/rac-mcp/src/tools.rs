@@ -184,7 +184,7 @@ pub fn find_decisions_tool(
             Some(TrackerModel::Delta(generation)) => {
                 rac_engine::retrieve::scope_lookup_value(
                     &rac_engine::retrieve::decisions_for_path_with_rows(
-                        &generation.derived.scope_rows,
+                        &generation.scope.rows(),
                         root,
                         p,
                     ),
@@ -204,8 +204,8 @@ pub fn find_decisions_tool(
             topic,
         ),
         Some(TrackerModel::Delta(generation)) => rac_engine::read_model::find_decisions_in(
-            &generation.derived.index_entries,
-            &generation.derived.live_decision_paths,
+            &generation.search.entries(&generation.graph),
+            &generation.scope.live_paths(),
             topic,
         ),
         None => find_decisions(root, topic, true),
@@ -311,7 +311,7 @@ pub fn get_summary(root: &str, model: Option<&TrackerModel>, budget: i64) -> Str
         let summary = match model {
             TrackerModel::View(reader) => reader.portfolio_summary().unwrap_or(Value::Null),
             TrackerModel::Snapshot(derived) => derived.portfolio_summary.clone(),
-            TrackerModel::Delta(generation) => generation.derived.portfolio_summary.clone(),
+            TrackerModel::Delta(generation) => generation.summary.value(root, true),
         };
         if let Value::Object(mut payload) = summary {
             let empty = payload
@@ -471,6 +471,12 @@ mod tests {
             graph: rac_engine::delta_generation::GraphGeneration::from_items(
                 items.iter().map(|item| ("decision.md", item)),
                 &IdentityGeneration::from_items(items.iter().map(|item| ("decision.md", item))),
+            ),
+            scope: rac_engine::delta_generation::ScopeGeneration::from_items(
+                items.iter().map(|item| ("decision.md", item)),
+            ),
+            summary: rac_engine::delta_generation::SummaryGeneration::from_items(
+                items.iter().map(|item| ("decision.md", item)),
             ),
             derived: stale_derived,
         }));
