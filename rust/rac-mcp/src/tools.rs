@@ -140,12 +140,12 @@ pub fn search_artifacts(
         Some(TrackerModel::Snapshot(derived)) => {
             search_index_filtered(&derived.index_entries, query, artifact_type, tags, live_only)
         }
-        Some(TrackerModel::Delta(generation)) => search_index_filtered(
-            &generation.derived.index_entries,
+        Some(TrackerModel::Delta(generation)) => generation.search.search(
             query,
             artifact_type,
             tags,
             live_only,
+            &generation.derived.index_entries,
         ),
         None => {
             let entries = build_index(root, true);
@@ -446,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn delta_point_resolution_uses_identity_generation() {
+    fn delta_point_and_search_routes_use_incremental_generations() {
         let root =
             std::env::temp_dir().join(format!("rac-p6-identity-route-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -460,13 +460,16 @@ mod tests {
         let items = rac_engine::relationships::corpus_items(&root_str, true);
         let identity =
             IdentityGeneration::from_items(items.iter().map(|item| ("decision.md", item)));
-        let model = TrackerModel::Delta(DeltaGeneration {
+        let model = TrackerModel::Delta(Box::new(DeltaGeneration {
             base_generation: 1,
             serving_generation: 2,
             changed_paths: vec!["decision.md".to_string()],
             identity,
+            search: rac_engine::delta_generation::SearchGeneration::from_items(
+                items.iter().map(|item| ("decision.md", item)),
+            ),
             derived: stale_derived,
-        });
+        }));
 
         assert_eq!(
             resolve_for(&root_str, Some(&model), "RAC-222222222222").outcome,
@@ -476,6 +479,17 @@ mod tests {
             resolve_for(&root_str, Some(&model), "RAC-111111111111").outcome,
             rac_engine::resolve::OUTCOME_NOT_FOUND
         );
+        let search = search_artifacts(
+            &root_str,
+            Some(&model),
+            "222222222222",
+            None,
+            &[],
+            false,
+            16_384,
+        );
+        assert!(search.contains("RAC-222222222222"));
+        assert!(!search.contains("RAC-111111111111"));
         let _ = std::fs::remove_dir_all(root);
     }
 }
