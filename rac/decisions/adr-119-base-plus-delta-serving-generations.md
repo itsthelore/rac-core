@@ -55,6 +55,12 @@ the default CLI or MCP server. Later slices may incrementally maintain:
 4. scope rows, live-decision state, and portfolio summary counters; and
 5. durable compaction without snapshot shedding.
 
+P6.2 implements item 1 behind the same preview boundary. Identity and status
+rows are shared across generations, changed rows and tombstones are staged in
+the overlay, and exact point resolution reads the published identity generation.
+The complete derived model remains a referee and the default serving path is
+still unchanged.
+
 No slice becomes the default until mutation referees show byte-identical output
 against a fresh whole-corpus rebuild and scale tests show bounded regression.
 
@@ -64,6 +70,11 @@ P6.1 makes the publication and lifecycle rules executable without changing
 production behavior. Add, edit, delete, rename, compaction, and first-edit-after-
 compaction tests compare the preview's persisted segments byte-for-byte with a
 fresh derivation.
+
+P6.2 adds identity/status and exact-resolution referees for those mutation
+classes, including casefolded aliases and duplicate identities. Staging shares
+the compacted base maps and clones only the bounded overlay; compaction reuses
+unchanged identity rows.
 
 The first slice does not claim mutation-latency improvement for derivation: it
 still materializes live documents and rebuilds all derived structures. Its
