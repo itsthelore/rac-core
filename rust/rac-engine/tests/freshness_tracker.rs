@@ -249,6 +249,34 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
             "status row for {relative}"
         );
     }
+    for (query, artifact_type, live_only) in [
+        ("widget", None, false),
+        ("widget", None, true),
+        ("adr widget", Some("decision"), false),
+        ("widget widget", None, false),
+        ("accepted", None, true),
+        ("zzzz-no-match", None, false),
+    ] {
+        let expected = rac_engine::resolve::search_index_filtered(
+            &fresh_index,
+            query,
+            artifact_type,
+            &[],
+            live_only,
+        );
+        let actual = generation.search.search(
+            query,
+            artifact_type,
+            &[],
+            live_only,
+            &generation.derived.index_entries,
+        );
+        assert_eq!(
+            rac_engine::output::search_result_value(&actual, true),
+            rac_engine::output::search_result_value(&expected, true),
+            "search generation for {query}"
+        );
+    }
     let _ = fs::remove_dir_all(candidate_cache);
     let _ = fs::remove_dir_all(fresh_cache);
 }
@@ -271,7 +299,8 @@ fn delta_preview_stages_mutations_compacts_and_keeps_parsed_base() {
 
     fs::write(
         corpus.join("adr-1-base.md"),
-        DOC.replace("Keep.", "Keep the edited base."),
+        DOC.replace("Keep.", "Keep the edited base.")
+            .replace("Accepted", "Superseded"),
     )
     .unwrap();
     let serving = tracker.serving_generation() + 1;

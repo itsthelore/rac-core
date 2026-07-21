@@ -61,6 +61,11 @@ the overlay, and exact point resolution reads the published identity generation.
 The complete derived model remains a referee and the default serving path is
 still unchanged.
 
+P6.3 implements item 2. Token rows and compacted postings are immutable shared
+bases; changed rows and tombstones form the search overlay. Candidate discovery,
+filters, field vectors, and exact corpus-global BM25 statistics read that
+overlay. Inbound graph counts still come from the complete referee until item 3.
+
 No slice becomes the default until mutation referees show byte-identical output
 against a fresh whole-corpus rebuild and scale tests show bounded regression.
 
@@ -75,6 +80,11 @@ P6.2 adds identity/status and exact-resolution referees for those mutation
 classes, including casefolded aliases and duplicate identities. Staging shares
 the compacted base maps and clones only the bounded overlay; compaction reuses
 unchanged identity rows.
+
+P6.3 extends the same mutation referee to complete search payloads, including
+prefix/AND candidates, duplicate query tokens, type/tag/live filters, snippets,
+scores, ranks, and ordering. Staging shares the compacted token and posting
+bases and clones only the bounded overlay.
 
 The first slice does not claim mutation-latency improvement for derivation: it
 still materializes live documents and rebuilds all derived structures. Its

@@ -371,6 +371,27 @@ does not claim an end-to-end mutation-latency win: P6.2 intentionally retains
 the complete derived rebuild as a referee while postings, graph, scope, and
 summary remain future slices. The default CLI and MCP paths are unchanged.
 
+### P6.3 incremental-search result
+
+P6.3 adds shared compacted token rows and token-to-path postings plus changed-row
+upserts and tombstones. Prefix postings drive AND candidate intersection;
+overlay-aware posting counts and field-length sums reproduce the corpus-global
+BM25 statistics, including the contract's duplicate-query-token behavior.
+Type, tag, and live-status filters consume the same staged rows.
+
+Search rows retain identity, tags, sections, and flat field vectors. Until P6.4
+moves graph state, the complete referee contributes only current inbound counts;
+the incremental row remains authoritative for matching, snippets, scoring inputs,
+and response projection. A routing test pairs a stale full row with current P6.2
+and P6.3 generations to prove both point resolution and search use their overlays.
+
+Mutation referees compare the complete serialized search payload against a fresh
+whole-corpus build across edits, additions, deletions, renames, compaction,
+prefix/AND queries, duplicate terms, filters, and no-match cases. Pointer-identity
+checks prove staging shares both compacted rows and postings. The default serving
+path remains unchanged, and no end-to-end mutation-latency claim is made while
+the full graph/scope/summary referee still rebuilds.
+
 ## Performance
 
 See the `PERF-REPORT.md` warm-path addendum. Headline (5k synthetic
