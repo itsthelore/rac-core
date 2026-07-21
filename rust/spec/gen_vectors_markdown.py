@@ -2,16 +2,15 @@
 """Generate markdown-module test vectors from the Python oracle.
 
 Drives rac.core.markdown (markdown-it-py 4.2.0 block parsing + the section
-walk) over synthetic contract edge cases and the full live corpus, dumping
-the complete extracted structure for byte-exact replay by the Rust port
+walk) over a bounded set of synthetic parser edge cases, dumping the complete
+extracted structure for byte-exact replay by the Rust port
 (rust/rac-engine/tests/markdown_vectors.rs).
 
 Run with the oracle venv:
     .venv-oracle/bin/python rust/spec/gen_vectors_markdown.py
 
 Outputs (committed):
-    rust/rac-engine/tests/vectors/markdown.json         (synthetic cases)
-    rust/rac-engine/tests/vectors/markdown_corpus.json  (live corpus products)
+    rust/rac-engine/tests/vectors/markdown.json
 
 File-kind cases use paths relative to rust/rac-engine (the cwd of `cargo
 test`); this script chdirs there so the oracle sees identical path strings.
@@ -766,39 +765,4 @@ with open(os.path.join(VEC_DIR, "markdown.json"), "w", encoding="utf-8") as fh:
     json.dump({"cases": CASES}, fh, ensure_ascii=True, separators=(",", ":"))
     fh.write("\n")
 
-# ---------------------------------------------------------------------------
-# Live corpus: every .md under rac/ and tests/
-# ---------------------------------------------------------------------------
-
-corpus_cases = []
-corpus_roots = [os.path.join(REPO, "rac"), os.path.join(REPO, "tests")]
-paths = []
-for root in corpus_roots:
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames.sort()
-        for fn in sorted(filenames):
-            if fn.endswith(".md"):
-                paths.append(os.path.join(dirpath, fn))
-paths.sort()
-for abspath in paths:
-    rel = os.path.relpath(abspath, ENGINE_DIR)
-    with open(abspath, "rb") as fh:
-        data = fh.read()
-    text = data.decode("utf-8", errors="replace")
-    product = md.parse_file(rel)
-    corpus_cases.append(
-        {
-            "name": rel,
-            "kind": "file",
-            "path": rel,
-            "cap": None,
-            "product": product_value(product, text=text),
-        }
-    )
-
-with open(os.path.join(VEC_DIR, "markdown_corpus.json"), "w", encoding="utf-8") as fh:
-    json.dump({"cases": corpus_cases}, fh, ensure_ascii=True, separators=(",", ":"))
-    fh.write("\n")
-
 print(f"synthetic cases: {len(CASES)}")
-print(f"corpus cases: {len(corpus_cases)}")
