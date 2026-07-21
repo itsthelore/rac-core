@@ -100,13 +100,8 @@ impl GraphView {
                 derived.relationships.clone(),
             ),
             TrackerModel::Delta(generation) => Self::new(
-                generation
-                    .derived
-                    .index_entries
-                    .iter()
-                    .map(identity_projection)
-                    .collect(),
-                generation.derived.relationships.clone(),
+                generation.identity.entries(),
+                generation.graph.relationships(),
             ),
         }
     }

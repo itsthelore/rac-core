@@ -7,16 +7,20 @@
 //!
 //! P6.2 adds an independently staged identity/status projection and exact
 //! resolution over the overlay. P6.3 adds token rows, postings, filters, and
-//! exact global search statistics. The complete derived model remains as the
-//! mutation and graph-signal referee while later slices move graph, scope, and
-//! summary structures behind the same publication boundary.
+//! exact global search statistics. P6.4 adds relationship rows, reverse target
+//! buckets, resolved edges, and inbound counts. The complete derived model
+//! remains as the mutation referee while later slices move scope and summary
+//! structures behind the same publication boundary.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::derived::DerivedIndex;
 use crate::pycompat::{py_casefold, py_strip};
-use crate::relationships::CorpusItem;
+use crate::relationships::{
+    edge_spec, rows_from_corpus_items, CorpusItem, Relationship, ValidationRow,
+    ISSUE_SELF_REFERENCE, ISSUE_TARGET_AMBIGUOUS, ISSUE_TARGET_NOT_FOUND,
+};
 use crate::resolve::{
     artifact_status, entry_from_item, entry_has_tags, field_tokens_of, identity_entry_from_item,
     is_retired_status, match_entry_with_fields, rank_and_build, resolved_from_entry, tokenize,
@@ -163,6 +167,23 @@ impl IdentityGeneration {
         self.base.get(path).map(|row| row.status.as_str())
     }
 
+    pub fn entries(&self) -> Vec<IndexEntry> {
+        self.base
+            .keys()
+            .chain(self.upserts.keys())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|path| {
+                self.upserts.get(path).or_else(|| {
+                    (!self.tombstones.contains(path))
+                        .then(|| self.base.get(path))
+                        .flatten()
+                })
+            })
+            .map(|row| row.entry.clone())
+            .collect()
+    }
+
     pub fn base_len(&self) -> usize {
         self.base.len()
     }
@@ -174,6 +195,282 @@ impl IdentityGeneration {
     pub fn tombstone_len(&self) -> usize {
         self.tombstones.len()
     }
+}
+
+/// Immutable relationship rows plus a cumulative source overlay. Raw target
+/// buckets let an identity/alias edit re-resolve only sources that mention an
+/// affected identifier, including otherwise unchanged documents.
+#[derive(Clone, Default)]
+pub struct GraphGeneration {
+    base_rows: Arc<BTreeMap<String, Arc<ValidationRow>>>,
+    base_relationships: Arc<BTreeMap<String, Arc<Vec<Relationship>>>>,
+    base_referrers: Arc<BTreeMap<String, Vec<String>>>,
+    base_inbound: Arc<BTreeMap<String, i64>>,
+    row_upserts: BTreeMap<String, Arc<ValidationRow>>,
+    relationship_upserts: BTreeMap<String, Arc<Vec<Relationship>>>,
+    tombstones: BTreeSet<String>,
+    inbound_delta: BTreeMap<String, i64>,
+}
+
+impl GraphGeneration {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn from_items<'a>(
+        items: impl IntoIterator<Item = (&'a str, &'a CorpusItem)>,
+        identity: &IdentityGeneration,
+    ) -> Self {
+        let owned: Vec<(&str, &CorpusItem)> = items.into_iter().collect();
+        let corpus: Vec<CorpusItem> = owned.iter().map(|(_, item)| (*item).clone()).collect();
+        let rows = rows_from_corpus_items(&corpus);
+        let base_rows: BTreeMap<String, Arc<ValidationRow>> = rows
+            .into_iter()
+            .zip(owned.iter())
+            .map(|(row, (key, _))| ((*key).to_string(), Arc::new(row)))
+            .collect();
+        let base_relationships: BTreeMap<String, Arc<Vec<Relationship>>> = base_rows
+            .iter()
+            .map(|(path, row)| (path.clone(), Arc::new(resolve_graph_row(row, identity))))
+            .collect();
+        let base_inbound =
+            inbound_for_relationships(base_relationships.values().flat_map(|v| v.iter()));
+        Self {
+            base_referrers: Arc::new(referrer_map(&base_rows)),
+            base_rows: Arc::new(base_rows),
+            base_relationships: Arc::new(base_relationships),
+            base_inbound: Arc::new(base_inbound),
+            row_upserts: BTreeMap::new(),
+            relationship_upserts: BTreeMap::new(),
+            tombstones: BTreeSet::new(),
+            inbound_delta: BTreeMap::new(),
+        }
+    }
+
+    pub fn stage(
+        &self,
+        changed: &BTreeSet<String>,
+        parsed: &BTreeMap<String, CorpusItem>,
+        identity: &IdentityGeneration,
+    ) -> Self {
+        let mut next = self.clone();
+        let mut affected_aliases = BTreeSet::new();
+        for path in changed {
+            if let Some(old) = self.row(path) {
+                affected_aliases.extend(old.identifiers.iter().map(|id| py_casefold(id)));
+            }
+            if let Some(item) = parsed.get(path) {
+                let row = rows_from_corpus_items(std::slice::from_ref(item))
+                    .into_iter()
+                    .next()
+                    .expect("one graph row per parsed item");
+                affected_aliases.extend(row.identifiers.iter().map(|id| py_casefold(id)));
+                next.row_upserts.insert(path.clone(), Arc::new(row));
+                next.tombstones.remove(path);
+            } else {
+                next.row_upserts.remove(path);
+                next.relationship_upserts.remove(path);
+                if next.base_rows.contains_key(path) {
+                    next.tombstones.insert(path.clone());
+                } else {
+                    next.tombstones.remove(path);
+                }
+            }
+        }
+
+        let mut affected_sources = changed.clone();
+        for alias in affected_aliases {
+            if let Some(paths) = self.base_referrers.get(&alias) {
+                affected_sources.extend(paths.iter().cloned());
+            }
+            for (path, row) in &next.row_upserts {
+                if row_references(row, &alias) {
+                    affected_sources.insert(path.clone());
+                }
+            }
+        }
+        for path in affected_sources {
+            if let Some(edges) = self.relationships_for_source(&path) {
+                adjust_inbound(&mut next.inbound_delta, edges, -1);
+            }
+            if let Some(row) = next.row(&path) {
+                let edges = Arc::new(resolve_graph_row(row, identity));
+                adjust_inbound(&mut next.inbound_delta, &edges, 1);
+                next.relationship_upserts.insert(path, edges);
+            } else {
+                next.relationship_upserts.remove(&path);
+            }
+        }
+        next
+    }
+
+    pub fn promote(&mut self) {
+        let mut rows = self.base_rows.as_ref().clone();
+        let mut relationships = self.base_relationships.as_ref().clone();
+        for path in &self.tombstones {
+            rows.remove(path);
+            relationships.remove(path);
+        }
+        for (path, row) in &self.row_upserts {
+            rows.insert(path.clone(), Arc::clone(row));
+        }
+        for (path, edges) in &self.relationship_upserts {
+            relationships.insert(path.clone(), Arc::clone(edges));
+        }
+        self.base_referrers = Arc::new(referrer_map(&rows));
+        self.base_inbound = Arc::new(inbound_for_relationships(
+            relationships.values().flat_map(|edges| edges.iter()),
+        ));
+        self.base_rows = Arc::new(rows);
+        self.base_relationships = Arc::new(relationships);
+        self.row_upserts.clear();
+        self.relationship_upserts.clear();
+        self.tombstones.clear();
+        self.inbound_delta.clear();
+    }
+
+    pub fn relationships(&self) -> Vec<Relationship> {
+        self.base_relationships
+            .keys()
+            .chain(self.relationship_upserts.keys())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|path| self.relationships_for_source(path))
+            .flat_map(|edges| edges.iter().cloned())
+            .collect()
+    }
+
+    pub fn inbound_count(&self, path: &str) -> i64 {
+        self.inbound_counts().get(path).copied().unwrap_or(0)
+    }
+
+    pub fn inbound_counts(&self) -> HashMap<String, i64> {
+        let mut counts: HashMap<String, i64> = self
+            .base_inbound
+            .iter()
+            .map(|(path, count)| (path.clone(), *count))
+            .collect();
+        for (path, delta) in &self.inbound_delta {
+            let count = counts.entry(path.clone()).or_insert(0);
+            *count += delta;
+            if *count == 0 {
+                counts.remove(path);
+            }
+        }
+        counts
+    }
+
+    fn row(&self, path: &str) -> Option<&ValidationRow> {
+        self.row_upserts.get(path).map(AsRef::as_ref).or_else(|| {
+            (!self.tombstones.contains(path))
+                .then(|| self.base_rows.get(path).map(AsRef::as_ref))
+                .flatten()
+        })
+    }
+
+    fn relationships_for_source(&self, path: &str) -> Option<&[Relationship]> {
+        self.relationship_upserts
+            .get(path)
+            .map(|edges| edges.as_slice())
+            .or_else(|| {
+                (!self.tombstones.contains(path))
+                    .then(|| {
+                        self.base_relationships
+                            .get(path)
+                            .map(|edges| edges.as_slice())
+                    })
+                    .flatten()
+            })
+    }
+
+    pub fn base_len(&self) -> usize {
+        self.base_rows.len()
+    }
+    pub fn upsert_len(&self) -> usize {
+        self.row_upserts.len()
+    }
+    pub fn tombstone_len(&self) -> usize {
+        self.tombstones.len()
+    }
+}
+
+fn adjust_inbound(deltas: &mut BTreeMap<String, i64>, edges: &[Relationship], direction: i64) {
+    for edge in edges {
+        if let Some(path) = &edge.resolved_path {
+            *deltas.entry(path.clone()).or_insert(0) += direction;
+        }
+    }
+    deltas.retain(|_, delta| *delta != 0);
+}
+
+fn inbound_for_relationships<'a>(
+    edges: impl IntoIterator<Item = &'a Relationship>,
+) -> BTreeMap<String, i64> {
+    let mut inbound = BTreeMap::new();
+    for edge in edges {
+        if let Some(path) = &edge.resolved_path {
+            *inbound.entry(path.clone()).or_insert(0) += 1;
+        }
+    }
+    inbound
+}
+
+fn row_references(row: &ValidationRow, wanted: &str) -> bool {
+    row.edges
+        .iter()
+        .any(|(_, refs)| refs.iter().any(|target| py_casefold(target) == wanted))
+}
+
+fn referrer_map(rows: &BTreeMap<String, Arc<ValidationRow>>) -> BTreeMap<String, Vec<String>> {
+    let mut refs: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (path, row) in rows {
+        for (_, targets) in &row.edges {
+            for target in targets {
+                refs.entry(py_casefold(target))
+                    .or_default()
+                    .push(path.clone());
+            }
+        }
+    }
+    refs
+}
+
+fn resolve_graph_row(row: &ValidationRow, identity: &IdentityGeneration) -> Vec<Relationship> {
+    let mut edges = Vec::new();
+    for (section, targets) in &row.edges {
+        let external = edge_spec(section).is_some_and(|spec| spec.external);
+        for target in targets {
+            let (resolved_path, issue) = if external {
+                (None, None)
+            } else {
+                let result = identity.resolve(target);
+                match result.outcome {
+                    OUTCOME_NOT_FOUND => (None, Some(ISSUE_TARGET_NOT_FOUND.to_string())),
+                    OUTCOME_DUPLICATE => (None, Some(ISSUE_TARGET_AMBIGUOUS.to_string())),
+                    OUTCOME_RESOLVED => {
+                        let path = result
+                            .artifact
+                            .expect("resolved identity has artifact")
+                            .path;
+                        if path == row.path {
+                            (None, Some(ISSUE_SELF_REFERENCE.to_string()))
+                        } else {
+                            (Some(path), None)
+                        }
+                    }
+                    _ => unreachable!("identity resolution outcome"),
+                }
+            };
+            edges.push(Relationship {
+                source_path: row.path.clone(),
+                relationship: section.clone(),
+                target: target.clone(),
+                resolved_path,
+                issue,
+            });
+        }
+    }
+    edges
 }
 
 fn alias_map(rows: &BTreeMap<String, Arc<IdentityRow>>) -> BTreeMap<String, Vec<String>> {
@@ -189,8 +486,8 @@ fn alias_map(rows: &BTreeMap<String, Arc<IdentityRow>>) -> BTreeMap<String, Vec<
     aliases
 }
 
-/// Searchable row owned by the P6.3 generation. Graph-derived inbound counts
-/// remain supplied by the complete referee until the later graph slice.
+/// Searchable row owned by the P6.3 generation. P6.4 supplies graph-derived
+/// inbound counts at query time so the token row remains graph-independent.
 #[derive(Clone)]
 pub struct SearchRow {
     pub entry: IndexEntry,
@@ -283,7 +580,7 @@ impl SearchGeneration {
         artifact_type: Option<&str>,
         tags: &[String],
         live_only: bool,
-        referee_entries: &[IndexEntry],
+        graph: &GraphGeneration,
     ) -> SearchResult {
         let terms = tokenize(query);
         if terms.is_empty() {
@@ -303,10 +600,7 @@ impl SearchGeneration {
         }
 
         let tag_filter: Vec<String> = tags.iter().map(|tag| py_casefold(tag)).collect();
-        let inbound_by_path: HashMap<&str, i64> = referee_entries
-            .iter()
-            .map(|entry| (entry.path.as_str(), entry.inbound_count))
-            .collect();
+        let inbound_by_path = graph.inbound_counts();
         let mut prepared = Vec::new();
         for path in candidates.unwrap_or_default() {
             let Some(row) = self.row(&path) else {
@@ -324,11 +618,11 @@ impl SearchGeneration {
             let Some(tier) = match_entry_with_fields(&row.entry, &row.fields, &terms) else {
                 continue;
             };
-            let Some(inbound_count) = inbound_by_path.get(row.entry.path.as_str()) else {
-                return empty_search(query, artifact_type);
-            };
             let mut entry = row.entry.clone();
-            entry.inbound_count = *inbound_count;
+            entry.inbound_count = inbound_by_path
+                .get(row.entry.path.as_str())
+                .copied()
+                .unwrap_or(0);
             prepared.push((entry, &row.fields, tier));
         }
         if prepared.is_empty() {
@@ -604,12 +898,15 @@ pub struct DeltaGeneration {
     pub changed_paths: Vec<String>,
     pub identity: IdentityGeneration,
     pub search: SearchGeneration,
+    pub graph: GraphGeneration,
     pub derived: DerivedIndex,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    type EdgeSignature = (String, String, String, Option<String>, Option<String>);
 
     const DOC: &str = "---\nschema_version: 1\nid: ADR-1\ntype: decision\n---\n# ADR-1: Delta\n\n## Context\n\nTest.\n\n## Decision\n\nKeep.\n\n## Consequences\n\nNone.\n\n## Status\n\nAccepted\n";
 
@@ -642,6 +939,49 @@ mod tests {
         }
     }
 
+    fn related_item(path: &str, id: &str, target: &str) -> CorpusItem {
+        let text = format!(
+            "---\nschema_version: 1\nid: {id}\ntype: requirement\n---\n# Requirement\n\n## Status\n\nAccepted\n\n## Problem\n\nTest.\n\n## Requirements\n\n- [REQ-001] Keep the graph exact.\n\n## Related Decisions\n\n- {target}\n"
+        );
+        let artifact = crate::parse::parse_text(&text, path);
+        let spec = crate::spec::spec_for(&crate::classify::classify(&artifact).artifact_type);
+        CorpusItem {
+            path: path.to_string(),
+            artifact,
+            spec,
+        }
+    }
+
+    fn edge_signature(edges: Vec<Relationship>) -> Vec<EdgeSignature> {
+        edges
+            .into_iter()
+            .map(|edge| {
+                (
+                    edge.source_path,
+                    edge.relationship,
+                    edge.target,
+                    edge.resolved_path,
+                    edge.issue,
+                )
+            })
+            .collect()
+    }
+
+    fn assert_graph_matches_fresh(graph: &GraphGeneration, items: &BTreeMap<String, CorpusItem>) {
+        let ordered: Vec<CorpusItem> = items.values().cloned().collect();
+        assert_eq!(
+            edge_signature(graph.relationships()),
+            edge_signature(crate::relationships::relationships_from_corpus(&ordered)),
+        );
+        let mut expected = HashMap::new();
+        for edge in crate::relationships::relationships_from_corpus(&ordered) {
+            if let Some(path) = edge.resolved_path {
+                *expected.entry(path).or_insert(0) += 1;
+            }
+        }
+        assert_eq!(graph.inbound_counts(), expected);
+    }
+
     fn assert_search_matches_fresh(
         search: &SearchGeneration,
         items: &BTreeMap<String, CorpusItem>,
@@ -652,6 +992,13 @@ mod tests {
     ) {
         let ordered: Vec<CorpusItem> = items.values().cloned().collect();
         let referee = crate::resolve::index_from_items(&ordered);
+        let identity = IdentityGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+        );
+        let graph = GraphGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+            &identity,
+        );
         let expected = crate::resolve::search_index_filtered(
             &referee,
             query,
@@ -659,7 +1006,7 @@ mod tests {
             tags,
             live_only,
         );
-        let actual = search.search(query, artifact_type, tags, live_only, &referee);
+        let actual = search.search(query, artifact_type, tags, live_only, &graph);
         assert_eq!(
             crate::output::search_result_value(&actual, true),
             crate::output::search_result_value(&expected, true),
@@ -772,6 +1119,112 @@ mod tests {
             identity.resolve("RAC-333333333333").duplicate_paths,
             vec!["a.md", "d.md"]
         );
+    }
+
+    #[test]
+    fn graph_overlay_re_resolves_unchanged_referrers_for_identity_changes() {
+        let mut items = BTreeMap::from([
+            ("a.md".to_string(), related_item("a.md", "REQ-001", "RAC-222222222222")),
+            ("b.md".to_string(), item("b.md", "RAC-222222222222", "Accepted")),
+        ]);
+        let mut identity = IdentityGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+        );
+        let mut graph = GraphGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+            &identity,
+        );
+        assert_graph_matches_fresh(&graph, &items);
+        assert_eq!(graph.inbound_count("b.md"), 1);
+
+        let shared_rows = Arc::clone(&graph.base_rows);
+        let shared_edges = Arc::clone(&graph.base_relationships);
+        let changed = BTreeSet::from(["b.md".to_string()]);
+        let parsed = BTreeMap::from([(
+            "b.md".to_string(),
+            item("b.md", "RAC-333333333333", "Accepted"),
+        )]);
+        identity = identity.stage(&changed, &parsed);
+        graph = graph.stage(&changed, &parsed, &identity);
+        items.insert("b.md".to_string(), parsed["b.md"].clone());
+        assert!(Arc::ptr_eq(&shared_rows, &graph.base_rows));
+        assert!(Arc::ptr_eq(&shared_edges, &graph.base_relationships));
+        assert_graph_matches_fresh(&graph, &items);
+        assert_eq!(
+            graph.relationships()[0].issue.as_deref(),
+            Some(ISSUE_TARGET_NOT_FOUND)
+        );
+
+        let changed = BTreeSet::from(["d.md".to_string()]);
+        let parsed = BTreeMap::from([(
+            "d.md".to_string(),
+            item("d.md", "RAC-222222222222", "Accepted"),
+        )]);
+        identity = identity.stage(&changed, &parsed);
+        graph = graph.stage(&changed, &parsed, &identity);
+        items.insert("d.md".to_string(), parsed["d.md"].clone());
+        assert_graph_matches_fresh(&graph, &items);
+        assert_eq!(
+            graph.relationships()[0].resolved_path.as_deref(),
+            Some("d.md")
+        );
+
+        graph.promote();
+        identity.promote();
+        assert_eq!(graph.base_len(), 3);
+        assert_eq!(graph.upsert_len(), 0);
+        assert_eq!(graph.tombstone_len(), 0);
+        assert_graph_matches_fresh(&graph, &items);
+    }
+
+    #[test]
+    fn graph_overlay_handles_source_edit_delete_and_ambiguity() {
+        let mut items = BTreeMap::from([
+            ("a.md".to_string(), related_item("a.md", "REQ-001", "RAC-222222222222")),
+            ("b.md".to_string(), item("b.md", "RAC-222222222222", "Accepted")),
+            ("c.md".to_string(), item("c.md", "RAC-333333333333", "Accepted")),
+        ]);
+        let mut identity = IdentityGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+        );
+        let mut graph = GraphGeneration::from_items(
+            items.iter().map(|(path, item)| (path.as_str(), item)),
+            &identity,
+        );
+
+        let changed = BTreeSet::from(["a.md".to_string()]);
+        let parsed = BTreeMap::from([(
+            "a.md".to_string(),
+            related_item("a.md", "REQ-001", "RAC-333333333333"),
+        )]);
+        identity = identity.stage(&changed, &parsed);
+        graph = graph.stage(&changed, &parsed, &identity);
+        items.insert("a.md".to_string(), parsed["a.md"].clone());
+        assert_graph_matches_fresh(&graph, &items);
+        assert_eq!(graph.inbound_count("c.md"), 1);
+
+        let changed = BTreeSet::from(["b.md".to_string()]);
+        let parsed = BTreeMap::from([(
+            "b.md".to_string(),
+            item("b.md", "RAC-333333333333", "Accepted"),
+        )]);
+        identity = identity.stage(&changed, &parsed);
+        graph = graph.stage(&changed, &parsed, &identity);
+        items.insert("b.md".to_string(), parsed["b.md"].clone());
+        assert_graph_matches_fresh(&graph, &items);
+        assert_eq!(
+            graph.relationships()[0].issue.as_deref(),
+            Some(ISSUE_TARGET_AMBIGUOUS)
+        );
+        assert!(graph.inbound_counts().is_empty());
+
+        let changed = BTreeSet::from(["a.md".to_string()]);
+        let parsed = BTreeMap::new();
+        identity = identity.stage(&changed, &parsed);
+        graph = graph.stage(&changed, &parsed, &identity);
+        items.remove("a.md");
+        assert_graph_matches_fresh(&graph, &items);
+        assert!(graph.relationships().is_empty());
     }
 
     #[test]

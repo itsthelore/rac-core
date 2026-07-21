@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::delta_generation::{
-    DeltaDocuments, DeltaGeneration, IdentityGeneration, SearchGeneration,
+    DeltaDocuments, DeltaGeneration, GraphGeneration, IdentityGeneration, SearchGeneration,
 };
 use crate::derived::{build_derived_index_from_items, DerivedIndex, SCHEMA_VERSION};
 use crate::derived_cache::{corpus_hash_from_complete_manifest, stat_scan};
@@ -54,6 +54,7 @@ pub struct FreshnessTracker {
     delta_documents: Option<DeltaDocuments>,
     delta_identity: Option<IdentityGeneration>,
     delta_search: Option<SearchGeneration>,
+    delta_graph: Option<GraphGeneration>,
     /// ADR-107 RSS finalization: after compaction the resident parsed
     /// snapshot is shed and the mapped base is the whole answer; the next
     /// change repopulates by a full re-parse on demand.
@@ -96,6 +97,7 @@ impl FreshnessTracker {
             delta_documents: None,
             delta_identity: None,
             delta_search: None,
+            delta_graph: None,
             snapshot_shed: false,
             last_parse_workers: 1,
             last_parse_files: 0,
@@ -115,6 +117,7 @@ impl FreshnessTracker {
         tracker.delta_documents = Some(DeltaDocuments::empty());
         tracker.delta_identity = Some(IdentityGeneration::empty());
         tracker.delta_search = Some(SearchGeneration::empty());
+        tracker.delta_graph = Some(GraphGeneration::empty());
         tracker
     }
 
@@ -372,31 +375,42 @@ impl FreshnessTracker {
         // A parser omission would make the staged generation incomplete.
         // Reparse the current corpus from an empty base instead of publishing
         // a partial overlay.
-        let (candidate, identity_candidate, search_candidate) = if parsed.len() == present.len() {
-            let identity = self
-                .delta_identity
-                .as_ref()
-                .expect("preview identity")
-                .stage(changed, &parsed);
-            let search = self
-                .delta_search
-                .as_ref()
-                .expect("preview search")
-                .stage(changed, &parsed);
-            let documents = self
-                .delta_documents
-                .as_ref()
-                .expect("preview documents")
-                .stage(changed, parsed);
-            (documents, identity, search)
-        } else {
-            self.full_delta_candidate()
-        };
+        let (candidate, identity_candidate, search_candidate, graph_candidate) =
+            if parsed.len() == present.len() {
+                let identity = self
+                    .delta_identity
+                    .as_ref()
+                    .expect("preview identity")
+                    .stage(changed, &parsed);
+                let search = self
+                    .delta_search
+                    .as_ref()
+                    .expect("preview search")
+                    .stage(changed, &parsed);
+                let graph = self
+                    .delta_graph
+                    .as_ref()
+                    .expect("preview graph")
+                    .stage(changed, &parsed, &identity);
+                let documents = self
+                    .delta_documents
+                    .as_ref()
+                    .expect("preview documents")
+                    .stage(changed, parsed);
+                (documents, identity, search, graph)
+            } else {
+                self.full_delta_candidate()
+            };
         let ordered_paths: Vec<String> = self.manifest.iter().map(|(rel, _)| rel.clone()).collect();
         let ordered_items = candidate.ordered_items(ordered_paths.iter().map(String::as_str));
-        let (candidate, identity_candidate, search_candidate) =
+        let (candidate, identity_candidate, search_candidate, graph_candidate) =
             if ordered_items.len() == self.manifest.len() {
-                (candidate, identity_candidate, search_candidate)
+                (
+                    candidate,
+                    identity_candidate,
+                    search_candidate,
+                    graph_candidate,
+                )
             } else {
                 self.full_delta_candidate()
             };
@@ -409,12 +423,14 @@ impl FreshnessTracker {
             changed_paths: candidate.changed_paths(),
             identity: identity_candidate.clone(),
             search: search_candidate.clone(),
+            graph: graph_candidate.clone(),
             derived: build_derived_index_from_items(&self.root_str, &ordered_items, true),
         };
 
         self.delta_documents = Some(candidate);
         self.delta_identity = Some(identity_candidate);
         self.delta_search = Some(search_candidate);
+        self.delta_graph = Some(graph_candidate);
         self.hash = Some(hash);
         self.serving_generation = serving_generation;
         self.model = Some(TrackerModel::Delta(Box::new(generation)));
@@ -422,7 +438,12 @@ impl FreshnessTracker {
 
     fn full_delta_candidate(
         &mut self,
-    ) -> (DeltaDocuments, IdentityGeneration, SearchGeneration) {
+    ) -> (
+        DeltaDocuments,
+        IdentityGeneration,
+        SearchGeneration,
+        GraphGeneration,
+    ) {
         let root = PathBuf::from(&self.root_str);
         let paths: Vec<PathBuf> = self
             .manifest
@@ -440,11 +461,16 @@ impl FreshnessTracker {
             IdentityGeneration::from_items(parsed.iter().map(|(path, item)| (path.as_str(), item)));
         let search =
             SearchGeneration::from_items(parsed.iter().map(|(path, item)| (path.as_str(), item)));
+        let graph = GraphGeneration::from_items(
+            parsed.iter().map(|(path, item)| (path.as_str(), item)),
+            &identity,
+        );
         let changed = self.manifest.iter().map(|(rel, _)| rel.clone()).collect();
         (
             DeltaDocuments::empty().stage(&changed, parsed),
             identity,
             search,
+            graph,
         )
     }
 
@@ -497,6 +523,10 @@ impl FreshnessTracker {
             self.delta_search
                 .as_mut()
                 .expect("preview search")
+                .promote();
+            self.delta_graph
+                .as_mut()
+                .expect("preview graph")
                 .promote();
             // P6 removes snapshot shedding for its parsed document base so
             // the first post-compaction edit remains change-bound.

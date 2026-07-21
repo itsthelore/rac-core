@@ -64,7 +64,15 @@ still unchanged.
 P6.3 implements item 2. Token rows and compacted postings are immutable shared
 bases; changed rows and tombstones form the search overlay. Candidate discovery,
 filters, field vectors, and exact corpus-global BM25 statistics read that
-overlay. Inbound graph counts still come from the complete referee until item 3.
+overlay.
+
+P6.4 implements item 3. Validation rows, resolved edge lists, reverse raw-target
+buckets, and inbound-count bases are immutable and shared. Source changes
+replace only that source's rows and edges. Identity or alias changes use the
+raw-target buckets to re-resolve the otherwise unchanged sources that mention
+an affected identifier. Inbound counts are adjusted by subtracting replaced
+edges and adding their replacements. Preview graph reads and search graph
+scoring now consume this generation rather than the complete referee.
 
 No slice becomes the default until mutation referees show byte-identical output
 against a fresh whole-corpus rebuild and scale tests show bounded regression.
@@ -85,6 +93,12 @@ P6.3 extends the same mutation referee to complete search payloads, including
 prefix/AND candidates, duplicate query tokens, type/tag/live filters, snippets,
 scores, ranks, and ordering. Staging shares the compacted token and posting
 bases and clones only the bounded overlay.
+
+P6.4 extends the referee to canonical resolved-edge payloads and inbound counts
+across source edits, deletion, identity changes, unresolved-to-resolved and
+resolved-to-ambiguous transitions, and compaction. Staging shares the compacted
+row, edge, reverse-target, and inbound-count bases; its work is bounded by the
+changed documents plus sources in affected raw-target buckets.
 
 The first slice does not claim mutation-latency improvement for derivation: it
 still materializes live documents and rebuilds all derived structures. Its
