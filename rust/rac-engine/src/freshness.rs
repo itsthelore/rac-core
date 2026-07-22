@@ -390,7 +390,9 @@ impl FreshnessTracker {
             scope_candidate,
             summary_candidate,
         ) =
-            if parsed.len() == present.len() {
+            if self.model.is_none() && parsed.len() == present.len() {
+                self.delta_candidate_from_parsed(parsed)
+            } else if parsed.len() == present.len() {
                 let identity = self
                     .delta_identity
                     .as_ref()
@@ -425,8 +427,6 @@ impl FreshnessTracker {
             } else {
                 self.full_delta_candidate()
             };
-        let ordered_paths: Vec<String> = self.manifest.iter().map(|(rel, _)| rel.clone()).collect();
-        let ordered_items = candidate.ordered_items(ordered_paths.iter().map(String::as_str));
         let (
             candidate,
             identity_candidate,
@@ -435,7 +435,7 @@ impl FreshnessTracker {
             scope_candidate,
             summary_candidate,
         ) =
-            if ordered_items.len() == self.manifest.len() {
+            if candidate.live_len() == self.manifest.len() {
                 (
                     candidate,
                     identity_candidate,
@@ -494,18 +494,36 @@ impl FreshnessTracker {
             .into_iter()
             .map(|item| (rel_of(&self.root_str, &item.path), item))
             .collect();
-        let identity =
-            IdentityGeneration::from_items(parsed.iter().map(|(path, item)| (path.as_str(), item)));
-        let search =
-            SearchGeneration::from_items(parsed.iter().map(|(path, item)| (path.as_str(), item)));
+        self.delta_candidate_from_parsed(parsed)
+    }
+
+    fn delta_candidate_from_parsed(
+        &self,
+        parsed: BTreeMap<String, CorpusItem>,
+    ) -> (
+        DeltaDocuments,
+        IdentityGeneration,
+        SearchGeneration,
+        GraphGeneration,
+        ScopeGeneration,
+        SummaryGeneration,
+    ) {
+        let identity = IdentityGeneration::from_items(
+            parsed.iter().map(|(path, item)| (path.as_str(), item)),
+        );
+        let search = SearchGeneration::from_items(
+            parsed.iter().map(|(path, item)| (path.as_str(), item)),
+        );
         let graph = GraphGeneration::from_items(
             parsed.iter().map(|(path, item)| (path.as_str(), item)),
             &identity,
         );
-        let scope =
-            ScopeGeneration::from_items(parsed.iter().map(|(path, item)| (path.as_str(), item)));
-        let summary =
-            SummaryGeneration::from_items(parsed.iter().map(|(path, item)| (path.as_str(), item)));
+        let scope = ScopeGeneration::from_items(
+            parsed.iter().map(|(path, item)| (path.as_str(), item)),
+        );
+        let summary = SummaryGeneration::from_items(
+            parsed.iter().map(|(path, item)| (path.as_str(), item)),
+        );
         let changed = self.manifest.iter().map(|(rel, _)| rel.clone()).collect();
         (
             DeltaDocuments::empty().stage(&changed, parsed),

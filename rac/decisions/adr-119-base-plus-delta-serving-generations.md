@@ -91,6 +91,13 @@ whole-corpus derivation remains only in bounded certification tests. Failed
 writes or failed reopen still leave the complete in-memory delta generation
 served unchanged.
 
+P6.7 certifies a recommended production envelope of 5,000 artifacts. It does
+not impose a hard limit: larger corpora remain available without the S1
+interactive-latency promise. Scale releases promote measured tiers at 10,000,
+25,000, 50,000, and 100,000 artifacts as demand or reusable architecture
+justifies them. The measured gates and commands are recorded in
+`rust/P6-SCALE-CERTIFICATION.md`.
+
 No slice becomes the default until mutation referees show byte-identical output
 against a fresh whole-corpus rebuild and scale tests show bounded regression.
 
@@ -139,6 +146,12 @@ full referee one structure family at a time.
 Keeping the parsed base resident trades memory for predictable mutation
 latency. Compaction thresholds and scale measurements must bound both the
 overlay lookup cost and the retained memory before default adoption.
+
+P6.7 closes latency certification for the 5,000-artifact S1 envelope. Default
+adoption requires S1 peak-RSS evidence and a bounded lifecycle soak; it does
+not require satisfying speculative 100,000-artifact latency targets. Higher
+tiers must repeat the same correctness, lifecycle, and memory evidence before
+their performance promises are published.
 
 ## Alternatives Considered
 
