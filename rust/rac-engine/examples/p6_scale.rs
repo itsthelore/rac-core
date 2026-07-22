@@ -55,9 +55,9 @@ fn main() {
     let file_count = rac_engine::walk::find_markdown_files(&root_text, true).len();
     let threshold = file_count.saturating_add(iterations).saturating_add(10);
     let mut tracker = if mode == "delta" {
-        FreshnessTracker::new_delta_preview(cache.clone(), &root_text, Some(threshold))
-    } else {
         FreshnessTracker::new(cache.clone(), &root_text, Some(threshold))
+    } else {
+        FreshnessTracker::new_snapshot(cache.clone(), &root_text, Some(threshold))
     };
 
     let cold_ms = timed_read(&mut tracker, true);
@@ -98,9 +98,9 @@ fn main() {
     }
 
     let mut compact_tracker = if mode == "delta" {
-        FreshnessTracker::new_delta_preview(cache.join("compact"), &root_text, Some(1))
-    } else {
         FreshnessTracker::new(cache.join("compact"), &root_text, Some(1))
+    } else {
+        FreshnessTracker::new_snapshot(cache.join("compact"), &root_text, Some(1))
     };
     timed_read(&mut compact_tracker, true);
     fs::write(&target, &edited).expect("write compaction edit");

@@ -151,7 +151,7 @@ def bullets(rng):
 def reqs_body(rng):
     lines = []
     for i in range(1, rng.randint(3, 6)):
-        lines.append(f"- [REQ-{i:03d}] The system must {sentence(rng).lower()}")
+        lines.append(f"- [REQ-{i:03d}] The system MUST {sentence(rng).lower()}")
     return "\n".join(lines)
 
 
