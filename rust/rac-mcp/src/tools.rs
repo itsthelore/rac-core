@@ -416,6 +416,7 @@ pub fn retrieve_grounding(
             )
         }
         Some(TrackerModel::Delta(generation)) => {
+            let derived = generation.materialize_derived(root, true);
             rac_engine::retrieve::retrieve_grounding_from_derived(
                 root,
                 task,
@@ -423,7 +424,7 @@ pub fn retrieve_grounding(
                 top_k,
                 effective,
                 live_only,
-                &generation.derived,
+                &derived,
             )
         }
         None => rac_engine::retrieve::retrieve_grounding(
@@ -454,8 +455,6 @@ mod tests {
         let path = root.join("decision.md");
         std::fs::write(&path, decision("RAC-111111111111")).unwrap();
         let root_str = root.to_string_lossy().into_owned();
-        let stale_derived = rac_engine::derived::build_derived_index(&root_str, true);
-
         std::fs::write(&path, decision("RAC-222222222222")).unwrap();
         let items = rac_engine::relationships::corpus_items(&root_str, true);
         let identity =
@@ -478,7 +477,6 @@ mod tests {
             summary: rac_engine::delta_generation::SummaryGeneration::from_items(
                 items.iter().map(|item| ("decision.md", item)),
             ),
-            derived: stale_derived,
         }));
 
         assert_eq!(
