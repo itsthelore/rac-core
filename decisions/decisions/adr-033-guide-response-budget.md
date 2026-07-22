@@ -158,4 +158,4 @@ client gains protocol-level response streaming that changes the trade-off.
 
 ## Applies To
 
-- src/rac/mcp/
+- rust/decided-mcp/

@@ -318,4 +318,4 @@ Review at v1.0.0 once external adoption patterns are better understood.
 
 ## Applies To
 
-- rac/
+- decisions/
