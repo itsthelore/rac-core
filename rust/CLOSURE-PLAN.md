@@ -28,7 +28,7 @@ as the port lands.
   comparison with per-file masks; pre-run sandbox seeding (state
   files, target files, malformed configs); scripted git fixtures with
   pinned `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` + offsets; id seam
-  plumbing (oracle: `RAC_ID_SEED`-style env consumed by the id
+  plumbing (oracle: `DECIDED_ID_SEED`-style env consumed by the id
   generator — see `new` brief; engine mirrors it); JSON field masking
   (eval `generated_at`/`lore_version`); file-mode assertion (hook);
   cwd-isolated sandboxes for default-output-path cases. Prove: 130

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from rac.core.corpus import collect_corpus, walk_corpus
-from rac.core.operations import (
+from asdecided.core.corpus import collect_corpus, walk_corpus
+from asdecided.core.operations import (
     CancellationToken,
     OperationCancelled,
     Progress,

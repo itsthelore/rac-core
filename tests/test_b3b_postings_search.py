@@ -30,12 +30,12 @@ import asyncio
 import json
 from pathlib import Path
 
-from rac.mcp.server import build_server
-from rac.services import index_store
-from rac.services.derived_cache import DerivedIndexCache
-from rac.services.index import build_repository_index
-from rac.services.index_store import ReadModelView
-from rac.services.resolve import find_decisions, search_index
+from asdecided.mcp.server import build_server
+from asdecided.services import index_store
+from asdecided.services.derived_cache import DerivedIndexCache
+from asdecided.services.index import build_repository_index
+from asdecided.services.index_store import ReadModelView
+from asdecided.services.resolve import find_decisions, search_index
 
 # Crockford-base32-clean ids (no I/L/O/U) so Core never falls back to the stem.
 _D1 = "RAC-B3BAAA000001"

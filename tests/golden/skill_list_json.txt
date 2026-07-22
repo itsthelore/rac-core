@@ -2,24 +2,20 @@
   "schema_version": "1",
   "skills": [
     {
-      "skill": "rac-artifacts",
-      "description": "Author and maintain Lore (RAC) Markdown artifacts with the rac CLI."
+      "skill": "decided-artifacts",
+      "description": "Author and maintain AsDecided Markdown artifacts with the decided CLI."
     },
     {
-      "skill": "rac-review",
-      "description": "Review a Lore (RAC) corpus and work findings worst-first."
+      "skill": "decided-review",
+      "description": "Review an AsDecided corpus and work findings worst-first."
     },
     {
-      "skill": "rac-ingest",
-      "description": "Convert legacy documents into valid, linked Lore (RAC) artifacts."
+      "skill": "decided-import",
+      "description": "Reformat one document into one valid AsDecided artifact, with human review."
     },
     {
-      "skill": "rac-import",
-      "description": "Reformat one document into one valid Lore (RAC) artifact, with human review."
-    },
-    {
-      "skill": "rac-capture",
-      "description": "Capture a new decision or requirement into a valid Lore (RAC) artifact."
+      "skill": "decided-capture",
+      "description": "Capture a new decision or requirement into a valid AsDecided artifact."
     }
   ]
 }

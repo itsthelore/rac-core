@@ -4,12 +4,12 @@ RAC runs against any directory of Markdown files, but it shines when a repositor
 gives its product knowledge an intentional home. This page describes the convention
 RAC itself uses.
 
-## The `rac/` knowledge directory
+## The `decisions/` knowledge directory
 
-Collect your artifacts under a top-level `rac/` directory, grouped by type:
+Collect your artifacts under a top-level `decisions/` directory, grouped by type:
 
 ```text
-rac/
+decisions/
   requirements/   # what needs to exist
   decisions/      # ADRs — why choices were made
   designs/        # product experience thinking
@@ -26,13 +26,13 @@ easy to read.
 ### Three documentation layers
 
 RAC's own repository separates concerns into three layers
-([ADR-022](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-022-documentation-boundaries.md)):
+([ADR-022](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-022-documentation-boundaries.md)):
 
 - **`README.md`** — the front door: what RAC is and how to try it.
 - **`docs/`** — user-facing guides (this directory).
-- **`rac/`** — RAC's internal, structured product knowledge.
+- **`decisions/`** — RAC's internal, structured product knowledge.
 
-`rac/` is the corpus RAC manages; `docs/` is documentation *for people*. Keep them
+`decisions/` is the corpus RAC manages; `docs/` is documentation *for people*. Keep them
 distinct: users shouldn't need to read internal roadmaps or ADRs to be productive.
 
 ## Naming
@@ -48,27 +48,27 @@ See [artifacts.md](artifacts.md) for the sections each type expects.
 Run these from the repository root:
 
 ```bash
-rac validate rac/                 # validate every recognized artifact in the tree
-rac stats rac/                    # counts, quality signals, per-type breakdown
-rac relationships rac/ --validate # check that cross-artifact references resolve
-rac review rac/                   # all of the above as one prioritized worklist
-rac portfolio rac/                # one-screen health summary + attention list
-rac index rac/ --json             # flat inventory for tools, CI, and agents
+decided validate decisions/                 # validate every recognized artifact in the tree
+decided stats decisions/                    # counts, quality signals, per-type breakdown
+decided relationships decisions/ --validate # check that cross-artifact references resolve
+decided review decisions/                   # all of the above as one prioritized worklist
+decided portfolio decisions/                # one-screen health summary + attention list
+decided index decisions/ --json             # flat inventory for tools, CI, and agents
 ```
 
 To check a single file as you edit it:
 
 ```bash
-rac validate rac/requirements/login-flow.md
-rac inspect  rac/requirements/login-flow.md
+decided validate decisions/requirements/login-flow.md
+decided inspect  decisions/requirements/login-flow.md
 ```
 
 ## In review and CI
 
 Because everything is Markdown in Git, documentation and artifacts move through the
-same pull-request workflow as code. A natural pre-merge check is `rac review rac/`
+same pull-request workflow as code. A natural pre-merge check is `decided review decisions/`
 — it validates every artifact, resolves every reference, and exits `1` if anything
 blocking is found, so reviewers see whether new or edited artifacts are complete
-and their links still resolve. RAC runs exactly this gate over its own `rac/`
+and their links still resolve. RAC runs exactly this gate over its own `decisions/`
 corpus in CI. See [testing.md](testing.md) for the contributor verification
 workflow.

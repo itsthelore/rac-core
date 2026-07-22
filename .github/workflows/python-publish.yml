@@ -37,7 +37,7 @@ jobs:
       - name: Install package
         run: python -m pip install -e .
       - name: Verify release version and changelog
-        run: python -m rac.release "${{ github.event.release.tag_name }}"
+        run: python -m asdecided.release "${{ github.event.release.tag_name }}"
 
   release-build:
     needs:
@@ -108,14 +108,14 @@ jobs:
           python -m pip install --quiet build wheel setuptools-scm
           VER="$(python -m setuptools_scm)"
           echo "native binaries version: $VER"
-          ( cd rust && RAC_RS_VERSION="$VER" cargo build --release --locked -p rac -p rac-mcp )
-      - name: Bundle binaries into rac.bin
+          ( cd rust && DECIDED_RS_VERSION="$VER" cargo build --release --locked -p decided -p decided-mcp )
+      - name: Bundle binaries into asdecided.bin
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cp rust/target/release/rac.exe rust/target/release/rac-mcp.exe src/rac/bin/
+            cp rust/target/release/decided.exe rust/target/release/decided-mcp.exe src/asdecided/bin/
           else
-            cp rust/target/release/rac rust/target/release/rac-mcp src/rac/bin/
+            cp rust/target/release/decided rust/target/release/decided-mcp src/asdecided/bin/
           fi
       - name: Build and platform-tag the wheel
         shell: bash
@@ -131,7 +131,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install dist/*.whl
-          RAC_ENGINE=rust rac --version
+          decided --version
       - name: Upload native wheel
         uses: actions/upload-artifact@v6
         with:
@@ -176,7 +176,7 @@ jobs:
 
   image-publish:
     # Official container image, published in lockstep with the PyPI release
-    # (rac/roadmaps/future/oci-image.md): same trigger, same wheel, same
+    # (decisions/roadmaps/future/oci-image.md): same trigger, same wheel, same
     # SemVer tag. Runs after pypi-publish so the image never exists for a
     # version PyPI does not have.
     runs-on: ubuntu-latest
@@ -201,7 +201,7 @@ jobs:
       - name: Build image
         run: |
           docker build \
-            --build-arg RAC_VERSION="$TAG" \
+            --build-arg DECIDED_VERSION="$TAG" \
             -t "$IMAGE:$TAG" \
             -t "$IMAGE:latest" \
             .

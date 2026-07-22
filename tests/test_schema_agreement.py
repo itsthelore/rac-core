@@ -28,14 +28,14 @@ import dataclasses
 
 import pytest
 
-from rac.core.artifacts import ARTIFACT_SPECS, spec_for
-from rac.core.classification import score_artifacts
-from rac.core.frontmatter import _SUPPORTED_FIELDS
-from rac.core.markdown import parse
-from rac.core.metadata import ArtifactMetadata
-from rac.core.schema import available_schemas, schema_reference
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.relationships import (
+from asdecided.core.artifacts import ARTIFACT_SPECS, spec_for
+from asdecided.core.classification import score_artifacts
+from asdecided.core.frontmatter import _SUPPORTED_FIELDS
+from asdecided.core.markdown import parse
+from asdecided.core.metadata import ArtifactMetadata
+from asdecided.core.schema import available_schemas, schema_reference
+from asdecided.services.portfolio import build_portfolio_summary
+from asdecided.services.relationships import (
     EXTERNAL_SECTIONS,
     RELATED_SECTIONS,
     RELATIONSHIP_SECTIONS,

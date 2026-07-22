@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rac.core.classification import classify
-from rac.core.corpus import CorpusEntry, walk_corpus
-from rac.core.fs import find_markdown_files
+from asdecided.core.classification import classify
+from asdecided.core.corpus import CorpusEntry, walk_corpus
+from asdecided.core.fs import find_markdown_files
 
 FIXTURES = str(Path(__file__).parent / "fixtures")
 

@@ -1,6 +1,6 @@
-"""Tests for rac.services.index and the `rac index` CLI command (v0.7.5).
+"""Tests for asdecided.services.index and the `decided index` CLI command (v0.7.5).
 
-`rac index` is a deterministic, read-only repository manifest: which artifacts
+`decided index` is a deterministic, read-only repository manifest: which artifacts
 exist, plus their stable identity, type, title, and path — nothing more (no
 status, no dates, no analysis). See the v0.7.5 roadmap and ADR-023.
 """
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
-from rac.services.index import build_repository_index
+from asdecided.cli import main
+from asdecided.services.index import build_repository_index
 
 # Reuse the portfolio fixture that already holds all five types + an unknown.
 ALL_TYPES = Path(__file__).parent / "fixtures" / "portfolio_summary" / "all_types"

@@ -7,14 +7,14 @@ name = "rac-core"
 # Version is derived from the git tag by setuptools-scm (see [tool.setuptools_scm]).
 # Release flow: tag vX.Y.Z -> the build is version X.Y.Z. No manual edits.
 dynamic = ["version"]
-description = "RAC — lint and diff product requirements written in Markdown."
+description = "Engineering decisions your agents can follow."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Tom Ballard" }]
 keywords = ["requirements", "product-management", "markdown", "linter", "cli", "diff"]
-dependencies = ["markdown-it-py>=3.0", "pyyaml>=6.0", "mcp>=1.0"]
+dependencies = ["markdown-it-py>=3.0", "pyyaml>=6.0"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -33,18 +33,8 @@ Repository = "https://github.com/itsthelore/rac-core"
 Issues = "https://github.com/itsthelore/rac-core/issues"
 
 [project.optional-dependencies]
-# Document ingestion (rac ingest). Optional so the core install stays light, and
-# split by format so users only pull the readers they need. HTML and Markdown
-# need no extra (HTML is built into MarkItDown; Markdown is pass-through).
-ingest = ["markitdown[docx]"]                        # DOCX (+ HTML, Markdown)
-ingest-pdf = ["markitdown[pdf]"]                     # + PDF
-ingest-office = ["markitdown[pptx,xlsx,xls]"]        # + PPTX / XLSX / XLS
-ingest-all = ["markitdown[docx,pdf,pptx,xlsx,xls]"]  # every supported format
-# Interactive Explorer TUI (rac explorer, v0.8.0). Optional so the core
-# install stays light; without it `rac explorer` prints an install hint.
-explorer = ["textual>=1.0"]
-# dev also pulls the libraries used to *generate* fixture files in the tests,
-# plus the explorer extra so its batteries run headlessly in CI.
+# Ingest is an ancillary Python connector and Explorer is retired. The dev
+# extra retains their frozen dependencies only for bounded retirement tests.
 dev = [
     "pytest>=7.0",
     "pytest-cov",
@@ -61,45 +51,43 @@ dev = [
 ]
 
 [project.scripts]
-rac = "rac.cli:main"
+decided = "asdecided.dispatch:main"
 
 [tool.setuptools]
-# src/ layout: the package root is src/, so the import package `rac` (and its
-# layer subpackages rac.core/rac.services/rac.output/rac.explorer) lives under
-# src/. The distribution and import names are unchanged.
+# src/ layout: the package root is src/ and the SDK import package is
+# `asdecided`. The public CLI is a thin launcher for the native Rust engine.
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
-# Discover rac and every rac.* subpackage automatically, so new layer packages
+# Discover asdecided and every asdecided.* subpackage automatically, so new layer packages
 # do not need to be enumerated here.
 where = ["src"]
 
 [tool.setuptools.package-data]
 # The shared artifact-spec registry ships with the distribution (ADR-063
-# Guard 1): `rac.core.artifacts` loads ARTIFACT_SPECS from it via
+# Guard 1): `asdecided.core.artifacts` loads ARTIFACT_SPECS from it via
 # importlib.resources, and the Rust engine embeds the same file — one shared,
 # language-neutral source of truth both engines read.
-"rac.spec" = ["*.json"]
+"asdecided.spec" = ["*.json"]
 # Bundled native (Rust) engine binaries (native-engine cutover, ADR-116): a
-# platform wheel places `rac`/`rac-mcp` here and `rac.dispatch` execs them for
-# covered commands. Absent from the repo and the pure-Python sdist, so the
-# native path is a per-platform acceleration, never an install requirement.
-"rac.bin" = ["rac", "rac-mcp", "rac.exe", "rac-mcp.exe"]
+# platform wheel places `decided`/`decided-mcp` here and the launcher execs
+# them. There is deliberately no Python CLI fallback.
+"asdecided.bin" = ["decided", "decided-mcp", "decided.exe", "decided-mcp.exe"]
 # Canonical artifact templates ship with the distribution (v0.7.10, ADR-021):
 # `rac new` loads them via importlib.resources, never from the repository.
 # The vendored Portal shell and its provenance manifest ship the same way
 # (v0.11.0): `rac export --html` loads them via importlib.resources.
-"rac.templates" = ["*.md", "portal/*.html", "portal/*.json"]
+"asdecided.templates" = ["*.md", "portal/*.html", "portal/*.json"]
 # The Explorer stylesheet ships with the distribution (v0.8.7): the app loads
 # it via CSS_PATH, resolved relative to the installed package.
-"rac.explorer" = ["*.tcss"]
+"asdecided.explorer" = ["*.tcss"]
 # The bundled Claude Code agent skill ships with the distribution (v0.10.4):
 # `rac skill install` loads it via importlib.resources, never from the
 # repository. A test pins it byte-for-byte to the dogfood copy (REQ-007).
-"rac.skills" = ["*/SKILL.md"]
+"asdecided.skills" = ["*/SKILL.md"]
 # Bundled git hook scripts ship with the distribution (v0.13.4): `rac hook
 # install` loads them via importlib.resources, never from the repository.
-"rac.hooks" = ["*.sh"]
+"asdecided.hooks" = ["*.sh"]
 
 [tool.setuptools_scm]
 # Defaults are fine: version comes from the latest `vX.Y.Z` git tag.

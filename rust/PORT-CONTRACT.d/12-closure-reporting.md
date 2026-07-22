@@ -4,9 +4,9 @@ Scope: the B1 read-only corpus-reporting commands ported for
 roadmap:native-cli-closure — `rac portfolio`, `rac coverage`,
 `rac decisions-for`. Every claim below was verified against the oracle
 (`.venv-oracle/bin/rac`, `0.1.dev50+g21c8be403`, Python 3.11.15). Source
-files: `src/rac/cli.py` (`cmd_portfolio`/`cmd_coverage`/
-`cmd_decisions_for`), `src/rac/services/{portfolio,coverage,scope}.py`,
-`src/rac/output/{human,json}.py`. Rust: `rac-engine/src/portfolio.rs`
+files: `src/asdecided/cli.py` (`cmd_portfolio`/`cmd_coverage`/
+`cmd_decisions_for`), `src/asdecided/services/{portfolio,coverage,scope}.py`,
+`src/asdecided/output/{human,json}.py`. Rust: `rac-engine/src/portfolio.rs`
 (pre-existing — built for review), new `coverage.rs`, `retrieve.rs`
 (`decisions_for_path`/`ScopeLookupResult`/`scope_lookup_value`),
 `commands.rs` (`cmd_portfolio`/`cmd_coverage`/`cmd_decisions_for`),
@@ -16,7 +16,7 @@ files: `src/rac/cli.py` (`cmd_portfolio`/`cmd_coverage`/
 Shared conventions (see 09 §0): one trailing `\n` from `print()`; ANSI
 color gated on `sys.stdout.isatty()` (the harness pipes, so plain bytes);
 `✓ ✗ ! ↳` and the em-dash are raw UTF-8. All three are read-only pure
-functions of corpus bytes (+ `.rac/config.yaml` overrides for portfolio):
+functions of corpus bytes (+ `.decided/config.yaml` overrides for portfolio):
 no git, no writes, no timestamps, no minted ids, no interactivity.
 `not a directory: <dir>` → stderr `rac: not a directory: <dir>`, exit 2,
 checked in the handler AFTER argparse (so parse errors win).
@@ -132,7 +132,7 @@ outside-repository paths all succeed (REQ-004). The whole scope engine
 was already ported for the MCP `find_decisions` path mode and is
 byte-identical to the CLI service (documented in
 `derived_cache.governing_decisions`): `repository_root` (nearest
-ancestor `.rac/config.yaml`), `normalize_query` (POSIX repo-relative;
+ancestor `.decided/config.yaml`), `normalize_query` (POSIX repo-relative;
 `..`/outside-root → None), `scope_rows_from_items` (live decisions with
 declared `## Applies To`), `entry_covers` (segment-aware globs),
 first-covering-entry-in-declared-order wins, sort by
@@ -169,7 +169,7 @@ walk is skipped entirely for an outside-repository query.
 invalid artifact + broken reference; one corpus per coverage gap class,
 a clean fully-traced corpus, and a mixed corpus with a non-ASCII path
 pinning ensure_ascii=False); decisions-for cases run against the live
-`rac/` corpus (repo root carries `.rac/`). Proven oracle-vs-oracle over
+`rac/` corpus (repo root carries `.decided/`). Proven oracle-vs-oracle over
 the whole closure file (82/82) before the port, then oracle-vs-rust
 11/11, 12/12, 13/13. Pinned nuances: portfolio's required positional,
 `--top-level` empty-corpus branch (hint + 100/100), float reprs in JSON,

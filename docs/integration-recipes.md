@@ -21,7 +21,7 @@ Copy [`examples/_recipe-template/`](../examples/_recipe-template/) to
 invocation in all three config dialects; the inline HTML comments tell you what to
 replace and what to leave alone. You should be able to produce a complete,
 structurally consistent recipe from the template and this checklist **without
-opening another recipe** — the same way `rac new` makes an artifact from its
+opening another recipe** — the same way `decided new` makes an artifact from its
 template (ADR-021).
 
 ## The recurring shape
@@ -30,8 +30,8 @@ A recipe README has these parts, in this order:
 
 1. **Title and framing** — `# RAC with <Client>`, then one line naming the two
    surfaces (the context file the client reads, and the `lore` MCP server).
-2. **Prerequisites** — `pip install rac-core` and a corpus under `rac/`.
-3. **Context file (the push)** — `rac export rac/ --agent-rules`, and which
+2. **Prerequisites** — `pip install rac-core` and a corpus under `decisions/`.
+3. **Context file (the push)** — `decided export decisions/ --agent-rules`, and which
    generated file this client reads (`AGENTS.md` is the glob-free default;
    `CLAUDE.md` and `.github/copilot-instructions.md` are the other targets).
 4. **The `lore` MCP server (the pull)** — the config path for this client and the
@@ -44,11 +44,11 @@ A recipe README has these parts, in this order:
 
 ### The `lore` invocation, in three dialects
 
-Every recipe runs the same server — `rac mcp --root .` — expressed in whichever
+Every recipe runs the same server — `decided-mcp --root .` — expressed in whichever
 config dialect the harness uses. Keep only the one your harness reads.
 
 ```json
-{ "mcpServers": { "lore": { "command": "rac", "args": ["mcp", "--root", "."] } } }
+{ "mcpServers": { "asdecided": { "command": "decided-mcp", "args": ["--root", "."] } } }
 ```
 
 ```toml
@@ -75,7 +75,7 @@ never drifts. Copy this paragraph verbatim, swapping only the client name:
 
 > RAC supplies context and enforces *after* the edit (ADR-067). There is no
 > platform API to veto a `<Client>` agent edit before it lands, so `<Client>`
-> relies on the post-edit guard: `rac validate` / `rac relationships --validate`
+> relies on the post-edit guard: `decided validate` / `decided relationships --validate`
 > and the GitHub Action / pre-merge gate, the same as any contributor.
 
 A harness that offers a pre-edit hook is tempting to describe as enforcement — do
@@ -87,7 +87,7 @@ every other recipe points readers there rather than describing a hook of its own
 
 - [ ] Copied `examples/_recipe-template/` to `examples/<client>/` and removed every
       `<PLACEHOLDER>` and HTML comment.
-- [ ] Section 1 names `rac export rac/ --agent-rules` and the exact context file
+- [ ] Section 1 names `decided export decisions/ --agent-rules` and the exact context file
       this client reads.
 - [ ] Section 2 shows the one config dialect and path this client uses, and names
       the five read-only tools.

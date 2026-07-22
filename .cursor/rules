@@ -1,6 +1,6 @@
 <!-- BEGIN RAC MANAGED BLOCK (digest: 85425bcf952c265e10a1016ee63073a5ba3e17ec4c43f3ffb9aaca019c3f3562) -->
-<!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
-## Settled decisions (RAC)
+<!-- Managed by `decided export --agent-rules`. Edit decisions in decisions/, not here; content outside this block is preserved. -->
+## Settled decisions (AsDecided)
 
 These decisions are already accepted. Do not re-open or contradict them; ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the full text before proposing a change that touches one.
 

@@ -15,11 +15,11 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from rac import cli
-from rac.mcp.server import build_server
-from rac.output import human as human_output
-from rac.output import json as json_output
-from rac.services.recency import (
+from asdecided import cli
+from asdecided.mcp.server import build_server
+from asdecided.output import human as human_output
+from asdecided.output import json as json_output
+from asdecided.services.recency import (
     DEFAULT_STALE_AFTER_DAYS,
     Staleness,
     annotate_search_recency,
@@ -28,7 +28,7 @@ from rac.services.recency import (
     recency_for_paths,
     staleness,
 )
-from rac.services.resolve import find_artifacts
+from asdecided.services.resolve import find_artifacts
 
 _REQUIREMENT = "# {title}\n\n## Problem\n\np\n\n## Requirements\n\n[REQ-001] x\n"
 _DECISION = "# {title}\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nk\n"
@@ -226,7 +226,7 @@ def test_staleness_to_dict_serialises_date():
 
 
 def _write_config(tmp_path: Path, body: str) -> None:
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "config.yaml").write_text(body, encoding="utf-8")
 
@@ -382,7 +382,7 @@ def test_mcp_search_carries_recency_within_budget(tmp_path):
 
 
 def test_cli_find_wires_recency_end_to_end(tmp_path, capsys):
-    # Through the real `rac find` command (not a manual annotate): the JSON face
+    # Through the real `decided find` command (not a manual annotate): the JSON face
     # carries recency, and the human face flags the ancient match inline.
     ancient, _fresh = _ancient_and_fresh(tmp_path)
     cli.main(["find", "widget", str(tmp_path), "--json"])

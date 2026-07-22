@@ -3,10 +3,10 @@
 Scope: the B1 read-only file-analysis commands ported for
 roadmap:native-cli-closure — `rac diff`, `rac inspect`, `rac improve`.
 Every claim below was verified against the oracle (`.venv-oracle/bin/rac`,
-`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/rac/cli.py`
+`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/asdecided/cli.py`
 (`cmd_diff`/`cmd_inspect`/`cmd_improve`, `_read`, `_read_markdown_input`),
-`src/rac/services/{diff,inspect,improve}.py`,
-`src/rac/output/{human,json,templates,_shared}.py`. Rust:
+`src/asdecided/services/{diff,inspect,improve}.py`,
+`src/asdecided/output/{human,json,templates,_shared}.py`. Rust:
 `rac-engine/src/{diff,inspect,improve}.rs`, `commands.rs`
 (`cmd_diff`/`cmd_inspect`/`cmd_improve`, `read_markdown_input`), `cli.rs`
 (`run_diff`/`run_inspect`/`run_improve`), `output.rs` renderers.
@@ -15,7 +15,7 @@ Shared conventions (see 09 §0): one trailing `\n` from `print()`; ANSI
 color gated on `sys.stdout.isatty()`; `--json` via `json.dumps(indent=2)`
 (`pyjson::dumps_indent2`); `✓ ✗ • → ×` and the em-dash are raw UTF-8.
 All three commands are pure functions of file bytes: no git, no cache
-(`RAC_NO_CACHE` irrelevant), no env, no writes, no timestamps.
+(`DECIDED_NO_CACHE` irrelevant), no env, no writes, no timestamps.
 
 ---
 

@@ -1,14 +1,14 @@
-//! Policy-aware unified enforcement (`rac.services.gate`, v0.21.14 /
-//! ADR-049) plus the STRICT `.rac/config.yaml` loaders it alone consumes
-//! (`rac.services.init.load_enforcement_policy` / `load_overrides`, the
+//! Policy-aware unified enforcement (`decided.services.gate`, v0.21.14 /
+//! ADR-049) plus the STRICT `.decided/config.yaml` loaders it alone consumes
+//! (`decided.services.init.load_enforcement_policy` / `load_overrides`, the
 //! raising paths).
 //!
-//! `rac gate` composes validation, relationship integrity, and review over
+//! `decided gate` composes validation, relationship integrity, and review over
 //! one corpus, then classifies every finding as blocking or advisory under
 //! the corpus enforcement policy. The other commands keep the engine's
 //! lenient config readers (`validate::load_overrides` skips malformed
 //! entries); the gate is the one surface where a malformed config is an
-//! operational error — `rac: malformed repository config <path>: <reason>`
+//! operational error — `decided: malformed repository config <path>: <reason>`
 //! on stderr, exit 1 (`MalformedRepositoryConfig` in `cmd_gate`).
 
 use crate::commands::{validate_directory, DirectoryValidation};
@@ -29,11 +29,11 @@ pub const SOURCE_RELATIONSHIPS: &str = "relationships";
 pub const SOURCE_REVIEW: &str = "review";
 
 // ---------------------------------------------------------------------------
-// MalformedRepositoryConfig (rac.services.init)
+// MalformedRepositoryConfig (decided.services.init)
 // ---------------------------------------------------------------------------
 
 /// The gate's operational config error. `message()` is the oracle's
-/// `str(MalformedRepositoryConfig)` shape; `cmd_gate` prefixes `rac: `.
+/// `str(MalformedRepositoryConfig)` shape; `cmd_gate` prefixes `decided: `.
 #[derive(Debug)]
 pub struct MalformedConfig {
     pub config_path: String,
@@ -50,7 +50,7 @@ impl MalformedConfig {
 }
 
 // ---------------------------------------------------------------------------
-// EnforcementPolicy (rac.services.gate.EnforcementPolicy)
+// EnforcementPolicy (decided.services.gate.EnforcementPolicy)
 // ---------------------------------------------------------------------------
 
 /// Finding codes mapped to an enforcement class (ADR-049). Precedence:
@@ -78,7 +78,7 @@ impl EnforcementPolicy {
 }
 
 // ---------------------------------------------------------------------------
-// Strict config loading (the raising `rac.services.init` paths)
+// Strict config loading (the raising `decided.services.init` paths)
 // ---------------------------------------------------------------------------
 
 /// `_parse_config_yaml`: read + YAML-parse the nearest config; a parse

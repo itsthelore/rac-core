@@ -20,10 +20,10 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ENGINE_DIR = os.path.join(REPO, "rust", "rac-engine")
 os.chdir(ENGINE_DIR)
-os.environ.pop("RAC_MAX_FILE_BYTES", None)
+os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
 
-from rac.core import markdown as md  # noqa: E402
-from rac.core.frontmatter import split_frontmatter  # noqa: E402
+from asdecided.core import markdown as md  # noqa: E402
+from asdecided.core.frontmatter import split_frontmatter  # noqa: E402
 
 def product_value(p, text=None):
     """Same shape as gen_vectors_markdown.product_value (kept in sync)."""

@@ -9,8 +9,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo"
@@ -27,8 +27,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -55,8 +55,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -83,8 +83,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -117,8 +117,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": "1"
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": "1"
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo"
@@ -136,8 +136,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo"
@@ -155,8 +155,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -185,8 +185,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -217,8 +217,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -247,8 +247,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo"
@@ -265,8 +265,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -293,8 +293,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -325,8 +325,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -490,8 +490,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo"
@@ -519,7 +519,7 @@
    "--version"
   ],
   "env": {
-   "RAC_RS_VERSION": "0.1.dev50+g21c8be403"
+   "DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"
   },
   "expect_exit": 0
  },
@@ -533,8 +533,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo"
@@ -554,8 +554,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -587,8 +587,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -625,8 +625,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -663,8 +663,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -701,8 +701,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -727,8 +727,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -756,8 +756,8 @@
    "--json"
   ],
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "setup": [
@@ -781,9 +781,9 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": "",
-   "RAC_RS_VERSION": "0.1.dev50+g21c8be403"
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": "",
+   "DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -809,8 +809,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -846,8 +846,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -877,8 +877,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -909,8 +909,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -925,7 +925,7 @@
     },
     {
      "step": "write",
-     "path": ".rac/config.yaml",
+     "path": ".decided/config.yaml",
      "content": "repository_key: FIX\nvalidation:\n  rules:\n    missing-consequences: warning\n"
     }
    ]
@@ -941,8 +941,8 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": ""
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": ""
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo",
@@ -969,9 +969,9 @@
   ],
   "cwd": "{SANDBOX}",
   "env": {
-   "RAC_CACHE_DIR": "{SANDBOX}/cache",
-   "RAC_NO_CACHE": "",
-   "RAC_PARALLEL_BUILD_MIN_FILES": "1"
+   "DECIDED_CACHE_DIR": "{SANDBOX}/cache",
+   "DECIDED_NO_CACHE": "",
+   "DECIDED_PARALLEL_BUILD_MIN_FILES": "1"
   },
   "sandbox": {
    "fixture": "rust/fixtures/index/repo"

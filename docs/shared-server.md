@@ -1,6 +1,6 @@
-# Operating a Shared Lore Server
+# Operating a Shared AsDecided Server
 
-By default Lore runs as one `rac mcp` process per developer, over stdio, against
+By default AsDecided runs as one `decided-mcp` process per developer, over stdio, against
 that developer's own checkout. That is the right model for almost everyone and
 needs no operations at all.
 
@@ -12,9 +12,9 @@ proxy in front, a step that keeps the checkout current with `main`, and where
 observability lives. It assumes you have read the [MCP Server](mcp.md) page.
 
 Everything here is deployment wrapper — containers, proxies, collectors — around
-an unchanged engine. Lore gains no hosted service, no database, and no
+an unchanged engine. AsDecided gains no hosted service, no database, and no
 authentication code; git stays the source of truth
-([ADR-080](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-080-single-source-of-truth-git-not-database.md)).
+([ADR-080](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-080-single-source-of-truth-git-not-database.md)).
 
 ## 1. Do you need it?
 
@@ -37,10 +37,10 @@ needs no proxy, and has no operational surface.
 ## 2. The shape
 
 ```
- agents ──TLS──▶  authenticating proxy  ──HTTP──▶  rac mcp --transport http
+ agents ──TLS──▶  authenticating proxy  ──HTTP──▶  decided-mcp --transport http
                   (terminates TLS,                 (read-only, stateless,
                    authenticates the caller,        mandatory audit-on,
-                   sets X-Lore-Principal)           serves one main checkout)
+                   sets X-AsDecided-Principal)           serves one main checkout)
                                                           ▲
                                         keep-current  ────┘
                                         (merge webhook or periodic git pull)
@@ -49,7 +49,7 @@ needs no proxy, and has no operational surface.
 Three moving parts, and not one of them is a database:
 
 - a **git checkout** of your knowledge repo's `main` branch,
-- a **stateless reader** (`rac mcp` over HTTP), and
+- a **stateless reader** (`decided-mcp` over HTTP), and
 - an **authenticating proxy** that the engine never knows about.
 
 ## 3. The container
@@ -70,7 +70,7 @@ CMD ["rac", "mcp", "--root", "/corpus", \
 ```
 
 HTTP serving is **mandatory audit-on**: the server refuses to start without a
-working audit sink. Enable it in the corpus's `.rac/config.yaml` (committed, so
+working audit sink. Enable it in the corpus's `.decided/config.yaml` (committed, so
 an auditor has one git-diffable artifact) — see
 [the audit section](mcp.md#8-read-access-audit-log-enterprise-opt-in):
 
@@ -87,11 +87,11 @@ internet.
 ## 4. The authenticating proxy
 
 The engine does not authenticate — by design
-([ADR-085](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-085-enterprise-configuration-not-mode.md)).
+([ADR-085](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-085-enterprise-configuration-not-mode.md)).
 Put a reverse proxy in front to terminate TLS, authenticate the caller, and
-assert the caller's identity to the audit log via the **`X-Lore-Principal`**
+assert the caller's identity to the audit log via the **`X-AsDecided-Principal`**
 header. The engine records that header as the per-request principal
-([ADR-098](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-098-shared-http-mcp-serving.md)).
+([ADR-098](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-098-shared-http-mcp-serving.md)).
 
 ```nginx
 location /mcp {
@@ -99,17 +99,17 @@ location /mcp {
     auth_request_set $principal $upstream_http_x_user; # identity it resolved
 
     # Overwrite the header from the *authenticated* identity. This also strips
-    # any client-supplied X-Lore-Principal, so a caller cannot forge another's
+    # any client-supplied X-AsDecided-Principal, so a caller cannot forge another's
     # identity in the audit log.
-    proxy_set_header X-Lore-Principal $principal;
+    proxy_set_header X-AsDecided-Principal $principal;
 
     proxy_pass http://lore:8000/mcp;
 }
 ```
 
 The critical line is the last `proxy_set_header`: the proxy must **overwrite**
-`X-Lore-Principal` with the identity it authenticated, never pass through a
-client-supplied value. Attribution in Lore is *attributable, not
+`X-AsDecided-Principal` with the identity it authenticated, never pass through a
+client-supplied value. Attribution in AsDecided is *attributable, not
 authenticated* — the engine records what it is told and never verifies it, so
 the trust of the header is exactly the trust of the proxy that sets it. If you
 run the endpoint with no authenticating proxy, principals are self-asserted and
@@ -139,21 +139,21 @@ container: knowledge changes only by pull from `main`, never by the server.
 ## 6. Observability, and the engine boundary
 
 Observability for the shared server lives in the **wrapper**, not the engine
-([ADR-091](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-091-engine-observability-boundary.md)):
+([ADR-091](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-091-engine-observability-boundary.md)):
 
-- **Engine diagnostics go to stderr.** `rac mcp` writes startup and operational
+- **Engine diagnostics go to stderr.** `decided-mcp` writes startup and operational
   notices to stderr (stdout is the protocol channel). Collect the container's
   stderr with your normal log pipeline.
 - **The audit log is your read-access record.** It is a local JSONL file by
   design; shipping it to Loki, S3, or Elastic is a collector's job, never the
-  engine's ([ADR-084](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-084-read-access-audit-recorder.md),
-  [ADR-073](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-073-backend-connectors-consolidate.md)).
+  engine's ([ADR-084](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-084-read-access-audit-recorder.md),
+  [ADR-073](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-073-backend-connectors-consolidate.md)).
   Tail the audit volume with a sidecar and forward it.
 - **A metrics scrape endpoint belongs to the wrapper, not the engine.** The
   engine ships no Prometheus `/metrics` surface. If you need scrape metrics,
   expose them from the proxy or a sidecar (request counts, latencies, and status
   codes all live there); the engine stays a stateless reader.
-- **Error reporting is bring-your-own.** There is no Lore-hosted sink; supply
+- **Error reporting is bring-your-own.** There is no AsDecided-hosted sink; supply
   your own DSN if you want error aggregation (ADR-091).
 
 ## 7. What the engine will never do
@@ -168,7 +168,7 @@ stand (ADR-085):
 - **No database or hosted multi-tenant service.** Git `main` is the single
   source of truth; the server is one reader of it (ADR-080).
 - **No write path.** Knowledge changes only by pull request to `main` behind
-  human review ([ADR-065](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-065-artifact-content-untrusted.md));
+  human review ([ADR-065](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-065-artifact-content-untrusted.md));
   no transport exposes a write.
 
 These are not limitations to work around — they are the properties that let one

@@ -1,6 +1,6 @@
-//! Traceability coverage report (`rac.services.coverage`) — typed
+//! Traceability coverage report (`decided.services.coverage`) — typed
 //! completeness gaps derived from the resolved relationship graph.
-//! Advisory, never a build failure: `rac coverage` always exits 0 on a
+//! Advisory, never a build failure: `decided coverage` always exits 0 on a
 //! real directory. Three gap classes, one type and one expected edge
 //! direction each:
 //!

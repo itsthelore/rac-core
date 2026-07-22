@@ -50,8 +50,8 @@ KNOWN_ID = "RAC-KWMW45KXHZJP"  # ADR-098 itself, copied into the corpus
 def build_corpus(out: Path) -> Path:
     corpus = out / "corpus"
     shutil.rmtree(corpus, ignore_errors=True)
-    (corpus / ".rac").mkdir(parents=True)
-    (corpus / ".rac" / "config.yaml").write_text("audit:\n  enabled: true\n", encoding="utf-8")
+    (corpus / ".decided").mkdir(parents=True)
+    (corpus / ".decided" / "config.yaml").write_text("audit:\n  enabled: true\n", encoding="utf-8")
     for name in ("adr-098-shared-http-mcp-serving.md", "adr-084-read-access-audit-recorder.md",
                  "adr-032-guide-stateless-reads.md"):
         src = REPO_ROOT / "rac" / "decisions" / name
@@ -69,8 +69,8 @@ class HttpServer:
             d.mkdir(parents=True, exist_ok=True)
             env[name] = str(d)
         self.audit_path = xdg / "audit.jsonl"
-        env["RAC_AUDIT_PATH"] = str(self.audit_path)
-        env["RAC_NO_CACHE"] = "1"
+        env["DECIDED_AUDIT_PATH"] = str(self.audit_path)
+        env["DECIDED_NO_CACHE"] = "1"
         self.port = port
         self.url = f"http://127.0.0.1:{port}/mcp"
         self._err = open(xdg / "stderr.log", "wb")

@@ -1,6 +1,6 @@
 # 07 — Output Bytes: JSON / SARIF / Human / OKF / Portal formatting
 
-Scope: everything under `src/rac/output/` plus every `json.dumps` call site in
+Scope: everything under `src/asdecided/output/` plus every `json.dumps` call site in
 `src/`. Goal: byte-for-byte reproduction of stdout and exit codes. All line
 numbers are into the frozen oracle at `src/`.
 
@@ -143,7 +143,7 @@ inside `write_text`.
 ## 2. Stdout encoding / locale independence
 
 There is **no** `sys.stdout.reconfigure(...)`, no `PYTHONIOENCODING` handling,
-no `codecs` wrapper anywhere in `src/rac/*.py` (grep verified: zero matches).
+no `codecs` wrapper anywhere in `src/asdecided/*.py` (grep verified: zero matches).
 Consequences:
 
 - Python opens `sys.stdout` as a text stream using the locale preferred
@@ -360,66 +360,66 @@ non-default args; `indent=2` noted where set. All default `ensure_ascii=True`
 unless `ea=False` shown; none set `sort_keys` except surface.py.
 
 ```
-src/rac/output/json.py:63   | indent=2                    | validate <file> --json (render_validation_json)
-src/rac/output/json.py:68   | indent=2                    | validate <dir> --json
-src/rac/output/json.py:78   | indent=2                    | validate - --corpus --json
-src/rac/output/json.py:86   | indent=2                    | review --json
-src/rac/output/json.py:94   | indent=2                    | gate --json
-src/rac/output/json.py:112  | indent=2                    | diff --json
-src/rac/output/json.py:194  | indent=2                    | stats --json
-src/rac/output/json.py:201  | indent=2                    | inspect <file> --json
-src/rac/output/json.py:216  | indent=2                    | inspect <dir> --json
-src/rac/output/json.py:223  | indent=2                    | improve --json
-src/rac/output/json.py:230  | indent=2                    | schema --list --json
-src/rac/output/json.py:234  | indent=2                    | schema <name> --json
-src/rac/output/json.py:257  | indent=2                    | relationships --json
-src/rac/output/json.py:268  | indent=2                    | relationships --validate --json
-src/rac/output/json.py:276  | indent=2                    | rename (dry-run plan) --json
-src/rac/output/json.py:281  | indent=2                    | rename (applied) --json
-src/rac/output/json.py:294  | indent=2                    | ingest <file> --json
-src/rac/output/json.py:330  | indent=2                    | ingest <dir> --json
-src/rac/output/json.py:338  | indent=2                    | portfolio --json
-src/rac/output/json.py:346  | indent=2                    | index --json
-src/rac/output/json.py:358  | indent=2                    | export --json
-src/rac/output/json.py:369  | ea=False, indent=None (JSONL)| export --documents  (one compact obj/line, raw UTF-8)
-src/rac/output/json.py:379  | indent=2                    | export --graph
-src/rac/output/json.py:388  | indent=2                    | export --agent-rules [--check]
-src/rac/output/json.py:396  | indent=2                    | templates --json
-src/rac/output/json.py:401  | indent=2                    | new --json
-src/rac/output/json.py:406  | indent=2                    | init --json
-src/rac/output/json.py:411  | indent=2                    | quickstart --json
-src/rac/output/json.py:419  | indent=2                    | resolve --json
-src/rac/output/json.py:428  | indent=2                    | decisions-for --json
-src/rac/output/json.py:439  | indent=2                    | find --json [--explain adds evidence]
-src/rac/output/json.py:447  | indent=2                    | migrate metadata --json
-src/rac/output/json.py:455  | indent=2                    | skill install --json
-src/rac/output/json.py:464  | indent=2                    | skill list --json
-src/rac/output/json.py:469  | indent=2                    | hook install --json
-src/rac/output/json.py:478  | indent=2                    | hook list --json
-src/rac/output/json.py:490  | indent=2                    | mcp-stats --json
-src/rac/output/json.py:498  | indent=2                    | watchkeeper --json
-src/rac/output/sarif.py:202 | indent=2                    | validate/review/relationships/gate --sarif
-src/rac/services/coverage.py:141 | ea=False, indent=2     | coverage report --json (service)
-src/rac/services/agent_rules.py:218 | (multi-line dumps)  | agent-rules internal
-src/rac/services/index_store.py:331 | ea=False, indent=None | derived index store portfolio blob (internal)
-src/rac/services/doctor.py:429   | ea=False, indent=2     | doctor --json
-src/rac/services/eval.py:535     | ea=False, indent=2     | eval scorecard --json
-src/rac/services/eval.py:540     | ea=False, indent=2     | eval metrics --json (baseline file too, cli 1167)
-src/rac/services/derived_cache.py:543 | indent=None        | cache manifest file (internal, not stdout)
-src/rac/usage.py:72    | ea=False, indent=None            | usage telemetry log line (file)
-src/rac/usage.py:167   | ea=False, indent=2               | usage --json (stdout)
-src/rac/usage.py:195   | ea=False, indent=2               | usage --share payload
-src/rac/mcp/telemetry.py:92  | ea=False, indent=None      | mcp telemetry log line (file)
-src/rac/mcp/telemetry.py:292 | ea=False, indent=2         | mcp telemetry report
-src/rac/mcp/budget.py:66     | ea=False, indent=None      | mcp budget payload (compact)
-src/rac/mcp/surface.py:116   | sort_keys=True (token count)| NOT emitted; only len() for token estimate
-src/rac/mcp/audit.py:224     | ea=False, indent=None      | audit log line (file)
-src/rac/mcp/audit.py:303     | ea=False (multi-line)      | audit query output
-src/rac/mcp/ping.py:77       | indent=2                   | ping state file (+ "\n")
-src/rac/mcp/ping.py:164      | (default compact)          | ping HTTP POST body (network)
-src/rac/explorer/preferences.py:89 | indent=2             | explorer prefs file (+ "\n")
-src/rac/explorer/workspace.py:105  | indent=2             | explorer workspace file (+ "\n")
-src/rac/consent.py:105       | indent=2                   | consent file (+ "\n")
+src/asdecided/output/json.py:63   | indent=2                    | validate <file> --json (render_validation_json)
+src/asdecided/output/json.py:68   | indent=2                    | validate <dir> --json
+src/asdecided/output/json.py:78   | indent=2                    | validate - --corpus --json
+src/asdecided/output/json.py:86   | indent=2                    | review --json
+src/asdecided/output/json.py:94   | indent=2                    | gate --json
+src/asdecided/output/json.py:112  | indent=2                    | diff --json
+src/asdecided/output/json.py:194  | indent=2                    | stats --json
+src/asdecided/output/json.py:201  | indent=2                    | inspect <file> --json
+src/asdecided/output/json.py:216  | indent=2                    | inspect <dir> --json
+src/asdecided/output/json.py:223  | indent=2                    | improve --json
+src/asdecided/output/json.py:230  | indent=2                    | schema --list --json
+src/asdecided/output/json.py:234  | indent=2                    | schema <name> --json
+src/asdecided/output/json.py:257  | indent=2                    | relationships --json
+src/asdecided/output/json.py:268  | indent=2                    | relationships --validate --json
+src/asdecided/output/json.py:276  | indent=2                    | rename (dry-run plan) --json
+src/asdecided/output/json.py:281  | indent=2                    | rename (applied) --json
+src/asdecided/output/json.py:294  | indent=2                    | ingest <file> --json
+src/asdecided/output/json.py:330  | indent=2                    | ingest <dir> --json
+src/asdecided/output/json.py:338  | indent=2                    | portfolio --json
+src/asdecided/output/json.py:346  | indent=2                    | index --json
+src/asdecided/output/json.py:358  | indent=2                    | export --json
+src/asdecided/output/json.py:369  | ea=False, indent=None (JSONL)| export --documents  (one compact obj/line, raw UTF-8)
+src/asdecided/output/json.py:379  | indent=2                    | export --graph
+src/asdecided/output/json.py:388  | indent=2                    | export --agent-rules [--check]
+src/asdecided/output/json.py:396  | indent=2                    | templates --json
+src/asdecided/output/json.py:401  | indent=2                    | new --json
+src/asdecided/output/json.py:406  | indent=2                    | init --json
+src/asdecided/output/json.py:411  | indent=2                    | quickstart --json
+src/asdecided/output/json.py:419  | indent=2                    | resolve --json
+src/asdecided/output/json.py:428  | indent=2                    | decisions-for --json
+src/asdecided/output/json.py:439  | indent=2                    | find --json [--explain adds evidence]
+src/asdecided/output/json.py:447  | indent=2                    | migrate metadata --json
+src/asdecided/output/json.py:455  | indent=2                    | skill install --json
+src/asdecided/output/json.py:464  | indent=2                    | skill list --json
+src/asdecided/output/json.py:469  | indent=2                    | hook install --json
+src/asdecided/output/json.py:478  | indent=2                    | hook list --json
+src/asdecided/output/json.py:490  | indent=2                    | mcp-stats --json
+src/asdecided/output/json.py:498  | indent=2                    | watchkeeper --json
+src/asdecided/output/sarif.py:202 | indent=2                    | validate/review/relationships/gate --sarif
+src/asdecided/services/coverage.py:141 | ea=False, indent=2     | coverage report --json (service)
+src/asdecided/services/agent_rules.py:218 | (multi-line dumps)  | agent-rules internal
+src/asdecided/services/index_store.py:331 | ea=False, indent=None | derived index store portfolio blob (internal)
+src/asdecided/services/doctor.py:429   | ea=False, indent=2     | doctor --json
+src/asdecided/services/eval.py:535     | ea=False, indent=2     | eval scorecard --json
+src/asdecided/services/eval.py:540     | ea=False, indent=2     | eval metrics --json (baseline file too, cli 1167)
+src/asdecided/services/derived_cache.py:543 | indent=None        | cache manifest file (internal, not stdout)
+src/asdecided/usage.py:72    | ea=False, indent=None            | usage telemetry log line (file)
+src/asdecided/usage.py:167   | ea=False, indent=2               | usage --json (stdout)
+src/asdecided/usage.py:195   | ea=False, indent=2               | usage --share payload
+src/asdecided/mcp/telemetry.py:92  | ea=False, indent=None      | mcp telemetry log line (file)
+src/asdecided/mcp/telemetry.py:292 | ea=False, indent=2         | mcp telemetry report
+src/asdecided/mcp/budget.py:66     | ea=False, indent=None      | mcp budget payload (compact)
+src/asdecided/mcp/surface.py:116   | sort_keys=True (token count)| NOT emitted; only len() for token estimate
+src/asdecided/mcp/audit.py:224     | ea=False, indent=None      | audit log line (file)
+src/asdecided/mcp/audit.py:303     | ea=False (multi-line)      | audit query output
+src/asdecided/mcp/ping.py:77       | indent=2                   | ping state file (+ "\n")
+src/asdecided/mcp/ping.py:164      | (default compact)          | ping HTTP POST body (network)
+src/asdecided/explorer/preferences.py:89 | indent=2             | explorer prefs file (+ "\n")
+src/asdecided/explorer/workspace.py:105  | indent=2             | explorer workspace file (+ "\n")
+src/asdecided/consent.py:105       | indent=2                   | consent file (+ "\n")
 ```
 
 Note: `surface.py:116` is the ONLY `sort_keys=True` site and it is used purely

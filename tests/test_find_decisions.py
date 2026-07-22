@@ -1,4 +1,4 @@
-"""Live decision query — `find_decisions` / `rac find --decisions` (v0.21.16).
+"""Live decision query — `find_decisions` / `decided find --decisions` (v0.21.16).
 
 ADR-067 fixes the boundary these tests pin: the engine retrieves *which live
 decisions bind a topic* — structural search restricted to decisions, then to the
@@ -16,8 +16,8 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.services.resolve import find_decisions
+from asdecided.cli import main
+from asdecided.services.resolve import find_decisions
 
 # An Accepted decision about caching — the live, matchable target.
 LIVE_CACHE = """---
@@ -203,7 +203,7 @@ Accepted
     assert [m.id for m in first] == ["RAC-CACHE0000001", "RAC-CACHE0000002"]
 
 
-# --- CLI face: `rac find <topic> --decisions [--json]` ------------------------
+# --- CLI face: `decided find <topic> --decisions [--json]` ------------------------
 
 
 def test_cli_decisions_flag_exits_zero_on_match(repo, capsys):

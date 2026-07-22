@@ -4,10 +4,10 @@ Scope: the B5 commands ported for roadmap:native-cli-closure — `rac new`,
 `rac init`, `rac quickstart`, `rac migrate metadata` (all WRITE), and
 `rac rename` (writes under `--apply`). Every claim below was verified
 against the oracle (`.venv-oracle/bin/rac`, `0.1.dev50+g21c8be403`,
-Python 3.11.15). Source files: `src/rac/cli.py` (`cmd_new`/`cmd_init`/
+Python 3.11.15). Source files: `src/asdecided/cli.py` (`cmd_new`/`cmd_init`/
 `cmd_quickstart`/`cmd_rename`/`cmd_migrate`, `_maybe_ask_usage_sharing`),
-`src/rac/core/{idgen,templates}.py`, `src/rac/services/{create,init,
-profiles,quickstart,rename,migrate}.py`, `src/rac/output/{human,json}.py`.
+`src/asdecided/core/{idgen,templates}.py`, `src/asdecided/services/{create,init,
+profiles,quickstart,rename,migrate}.py`, `src/asdecided/output/{human,json}.py`.
 Rust: new `rac-engine/src/scaffold.rs` (idgen, embedded templates, config
 identity, init/profiles, create, quickstart, migrate) and `rename.rs`;
 vendored assets under `rac-engine/assets/templates/`; `output.rs`
@@ -46,7 +46,7 @@ no trailing-newline munging).
 
 Two required positionals; no directory arg — the repository identity is
 discovered by walking UP from the output path's parent (resolved) to the
-nearest `.rac/config.yaml`. NOT order-aware: `--version` anywhere wins
+nearest `.decided/config.yaml`. NOT order-aware: `--version` anywhere wins
 (`new bogus x.md --version` prints the version), the generic pre-scan
 applies.
 
@@ -83,7 +83,7 @@ consumed — `init --profile bogus --version` exits 2, `init --version
 --profile bogus` prints the version — and a missing `--key` value errors
 at its own position (`--key --version` → `expected one argument`, exit 2).
 
-Semantics: fresh init writes `<dir>/.rac/config.yaml` as hand-built
+Semantics: fresh init writes `<dir>/.decided/config.yaml` as hand-built
 string concatenation (NOT a YAML dump): `repository_key: <KEY>\n`, then
 optional `ticketing:\n  provider: <p>\n`, then the profile stanza
 verbatim (enterprise: a fixed comment + `enforcement.blocking` block). A
@@ -93,7 +93,7 @@ from `files_written` (pinned: `init-profile-skips-existing-mcp-json`).
 Idempotent re-init with the same key re-reads and validates the existing
 config and IGNORES `--ticketing`/`--profile` entirely (created=false, no
 files written). Paths are literal pathlib joins of the directory arg
-(`i2/.rac/config.yaml`; default `.` yields `.rac/config.yaml`).
+(`i2/.decided/config.yaml`; default `.` yields `.decided/config.yaml`).
 
 Exits: 0 created or idempotent; 1 `RepositoryKeyConflict` (`repository
 already initialized with key 'RAC' (<path>); refusing to change it to
@@ -132,7 +132,7 @@ type+"s"). The empty check counts only entries classifying to a KNOWN
 type — an unknown-documents-only corpus is still "empty" and scaffolds.
 LANDMINE: the identity write lands BEFORE the starter-exists refusal, so
 a squatted starter path exits 1 with `… already exists; rac new never
-overwrites` (create's message) AND `.rac/config.yaml` freshly written —
+overwrites` (create's message) AND `.decided/config.yaml` freshly written —
 pinned by `quickstart-err-starter-exists-config-written`. The same
 `OutputPathExists` is exit 2 under `new` but exit 1 under quickstart
 (refusal group).
@@ -274,7 +274,7 @@ written-tree cases plus 12: roadmap/prompt/design template trees with
 verbatim `./` and `//` path echoes, bad type / exists / missing parent /
 no config with captured-tree no-write proofs, both missing-positional
 shapes, extra-positional-writes-nothing, version ordering both ways);
-20 `init-` (created human/json, default-dir `.rac/config.yaml` shape,
+20 `init-` (created human/json, default-dir `.decided/config.yaml` shape,
 inline `--key=`, idempotent + profile-ignoring idempotent, default and
 enterprise+ticketing profile trees, existing-`.mcp.json` skip, key
 conflict, invalid-key-beats-conflict, malformed config, not-a-directory,

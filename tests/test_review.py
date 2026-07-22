@@ -1,4 +1,4 @@
-"""Tests for rac.services.review and the ``rac review`` CLI command (v0.7.9)."""
+"""Tests for asdecided.services.review and the ``decided review`` CLI command (v0.7.9)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.review import (
+from asdecided.cli import main
+from asdecided.services.portfolio import build_portfolio_summary
+from asdecided.services.review import (
     PRIORITY_BROKEN_RELATIONSHIP,
     PRIORITY_INVALID_ARTIFACT,
     PRIORITY_MISSING_RECOMMENDED,
@@ -224,7 +224,7 @@ def test_empty_directory_reviews_ok(tmp_path, capsys):
 def test_impact_is_core_owned_and_always_present():
     # v0.8.11: the "why it matters" sentence is repository intelligence,
     # not viewer copy — every consumer reads the same text.
-    from rac.services.review import impact_for
+    from asdecided.services.review import impact_for
 
     report = build_review(str(FIXTURES / "invalid_known"))
     assert report.issues

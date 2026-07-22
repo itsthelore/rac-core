@@ -8,8 +8,8 @@ missing section is fine. The decision code `invalid-decision-status` is unchange
 
 from __future__ import annotations
 
-from rac.core.markdown import parse
-from rac.core.validation import validate
+from asdecided.core.markdown import parse
+from asdecided.core.validation import validate
 
 REQUIREMENT = "# R\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] do it\n\n## Status\n\n{s}\n"
 ROADMAP = "# R\n\n## Outcomes\n\no\n\n## Initiatives\n\ni\n\n## Status\n\n{s}\n"

@@ -1,12 +1,12 @@
 # Grounding retrieval benchmark fixture (v0.23.0, WS1)
 
-This directory is the versioned fixture the `rac eval` grounding benchmark
+This directory is the versioned fixture the `decided eval` grounding benchmark
 scores. It is a dev/CI surface, not a RAC artifact corpus — nothing here is part
 of the product knowledge under `rac/`.
 
 ## Layout
 
-- `corpus/` — a small, schema-valid fixture corpus (`rac validate` exit 0),
+- `corpus/` — a small, schema-valid fixture corpus (`decided validate` exit 0),
   spanning all five artifact types, modelling a fictional collaborative editor
   ("Aurora"). It includes:
   - a **supersession chain**: `decision-token-expiry-v1` (Status: Superseded) is
@@ -26,7 +26,7 @@ of the product knowledge under `rac/`.
   `overall.p_at_1`, `overall.r_at_5`, `negative_violations`, and each query
   category's `p_at_1` / `r_at_5`. Per-tool figures are diagnostic.
 - `baseline.json` — the committed `metrics` baseline, written by
-  `rac eval --update-baseline` (human-only; CI never rebaselines).
+  `decided eval --update-baseline` (human-only; CI never rebaselines).
 
 ## Running
 
@@ -44,4 +44,4 @@ The initial floors come from the first green run, on which every category scored
 per-category floors sit a margin below their calibrated values, with the
 committed baseline minus the tolerance (`0.02`) providing the tight per-category
 regression guard. When the corpus or query set legitimately changes, re-run
-`rac eval --update-baseline` and commit the new baseline alongside the change.
+`decided eval --update-baseline` and commit the new baseline alongside the change.

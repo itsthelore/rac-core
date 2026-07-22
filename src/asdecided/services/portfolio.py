@@ -1,0 +1,386 @@
+"""Repository intelligence summary — `decided portfolio` (v0.7.3).
+
+``build_portfolio_summary`` walks a directory once, gathering:
+
+- Artifact counts (by type + unknown)
+- Validation (valid / invalid)
+- Completeness (filled recommended slots / total recommended slots)
+- Relationship health (from ``summarize_relationships``)
+- Attention items (broken refs, invalid artifacts, missing recommended sections)
+- Health score (weighted composite)
+
+All analysis is deterministic and belongs to Core (ADR-015). The CLI renders
+the result; it calculates nothing independently.
+
+Health score formula (each sub-score ∈ [0, 1], 1.0 when denominator is 0):
+
+    score = round(100 × (0.5·validity + 0.25·completeness + 0.25·rel_integrity))
+
+where:
+    validity         = valid_artifacts / total_artifacts
+    completeness     = filled_recommended_slots / total_recommended_slots
+    rel_integrity    = (total_refs − broken_refs) / total_refs
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from asdecided.core.artifacts import ARTIFACT_SPECS, spec_for
+from asdecided.core.classification import missing_sections
+from asdecided.core.corpus import CorpusEntry, walk_corpus
+from asdecided.core.identity import artifact_identifier
+from asdecided.core.overrides import apply_overrides
+from asdecided.core.validation import Issue, has_errors, validate
+from asdecided.services.init import load_overrides
+
+from .relationships import (
+    ISSUE_SELF_REFERENCE,
+    ISSUE_TARGET_AMBIGUOUS,
+    ISSUE_TARGET_NOT_FOUND,
+    RelationshipSummary,
+    ResolutionIndex,
+    ValidationRow,
+    resolution_index_from_rows,
+    summary_from_rows,
+    validation_from_rows,
+    validation_row,
+)
+
+# Stable attention codes (part of the JSON contract, ADR-007).
+ATTENTION_INVALID = "invalid-artifact"
+ATTENTION_MISSING_RECOMMENDED = "missing-recommended-sections"
+ATTENTION_BROKEN_RELATIONSHIP = "broken-relationship"
+
+# Human phrasing for each relationship-resolution issue in attention messages.
+_REL_ISSUE_PHRASE = {
+    ISSUE_TARGET_NOT_FOUND: "references missing artifact",
+    ISSUE_TARGET_AMBIGUOUS: "has an ambiguous reference to",
+    ISSUE_SELF_REFERENCE: "references itself via",
+}
+
+
+@dataclass
+class AttentionItem:
+    """One actionable finding surfaced by ``decided portfolio``."""
+
+    path: str
+    identifier: str  # artifact identifier or filename stem
+    severity: str  # "error" | "warning"
+    code: str
+    message: str
+
+    def to_dict(self) -> dict:
+        return {
+            "path": self.path,
+            "identifier": self.identifier,
+            "severity": self.severity,
+            "code": self.code,
+            "message": self.message,
+        }
+
+
+@dataclass
+class PortfolioSummary:
+    """Repository-level intelligence result (v0.7.3).
+
+    ``to_dict`` is the stable JSON contract (ADR-007); all fields are additive
+    and schema_version-gated so consumers can detect breaking changes.
+    """
+
+    directory: str
+    recursive: bool
+    by_type: dict[str, int]  # {type: count} incl. unknown
+    valid_artifacts: int
+    invalid_artifacts: int
+    recommended_slots: int
+    filled_slots: int
+    relationships: RelationshipSummary
+    attention: list[AttentionItem] = field(default_factory=list)
+    # Paths of unknown-type files (v0.7.9, additive): they are counted in
+    # ``by_type`` but neither validated nor completeness-scored, so consumers
+    # like ``decided review`` need the paths to surface them without a second walk.
+    unknown_paths: list[str] = field(default_factory=list)
+    # Full relationship-validation gate result (v0.16.0, additive): whether every
+    # referential, edge-legality, range, status-consistency, and acyclicity check
+    # passes. Distinct from ``relationships.broken`` (referential resolution only),
+    # so the summary can report the same verdict as `decided relationships --validate`.
+    relationships_ok: bool = True
+
+    @property
+    def total_artifacts(self) -> int:
+        return sum(self.by_type.values())
+
+    @property
+    def completeness(self) -> float:
+        if self.recommended_slots == 0:
+            return 1.0
+        return round(self.filled_slots / self.recommended_slots, 4)
+
+    @property
+    def health_score(self) -> int:
+        total = self.total_artifacts
+        validity = self.valid_artifacts / total if total else 1.0
+        completeness = self.completeness
+        checked = self.relationships.total
+        rel_integrity = (checked - self.relationships.broken) / checked if checked else 1.0
+        raw = 0.5 * validity + 0.25 * completeness + 0.25 * rel_integrity
+        return round(100 * raw)
+
+    def to_dict(self) -> dict:
+        return {
+            "schema_version": "1",
+            "directory": self.directory,
+            "recursive": self.recursive,
+            # Additive in v0.13.1 (ADR-007): a day-one empty-corpus marker.
+            "empty": self.total_artifacts == 0,
+            "artifacts": {
+                "total": self.total_artifacts,
+                "by_type": self.by_type,
+                # Additive in v0.7.9 (ADR-007): unknown files listed by path.
+                "unknown_paths": self.unknown_paths,
+            },
+            "validation": {
+                "valid": self.valid_artifacts,
+                "invalid": self.invalid_artifacts,
+            },
+            "completeness": {
+                "recommended_slots": self.recommended_slots,
+                "filled": self.filled_slots,
+                "ratio": self.completeness,
+            },
+            "relationships": {
+                "total": self.relationships.total,
+                "valid": self.relationships.valid,
+                "broken": self.relationships.broken,
+                "orphaned": self.relationships.orphaned,
+                "coverage": self.relationships.coverage,
+            },
+            "attention": [item.to_dict() for item in self.attention],
+            "health": {
+                "score": self.health_score,
+            },
+            # Additive (v0.16.0, ADR-007): the repository validation gate, so an
+            # agent over MCP (`get_summary`) can read pass/fail without a second
+            # tool. ``relationships_ok`` reflects the full relationship-validation
+            # gate (referential + edge-legality + range + status + acyclicity).
+            "validation_status": {
+                "artifacts_ok": self.invalid_artifacts == 0,
+                "relationships_ok": self.relationships_ok,
+                "ok": self.invalid_artifacts == 0 and self.relationships_ok,
+            },
+        }
+
+
+def build_portfolio_summary(directory: str, recursive: bool = True) -> PortfolioSummary:
+    """Walk ``directory`` and compute a full repository intelligence summary."""
+    entries = list(walk_corpus(directory, recursive=recursive))
+    return portfolio_from_corpus(directory, entries, recursive=recursive)
+
+
+@dataclass(frozen=True)
+class PortfolioRow:
+    """One document's compact projection for the portfolio summary (ADR-108).
+
+    Carries the per-document derivation outputs the summary reads — its type and
+    identity, the raw ``validate`` findings (overrides are applied at aggregation,
+    ADR-053), the recommended-slot count and the missing recommended sections —
+    plus the :class:`ValidationRow` the relationship summary and gate run over. The
+    ``Product`` is dropped, so a worker can ship the row (the fan-out) or the parent
+    can build it from an entry; the aggregation is byte-identical either way.
+    """
+
+    path: str
+    artifact_type: str
+    identifier: str
+    validation: ValidationRow
+    validate_issues: tuple[Issue, ...]
+    recommended_slots: int
+    missing_recommended: tuple[str, ...]
+
+
+def portfolio_row(entry: CorpusEntry) -> PortfolioRow:
+    """The compact :class:`PortfolioRow` projection of one corpus entry.
+
+    Pure and deterministic: every field is read straight from the parsed product,
+    so a row built here in the parent and a row shipped from a worker over the same
+    document are identical. Unknown documents carry no validation findings and no
+    recommended slots — they are counted in ``by_type`` but neither validated nor
+    completeness-scored, exactly as the item-based pass treats them.
+    """
+    path = str(entry.path)
+    product = entry.product
+    artifact_type = entry.artifact_type
+    spec = spec_for(artifact_type)
+    vrow = validation_row(path, product, spec)
+    if spec is None:
+        return PortfolioRow(
+            path=path,
+            artifact_type=artifact_type,
+            identifier=vrow.canonical_id,
+            validation=vrow,
+            validate_issues=(),
+            recommended_slots=0,
+            missing_recommended=(),
+        )
+    _, missing_rec = missing_sections(product, spec)
+    return PortfolioRow(
+        path=path,
+        artifact_type=artifact_type,
+        identifier=artifact_identifier(product, spec, path),
+        validation=vrow,
+        validate_issues=tuple(validate(product, artifact_type=artifact_type)),
+        recommended_slots=len(spec.recommended),
+        missing_recommended=tuple(missing_rec),
+    )
+
+
+def portfolio_from_corpus(
+    directory: str,
+    entries: list[CorpusEntry],
+    recursive: bool = True,
+    *,
+    resolution_index: ResolutionIndex | None = None,
+) -> PortfolioSummary:
+    """Summarize an already-walked corpus snapshot (v0.8.0).
+
+    Same result as :func:`build_portfolio_summary`. The snapshot also feeds
+    the relationship summary, so a portfolio costs one walk instead of two. A
+    prebuilt ``resolution_index`` (from the derived build) is shared across the
+    relationship summary and validation rather than each rebuilding it — the
+    portfolio dict is byte-identical either way. Delegates to the compact-row core
+    (ADR-108) so the serial build and the parallel merge aggregate identically.
+    """
+    return portfolio_from_rows(
+        directory,
+        [portfolio_row(entry) for entry in entries],
+        recursive=recursive,
+        resolution_index=resolution_index,
+    )
+
+
+def portfolio_from_rows(
+    directory: str,
+    rows: list[PortfolioRow],
+    recursive: bool = True,
+    *,
+    resolution_index: ResolutionIndex | None = None,
+) -> PortfolioSummary:
+    """Compute the portfolio summary over compact rows (ADR-108).
+
+    The single core the serial :func:`portfolio_from_corpus` and the parallel merge
+    both run. Byte-identical to the item-based pass: the same per-document findings
+    aggregate, and the relationship summary and gate resolve over one shared index
+    (ADR-103), built here from the rows if not supplied.
+    """
+    validation_rows: list[ValidationRow] = [row.validation for row in rows]
+    if resolution_index is None:
+        resolution_index = resolution_index_from_rows(validation_rows)
+
+    # Repository-wide severity overrides (ADR-053): review/portfolio/watchkeeper
+    # honour the same .decided/config.yaml policy as `decided validate`.
+    overrides = load_overrides(directory)
+
+    # --- per-artifact pass ---------------------------------------------------
+    by_type: dict[str, int] = {spec.name: 0 for spec in ARTIFACT_SPECS}
+    by_type["unknown"] = 0
+
+    valid_count = 0
+    invalid_count = 0
+    recommended_slots = 0
+    filled_slots = 0
+    attention: list[AttentionItem] = []
+    unknown_paths: list[str] = []
+    # path -> canonical identifier, for mapping relationship issues (whose
+    # source_path is always a known artifact) back to an identifier without a
+    # second identifier pass.
+    path_to_identifier: dict[str, str] = {}
+
+    for row in rows:
+        by_type[row.artifact_type] = by_type.get(row.artifact_type, 0) + 1
+
+        if row.validation.spec_name is None:
+            # Unknown artifacts: not validated, not scored for completeness.
+            unknown_paths.append(row.path)
+            continue
+
+        identifier = row.identifier
+        path_to_identifier[row.path] = identifier
+
+        # Validation (overrides applied, ADR-053)
+        issues = apply_overrides(list(row.validate_issues), row.artifact_type, overrides)
+        if has_errors(issues):
+            invalid_count += 1
+            error_codes = [i.code for i in issues if i.severity == "error"]
+            attention.append(
+                AttentionItem(
+                    path=row.path,
+                    identifier=identifier,
+                    severity="error",
+                    code=ATTENTION_INVALID,
+                    message=f"Validation errors: {', '.join(error_codes)}",
+                )
+            )
+        else:
+            valid_count += 1
+
+        # Completeness (recommended sections only — required failures are already
+        # reported as validation errors above, counting them twice would double-
+        # penalise in the health score).
+        slots = row.recommended_slots
+        recommended_slots += slots
+        missing_rec = list(row.missing_recommended)
+        filled = slots - len(missing_rec)
+        filled_slots += filled
+        if missing_rec:
+            names = ", ".join(s.title() for s in missing_rec)
+            attention.append(
+                AttentionItem(
+                    path=row.path,
+                    identifier=identifier,
+                    severity="warning",
+                    code=ATTENTION_MISSING_RECOMMENDED,
+                    message=f"Missing recommended sections: {names}",
+                )
+            )
+
+    # --- relationship summary ------------------------------------------------
+    # Reuses the snapshot (no second walk); per-reference issues become
+    # attention items so broken references are surfaced, not just counted.
+    rel_summary = summary_from_rows(validation_rows, resolution_index=resolution_index)
+    # The full relationship-validation gate (additive, v0.16.0): same verdict as
+    # `decided relationships --validate`, over the same snapshot (no extra walk).
+    relationships_ok = validation_from_rows(
+        directory, validation_rows, recursive=recursive, resolution_index=resolution_index
+    ).ok
+    for issue in rel_summary.issues:
+        source = issue.source_path or ""
+        label = (issue.relationship or "").replace("_", " ").title()
+        phrase = _REL_ISSUE_PHRASE.get(issue.code, "has an unresolved reference")
+        attention.append(
+            AttentionItem(
+                path=source,
+                identifier=path_to_identifier.get(source, source),
+                severity="warning",
+                code=ATTENTION_BROKEN_RELATIONSHIP,
+                message=f"{label} {phrase}: {issue.target}",
+            )
+        )
+
+    # Sort attention: errors before warnings, then path, then code (deterministic).
+    _SEV_ORDER = {"error": 0, "warning": 1}
+    attention.sort(key=lambda a: (_SEV_ORDER.get(a.severity, 2), a.path, a.code))
+
+    return PortfolioSummary(
+        directory=directory,
+        recursive=recursive,
+        by_type=by_type,
+        valid_artifacts=valid_count,
+        invalid_artifacts=invalid_count,
+        recommended_slots=recommended_slots,
+        filled_slots=filled_slots,
+        relationships=rel_summary,
+        attention=attention,
+        unknown_paths=unknown_paths,
+        relationships_ok=relationships_ok,
+    )

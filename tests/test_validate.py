@@ -6,10 +6,10 @@ import json
 
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.markdown import parse, parse_file
-from rac.core.validation import has_errors, validate
-from rac.services.validate import (
+from asdecided.cli import main
+from asdecided.core.markdown import parse, parse_file
+from asdecided.core.validation import has_errors, validate
+from asdecided.services.validate import (
     STATUS_INVALID,
     STATUS_SKIPPED,
     STATUS_VALID,
@@ -45,7 +45,7 @@ def _decision_with(entries: str) -> str:
 
 
 def _config(tmp_path, provider: str | None) -> None:
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir(exist_ok=True)
     body = "repository_key: ACME\n"
     if provider is not None:
@@ -109,7 +109,7 @@ def test_linear_jira_key_collision_resolved_by_provider(tmp_path):
 
 def test_ticketing_lint_is_overridable(tmp_path):
     # ADR-053: malformed-ticket-reference can be downgraded/silenced per repo.
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text(
         "repository_key: ACME\nticketing:\n  provider: jira\n"
@@ -206,7 +206,7 @@ def test_too_many_requirements_warning():
 
 
 # ---------------------------------------------------------------------------
-# Directory validation (v0.7.9) — `rac validate <directory>`
+# Directory validation (v0.7.9) — `decided validate <directory>`
 # ---------------------------------------------------------------------------
 
 
@@ -344,7 +344,7 @@ def test_validate_product_applies_repository_overrides(tmp_path):
     default = metric_issues(str(tmp_path))
     assert default and default[0].severity == "warning"  # no config yet
 
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text(
         "repository_key: RAC\nvalidation:\n  rules:\n    missing-success-metrics: error\n"

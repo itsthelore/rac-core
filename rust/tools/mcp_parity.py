@@ -67,7 +67,7 @@ class Server:
         # violation). Pin BOTH servers to the no-cache engine path — the same
         # path every other parity claim in this spike compares against. The
         # Rust server ignores the variable (it re-reads per call, ADR-032).
-        env["RAC_NO_CACHE"] = "" if Server.cache_on else "1"
+        env["DECIDED_NO_CACHE"] = "" if Server.cache_on else "1"
         # stderr goes to a temp file, never compared (contract §9) but kept
         # for the crash diagnostic in recv(); a PIPE could deadlock unread.
         self._errfile = tempfile.NamedTemporaryFile(
@@ -383,7 +383,7 @@ def main() -> int:
         "--cache-on",
         action="store_true",
         help=(
-            "leave RAC_NO_CACHE unset on both servers (INDEX-PLAN B6 cache-on "
+            "leave DECIDED_NO_CACHE unset on both servers (INDEX-PLAN B6 cache-on "
             "referee); duplicate-token cases are skipped — the oracle's warm "
             "path diverges from its own cold path there (contract §0a) and "
             "the native engine deliberately keeps warm == cold"

@@ -68,7 +68,7 @@ def main() -> int:
     # configuration remains discoverable. The directory is still removed at
     # the end of the run and the copied corpus never touches the source tree.
     with tempfile.TemporaryDirectory(
-        prefix=".rac-live-invariants-", dir=corpus.parent
+        prefix=".decided-live-invariants-", dir=corpus.parent
     ) as scratch_raw:
         scratch = Path(scratch_raw)
         isolated = scratch / "corpus"
@@ -78,11 +78,11 @@ def main() -> int:
             {
                 "LC_ALL": "C",
                 "TZ": "UTC",
-                "RAC_CACHE_DIR": str(scratch / "cache"),
+                "DECIDED_CACHE_DIR": str(scratch / "cache"),
                 "XDG_STATE_HOME": str(scratch / "state"),
             }
         )
-        env.pop("RAC_NO_CACHE", None)
+        env.pop("DECIDED_NO_CACHE", None)
 
         validate_args = ["validate", str(isolated), "--json", "--no-cache"]
         validation = invoke(engine, validate_args, env)

@@ -38,12 +38,12 @@ from pathlib import Path
 
 import pytest
 
-from rac.core.corpus import corpus_content_hash, walk_corpus
-from rac.mcp.server import build_server
-from rac.services import index_format, index_store
-from rac.services.derived_cache import SCHEMA_VERSION, DerivedIndexCache, build_derived_index
-from rac.services.index import build_repository_index
-from rac.services.index_store import (
+from asdecided.core.corpus import corpus_content_hash, walk_corpus
+from asdecided.mcp.server import build_server
+from asdecided.services import index_format, index_store
+from asdecided.services.derived_cache import SCHEMA_VERSION, DerivedIndexCache, build_derived_index
+from asdecided.services.index import build_repository_index
+from asdecided.services.index_store import (
     Delta,
     Fold,
     MmapIndexReader,
@@ -51,7 +51,7 @@ from rac.services.index_store import (
     store_dir,
     write_store,
 )
-from rac.services.resolve import (
+from asdecided.services.resolve import (
     _FIELD_BOOSTS,
     _bm25f,
     _corpus_stats,

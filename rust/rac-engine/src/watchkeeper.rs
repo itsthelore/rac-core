@@ -1,4 +1,4 @@
-//! Watchkeeper report assembly (`rac.services.watchkeeper`): resolve the
+//! Watchkeeper report assembly (`decided.services.watchkeeper`): resolve the
 //! base and head of a comparison — each an existing directory or a git
 //! revision materialized through `revisions` — load both states, compare,
 //! run intent analysis, and derive the deterministic review verdict.

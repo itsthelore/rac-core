@@ -2,9 +2,9 @@
 
 AST-based rules over the source tree (ADR-015 / ADR-028):
 
-- ``rac.core`` and ``rac.services`` never import Textual or the Explorer.
+- ``asdecided.core`` and ``asdecided.services`` never import Textual or the Explorer.
 - Textual widgets/screens/app never import Core internals — they reach RAC
-  only through ``rac.explorer.adapter`` / ``state`` / ``launch``.
+  only through ``asdecided.explorer.adapter`` / ``state`` / ``launch``.
 - The adapter, state, and launch modules never import Textual, so the base
   install (no ``explorer`` extra) and headless tests work without it.
 """
@@ -41,7 +41,7 @@ def _violations(files: list[Path], forbidden: tuple[str, ...]) -> list[str]:
 def test_core_and_services_never_import_textual_or_explorer():
     files = sorted((SRC / "core").rglob("*.py")) + sorted((SRC / "services").rglob("*.py"))
     assert files
-    assert _violations(files, ("textual", "rac.explorer")) == []
+    assert _violations(files, ("textual", "asdecided.explorer")) == []
 
 
 def test_widgets_never_import_core_internals():
@@ -50,7 +50,7 @@ def test_widgets_never_import_core_internals():
         ui_files.extend(sorted((SRC / "explorer" / sub).rglob("*.py")))
     ui_files = [f for f in ui_files if f.exists()]
     assert ui_files, "the Textual application modules must exist"
-    assert _violations(ui_files, ("rac.core", "rac.services")) == []
+    assert _violations(ui_files, ("asdecided.core", "asdecided.services")) == []
 
 
 def test_adapter_state_and_launch_never_import_textual():
@@ -75,4 +75,4 @@ def test_command_routing_owns_no_intelligence():
     # DESIGN-command-surface: routing may live in Explorer, answers may not —
     # the registry module reaches neither Core nor the services.
     commands = SRC / "explorer" / "commands.py"
-    assert _violations([commands], ("rac.core", "rac.services")) == []
+    assert _violations([commands], ("asdecided.core", "asdecided.services")) == []

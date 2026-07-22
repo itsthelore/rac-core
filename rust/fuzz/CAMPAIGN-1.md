@@ -16,8 +16,8 @@ currently-green command set, per the native-engine spike phase 3.
 - Command matrix per input (9): `validate FILE [--json]`,
   `validate DIR [--json|--sarif]`, `relationships DIR --validate [--json]`,
   `stats DIR [--json]` — raw stdout bytes + exit codes compared under the
-  parity env (env-cleared, `RAC_NO_CACHE=1`, `LC_ALL=C`, `TZ=UTC`,
-  `COLUMNS=80`, `PYTHONHASHSEED=0`, `RAC_RS_VERSION` seam, null stdin).
+  parity env (env-cleared, `DECIDED_NO_CACHE=1`, `LC_ALL=C`, `TZ=UTC`,
+  `COLUMNS=80`, `PYTHONHASHSEED=0`, `DECIDED_RS_VERSION` seam, null stdin).
 
 ## Inputs tested
 
@@ -128,9 +128,9 @@ Fuzzer bugs found and fixed during the campaign:
   plus the non-validate `relationships` and `relationships --json/--sarif`
   surfaces): parity-clean.
 - Not covered (future campaigns): `resolve`/`search`/`schema`/`export`
-  commands (not in the green matrix), `RAC_MAX_FILE_BYTES` env variation,
+  commands (not in the green matrix), `DECIDED_MAX_FILE_BYTES` env variation,
   path-argument edge forms (trailing slashes, `.markdown` args), concurrent
-  cache behavior (campaign pins `RAC_NO_CACHE=1`), stdin-based input, and
+  cache behavior (campaign pins `DECIDED_NO_CACHE=1`), stdin-based input, and
   windows-style path separators.
 
 ## Verdict

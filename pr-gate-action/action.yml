@@ -1,10 +1,10 @@
-# RAC PR-gate composite action (v0.21.14, ADR-049 / ADR-063).
+# AsDecided PR-gate composite action (ADR-049 / ADR-063).
 #
-# Carries the full RAC contract into a single required pull-request check:
-# install RAC and run `rac gate` — one command that enforces validation,
+# Carries the full AsDecided contract into a single required pull-request check:
+# install AsDecided and run `decided gate` — one command that enforces validation,
 # relationship integrity, and review under the corpus enforcement policy
-# (`.rac/config.yaml`), emitting one SARIF document (ADR-054). The single SARIF
-# is uploaded to GitHub Code Scanning under one category (`rac-gate`), and the
+# (`.decided/config.yaml`), emitting one SARIF document (ADR-054). The single SARIF
+# is uploaded to GitHub Code Scanning under one category (`decided-gate`), and the
 # CLI exit code is re-surfaced. The action is a thin consumer (ADR-063): all
 # analysis and enforcement policy live in the package (ADR-015 / ADR-049); the
 # action never reinterprets findings or decides what is blocking.
@@ -12,12 +12,12 @@
 # The Watchkeeper action lives at the repository root and the single-command
 # validate action at `validate-action/`; this gate is referenced as
 # `uses: itsthelore/rac-core/pr-gate-action@<ref>`.
-name: "RAC PR gate"
+name: "AsDecided PR gate"
 description: >-
-  Enforce a requirements-as-code (RAC) corpus on a pull request with a single
-  `rac gate` command — validation, relationship integrity, and review under the
+  Enforce an AsDecided corpus on a pull request with a single `decided gate`
+  command — validation, relationship integrity, and review under the
   corpus enforcement policy — surfaced inline via GitHub Code Scanning (SARIF) as
-  a required status check. A thin wrapper over the `rac` CLI.
+  a required status check. A thin wrapper over the `decided` CLI.
 author: "Tom Ballard"
 
 branding:
@@ -26,9 +26,9 @@ branding:
 
 inputs:
   path:
-    description: "The RAC corpus directory to enforce (passed to `rac gate`)."
+    description: "The corpus directory to enforce (passed to `decided gate`)."
     required: false
-    default: "rac"
+    default: "decisions"
   upload-sarif:
     description: >-
       Upload SARIF to GitHub Code Scanning (`true` or `false`). Requires the job
@@ -38,8 +38,8 @@ inputs:
   sarif-dir:
     description: "Directory the single `gate.sarif` document is written to."
     required: false
-    default: "rac-sarif"
-  rac-version:
+    default: "decided-sarif"
+  decided-version:
     description: >-
       Exact rac-core version to install from PyPI. Empty installs the
       latest release. Ignored when `install-from` is `source`.
@@ -47,7 +47,7 @@ inputs:
     default: ""
   install-from:
     description: >-
-      Where to install RAC from: `pypi` (the default for consumers) or `source`
+      Where to install AsDecided from: `pypi` (the default for consumers) or `source`
       (the action checkout itself — for this repository's own dogfood job;
       requires `uses: ./pr-gate-action` on a full checkout).
     required: false
@@ -60,26 +60,30 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install RAC
+    - name: Install AsDecided
       shell: bash
       env:
         INSTALL_FROM: ${{ inputs.install-from }}
-        RAC_VERSION: ${{ inputs.rac-version }}
+        DECIDED_VERSION: ${{ inputs.decided-version }}
       run: |
         python -m pip install --quiet --upgrade pip
         if [ "$INSTALL_FROM" = "source" ]; then
+          (cd "$GITHUB_ACTION_PATH/../rust" && cargo build --release --locked -p decided -p decided-mcp)
+          cp "$GITHUB_ACTION_PATH/../rust/target/release/decided" \
+             "$GITHUB_ACTION_PATH/../rust/target/release/decided-mcp" \
+             "$GITHUB_ACTION_PATH/../src/asdecided/bin/"
           python -m pip install --quiet "$GITHUB_ACTION_PATH/.."
-        elif [ -n "$RAC_VERSION" ]; then
-          python -m pip install --quiet "rac-core==$RAC_VERSION"
+        elif [ -n "$DECIDED_VERSION" ]; then
+          python -m pip install --quiet "rac-core==$DECIDED_VERSION"
         else
           python -m pip install --quiet rac-core
         fi
 
     # The CLI is the source of truth (ADR-058). `set +e` lets a non-zero exit
     # still produce SARIF for upload; the exit code is re-surfaced below. One
-    # command, one SARIF document — `rac gate` already composes validation,
+    # command, one SARIF document — `decided gate` already composes validation,
     # relationships, and review under the corpus enforcement policy.
-    - name: Run RAC gate (SARIF)
+    - name: Run AsDecided gate (SARIF)
       id: gate
       shell: bash
       env:
@@ -88,19 +92,19 @@ runs:
       run: |
         set +e
         mkdir -p "$SARIF_DIR"
-        rac gate "$INPUT_PATH" --sarif > "$SARIF_DIR/gate.sarif"
+        decided gate "$INPUT_PATH" --sarif > "$SARIF_DIR/gate.sarif"
         code=$?
         echo "gate exited $code"
         echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
     # A single SARIF document uploaded under one Code Scanning category. The gate
-    # is one tool ("rac") producing one run, so one categorised analysis suffices.
+    # is one tool ("decided") producing one run, so one categorised analysis suffices.
     - name: Upload gate SARIF
       if: ${{ always() && inputs.upload-sarif == 'true' }}
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: ${{ inputs.sarif-dir }}/gate.sarif
-        category: rac-gate
+        category: decided-gate
 
     # Any non-zero CLI exit fails the check; the Code Scanning annotations show
     # every finding, blocking and advisory. What is blocking is decided by the
@@ -111,7 +115,7 @@ runs:
         EXIT_CODE: ${{ steps.gate.outputs.exit_code }}
       run: |
         if [ "$EXIT_CODE" != "0" ]; then
-          echo "::error::RAC PR gate failed (exit $EXIT_CODE) — see the Code Scanning annotations."
+          echo "::error::AsDecided PR gate failed (exit $EXIT_CODE) — see the Code Scanning annotations."
           exit "$EXIT_CODE"
         fi
-        echo "RAC PR gate passed."
+        echo "AsDecided PR gate passed."

@@ -19,10 +19,10 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.mcp import audit
-from rac.mcp.audit import AuditConfig, AuditRecorder, MalformedAuditConfig
-from rac.mcp.budget import DEFAULT_BUDGET
-from rac.mcp.server import build_server
+from asdecided.mcp import audit
+from asdecided.mcp.audit import AuditConfig, AuditRecorder, MalformedAuditConfig
+from asdecided.mcp.budget import DEFAULT_BUDGET
+from asdecided.mcp.server import build_server
 
 CORPUS = fixture_path("mcp", "corpus")
 
@@ -188,12 +188,12 @@ def test_exception_is_recorded_and_reraised(tmp_path):
 
 
 def test_principal_env_override_wins(tmp_path, monkeypatch):
-    monkeypatch.setenv("RAC_AUDIT_PRINCIPAL", "CI Bot <ci@example.com>")
+    monkeypatch.setenv("DECIDED_AUDIT_PRINCIPAL", "CI Bot <ci@example.com>")
     assert audit.resolve_principal(str(tmp_path)) == "CI Bot <ci@example.com>"
 
 
 def test_principal_defaults_to_git_identity(tmp_path, monkeypatch):
-    monkeypatch.delenv("RAC_AUDIT_PRINCIPAL", raising=False)
+    monkeypatch.delenv("DECIDED_AUDIT_PRINCIPAL", raising=False)
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Ada Lovelace"], check=True)
     subprocess.run(
@@ -203,7 +203,7 @@ def test_principal_defaults_to_git_identity(tmp_path, monkeypatch):
 
 
 def test_principal_unattributed_without_git_or_env(tmp_path, monkeypatch):
-    monkeypatch.delenv("RAC_AUDIT_PRINCIPAL", raising=False)
+    monkeypatch.delenv("DECIDED_AUDIT_PRINCIPAL", raising=False)
     monkeypatch.setattr(audit, "_git_identity", lambda root: None)
     assert audit.resolve_principal(str(tmp_path)) == "unattributed"
 
@@ -212,8 +212,8 @@ def test_principal_unattributed_without_git_or_env(tmp_path, monkeypatch):
 
 
 def _write_config(tmp_path: Path, body: str) -> None:
-    (tmp_path / ".rac").mkdir(parents=True, exist_ok=True)
-    (tmp_path / ".rac" / "config.yaml").write_text(body, encoding="utf-8")
+    (tmp_path / ".decided").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".decided" / "config.yaml").write_text(body, encoding="utf-8")
 
 
 def test_load_audit_config_absent_is_disabled(tmp_path):
@@ -248,14 +248,14 @@ def test_load_audit_config_malformed_raises(tmp_path, body):
 
 def test_audit_path_resolution_order(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    monkeypatch.delenv("RAC_AUDIT_PATH", raising=False)
+    monkeypatch.delenv("DECIDED_AUDIT_PATH", raising=False)
     # Default: XDG state dir.
     assert audit.audit_path(None) == tmp_path / "state" / "rac" / "audit.jsonl"
     # Config path beats the default.
     configured = AuditConfig(enabled=True, path=str(tmp_path / "c.jsonl"), on_write_error="warn")
     assert audit.audit_path(configured) == tmp_path / "c.jsonl"
     # Env beats the config path.
-    monkeypatch.setenv("RAC_AUDIT_PATH", str(tmp_path / "env.jsonl"))
+    monkeypatch.setenv("DECIDED_AUDIT_PATH", str(tmp_path / "env.jsonl"))
     assert audit.audit_path(configured) == tmp_path / "env.jsonl"
 
 
@@ -294,8 +294,8 @@ def test_block_mode_refuses_the_call_on_write_failure(tmp_path, capsys):
 def test_http_recorder_skips_git_and_blocks(tmp_path, monkeypatch):
     # On the shared HTTP transport the recorder must not borrow the host's git
     # identity, and it blocks on write failure regardless of config (REQ-002/003).
-    monkeypatch.delenv("RAC_AUDIT_PRINCIPAL", raising=False)
-    monkeypatch.setenv("RAC_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.delenv("DECIDED_AUDIT_PRINCIPAL", raising=False)
+    monkeypatch.setenv("DECIDED_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
     config = AuditConfig(enabled=True, path="", on_write_error="warn")
     recorder = audit.create_recorder(config, ".", transport="http")
     assert recorder is not None
@@ -306,8 +306,8 @@ def test_http_recorder_skips_git_and_blocks(tmp_path, monkeypatch):
 
 def test_stdio_recorder_keeps_git_identity(tmp_path, monkeypatch):
     # stdio is byte-unchanged: construction-time git identity still resolves.
-    monkeypatch.delenv("RAC_AUDIT_PRINCIPAL", raising=False)
-    monkeypatch.setenv("RAC_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.delenv("DECIDED_AUDIT_PRINCIPAL", raising=False)
+    monkeypatch.setenv("DECIDED_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
     config = AuditConfig(enabled=True, path="", on_write_error="warn")
     recorder = audit.create_recorder(config, ".", transport="stdio")
     assert recorder is not None
@@ -318,7 +318,7 @@ def test_stdio_recorder_keeps_git_identity(tmp_path, monkeypatch):
 
 
 def test_resolve_principal_env_override_wins_on_http(monkeypatch):
-    monkeypatch.setenv("RAC_AUDIT_PRINCIPAL", "svc-lore <svc@example.com>")
+    monkeypatch.setenv("DECIDED_AUDIT_PRINCIPAL", "svc-lore <svc@example.com>")
     assert audit.resolve_principal(".", allow_git=False) == "svc-lore <svc@example.com>"
 
 

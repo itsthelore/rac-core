@@ -7,7 +7,7 @@ Nothing here asserts what the behavior *ought* to be; every expected value was
 produced by running the current code.
 
 Priority pinning is the frozen cross-repo (rac-connectors) export contract:
-``rac export --graph`` and ``rac export --documents`` are byte-pinned — field
+``decided export --graph`` and ``decided export --documents`` are byte-pinned — field
 order, the ``external``/``provider`` keys carried on *ordinary* in-corpus edges,
 compact-vs-spaced separators, and ``ensure_ascii=False`` UTF-8 bodies — because
 a connector parses those bytes. The portfolio/stats pins lock the health-score
@@ -21,16 +21,16 @@ from __future__ import annotations
 
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.output import human
-from rac.output.json import (
+from asdecided.cli import main
+from asdecided.output import human
+from asdecided.output.json import (
     render_documents_jsonl,
     render_graph_json,
     render_stats_json,
 )
-from rac.services.export import build_documents_export, build_graph_export
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.stats import collect_stats
+from asdecided.services.export import build_documents_export, build_graph_export
+from asdecided.services.portfolio import build_portfolio_summary
+from asdecided.services.stats import collect_stats
 
 # The graph fixture's whole-graph JSON, byte-for-byte. It contains no
 # filesystem paths, and ``source`` is the directory basename ("graph"), so the

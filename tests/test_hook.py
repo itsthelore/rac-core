@@ -1,8 +1,8 @@
-"""Tests for rac.core.hooks, rac.services.hook, and the `rac hook` CLI (v0.13.4).
+"""Tests for asdecided.core.hooks, asdecided.services.hook, and the `decided hook` CLI (v0.13.4).
 
 Pins the bundled git-hook contract: each hook ships as a package resource,
-`rac hook install` writes the selected style into `.git/hooks/<style>`
-(executable) without ever overwriting, `rac hook list` enumerates the bundle,
+`decided hook install` writes the selected style into `.git/hooks/<style>`
+(executable) without ever overwriting, `decided hook list` enumerates the bundle,
 and exit codes follow the standard convention (0 installed/listed, 1 refused
 or operational error, 2 bad path or no .git directory). One functional test
 exercises the installed post-commit hook end to end.
@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
-from rac.core.hooks import (
+from asdecided.cli import main
+from asdecided.core.hooks import (
     BUNDLED_HOOKS,
     DEFAULT_STYLE,
     HookNotFound,
@@ -28,7 +28,7 @@ from rac.core.hooks import (
     hook_specs,
     load_hook,
 )
-from rac.services.hook import HookFileExists, NotAGitWorkTree, install_hook
+from asdecided.services.hook import HookFileExists, NotAGitWorkTree, install_hook
 
 HOOK_STYLES = ["post-commit", "pre-commit"]
 
@@ -83,7 +83,7 @@ def test_unknown_style_raises_hook_not_found():
 
 
 def test_missing_resource_raises_hook_resource_missing(monkeypatch):
-    from rac.core import hooks as core_hooks
+    from asdecided.core import hooks as core_hooks
 
     ghost = core_hooks.HookSpec(style="ghost-commit", description="No resource ships.")
     monkeypatch.setattr(core_hooks, "BUNDLED_HOOKS", (*BUNDLED_HOOKS, ghost))

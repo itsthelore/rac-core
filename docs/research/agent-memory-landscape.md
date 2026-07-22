@@ -1,13 +1,13 @@
-# Agent Memory for Team Knowledge — Competitive Landscape & Lessons for Lore
+# Agent Memory for Team Knowledge — Competitive Landscape & Lessons for AsDecided
 
 > **Status: research document, not a RAC artifact.** Per ADR-010 ("Documents Are
 > Not Artifacts") and ADR-024 ("RAC Is Not a Content Store"), this is reference /
-> working material, not part of the validated `rac/` corpus. Its *actionable*
+> working material, not part of the validated `decisions/` corpus. Its *actionable*
 > conclusions are captured as corpus artifacts — see "What this produced" below.
 >
 > **Scope:** products and projects positioned as "agent memory for a team's
 > knowledge" — systems that turn docs, chats, tickets, code, or decisions into a
-> queryable store an AI agent reads — and where Lore (RAC) sits among them.
+> queryable store an AI agent reads — and where AsDecided (RAC) sits among them.
 > **Method:** two multi-angle web-research passes with adversarial verification
 > (3-vote, 2/3 to kill) and evidence-vs-marketing tagging; a second pass closed
 > the coverage gaps (Cognee, Glean, Dust, native assistant memory) the first left
@@ -18,7 +18,7 @@
 
 ## Executive summary
 
-The space splits on one axis, and Lore sits cleanly on the under-served side:
+The space splits on one axis, and AsDecided sits cleanly on the under-served side:
 **LLM-distilled mutable stores** vs **human-reviewed versioned knowledge.** The
 overwhelming majority — Mem0, Zep/Graphiti, Cognee, Letta, OB1, and the native
 memory in ChatGPT, Claude, Cursor — use an LLM to *extract* facts at ingest into a
@@ -28,7 +28,7 @@ authoritative. That is the right design for personal recall and the wrong design
 for a shared team source of truth, where a confidently-distilled stale "fact" is
 the exact failure mode the category cannot police.
 
-Only a thin **git-native, human-reviewed** band overlaps Lore's positioning, and
+Only a thin **git-native, human-reviewed** band overlaps AsDecided's positioning, and
 it has just two real occupants — **Mainline** and **Kage** — both of which appeared
 recently and neither of which governs a *typed* requirements/decisions corpus with
 ratified supersession. The convenient "only git-native team-knowledge engine" line
@@ -36,7 +36,7 @@ is therefore no longer true and must be retired.
 
 One-sentence positioning that the research supports:
 
-> **Lore is the git-native, human-ratified source of truth for a team's *typed*
+> **AsDecided is the git-native, human-ratified source of truth for a team's *typed*
 > decisions and requirements — knowledge that is authored and accepted by people,
 > not distilled by a model — winning on the trust axis (deterministic supersession
 > and provenance) that every LLM-distilled memory store structurally cannot own.**
@@ -45,7 +45,7 @@ One-sentence positioning that the research supports:
 
 ## The axis
 
-| | LLM-distilled mutable store | Human-reviewed versioned knowledge (Lore) |
+| | LLM-distilled mutable store | Human-reviewed versioned knowledge (AsDecided) |
 |---|---|---|
 | How knowledge is made | LLM extracts facts at ingest | authored + ratified by a human |
 | Source of truth | database / vector / graph store | files in git, `main` |
@@ -84,24 +84,24 @@ One-sentence positioning that the research supports:
 - **Letta Context Repositories** are genuinely git-backed (every memory change
   auto-committed; agents clone the repo; subagents merge via worktrees) — but memory
   is **per-agent** and managed by **LLM "sleep-time" reflection subagents**, with no
-  human-ratification gate. Architecturally close to Lore's medium, opposite on trust.
+  human-ratification gate. Architecturally close to AsDecided's medium, opposite on trust.
   [high] ([Letta](https://www.letta.com/blog/context-repositories/))
 - **OB1 (OpenBrain)** uses LLM "schema-aware routing" to distribute text into a
   **PostgreSQL/pgvector** store (Supabase or self-hosted); it does track provenance /
   derivation chains, but the source of truth is a DB, not git. [high]
   ([repo](https://github.com/NateBJones-Projects/OB1))
 - **Collaborative Memory** (Accenture research, not a product) is notable for two
-  Lore-relevant ideas in an otherwise LLM-distilled mutable store: **private + shared
+  AsDecided-relevant ideas in an otherwise LLM-distilled mutable store: **private + shared
   tiers** with access control, and **immutable provenance metadata** per fragment
   (creation time, contributing user/agents, resources accessed). [high]
   ([arXiv 2505.18279](https://arxiv.org/html/2505.18279v1))
 
-> Note for Lore: even the best supersession in this camp (Graphiti's bi-temporal
-> invalidation) is *model-judged at ingest*. Lore's supersession is human-ratified
+> Note for AsDecided: even the best supersession in this camp (Graphiti's bi-temporal
+> invalidation) is *model-judged at ingest*. AsDecided's supersession is human-ratified
 > and typed — the difference between "the model decided this fact is stale" and "a
 > reviewer accepted that this decision supersedes that one."
 
-### 2. Git-native human-reviewed knowledge — Lore's real neighbours
+### 2. Git-native human-reviewed knowledge — AsDecided's real neighbours
 
 *Mainline, Kage; Letta Context Repositories (per-agent, see above); Semiont
 (positioning-adjacent).*
@@ -112,7 +112,7 @@ One-sentence positioning that the research supports:
   merge, and binds decisions to the commits that produced them (commit-level
   provenance). [high] ([mainline.sh](https://mainline.sh/),
   [repo](https://github.com/mainline-org/mainline))
-- **Kage** is the closest match to Lore's *positioning*: git-native ("no account, no
+- **Kage** is the closest match to AsDecided's *positioning*: git-native ("no account, no
   API key, no database — just files in git"), **reviewed in the same pull request as
   the code**, with strong provenance/staleness handling — citations validated against
   the repo at capture (hallucinated citations refused), stale memory withheld when its
@@ -125,7 +125,7 @@ One-sentence positioning that the research supports:
   direct-"agentic-memory" claims. Treat as positioning-adjacent, not git-native. [medium]
   ([repo](https://github.com/The-AI-Alliance/semiont))
 
-> Note for Lore: Mainline and Kage capture **agent intent / lessons**; Lore governs a
+> Note for AsDecided: Mainline and Kage capture **agent intent / lessons**; AsDecided governs a
 > **typed requirements/decisions corpus** with ratified supersession and a validated
 > graph (ADR-049, ADR-061, ADR-074). That is the narrower, defensible distinction now
 > that "only git-native" is gone.
@@ -153,12 +153,12 @@ One-sentence positioning that the research supports:
   conversation history** with no AI-generated summaries. All per-user. [high]
   ([Claude memory](https://simonwillison.net/2025/Sep/12/claude-memory/))
 - **Cursor / Continue rules** (`.cursor/rules/*.mdc`, `.cursorrules`) are the one
-  native feature sharing Lore's *medium*: **human-authored, git-versioned, team-shared
+  native feature sharing AsDecided's *medium*: **human-authored, git-versioned, team-shared
   files reviewed in the normal PR flow.** But they are **free-form instructions**, not
   a typed, validated, supersession-aware corpus. [high]
   ([Cursor rules](https://cursor.com/docs/context/rules))
 
-> Note for Lore: Cursor/Continue rules prove the substrate (git + PR review) is an
+> Note for AsDecided: Cursor/Continue rules prove the substrate (git + PR review) is an
 > accepted industry pattern, not a compromise — but they stop at free-form prose. The
 > typed artifact model + deterministic validation is the layer above them.
 
@@ -168,13 +168,13 @@ One-sentence positioning that the research supports:
 
 - **No agent-memory system ships a human-review promotion gate.** A direct survey
   finding: "no system natively implements [a human-review step]; all assume the agent
-  has authority to update memory directly." This is the gap Lore's two-gate capture
+  has authority to update memory directly." This is the gap AsDecided's two-gate capture
   model (ADR-077) and PR trust boundary (ADR-065) fill. [high]
 - **Deterministic supersession beats LLM-judgment — measured.** A 2026 preprint
   reports that replacing LLM-judgment with a candidate-extraction + `max(serial)`
   pipeline for memory freshness/conflict resolution yields **+10.8 points on the FC-SH
   benchmark (67.2 → 78.0)**, and that LLMs degrade at tracking which knowledge version
-  is current — external support for Lore's deterministic stance (ADR-066, ADR-080).
+  is current — external support for AsDecided's deterministic stance (ADR-066, ADR-080).
   [medium — recent preprint, cite as supporting evidence, not settled]
   ([arXiv 2606.01435](https://arxiv.org/abs/2606.01435))
 
@@ -182,7 +182,7 @@ One-sentence positioning that the research supports:
 
 ## Where each player lands (verdict)
 
-| Player | Camp | Overlap with Lore |
+| Player | Camp | Overlap with AsDecided |
 |---|---|---|
 | Zep / Graphiti | distilled mutable (graph) | adjacent — strongest supersession, but model-judged, DB-backed |
 | Mem0 | distilled mutable (hybrid) | adjacent — per-user episodic |
@@ -203,7 +203,7 @@ One-sentence positioning that the research supports:
 1. **The two surviving differentiators are narrow but real:** (a) no LLM distillation
    of judgment, and (b) a human-ratification gate over a *typed* corpus with explicit
    supersession. Mainline and Kage do PR review of agent intent/lessons; none ratifies
-   typed decision/requirement artifacts the way Lore does.
+   typed decision/requirement artifacts the way AsDecided does.
 2. **"Only git-native" is retired.** Mainline and Kage occupy the same substrate; the
    defensible claim is human-ratified + typed, not git-native exclusivity.
 3. **Refuted claims (excluded):** Kage having an explicit supersession command with a
@@ -228,8 +228,8 @@ One-sentence positioning that the research supports:
 The competitive *positioning* conclusions were distilled into a growth-positioning
 requirement (this document is the reference behind it):
 
-- `rac/requirements/rac-growth-agent-memory-positioning.md` (`RAC-KVWHTV28J65S`) —
-  relate Lore to the agent-memory category on a `docs/` comparison page (deliberately
+- `decisions/requirements/rac-growth-agent-memory-positioning.md` (`RAC-KVWHTV28J65S`) —
+  relate AsDecided to the agent-memory category on a `docs/` comparison page (deliberately
   not the corpus README); name Mainline and Kage; retire "only git-native"; state the
   human-ratified + typed differentiator; and acknowledge the adjacents (Glean, Dust,
   ChatGPT, Claude, Cursor, Continue) honestly.

@@ -21,19 +21,19 @@ this from the file alone.
 pip install rac-core   # the `rac` CLI and the `lore` MCP server
 ```
 
-A repository with a RAC corpus under `rac/` (run `rac quickstart`, or use this
-repository's own `rac/`).
+A repository with a RAC corpus under `decisions/` (run `decided quickstart`, or use this
+repository's own `decisions/`).
 
 ## 1. Context file (the push)
 
 ```bash
-rac export rac/ --agent-rules
+decided export decisions/ --agent-rules
 ```
 
 This writes several agent-context files; <Client> reads **`<CONTEXT-FILE>`**
 <!-- e.g. AGENTS.md (the glob-free default), CLAUDE.md, or .github/copilot-instructions.md -->
 as plain instructions. The managed block keeps your own content intact; re-run on
-change (`rac export rac/ --agent-rules --check` fails CI on drift).
+change (`decided export decisions/ --agent-rules --check` fails CI on drift).
 
 ## 2. The `lore` MCP server (the pull)
 
@@ -44,7 +44,7 @@ Add **`<CONFIG-PATH>`** <!-- e.g. .cursor/mcp.json, ~/.codex/config.toml --> wit
 ```json
 {
   "mcpServers": {
-    "lore": { "command": "rac", "args": ["mcp", "--root", "."] }
+    "asdecided": { "command": "decided-mcp", "args": ["--root", "."] }
   }
 }
 ```
@@ -75,7 +75,7 @@ every call and never writes to the repo.
 else in this section so the boundary reads identically across every recipe. -->
 RAC supplies context and enforces *after* the edit (ADR-067). There is no platform
 API to veto a <Client> agent edit before it lands, so <Client> relies on the
-post-edit guard: `rac validate` / `rac relationships --validate` and the GitHub
+post-edit guard: `decided validate` / `decided relationships --validate` and the GitHub
 Action / pre-merge gate, the same as any contributor. (A pre-edit veto is
 Claude-Code-specific — see [`examples/claude-code/`](../claude-code/README.md).)
 
@@ -89,9 +89,9 @@ unconnected run violates: [`examples/guide/`](../guide/demo.md).
 
 | Surface | Command | What <Client> does with it |
 | --- | --- | --- |
-| `<CONTEXT-FILE>` | `rac export rac/ --agent-rules` | Reads it as project instructions |
-| `lore` MCP | `<CONFIG-PATH>` → `rac mcp --root .` | Calls `find_decisions` / `get_related` on demand |
-| CI gate | `rac validate` · `rac relationships --validate` | Enforces on every PR |
+| `<CONTEXT-FILE>` | `decided export decisions/ --agent-rules` | Reads it as project instructions |
+| `lore` MCP | `<CONFIG-PATH>` → `decided-mcp --root .` | Calls `find_decisions` / `get_related` on demand |
+| CI gate | `decided validate` · `decided relationships --validate` | Enforces on every PR |
 
 <!-- Before this recipe is listed in docs/ecosystem.md it MUST be smoke-tested against
 a released rac-core version (docs/integration-recipes.md, the verification gate).

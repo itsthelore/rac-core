@@ -1,4 +1,4 @@
-//! Artifact improvement (`rac.services.improve`): deterministic,
+//! Artifact improvement (`decided.services.improve`): deterministic,
 //! schema-driven guidance. Advisory and read-only — reports missing
 //! required/recommended sections with schema-defined guidance questions.
 

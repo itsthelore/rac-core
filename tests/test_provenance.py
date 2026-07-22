@@ -16,8 +16,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from rac.mcp.server import build_server
-from rac.services.recency import artifact_provenance
+from asdecided.mcp.server import build_server
+from asdecided.services.recency import artifact_provenance
 
 DECISION = (
     "---\nschema_version: 1\nid: {id}\ntype: decision\n---\n# {title}\n\n"

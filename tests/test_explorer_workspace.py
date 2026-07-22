@@ -6,15 +6,15 @@ import json
 
 import pytest
 
-from rac.explorer import mascot
-from rac.explorer.preferences import (
+from asdecided.explorer import mascot
+from asdecided.explorer.preferences import (
     GROUPING_FLAT,
     Preferences,
     load_preferences,
     preferences_path,
     save_preferences,
 )
-from rac.explorer.workspace import Workspace, load_workspace, save_workspace, workspace_path
+from asdecided.explorer.workspace import Workspace, load_workspace, save_workspace, workspace_path
 
 
 @pytest.fixture(autouse=True)

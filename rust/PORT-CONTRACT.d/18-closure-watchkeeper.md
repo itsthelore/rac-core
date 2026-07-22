@@ -4,9 +4,9 @@ Scope: the B7 command ported for roadmap:native-cli-closure —
 `rac watchkeeper`, the product-knowledge review surface (ADR-043
 revision materialization). Every claim below was verified against the
 oracle (`.venv-oracle/bin/rac`, `0.1.dev50+g21c8be403`, Python
-3.11.15). Source files: `src/rac/cli.py` (`cmd_watchkeeper` + parser),
-`src/rac/services/{watchkeeper,compare,intent,revisions,diff}.py`,
-`src/rac/output/{human,json,github}.py`. Rust: new
+3.11.15). Source files: `src/asdecided/cli.py` (`cmd_watchkeeper` + parser),
+`src/asdecided/services/{watchkeeper,compare,intent,revisions,diff}.py`,
+`src/asdecided/output/{human,json,github}.py`. Rust: new
 `rac-engine/src/revisions.rs` (git archive materialization + a minimal
 in-process tar reader), `compare.rs` (`load_state`/`compare_states`),
 `intent.rs` (`analyze_intent`), `watchkeeper.rs` (report assembly +

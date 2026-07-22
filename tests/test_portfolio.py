@@ -1,4 +1,4 @@
-"""Tests for rac.portfolio and the ``rac portfolio`` CLI command (v0.7.3)."""
+"""Tests for asdecided.portfolio and the ``decided portfolio`` CLI command (v0.7.3)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
-from rac.services.portfolio import (
+from asdecided.cli import main
+from asdecided.services.portfolio import (
     ATTENTION_BROKEN_RELATIONSHIP,
     ATTENTION_INVALID,
     build_portfolio_summary,
@@ -328,7 +328,7 @@ def test_orphan_not_double_counted_when_broken(tmp_path):
 
 def test_unknown_paths_listed_additively():
     # v0.7.9 additive contract field (ADR-007): unknown files listed by path so
-    # consumers like `rac review` can surface them without a second walk.
+    # consumers like `decided review` can surface them without a second walk.
     s = summary("all_types")
     assert len(s.unknown_paths) == s.by_type["unknown"] == 1
     assert s.unknown_paths[0].endswith("unknown.md")

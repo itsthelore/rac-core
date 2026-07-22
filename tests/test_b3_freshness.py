@@ -1,7 +1,7 @@
 """Movement-B bundle B3 — event-sourced serving freshness (ADR-105).
 
 B3 replaces the per-call whole-corpus ``corpus_content_hash`` re-hash with a
-server-lifetime :class:`~rac.services.freshness.FreshnessTracker` on the opt-in
+server-lifetime :class:`~asdecided.services.freshness.FreshnessTracker` on the opt-in
 cache path. These tests pin what that tracker must guarantee:
 
 (a) **Parity across every mutation class, mid-session** — one long-lived cached
@@ -32,15 +32,15 @@ from pathlib import Path
 
 import pytest
 
-from rac.mcp.server import build_server
-from rac.services import freshness
-from rac.services.derived_cache import DerivedIndexCache, build_derived_index
-from rac.services.freshness import (
+from asdecided.mcp.server import build_server
+from asdecided.services import freshness
+from asdecided.services.derived_cache import DerivedIndexCache, build_derived_index
+from asdecided.services.freshness import (
     MODE_STAT,
     FreshnessTracker,
     INotifyUnavailable,
 )
-from rac.services.index_store import store_dir
+from asdecided.services.index_store import store_dir
 
 # Crockford-base32-clean ids (no I/L/O/U) so Core never falls back to the stem.
 _D1 = "RAC-B3AAAA000001"

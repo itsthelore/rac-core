@@ -1,9 +1,9 @@
 {
   "servers": {
-    "lore": {
+    "asdecided": {
       "type": "stdio",
-      "command": "rac",
-      "args": ["mcp", "--root", "."]
+      "command": "decided-mcp",
+      "args": ["--root", "."]
     }
   }
 }

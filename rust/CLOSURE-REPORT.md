@@ -71,7 +71,7 @@ Sources: PORT-CONTRACT.d/11–18 "known divergences" sections.
    curated: `rust/fuzz/pinned/oracle-crashes/`; pinned natively:
    `rust/fixtures/hostile/` + `rac-engine/tests/hostile_inputs.rs`
    (REQ-004, below).
-2. **PyYAML stderr prose.** Malformed `.rac/config.yaml` reasons
+2. **PyYAML stderr prose.** Malformed `.decided/config.yaml` reasons
    (`gate`, `init`, `migrate`, scaffold writes): the oracle embeds
    PyYAML's multi-line exception text after
    `rac: malformed repository config <path>: invalid YAML: `; the
@@ -156,7 +156,7 @@ read-only/reporting surface: `diff` (vs a pinned synthetic template and
 self), `inspect` (file/dir/stdin/verbose), `improve`
 (file/stdin/json/template), `portfolio`, `coverage`, `decisions-for`,
 `gate` (bare, `--json`, `--sarif`, pinned policy config, and the mutated
-primary as a HOSTILE `.rac/config.yaml`), `doctor` (`--json`,
+primary as a HOSTILE `.decided/config.yaml`), `doctor` (`--json`,
 `--hub-threshold 0`; non-git sandbox keeps the drift phase empty),
 `export --graph`, `export --agent-rules --check`, and the
 `--html`/`--okf` write arms with per-engine staging/cleanup so both
@@ -197,7 +197,7 @@ survived.
   regression fixtures): delivered this pass. `rust/fixtures/hostile/`
   distills `rust/fuzz/findings2/` to one minimized fixture per crash
   class — A: unhashable YAML mapping keys (list and dict variants),
-  B: the two deterministic `RAC_MAX_FILE_BYTES` read-crash zones,
+  B: the two deterministic `DECIDED_MAX_FILE_BYTES` read-crash zones,
   C: undecodable stdin bytes (surrogateescape), D: strict-UTF-8
   re-read of a classified artifact (invalid bytes on disk) — each
   verified to still crash the oracle. The NATIVE-ONLY cargo test

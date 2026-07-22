@@ -18,12 +18,12 @@ from __future__ import annotations
 import hashlib
 import os
 
-from rac.core.classification import CONFIDENCE_THRESHOLD, classify, score_artifacts
-from rac.core.corpus import content_hash
-from rac.core.fs import find_markdown_files
-from rac.core.identity import artifact_identifier, artifact_identifiers
-from rac.core.limits import DEFAULT_MAX_FILE_BYTES, max_file_bytes
-from rac.core.markdown import parse, parse_file
+from asdecided.core.classification import CONFIDENCE_THRESHOLD, classify, score_artifacts
+from asdecided.core.corpus import content_hash
+from asdecided.core.fs import find_markdown_files
+from asdecided.core.identity import artifact_identifier, artifact_identifiers
+from asdecided.core.limits import DEFAULT_MAX_FILE_BYTES, max_file_bytes
+from asdecided.core.markdown import parse, parse_file
 
 # --- BOM before frontmatter (finding #1, HIGH) -------------------------------
 #
@@ -118,9 +118,9 @@ def test_find_markdown_recurses_nested_dirs_in_sorted_order(tmp_path):
 
 def test_find_markdown_dotted_root_does_not_self_skip(tmp_path):
     # The dotted-component check runs on `p.relative_to(root).parts` only, so a
-    # root that is itself dotted (e.g. a ".rac" directory) does NOT skip its own
+    # root that is itself dotted (e.g. a ".decided" directory) does NOT skip its own
     # direct files — but a dotted subdirectory inside it still is skipped.
-    root = tmp_path / ".rac"
+    root = tmp_path / ".decided"
     root.mkdir()
     (root / "x.md").write_text("# X\n", encoding="utf-8")
     inner = root / ".hidden"
@@ -224,14 +224,14 @@ def test_classify_confidence_is_rounded_to_two_places():
 
 
 def test_oversize_parse_and_file_messages_differ(tmp_path, monkeypatch):
-    monkeypatch.setenv("RAC_MAX_FILE_BYTES", "64")
+    monkeypatch.setenv("DECIDED_MAX_FILE_BYTES", "64")
     oversize = "x" * 200  # well over the 64-byte cap
 
     # In-memory parse path: "parse cap".
     in_memory = parse(oversize)
     assert [i.code for i in in_memory.parse_issues] == ["artifact-oversize"]
     assert "parse cap" in in_memory.parse_issues[0].message
-    assert "RAC_MAX_FILE_BYTES" in in_memory.parse_issues[0].message
+    assert "DECIDED_MAX_FILE_BYTES" in in_memory.parse_issues[0].message
 
     # File path: the same code but a DIFFERENT message, "file cap".
     p = tmp_path / "big.md"
@@ -274,16 +274,16 @@ def test_artifact_identifiers_dedup_preserves_first_seen_casing():
 
 
 def test_max_file_bytes_falls_back_for_non_positive_and_unparseable(monkeypatch):
-    # A non-positive or unparseable RAC_MAX_FILE_BYTES falls back to the default
+    # A non-positive or unparseable DECIDED_MAX_FILE_BYTES falls back to the default
     # (the guard is never disabled); a positive value is honored.
     for bad in ("0", "-1", "abc", ""):
-        monkeypatch.setenv("RAC_MAX_FILE_BYTES", bad)
+        monkeypatch.setenv("DECIDED_MAX_FILE_BYTES", bad)
         assert max_file_bytes() == DEFAULT_MAX_FILE_BYTES
 
-    monkeypatch.setenv("RAC_MAX_FILE_BYTES", "2048")
+    monkeypatch.setenv("DECIDED_MAX_FILE_BYTES", "2048")
     assert max_file_bytes() == 2048
 
-    monkeypatch.delenv("RAC_MAX_FILE_BYTES", raising=False)
+    monkeypatch.delenv("DECIDED_MAX_FILE_BYTES", raising=False)
     assert max_file_bytes() == DEFAULT_MAX_FILE_BYTES
 
 

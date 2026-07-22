@@ -1,4 +1,4 @@
-"""Path-to-decisions lookup — `rac decisions-for` and the `find_decisions` path arg.
+"""Path-to-decisions lookup — `decided decisions-for` and the `find_decisions` path arg.
 
 Initiative 2 of decision-to-code-proximity (`rac-path-decisions-lookup`): given a
 code path, return the live decisions whose declared `## Applies To` scope covers
@@ -17,9 +17,9 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.mcp.server import build_server
-from rac.services.scope import decisions_for_path
+from asdecided.cli import main
+from asdecided.mcp.server import build_server
+from asdecided.services.scope import decisions_for_path
 
 # --- fixture corpus ----------------------------------------------------------
 

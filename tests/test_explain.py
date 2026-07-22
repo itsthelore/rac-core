@@ -4,8 +4,8 @@ Pins the additive ``evidence`` object on search results: the winning field,
 tier, and matched terms read off the matcher (ADR-037/ADR-038), never a second
 heuristic. A controlled corpus isolates each tier (id / title / path / heading /
 body) so the reported field is asserted against the matcher's real rank. Also
-pins the `rac find --explain` faces and the one-source-of-truth equality between
-the MCP search payload and `rac find --explain --json`.
+pins the `decided find --explain` faces and the one-source-of-truth equality between
+the MCP search payload and `decided find --explain --json`.
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ import asyncio
 import json
 from pathlib import Path
 
-from rac import cli
-from rac.mcp.server import build_server
-from rac.output import json as json_output
-from rac.services.index import build_repository_index
-from rac.services.recency import annotate_search_recency
-from rac.services.resolve import find_artifacts, search_index
+from asdecided import cli
+from asdecided.mcp.server import build_server
+from asdecided.output import json as json_output
+from asdecided.services.index import build_repository_index
+from asdecided.services.recency import annotate_search_recency
+from asdecided.services.resolve import find_artifacts, search_index
 
 # One decision authored so each query term is unique to one match tier. The
 # filename stem ("aaa") is an id alias, so no content word may collide with it.
@@ -171,7 +171,7 @@ def test_mcp_search_payload_equals_find_explain_json(tmp_path):
     server = build_server(root)
     contents, _ = asyncio.run(server.call_tool("search_artifacts", {"query": "photosynthesis"}))
     mcp_payload = json.loads(contents[0].text)
-    # `rac find --explain --json` joins git-derived recency the same way the MCP
+    # `decided find --explain --json` joins git-derived recency the same way the MCP
     # surface does (freshness-and-drift phase 1); annotate the CLI side to keep
     # the one-source-of-truth equality exact. Both are computed from the same git
     # state at the same instant, so the (volatile) values stay equal by

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Mutation-sequence referee (INDEX-PLAN B6): drive the oracle server and
-rac-mcp — BOTH cache-on — over one shared corpus while editing, adding, and
+decided-mcp — BOTH cache-on — over one shared corpus while editing, adding, and
 deleting files between tool calls; every frame must byte-match. Duplicate-
 token queries are excluded (contract §0a oracle defect)."""
 
@@ -29,7 +29,7 @@ servers = {
         [str(REPO / ".venv-oracle/bin/rac"), "mcp"], root, work / "xdg-a"
     ),
     "native": mcp_parity.Server(
-        [str(REPO / "rust/target/release/rac-mcp")], root, work / "xdg-b"
+        [str(REPO / "rust/target/release/decided-mcp")], root, work / "xdg-b"
     ),
 }
 for s in servers.values():

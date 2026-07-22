@@ -1,5 +1,5 @@
 //! SHA-256 (FIPS 180-4) — the digest behind eval's `corpus_hash` /
-//! `query_set_hash` (`hashlib.sha256` in `src/rac/services/eval.py`).
+//! `query_set_hash` (`hashlib.sha256` in `src/asdecided/services/eval.py`).
 //! Hand-rolled to keep the workspace dependency-free (same posture as the
 //! harness glob); verified against the FIPS test vectors below.
 

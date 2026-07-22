@@ -3,7 +3,7 @@
 
 Historically this script *generated* ``rust/spec/artifact-specs.json`` from the
 Python engine — the spec was one-directional, extracted from Python and read
-only by Rust. Guard 1 inverted that: ``src/rac/spec/artifact-specs.json`` is now
+only by Rust. Guard 1 inverted that: ``src/asdecided/spec/artifact-specs.json`` is now
 the single shared, language-neutral source both engines read (Python loads
 ``ARTIFACT_SPECS`` from it at import; the Rust engine embeds the same bytes via
 ``include_str!``).
@@ -11,7 +11,7 @@ the single shared, language-neutral source both engines read (Python loads
 With the file as the source, drift can no longer happen *between an engine and
 the file* — both read it. What this gate guards instead is that the shared file
 still reconstructs the exact registry the engine contract expects: it loads the
-file the way ``rac.core.artifacts`` does, re-derives the ordered dataclass shape,
+file the way ``asdecided.core.artifacts`` does, re-derives the ordered dataclass shape,
 and checks it against the live ``ARTIFACT_SPECS`` (same object, so this also
 proves the loader stays wired to the shared file) and against the frozen oracle
 golden vector ``rust/rac-engine/tests/vectors/spec.json``. Any hand-edit of the
@@ -31,10 +31,10 @@ import json
 import sys
 from pathlib import Path
 
-from rac.core.artifacts import ARTIFACT_SPECS, RELATIONSHIP_DESCRIPTIONS
+from asdecided.core.artifacts import ARTIFACT_SPECS, RELATIONSHIP_DESCRIPTIONS
 
 REPO = Path(__file__).resolve().parents[2]
-SHARED = REPO / "src/rac/spec/artifact-specs.json"
+SHARED = REPO / "src/asdecided/spec/artifact-specs.json"
 GOLDEN = REPO / "rust/rac-engine/tests/vectors/spec.json"
 
 

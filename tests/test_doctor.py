@@ -1,6 +1,6 @@
 """Repository health diagnostic battery (v0.23.0, WS3).
 
-Exercises each defect class `rac doctor` aggregates or adds — malformed front
+Exercises each defect class `decided doctor` aggregates or adds — malformed front
 matter, broken/cyclic relationships, duplicate id, orphan, high-fan-out hub, and
 injection-style content — and pins the contract: a paste-ready fix per finding,
 exit non-zero only on an error, warnings (incl. injection) exit zero, and
@@ -13,9 +13,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from rac import cli
-from rac.services import doctor
-from rac.services.portfolio import build_portfolio_summary
+from asdecided import cli
+from asdecided.services import doctor
+from asdecided.services.portfolio import build_portfolio_summary
 
 # --- fixture builders --------------------------------------------------------
 
@@ -306,7 +306,7 @@ def test_cli_json_shape(tmp_path, capsys):
 
 
 def test_eval_fixture_corpus_passes_doctor():
-    # The in-repo grounding-eval fixture must pass `rac doctor` clean (exit 0):
+    # The in-repo grounding-eval fixture must pass `decided doctor` clean (exit 0):
     # no validation or relationship-integrity error. Orphan warnings on a
     # retrieval fixture are expected and advisory.
     report = doctor.diagnose("tests/eval/corpus")

@@ -3,24 +3,20 @@
   "installed": true,
   "skills": [
     {
-      "skill": "rac-artifacts",
-      "path": ".claude/skills/rac-artifacts/SKILL.md"
+      "skill": "decided-artifacts",
+      "path": ".claude/skills/decided-artifacts/SKILL.md"
     },
     {
-      "skill": "rac-review",
-      "path": ".claude/skills/rac-review/SKILL.md"
+      "skill": "decided-review",
+      "path": ".claude/skills/decided-review/SKILL.md"
     },
     {
-      "skill": "rac-ingest",
-      "path": ".claude/skills/rac-ingest/SKILL.md"
+      "skill": "decided-import",
+      "path": ".claude/skills/decided-import/SKILL.md"
     },
     {
-      "skill": "rac-import",
-      "path": ".claude/skills/rac-import/SKILL.md"
-    },
-    {
-      "skill": "rac-capture",
-      "path": ".claude/skills/rac-capture/SKILL.md"
+      "skill": "decided-capture",
+      "path": ".claude/skills/decided-capture/SKILL.md"
     }
   ]
 }

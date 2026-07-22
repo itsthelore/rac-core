@@ -12,8 +12,8 @@ import time
 
 import pytest
 
-from rac.core.operations import CancellationToken, OperationCancelled, Progress
-from rac.services.repository import SOURCE_RELATIONSHIPS, load_repository
+from asdecided.core.operations import CancellationToken, OperationCancelled, Progress
+from asdecided.services.repository import SOURCE_RELATIONSHIPS, load_repository
 
 DECISIONS = 600
 REQUIREMENTS = 600

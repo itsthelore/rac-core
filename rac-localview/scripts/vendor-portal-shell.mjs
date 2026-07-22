@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
  * vendor-portal-shell.mjs — build the Portal shell and vendor it into
- * the RAC package as data files. No dependencies.
+ * the AsDecided package as data files. No dependencies.
  *
  * Runs the shell-only viewer build (`npm run build:viewer -- --shell-only`),
- * then writes into ../src/rac/templates/portal/:
+ * then writes into ../src/asdecided/templates/portal/:
  *
- *   lore-portal-shell.html   the shell, with a provenance comment
+ *   asdecided-portal-shell.html   the shell, with a provenance comment
  *                            inserted immediately after the doctype
  *   provenance.json          { lore_web_commit, shell_sha256,
  *                              viewer_source_sha256, vendored_with }
@@ -42,7 +42,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(root, '..');
-const portalDir = resolve(repoRoot, 'src/rac/templates/portal');
+const portalDir = resolve(repoRoot, 'src/asdecided/templates/portal');
 const shellBuildPath = resolve(root, 'dist/viewer/lore-portal-shell.html');
 
 /* ---- 1. build the shell ------------------------------------------------ */
@@ -107,7 +107,7 @@ const vendoredShell = shell.replace(
 );
 
 mkdirSync(portalDir, { recursive: true });
-const shellPath = resolve(portalDir, 'lore-portal-shell.html');
+const shellPath = resolve(portalDir, 'asdecided-portal-shell.html');
 writeFileSync(shellPath, vendoredShell);
 
 const shellSha256 = createHash('sha256').update(vendoredShell).digest('hex');

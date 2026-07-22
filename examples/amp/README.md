@@ -16,8 +16,8 @@ the full text and relationships when it needs them.
 pip install rac-core   # the `rac` CLI and the `lore` MCP server
 ```
 
-You also need a repository with a RAC corpus under `rac/` (run `rac quickstart`
-in a fresh project, or point at this repository's own `rac/`).
+You also need a repository with a RAC corpus under `decisions/` (run `decided quickstart`
+in a fresh project, or point at this repository's own `decisions/`).
 
 ## 1. Generate `AGENTS.md` (the push)
 
@@ -25,7 +25,7 @@ Amp reads `AGENTS.md` for project conventions and guidance. RAC generates one
 from your recorded decisions:
 
 ```bash
-rac export rac/ --agent-rules
+decided export decisions/ --agent-rules
 ```
 
 This writes (or updates) `AGENTS.md` at the repository root, inside a managed
@@ -33,7 +33,7 @@ block — anything you keep outside the block is preserved. Amp discovers it
 automatically: it reads `AGENTS.md` from the working directory up through the
 parent directories, and from subtrees as it opens files there. Re-run the export
 whenever decisions change (a pre-commit hook or CI step keeps it current); the
-`agent-rules` drift check (`rac export rac/ --agent-rules --check`) fails if it
+`agent-rules` drift check (`decided export decisions/ --agent-rules --check`) fails if it
 falls out of sync.
 
 > Amp falls back to `CLAUDE.md` when no `AGENTS.md` is present — RAC generates
@@ -48,9 +48,9 @@ Amp configures MCP servers under the `amp.mcpServers` key. Add a project-level
 ```json
 {
   "amp.mcpServers": {
-    "lore": {
-      "command": "rac",
-      "args": ["mcp", "--root", "."]
+    "asdecided": {
+      "command": "decided-mcp",
+      "args": ["--root", "."]
     }
   }
 }
@@ -73,16 +73,16 @@ Use the bundled grounding demo to see the difference a connection makes. The
 once with no MCP server and once with `lore` connected — and shows the
 unconnected agent violating a recorded decision that the connected one respects.
 Point Amp at it the same way (its prompt and corpus are client-agnostic), or run
-`rac mcp --root examples/guide` and ask Amp to implement the task in
+`decided-mcp --root examples/guide` and ask Amp to implement the task in
 `examples/guide/task/`.
 
 ## Enforcement is separate, and Amp-agnostic
 
 RAC supplies context and enforces *after* the edit — it does not intercept Amp's
-edit loop (ADR-067). Whatever Amp writes is checked by `rac validate` and
-`rac relationships --validate` (and the GitHub Action / pre-merge gate) the same
+edit loop (ADR-067). Whatever Amp writes is checked by `decided validate` and
+`decided relationships --validate` (and the GitHub Action / pre-merge gate) the same
 as any other contributor; the trust boundary is human PR review and CI, not the
-agent. The per-edit `rac hook` is specific to Claude Code, so with Amp you rely
+agent. The per-edit `decided hook` is specific to Claude Code, so with Amp you rely
 on the CI gate rather than a live pre-edit block — Amp's loop stays untouched and
 adds no latency.
 
@@ -90,6 +90,6 @@ adds no latency.
 
 | Surface | Command | What Amp does with it |
 | --- | --- | --- |
-| `AGENTS.md` | `rac export rac/ --agent-rules` | Reads it every session — decisions are always in context |
-| `lore` MCP | `.amp/settings.json` → `rac mcp --root .` | Calls `find_decisions` / `get_related` to consult the full corpus on demand |
-| CI gate | `rac validate` · `rac relationships --validate` | Enforces the corpus on every PR, regardless of which agent edited |
+| `AGENTS.md` | `decided export decisions/ --agent-rules` | Reads it every session — decisions are always in context |
+| `lore` MCP | `.amp/settings.json` → `decided-mcp --root .` | Calls `find_decisions` / `get_related` to consult the full corpus on demand |
+| CI gate | `decided validate` · `decided relationships --validate` | Enforces the corpus on every PR, regardless of which agent edited |

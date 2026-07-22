@@ -19,12 +19,12 @@ import socket
 
 import pytest
 
-from rac.services.export import build_corpus_export
-from rac.services.gate import build_gate
-from rac.services.relationships import validate_relationships
-from rac.services.resolve import find_artifacts
-from rac.services.review import build_review
-from rac.services.validate import validate_directory
+from asdecided.services.export import build_corpus_export
+from asdecided.services.gate import build_gate
+from asdecided.services.relationships import validate_relationships
+from asdecided.services.resolve import find_artifacts
+from asdecided.services.review import build_review
+from asdecided.services.validate import validate_directory
 
 _DECISION = """\
 ---

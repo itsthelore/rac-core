@@ -20391,7 +20391,7 @@
     [
      "error",
      "artifact-oversize",
-     "artifact exceeds the 1048576-byte file cap (set RAC_MAX_FILE_BYTES to raise it)",
+     "artifact exceeds the 1048576-byte file cap (set DECIDED_MAX_FILE_BYTES to raise it)",
      1
     ]
    ],
@@ -20421,7 +20421,7 @@
     [
      "error",
      "artifact-oversize",
-     "artifact exceeds the 16-byte file cap (set RAC_MAX_FILE_BYTES to raise it)",
+     "artifact exceeds the 16-byte file cap (set DECIDED_MAX_FILE_BYTES to raise it)",
      1
     ]
    ],

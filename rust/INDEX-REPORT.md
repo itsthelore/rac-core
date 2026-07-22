@@ -56,7 +56,7 @@ native writer is byte-identical to the oracle's store.
 ## Referee battery (green after every batch, cache-on AND cache-off)
 
 - CLI suite 130/130; closure suite 391/391; retrieve suite 44/44 —
-  unchanged, `RAC_NO_CACHE=1` base env as always.
+  unchanged, `DECIDED_NO_CACHE=1` base env as always.
 - Index suite (`rust/parity-cases-index.json`): 45 cases — P0
   cache-state smoke (13), B1 `rac index` (17), B3 find/store (8),
   B4 incremental validate (6), B5 parallel build (1) — every case
@@ -77,7 +77,7 @@ native writer is byte-identical to the oracle's store.
 ## Cache-state differential matrix
 
 Cold, warm, stale (edit/add/delete/rename), bypassed
-(`--no-cache` / `RAC_NO_CACHE`), verify, corrupt-segment,
+(`--no-cache` / `DECIDED_NO_CACHE`), verify, corrupt-segment,
 truncated-header, unwritable-cache-dir, config-change invalidation,
 top-level root keys — for `find`, `validate`, and the MCP server, each
 byte-compared against the oracle in the same state. Native
@@ -123,7 +123,7 @@ fixture corpus, including duplicate-token queries.
    oracle freshens inside each known tool. Latency-only, no wire
    bytes.
 
-## RAC_TIMING scorecard
+## DECIDED_TIMING scorecard
 
 `rac-timing:` lines (stderr-only, env-gated, never a parity surface)
 ported on both cold-build paths with the oracle's exact shape:

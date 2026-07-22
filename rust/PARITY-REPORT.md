@@ -52,10 +52,10 @@ Outcome:
 - Oracle nondeterminism: none observed.
 
 Campaign 2 (full command matrix: adds resolve, find, schema, export,
-review, relationships inspection, stdin validation, RAC_MAX_FILE_BYTES
+review, relationships inspection, stdin validation, DECIDED_MAX_FILE_BYTES
 variation, path edge forms, multi-file corpora; 10 engine-pair runs per
 input): ~4,800 further inputs across seeds 201-306. Found and FIXED eight
-more engine bugs — surrogate handling on stdin, RAC_MAX_FILE_BYTES
+more engine bugs — surrogate handling on stdin, DECIDED_MAX_FILE_BYTES
 Python-int() env parsing, CRLF export edges, fence-at-EOF rendering, a
 stats largest-file tie-break, export --documents/--json body_html edge
 cases, and C0 control stripping in tight list items (markdown-it-py
@@ -112,7 +112,7 @@ mainline, the Rust engine should be certified against rac-spec's
    crash or fix it (we recommend: report, don't crash — and patch the
    Python oracle separately).
 2. **Version strings** — the oracle emits a setuptools-scm git-describe
-   version. The Rust binary takes `RAC_RS_VERSION` (spike seam); the
+   version. The Rust binary takes `DECIDED_RS_VERSION` (spike seam); the
    harness pins it to the oracle's exact string, so comparisons stay
    byte-for-byte. A mainline port would build the same version string in.
 3. **argparse usage/help bodies** — width-wrapped by Python's
@@ -173,7 +173,7 @@ while its no-cache path double-counts duplicate query tokens — warm and
 cold Python return different ranking-evidence bytes for duplicate-token
 queries, violating ADR-112's byte-identical invariant. The Rust engine
 matches the no-cache path (per contract 06); the MCP harness pins
-`RAC_NO_CACHE=1` on both servers as the canonical comparison path. This
+`DECIDED_NO_CACHE=1` on both servers as the canonical comparison path. This
 needs an upstream Python fix at mainline, after which the pin can drop.
 
 Declared gaps: HTTP transport (ADR-098) not ported (stdio only);

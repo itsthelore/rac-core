@@ -17,8 +17,8 @@ test it against your Omnigent version before relying on it in production.
 pip install rac-core   # the `rac` CLI and the `lore` MCP server
 ```
 
-A repository with a RAC corpus under `rac/` (run `rac quickstart`, or use this
-repository's own `rac/`). A working Omnigent install with at least one harness
+A repository with a RAC corpus under `decisions/` (run `decided quickstart`, or use this
+repository's own `decisions/`). A working Omnigent install with at least one harness
 configured.
 
 ## 1. Generate `AGENTS.md` (the push)
@@ -28,7 +28,7 @@ agent's `instructions` at the `AGENTS.md` RAC generates from your recorded
 decisions:
 
 ```bash
-rac export rac/ --agent-rules
+decided export decisions/ --agent-rules
 ```
 
 This writes `AGENTS.md` at the repo root, in a managed block (your own content
@@ -38,7 +38,7 @@ is preserved). Reference it from the agent's `config.yaml`:
 instructions: AGENTS.md
 ```
 
-Re-run the export when decisions change (`rac export rac/ --agent-rules --check`
+Re-run the export when decisions change (`decided export decisions/ --agent-rules --check`
 fails CI on drift). The same file is read verbatim whichever harness the agent
 is bound to, so the grounding survives a one-line harness swap.
 
@@ -69,7 +69,7 @@ the corpus root.
 
 RAC supplies context and enforces *after* the edit (ADR-067) — it does not
 intercept the agent's loop. Whatever the agent writes is checked by
-`rac validate` and `rac relationships --validate` (and the GitHub Action /
+`decided validate` and `decided relationships --validate` (and the GitHub Action /
 pre-merge gate) the same as any other contributor; the trust boundary is human
 PR review and CI (ADR-065). That holds no matter which harness Omnigent routes
 to, and adds no latency to the loop.
@@ -94,4 +94,4 @@ unconnected run violates: [`examples/guide/`](../guide/demo.md).
 | --- | --- | --- |
 | `AGENTS.md` | `instructions: AGENTS.md` in `config.yaml` | Reads it as the agent's instructions |
 | `lore` MCP | `tools.lore` (`type: mcp`) in `config.yaml` | Calls `find_decisions` / `get_related` on demand |
-| CI gate | `rac validate` · `rac relationships --validate` | Enforces on every PR |
+| CI gate | `decided validate` · `decided relationships --validate` | Enforces on every PR |

@@ -10,8 +10,8 @@ from pathlib import Path
 
 from conftest import fixture_path
 
-from rac.services.compare import compare_states, load_state
-from rac.services.intent import (
+from asdecided.services.compare import compare_states, load_state
+from asdecided.services.intent import (
     ACCEPTANCE_CRITERIA_REMOVED,
     AMBIGUITY_INTRODUCED,
     CONSTRAINT_REMOVED,

@@ -3,7 +3,7 @@
     "subject": "Full Rust rewrite of the rac-core engine (native-engine-spike), byte-parity-gated against the frozen Python oracle, derived-index cache deleted by design",
     "before_ref": "Python oracle: src/ at origin/main 1e0e2c7 (re-pinned; byte-identical src/ to original pin 21c8be4), .venv-oracle rac 0.1.dev50+g21c8be403; plus oracle-next at retrieval branch f2091be (0.1.dev55+gf2091befd) for the retrieve surface",
     "after_ref": "rust/target/release/rac at 3b557ce (rustc 1.94.1, lto=thin, rayon 4 threads)",
-    "select_how": "two binaries, identical argv/cwd/env via the parity harness seam (piped stdio, neutralized telemetry, RAC_NO_CACHE=1)",
+    "select_how": "two binaries, identical argv/cwd/env via the parity harness seam (piped stdio, neutralized telemetry, DECIDED_NO_CACHE=1)",
     "reference_node": "4 vCPU / 15 GiB container (ADR-107 reference class)",
     "measured_at": "2026-07-11T20:45Z re-pin re-measurement (startup/single-file/live corpus, 423 artifacts); synthetic matrix from 16:31Z final run (engine delta since is additive only)",
     "rerun": [

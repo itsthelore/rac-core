@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rac.services.links import detect_unlinked_references
+from asdecided.services.links import detect_unlinked_references
 
 DECISION = """\
 ---

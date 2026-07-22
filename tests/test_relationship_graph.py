@@ -8,9 +8,9 @@ exposes to the MCP get_summary tool.
 
 from __future__ import annotations
 
-from rac.core.relationship_types import REGISTRY, edge_spec
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.relationships import (
+from asdecided.core.relationship_types import REGISTRY, edge_spec
+from asdecided.services.portfolio import build_portfolio_summary
+from asdecided.services.relationships import (
     ISSUE_RELATIONSHIP_CYCLE,
     ISSUE_TARGET_SUPERSEDED,
     ISSUE_TARGET_TYPE_MISMATCH,

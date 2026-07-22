@@ -1,4 +1,4 @@
-//! OKF bundle export (`rac.output.okf` + the recency join) — `rac export
+//! OKF bundle export (`decided.output.okf` + the recency join) — `decided export
 //! --okf`, per PORT-CONTRACT.d/17 §4.
 //!
 //! A derived tree of Markdown files: one per typed artifact at its path
@@ -16,7 +16,7 @@ use crate::gitinfo;
 use crate::markdown::split_frontmatter;
 use crate::pycompat::{py_relpath, py_strip, read_text_universal};
 
-/// RAC `type` → OKF `type` (`rac.core.okf.OKF_TYPE`, ADR-048).
+/// RAC `type` → OKF `type` (`decided.core.okf.OKF_TYPE`, ADR-048).
 fn okf_type(rac_type: &str) -> &'static str {
     match rac_type {
         "requirement" => "Requirement",
@@ -161,7 +161,7 @@ fn index(export: &CorpusExport, rel: &HashMap<&str, String>) -> String {
         format!("# {} \u{2014} Knowledge Index", export.corpus_name),
         String::new(),
         format!(
-            "A derived OKF bundle of {count} {noun}. The RAC corpus is authoritative; \
+            "A derived OKF bundle of {count} {noun}. The AsDecided corpus is authoritative; \
              this index is a generated entry point."
         ),
     ];

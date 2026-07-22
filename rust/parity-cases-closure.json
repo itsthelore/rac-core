@@ -5,7 +5,7 @@
    "argv": ["new", "decision", "rac/decisions/pinned-choice.md"],
    "expect_exit": 0,
    "normalize": ["mask-ids"],
-   "capture": ["rac/**", ".rac/**"]},
+   "capture": ["rac/**", ".decided/**"]},
 
   {"id": "closure-smoke-new-requirement-mkdir-json",
    "sandbox": {"fixture": "rust/fixtures/closure/mini-repo",
@@ -271,13 +271,13 @@
    "argv": ["decisions-for", "rac/prompts", "rac/"],
    "expect_exit": 0},
   {"id": "decisions-for-governed-multi-human",
-   "argv": ["decisions-for", "src/rac/mcp/server.py", "rac/"],
+   "argv": ["decisions-for", "src/asdecided/mcp/server.py", "rac/"],
    "expect_exit": 0},
   {"id": "decisions-for-governed-json",
    "argv": ["decisions-for", "rac/prompts", "rac/", "--json"],
    "expect_exit": 0},
   {"id": "decisions-for-governed-multi-json",
-   "argv": ["decisions-for", "src/rac/mcp/server.py", "rac/", "--json"],
+   "argv": ["decisions-for", "src/asdecided/mcp/server.py", "rac/", "--json"],
    "expect_exit": 0},
   {"id": "decisions-for-outside-repo-human",
    "argv": ["decisions-for", "/etc/passwd", "rac/"],
@@ -298,7 +298,7 @@
    "argv": ["decisions-for", "rac/prompts", "rac/", "--recursive", "--json"],
    "expect_exit": 0},
   {"id": "decisions-for-err-not-a-dir",
-   "argv": ["decisions-for", "src/rac/cli.py", "/nonexistent_dir"],
+   "argv": ["decisions-for", "src/asdecided/cli.py", "/nonexistent_dir"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "decisions-for-err-missing-path",
    "argv": ["decisions-for"],
@@ -562,7 +562,7 @@
    "argv": ["usage", "--json", "--share", "--version"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "usage-version-after-extras",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["usage", "extra", "--version"],
    "expect_exit": 0},
   {"id": "usage-err-extra-positional",
@@ -830,14 +830,14 @@
    "argv": ["telemetry", "bogus", "--version"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "telemetry-version-beats-bad-action",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["telemetry", "--version", "bogus"],
    "expect_exit": 0},
   {"id": "telemetry-version-after-extras",
    "sandbox": {},
    "env": {"XDG_CONFIG_HOME": "{SANDBOX}/xdg-config",
            "XDG_STATE_HOME": "{SANDBOX}/xdg-state",
-           "RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+           "DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["telemetry", "on", "off", "--version"],
    "expect_exit": 0,
    "capture": ["xdg-config/**"]},
@@ -918,7 +918,7 @@
    "argv": ["skill", "bogusaction", "--version"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "skill-version-beats-bad-action",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["skill", "--version", "bogusaction"],
    "expect_exit": 0},
   {"id": "skill-err-extra-positional-nothing-written",
@@ -1011,7 +1011,7 @@
    "argv": ["hook", "--style", "bogus", "--version"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "hook-version-beats-bad-style",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["hook", "--version", "--style", "bogus"],
    "expect_exit": 0},
   {"id": "hook-missing-action",
@@ -1185,11 +1185,11 @@
    "expect_exit": 2, "expect_nonzero_ok": true,
    "capture": ["rac/**"]},
   {"id": "new-version-beats-bad-type",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["new", "bogus", "x.md", "--version"],
    "expect_exit": 0},
   {"id": "new-version-first",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["new", "--version", "bogus", "x.md"],
    "expect_exit": 0},
 
@@ -1210,7 +1210,7 @@
    "cwd": "{SANDBOX}",
    "argv": ["init"],
    "expect_exit": 0,
-   "capture": [".rac/**"]},
+   "capture": [".decided/**"]},
   {"id": "init-custom-key-inline-json",
    "sandbox": {"setup": [{"step": "mkdir", "path": "repo"}]},
    "cwd": "{SANDBOX}",
@@ -1222,7 +1222,7 @@
    "cwd": "{SANDBOX}",
    "argv": ["init"],
    "expect_exit": 0,
-   "capture": [".rac/**"]},
+   "capture": [".decided/**"]},
   {"id": "init-idempotent-ignores-profile",
    "sandbox": {"fixture": "rust/fixtures/closure/mini-repo"},
    "cwd": "{SANDBOX}",
@@ -1255,16 +1255,16 @@
    "cwd": "{SANDBOX}",
    "argv": ["init", "--key", "OTHER"],
    "expect_exit": 1, "expect_nonzero_ok": true,
-   "capture": [".rac/**"]},
+   "capture": [".decided/**"]},
   {"id": "init-err-invalid-key-beats-conflict",
    "sandbox": {"fixture": "rust/fixtures/closure/mini-repo"},
    "cwd": "{SANDBOX}",
    "argv": ["init", "--key", "bad"],
    "expect_exit": 2, "expect_nonzero_ok": true,
-   "capture": [".rac/**"]},
+   "capture": [".decided/**"]},
   {"id": "init-err-malformed-config",
    "sandbox": {"setup": [
-     {"step": "write", "path": "repo/.rac/config.yaml",
+     {"step": "write", "path": "repo/.decided/config.yaml",
       "content": "repository_key: [broken\n"}
    ]},
    "cwd": "{SANDBOX}",
@@ -1284,7 +1284,7 @@
    "argv": ["init", "--profile", "bogus", "--version"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "init-version-beats-bad-choice",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["init", "--version", "--profile", "bogus"],
    "expect_exit": 0},
   {"id": "init-err-key-missing-value-beats-version",
@@ -1324,7 +1324,7 @@
    "cwd": "{SANDBOX}",
    "argv": ["init", "--org-endpoint", "https://lore.example.com/mcp"],
    "expect_exit": 0,
-   "capture": [".mcp.json", ".cursor/**", ".rac/**"]},
+   "capture": [".mcp.json", ".cursor/**", ".decided/**"]},
 
   {"id": "init-org-endpoint-merges-user-config-json",
    "sandbox": {"setup": [
@@ -1339,7 +1339,7 @@
 
   {"id": "init-org-endpoint-idempotent-human",
    "sandbox": {"setup": [
-     {"step": "write", "path": "repo/.rac/config.yaml", "content": "repository_key: RAC\n"},
+     {"step": "write", "path": "repo/.decided/config.yaml", "content": "repository_key: RAC\n"},
      {"step": "write", "path": "repo/.mcp.json",
       "content": "{\n  \"mcpServers\": {\n    \"lore-org\": {\n      \"type\": \"http\",\n      \"url\": \"https://lore.example.com/mcp\"\n    }\n  }\n}\n"},
      {"step": "write", "path": "repo/.cursor/mcp.json",
@@ -1361,7 +1361,7 @@
 
   {"id": "init-org-endpoint-err-malformed-mcp-json",
    "sandbox": {"setup": [
-     {"step": "write", "path": "repo/.rac/config.yaml", "content": "repository_key: RAC\n"},
+     {"step": "write", "path": "repo/.decided/config.yaml", "content": "repository_key: RAC\n"},
      {"step": "write", "path": "repo/.mcp.json", "content": "{not json"}
    ]},
    "cwd": "{SANDBOX}",
@@ -1401,7 +1401,7 @@
    "capture": ["proj/**"]},
   {"id": "quickstart-using-verb-human",
    "sandbox": {"setup": [
-     {"step": "write", "path": "proj/.rac/config.yaml",
+     {"step": "write", "path": "proj/.decided/config.yaml",
       "content": "repository_key: RAC\n"}
    ]},
    "cwd": "{SANDBOX}",
@@ -1458,7 +1458,7 @@
    "capture": ["proj/**"]},
   {"id": "quickstart-err-key-conflict",
    "sandbox": {"setup": [
-     {"step": "write", "path": "proj/.rac/config.yaml",
+     {"step": "write", "path": "proj/.decided/config.yaml",
       "content": "repository_key: OTHER\n"}
    ]},
    "cwd": "{SANDBOX}",
@@ -1469,7 +1469,7 @@
    "argv": ["quickstart", "/nonexistent_dir_xyz"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "quickstart-version-beats-bad-key",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["quickstart", "zzz", "--key", "bad", "--version"],
    "expect_exit": 0},
   {"id": "quickstart-err-type-missing-value-beats-version",
@@ -1573,7 +1573,7 @@
    "argv": ["rename", "RAC-AAAAAAAAAAAA"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "rename-version-after-flags",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["rename", "RAC-AAAAAAAAAAAA", "RAC-ZZZZZZZZZZZZ", "nowhere", "--apply", "--version"],
    "expect_exit": 0},
 
@@ -1621,7 +1621,7 @@
    "capture": ["corpus/**"]},
   {"id": "migrate-toplevel-dry-run-human",
    "sandbox": {"setup": [
-     {"step": "write", "path": "corpus/.rac/config.yaml",
+     {"step": "write", "path": "corpus/.decided/config.yaml",
       "content": "repository_key: RAC\n"},
      {"step": "write", "path": "corpus/top-decision.md",
       "content": "# Top Decision\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n\n## Status\n\nAccepted\n"},
@@ -1635,7 +1635,7 @@
    "capture": ["corpus/**"]},
   {"id": "migrate-recursive-flag-json",
    "sandbox": {"setup": [
-     {"step": "write", "path": "corpus/.rac/config.yaml",
+     {"step": "write", "path": "corpus/.decided/config.yaml",
       "content": "repository_key: RAC\n"},
      {"step": "write", "path": "corpus/top-decision.md",
       "content": "# Top Decision\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n\n## Status\n\nAccepted\n"},
@@ -1648,7 +1648,7 @@
    "normalize": ["mask-ids"]},
   {"id": "migrate-wide-alignment-human",
    "sandbox": {"setup": [
-     {"step": "write", "path": "corpus/.rac/config.yaml",
+     {"step": "write", "path": "corpus/.decided/config.yaml",
       "content": "repository_key: RAC\n"},
      {"step": "write", "path": "corpus/a.md",
       "content": "# D One\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\nq\n\n## Status\n\nAccepted\n"},
@@ -1674,7 +1674,7 @@
    "argv": ["migrate", "frobnicate", "x", "--version"],
    "expect_exit": 2, "expect_nonzero_ok": true},
   {"id": "migrate-version-beats-bad-target",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["migrate", "--version", "frobnicate", "x"],
    "expect_exit": 0},
   {"id": "migrate-err-missing-directory",
@@ -1692,7 +1692,7 @@
    "capture": ["corpus/**"]},
 
   {"id": "export-html-out-fixture",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
    "cwd": "{SANDBOX}",
    "argv": ["export", "rac", "--html", "--out", "out.html"],
@@ -1700,7 +1700,7 @@
    "capture": ["out.html"]},
 
   {"id": "export-html-default-out",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
    "cwd": "{SANDBOX}",
    "argv": ["export", "rac", "--html"],
@@ -1708,7 +1708,7 @@
    "capture": ["lore-export.html"]},
 
   {"id": "export-html-out-eq-form",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
    "cwd": "{SANDBOX}",
    "argv": ["export", "rac", "--html", "--out=alt.html"],
@@ -1716,7 +1716,7 @@
    "capture": ["alt.html"]},
 
   {"id": "export-html-subcorpus-name",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "sandbox": {"fixture": "rust/fixtures/closure/export/proj"},
    "cwd": "{SANDBOX}",
    "argv": ["export", "rac/decisions", "--html", "--out", "d.html"],
@@ -1724,7 +1724,7 @@
    "capture": ["d.html"]},
 
   {"id": "export-html-empty-corpus",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "sandbox": {"setup": [
      {"step": "mkdir", "path": "empty"}
    ]},
@@ -1766,7 +1766,7 @@
    "capture": ["*.html", "okf-bundle/**"]},
 
   {"id": "export-html-version-beats-missing-dir",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["export", "bogus", "--html", "--version"],
    "expect_exit": 0},
 
@@ -2045,7 +2045,7 @@
    "capture": ["out/**"]},
 
   {"id": "export-okf-version-beats-missing-dir",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["export", "bogus", "--okf", "--version"],
    "expect_exit": 0},
 
@@ -2464,12 +2464,12 @@
    "expect_nonzero_ok": true},
 
   {"id": "watchkeeper-version-beats-bad-dir",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["watchkeeper", "bogusdir", "--version"],
    "expect_exit": 0},
 
   {"id": "watchkeeper-version-after-extra-positional",
-   "env": {"RAC_RS_VERSION": "0.1.dev50+g21c8be403"},
+   "env": {"DECIDED_RS_VERSION": "0.1.dev50+g21c8be403"},
    "argv": ["watchkeeper", "rac/", "extra", "--version"],
    "expect_exit": 0}
 ]

@@ -14,13 +14,13 @@ from pathlib import Path
 import pytest
 from textual.widgets import Input, Markdown, OptionList, Static, TabbedContent
 
-from rac.explorer import commands, firstrun, mascot
-from rac.explorer.app import ExplorerApp
-from rac.explorer.screens.main import MainScreen
-from rac.explorer.widgets import RepositoryPanel
-from rac.explorer.widgets.palette import CommandPalette
-from rac.explorer.widgets.sidebar import NavigationSidebar
-from rac.explorer.widgets.views import ContextView
+from asdecided.explorer import commands, firstrun, mascot
+from asdecided.explorer.app import ExplorerApp
+from asdecided.explorer.screens.main import MainScreen
+from asdecided.explorer.widgets import RepositoryPanel
+from asdecided.explorer.widgets.palette import CommandPalette
+from asdecided.explorer.widgets.sidebar import NavigationSidebar
+from asdecided.explorer.widgets.views import ContextView
 
 FIXTURES = Path(__file__).parent / "fixtures" / "portfolio_summary"
 
@@ -76,7 +76,7 @@ def test_summary_states_meaning_in_text_not_colour_alone():
     # DESIGN-visual-system: health carries a text label at every level.
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     assert app  # construction requires no terminal
-    from rac.explorer.widgets import _health_label
+    from asdecided.explorer.widgets import _health_label
 
     assert _health_label(90) == "✓ Healthy"
     assert _health_label(60) == "! Needs Attention"
@@ -97,7 +97,7 @@ async def test_core_failure_renders_recoverable_error_state(tmp_path, monkeypatc
     # A genuine core failure renders the recoverable error screen. WS4 makes a
     # malformed/non-UTF-8 artifact degrade gracefully, so the failure is injected
     # at the load boundary rather than via bad file content.
-    import rac.explorer.adapter as adapter_mod
+    import asdecided.explorer.adapter as adapter_mod
 
     def _boom(*args, **kwargs):
         raise RuntimeError("core exploded")
@@ -112,7 +112,7 @@ async def test_core_failure_renders_recoverable_error_state(tmp_path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_reload_binding_recovers_after_repair(tmp_path, monkeypatch):
-    import rac.explorer.adapter as adapter_mod
+    import asdecided.explorer.adapter as adapter_mod
 
     real_load = adapter_mod.load_repository
     state = {"broken": True}
@@ -183,7 +183,7 @@ async def test_rac_lantern_theme_is_the_default():
 
 @pytest.mark.asyncio
 async def test_theme_preference_overrides_the_default(monkeypatch, tmp_path):
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     save_preferences(Preferences(theme="textual-light"))
@@ -206,7 +206,7 @@ async def test_rac_parchment_light_theme_is_registered():
 
 @pytest.mark.asyncio
 async def test_parchment_theme_preference_applies(monkeypatch, tmp_path):
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     save_preferences(Preferences(theme="rac-parchment"))
@@ -217,7 +217,7 @@ async def test_parchment_theme_preference_applies(monkeypatch, tmp_path):
 
 
 def test_type_tag_hue_adapts_to_theme():
-    from rac.explorer.widgets.sidebar import type_tag
+    from asdecided.explorer.widgets.sidebar import type_tag
 
     # The tag text is identical across themes; only the hue changes so it stays
     # legible on light or dark (v0.26.1) — meaning never rides on colour alone.
@@ -240,7 +240,7 @@ async def test_rac_high_contrast_theme_is_registered():
 
 @pytest.mark.asyncio
 async def test_type_tags_recolour_on_theme_change():
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     save_preferences(Preferences(artifact_grouping="type"))
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
@@ -262,7 +262,7 @@ async def test_type_tags_recolour_on_theme_change():
 
 
 def test_portfolio_state_counts_links_and_humanises_id():
-    from rac.explorer.adapter import ExplorerAdapter
+    from asdecided.explorer.adapter import ExplorerAdapter
 
     adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
     adapter.load()
@@ -277,7 +277,7 @@ def test_portfolio_state_counts_links_and_humanises_id():
 def test_recency_index_returns_a_mapping():
     # Outside git (a fixture is not a repository) recency is simply empty — the
     # column degrades and never raises (v0.26.2).
-    from rac.explorer.adapter import ExplorerAdapter
+    from asdecided.explorer.adapter import ExplorerAdapter
 
     adapter = ExplorerAdapter(str(FIXTURES / "valid_clean"))
     adapter.load()
@@ -301,7 +301,7 @@ async def test_list_command_opens_portfolio_table():
 
 @pytest.mark.asyncio
 async def test_portfolio_sort_cycles():
-    from rac.explorer.widgets.views import PortfolioView
+    from asdecided.explorer.widgets.views import PortfolioView
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -318,7 +318,7 @@ async def test_portfolio_sort_cycles():
 async def test_portfolio_filter_narrows_to_invalid():
     from textual.widgets import DataTable
 
-    from rac.explorer.widgets.views import PortfolioView
+    from asdecided.explorer.widgets.views import PortfolioView
 
     app = ExplorerApp(str(FIXTURES / "invalid_known"))
     async with app.run_test() as pilot:
@@ -336,7 +336,7 @@ async def test_portfolio_filter_narrows_to_invalid():
 
 
 def test_fuzzy_matches_substring_and_subsequence():
-    from rac.explorer.widgets.views import _fuzzy
+    from asdecided.explorer.widgets.views import _fuzzy
 
     assert _fuzzy("explorer", "ADR-028 Explorer Delivery Surface")  # substring, case-insensitive
     assert _fuzzy("expsurf", "Explorer Delivery Surface")  # subsequence (chars in order)
@@ -347,7 +347,7 @@ def test_fuzzy_matches_substring_and_subsequence():
 async def test_portfolio_fuzzy_search_narrows_rows():
     from textual.widgets import DataTable, Input
 
-    from rac.explorer.widgets.views import PortfolioView
+    from asdecided.explorer.widgets.views import PortfolioView
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -369,7 +369,7 @@ async def test_portfolio_fuzzy_search_narrows_rows():
 
 @pytest.mark.asyncio
 async def test_list_command_searches_names_when_not_a_type():
-    from rac.explorer.widgets.views import PortfolioView
+    from asdecided.explorer.widgets.views import PortfolioView
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -385,7 +385,7 @@ async def test_list_command_searches_names_when_not_a_type():
 async def test_list_command_scopes_to_a_type():
     from textual.widgets import DataTable
 
-    from rac.explorer.widgets.views import PortfolioView
+    from asdecided.explorer.widgets.views import PortfolioView
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -404,7 +404,7 @@ async def test_list_command_scopes_to_a_type():
 
 
 def test_layout_preference_defaults_to_frame_and_validates(monkeypatch, tmp_path):
-    from rac.explorer.preferences import Preferences, load_preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, load_preferences, save_preferences
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     assert Preferences().layout == "frame"
@@ -417,8 +417,8 @@ def test_layout_preference_defaults_to_frame_and_validates(monkeypatch, tmp_path
 
 @pytest.mark.asyncio
 async def test_split_layout_master_drives_detail(monkeypatch, tmp_path):
-    from rac.explorer.preferences import Preferences, save_preferences
-    from rac.explorer.widgets.views import ContextView, PortfolioView
+    from asdecided.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.widgets.views import ContextView, PortfolioView
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     save_preferences(Preferences(layout="split"))
@@ -439,7 +439,7 @@ async def test_split_layout_master_drives_detail(monkeypatch, tmp_path):
 async def test_layout_switches_live_in_settings(monkeypatch, tmp_path):
     from dataclasses import replace
 
-    from rac.explorer.widgets.views import PortfolioView, SettingsChanged
+    from asdecided.explorer.widgets.views import PortfolioView, SettingsChanged
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))  # default: frame
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
@@ -469,7 +469,7 @@ def test_stylesheet_ships_as_package_data():
     # resolve through the package, not the source tree.
     from importlib.resources import files
 
-    assert files("rac.explorer").joinpath("explorer.tcss").is_file()
+    assert files("asdecided.explorer").joinpath("explorer.tcss").is_file()
 
 
 # --- focus routing and the palette ------------------------------------------------
@@ -602,7 +602,7 @@ async def test_status_line_hints_follow_the_focused_panel():
 
 @pytest.mark.asyncio
 async def test_sidebar_groups_carry_type_tags_and_counts():
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     save_preferences(Preferences(artifact_grouping="type"))
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
@@ -636,7 +636,7 @@ async def test_sidebar_marks_invalid_artifacts():
 
 @pytest.mark.asyncio
 async def test_sidebar_keeps_expansion_and_cursor_across_reload():
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     save_preferences(Preferences(artifact_grouping="type"))  # lazy-population coverage
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
@@ -680,7 +680,7 @@ async def test_sidebar_enter_opens_context_and_esc_returns_home():
 
 @pytest.mark.asyncio
 async def test_flat_grouping_preference_lists_rows_without_headers(monkeypatch, tmp_path):
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     save_preferences(Preferences(artifact_grouping="flat"))
@@ -863,8 +863,8 @@ async def test_links_tab_traverses_to_a_connected_artifact():
 def test_render_sections_uses_knowledge_graph_grammar():
     # DESIGN-knowledge-graph: dependency chain, Impact Analysis block, lineage
     # chain — a pure render over RelationshipsView, no fixtures needed.
-    from rac.explorer.state import RelationshipLink, RelationshipsView
-    from rac.explorer.widgets.views import render_sections
+    from asdecided.explorer.state import RelationshipLink, RelationshipsView
+    from asdecided.explorer.widgets.views import render_sections
 
     view = RelationshipsView(
         id="REQ-004",
@@ -913,7 +913,7 @@ async def test_slash_relationships_opens_the_links_tab():
 
 @pytest.mark.asyncio
 async def test_context_e_opens_external_editor(monkeypatch):
-    import rac.explorer.editor as editor_mod
+    import asdecided.explorer.editor as editor_mod
 
     launched: list[list[str]] = []
     monkeypatch.setattr(editor_mod, "_RUNNER", lambda cmd: launched.append(list(cmd)))
@@ -934,7 +934,7 @@ async def test_context_e_opens_external_editor(monkeypatch):
 async def test_context_e_terminal_editor_needs_suspend(monkeypatch):
     # Headless sessions cannot suspend; the terminal-editor path must fall
     # back to guidance instead of crashing or launching blind.
-    import rac.explorer.editor as editor_mod
+    import asdecided.explorer.editor as editor_mod
 
     launched: list[list[str]] = []
     monkeypatch.setattr(editor_mod, "_BLOCKING_RUNNER", lambda cmd: launched.append(list(cmd)))
@@ -1055,7 +1055,7 @@ async def test_slash_browse_with_type_lists_in_results_view():
 
 @pytest.mark.asyncio
 async def test_slash_browse_behaves_the_same_in_type_grouping():
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     save_preferences(Preferences(artifact_grouping="type"))
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
@@ -1135,7 +1135,7 @@ async def test_preferences_command_still_opens_settings():
 
 @pytest.mark.asyncio
 async def test_settings_theme_cycles_live_and_persists():
-    from rac.explorer.preferences import load_preferences
+    from asdecided.explorer.preferences import load_preferences
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -1150,7 +1150,7 @@ async def test_settings_theme_cycles_live_and_persists():
 
 @pytest.mark.asyncio
 async def test_settings_toggle_persists_across_sessions():
-    from rac.explorer.preferences import load_preferences
+    from asdecided.explorer.preferences import load_preferences
 
     directory = str(FIXTURES / "valid_clean")
     app = ExplorerApp(directory)
@@ -1167,7 +1167,7 @@ async def test_settings_toggle_persists_across_sessions():
 
 @pytest.mark.asyncio
 async def test_settings_editor_row_takes_typed_input():
-    from rac.explorer.preferences import load_preferences
+    from asdecided.explorer.preferences import load_preferences
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -1194,7 +1194,7 @@ async def test_settings_editor_row_takes_typed_input():
 
 @pytest.mark.asyncio
 async def test_settings_grouping_cycles_three_values_and_rebuilds_sidebar():
-    from rac.explorer.preferences import load_preferences
+    from asdecided.explorer.preferences import load_preferences
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -1296,7 +1296,7 @@ async def test_first_run_welcome_shows_mascot_when_enabled(fresh_first_run):
 
 @pytest.mark.asyncio
 async def test_mascot_can_be_disabled(fresh_first_run, tmp_path, monkeypatch):
-    from rac.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.preferences import Preferences, save_preferences
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     save_preferences(Preferences(mascot=False))
@@ -1323,7 +1323,7 @@ def test_mascot_frames_are_equal_sized_per_state():
 
 @pytest.mark.asyncio
 async def test_mascot_animates_only_with_animations_on(fresh_first_run):
-    from rac.explorer.widgets.views import HomeView
+    from asdecided.explorer.widgets.views import HomeView
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -1357,8 +1357,8 @@ async def test_mascot_animates_only_with_animations_on(fresh_first_run):
 
 @pytest.mark.asyncio
 async def test_mascot_searches_while_loading(fresh_first_run):
-    from rac.explorer.state import LoadProgressState
-    from rac.explorer.widgets.views import HomeView
+    from asdecided.explorer.state import LoadProgressState
+    from asdecided.explorer.widgets.views import HomeView
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -1393,7 +1393,7 @@ def test_mascot_interaction_message_is_deterministic():
 
 @pytest.mark.asyncio
 async def test_mascot_selection_appends_response(fresh_first_run):
-    from rac.explorer.widgets.views import MascotArt
+    from asdecided.explorer.widgets.views import MascotArt
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -1418,7 +1418,7 @@ async def test_mascot_selection_appends_response(fresh_first_run):
 
 @pytest.mark.asyncio
 async def test_mascot_click_selects(fresh_first_run):
-    from rac.explorer.widgets.views import MascotArt
+    from asdecided.explorer.widgets.views import MascotArt
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -1431,8 +1431,8 @@ async def test_mascot_click_selects(fresh_first_run):
 
 @pytest.mark.asyncio
 async def test_mascot_interaction_can_be_disabled(fresh_first_run, tmp_path, monkeypatch):
-    from rac.explorer.preferences import Preferences, save_preferences
-    from rac.explorer.widgets.views import MascotArt
+    from asdecided.explorer.preferences import Preferences, save_preferences
+    from asdecided.explorer.widgets.views import MascotArt
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     save_preferences(Preferences(mascot_interaction=False))
@@ -1601,7 +1601,7 @@ async def test_slash_import_reports_unsupported(tmp_path):
 
 @pytest.mark.asyncio
 async def test_recommendations_export_previews_then_writes(tmp_path, monkeypatch):
-    from rac.explorer.screens.confirm import ConfirmWriteScreen
+    from asdecided.explorer.screens.confirm import ConfirmWriteScreen
 
     monkeypatch.chdir(tmp_path)  # export defaults to recommendations.md in cwd
     app = ExplorerApp(str(FIXTURES / "broken_rels"))
@@ -1774,7 +1774,7 @@ async def test_results_title_carries_the_count_and_empty_uses_mascot():
 
 @pytest.mark.asyncio
 async def test_sidebar_e_opens_highlighted_artifact_in_editor(monkeypatch):
-    import rac.explorer.editor as editor_mod
+    import asdecided.explorer.editor as editor_mod
 
     launched: list[list[str]] = []
     monkeypatch.setattr(editor_mod, "_RUNNER", lambda cmd: launched.append(list(cmd)))
@@ -1795,7 +1795,7 @@ async def test_sidebar_e_opens_highlighted_artifact_in_editor(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_app_bar_shows_short_version_and_tilde_path(tmp_path, monkeypatch):
-    from rac.explorer.widgets.appbar import _SHORT_VERSION, _tilde
+    from asdecided.explorer.widgets.appbar import _SHORT_VERSION, _tilde
 
     assert "+" not in _SHORT_VERSION  # local-build suffix trimmed
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -1903,7 +1903,7 @@ async def test_watcher_does_not_run_after_a_load_error(tmp_path, monkeypatch):
     # A genuine load failure (WS4: not a malformed artifact, which now degrades
     # gracefully) leaves the watcher with no baseline; a file change does not
     # auto-recover — only `r` does.
-    import rac.explorer.adapter as adapter_mod
+    import asdecided.explorer.adapter as adapter_mod
 
     def _boom(*args, **kwargs):
         raise RuntimeError("core exploded")
@@ -2216,7 +2216,7 @@ async def test_bare_new_lists_creatable_types_and_usage():
 
 @pytest.mark.asyncio
 async def test_new_previews_then_confirm_creates_and_opens(tmp_path):
-    from rac.services.init import init_repository
+    from asdecided.services.init import init_repository
 
     init_repository(str(tmp_path), key="RAC")
     (tmp_path / "seed.md").write_text("# Seed Note\n", encoding="utf-8")
@@ -2248,7 +2248,7 @@ async def test_new_previews_then_confirm_creates_and_opens(tmp_path):
 
 @pytest.mark.asyncio
 async def test_new_onto_an_existing_file_refuses_and_writes_nothing(tmp_path):
-    from rac.services.init import init_repository
+    from asdecided.services.init import init_repository
 
     init_repository(str(tmp_path), key="RAC")
     taken = tmp_path / "taken.md"
@@ -2290,7 +2290,7 @@ async def test_stats_command_renders_the_dashboard():
 
 @pytest.mark.asyncio
 async def test_first_run_editor_prompt_persists_a_typed_command(fresh_first_run):
-    from rac.explorer.preferences import load_preferences
+    from asdecided.explorer.preferences import load_preferences
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -2310,7 +2310,7 @@ async def test_first_run_editor_prompt_persists_a_typed_command(fresh_first_run)
 
 @pytest.mark.asyncio
 async def test_first_run_editor_prompt_empty_enter_keeps_the_fallback(fresh_first_run):
-    from rac.explorer.preferences import load_preferences
+    from asdecided.explorer.preferences import load_preferences
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:
@@ -2323,7 +2323,7 @@ async def test_first_run_editor_prompt_empty_enter_keeps_the_fallback(fresh_firs
 
 @pytest.mark.asyncio
 async def test_first_run_editor_prompt_esc_skips_without_writing(fresh_first_run, monkeypatch):
-    from rac.explorer.preferences import preferences_path
+    from asdecided.explorer.preferences import preferences_path
 
     app = ExplorerApp(str(FIXTURES / "valid_clean"))
     async with app.run_test() as pilot:

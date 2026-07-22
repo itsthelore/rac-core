@@ -25,7 +25,7 @@ run 'pip install rac-core'
 run 'claude mcp add lore -- rac mcp'
 run 'rac find "test topology" rac/'
 run 'rac resolve ADR-027 rac/'
-run 'rac validate rac/'
+run 'decided validate decisions/'
 sleep 1.5
 
 # --- How this recording was made (reproducibility) -------------------------

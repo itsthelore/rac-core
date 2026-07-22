@@ -35,7 +35,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "rac/decisions/adr-bad-status.md"
+                  "uri": "decisions/decisions/adr-bad-status.md"
                 }
               }
             }
@@ -51,7 +51,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "rac/requirements/feature.md"
+                  "uri": "decisions/requirements/feature.md"
                 }
               }
             }
@@ -67,7 +67,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "rac/requirements/feature.md"
+                  "uri": "decisions/requirements/feature.md"
                 }
               }
             }
@@ -83,7 +83,7 @@
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "rac/requirements/feature.md"
+                  "uri": "decisions/requirements/feature.md"
                 },
                 "region": {
                   "startLine": 7

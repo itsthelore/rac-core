@@ -30,12 +30,12 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from rac.mcp.server import build_server
-from rac.services import index_store
-from rac.services.derived_cache import DerivedIndexCache
-from rac.services.index import build_repository_index
-from rac.services.index_store import ReadModelView
-from rac.services.resolve import resolve_in_index
+from asdecided.mcp.server import build_server
+from asdecided.services import index_store
+from asdecided.services.derived_cache import DerivedIndexCache
+from asdecided.services.index import build_repository_index
+from asdecided.services.index_store import ReadModelView
+from asdecided.services.resolve import resolve_in_index
 
 # Crockford-base32-clean ids (no I/L/O/U) so Core never falls back to the stem
 # for the *canonical* id — the stem is then a distinct legacy alias.

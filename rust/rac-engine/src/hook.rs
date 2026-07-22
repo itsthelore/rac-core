@@ -1,8 +1,8 @@
-//! Bundled git hooks — `rac hook` (PORT-CONTRACT.d/15).
+//! Bundled git hooks — `decided hook` (PORT-CONTRACT.d/15).
 //!
-//! Port of `src/rac/core/hooks.py` (registry + resource loading) and
-//! `src/rac/services/hook.py` (`install_hook`). The packaged `<style>.sh`
-//! scripts are embedded verbatim from `rust/rac-engine/assets/hooks/`,
+//! Port of `src/asdecided/core/hooks.py` (registry + resource loading) and
+//! `src/asdecided/services/hook.py` (`install_hook`). The packaged `<style>.sh`
+//! scripts are embedded verbatim from `rust/decided-engine/assets/hooks/`,
 //! vendored byte-identical copies of the Python package files (unit test
 //! below); the INSTALLED file is named `<style>` with no extension, under
 //! `<dir>/.git/hooks/`, and is made executable (hook brief, landmines 1-2).
@@ -50,7 +50,7 @@ fn hook_bytes(style: &str) -> Option<&'static [u8]> {
         .map(|i| HOOK_BYTES[i])
 }
 
-/// Result of a `rac hook install` run (`InstalledHook`; `bytes_written` is
+/// Result of a `decided hook install` run (`InstalledHook`; `bytes_written` is
 /// in the oracle's model but absent from its JSON).
 pub struct InstalledHook {
     pub style: String,
@@ -80,7 +80,7 @@ pub fn install_hook(target_dir: &str, style: &str) -> Result<InstalledHook, Hook
     let git_dir = Path::new(target_dir).join(".git");
     if !git_dir.is_dir() {
         return Err(HookInstallError::NotAGitWorkTree(format!(
-            "no .git directory in {target_dir}; run `rac hook install` from a git repository root"
+            "no .git directory in {target_dir}; run `decided hook install` from a git repository root"
         )));
     }
 
@@ -88,7 +88,7 @@ pub fn install_hook(target_dir: &str, style: &str) -> Result<InstalledHook, Hook
     let dest = Path::new(&dest_display);
     if dest.exists() {
         return Err(HookInstallError::FileExists(format!(
-            "{dest_display} already exists; rac hook install never overwrites"
+            "{dest_display} already exists; decided hook install never overwrites"
         )));
     }
 
@@ -118,14 +118,12 @@ mod tests {
     use super::*;
 
     /// The embedded scripts must be byte-identical to the Python package
-    /// files the oracle installs (hook brief, landmine 1). Sizes pinned from
-    /// the extraction probe (post-commit.sh 572 B, pre-commit.sh 625 B).
+    /// files the retirement oracle installs.
     #[test]
     fn embedded_bytes_equal_python_package_files() {
-        let expected_sizes = [572usize, 625];
         for (i, spec) in BUNDLED_HOOKS.iter().enumerate() {
             let py_path = format!(
-                "{}/../../src/rac/hooks/{}.sh",
+                "{}/../../src/asdecided/hooks/{}.sh",
                 env!("CARGO_MANIFEST_DIR"),
                 spec.style
             );
@@ -136,7 +134,6 @@ mod tests {
                 "embedded {} differs from the Python package file",
                 spec.style
             );
-            assert_eq!(HOOK_BYTES[i].len(), expected_sizes[i]);
         }
     }
 

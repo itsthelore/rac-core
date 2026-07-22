@@ -88,9 +88,9 @@ lint trio, the smoke set, plus the dogfood gates:
 .venv/bin/python -m ruff check src/ tests/
 .venv/bin/python -m ruff format --check src/ tests/
 .venv/bin/python -m mypy src/
-.venv/bin/rac gate rac/        # validate + relationships + review, one command
-.venv/bin/rac eval --check     # grounding-eval gate
-.venv/bin/rac doctor rac/      # doctor dogfood
+.venv/bin/decided gate decisions/        # validate + relationships + review, one command
+.venv/bin/decided eval --check     # grounding-eval gate
+.venv/bin/decided doctor decisions/      # doctor dogfood
 ```
 
 ### 3. Full local CI (merge grid) — the complete suite
@@ -120,16 +120,16 @@ before pushing:
 Coverage is reported (not gated) in CI; the same view locally:
 
 ```bash
-.venv/bin/python -m pytest -q --cov=src/rac --cov-report=term-missing
+.venv/bin/python -m pytest -q --cov=src/asdecided --cov-report=term-missing
 ```
 
 ## Source layout
 
 The package uses a `src/` layout. The import package `rac` is organized into layers
-([ADR-023](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-023-clean-break-internal-refactors.md)):
+([ADR-023](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-023-clean-break-internal-refactors.md)):
 
 ```text
-src/rac/
+src/decisions/
   cli.py       command-line entry point
   core/        domain primitives: parsing, classification, identity, schemas
   services/    repository capabilities: inspect, stats, relationships, ingest
@@ -151,9 +151,9 @@ src/rac/
 2. **Review your artifact changes** with RAC's own tooling:
 
    ```bash
-   .venv/bin/rac validate rac/
-   .venv/bin/rac relationships rac/ --validate
-   .venv/bin/rac review rac/
+   .venv/bin/decided validate decisions/
+   .venv/bin/decided relationships decisions/ --validate
+   .venv/bin/decided review decisions/
    ```
 
    `validate` checks every recognized artifact against its schema;
@@ -163,5 +163,5 @@ src/rac/
    result here will be a red build.
 
 3. **Follow the commit conventions** in
-   [`rac/prompts/rac-agent-commit-guidelines.md`](https://github.com/itsthelore/rac-core/blob/main/rac/prompts/rac-agent-commit-guidelines.md):
+   [`decisions/prompts/rac-agent-commit-guidelines.md`](https://github.com/itsthelore/rac-core/blob/main/decisions/prompts/rac-agent-commit-guidelines.md):
    `<type>(<area>): <summary> [reference]`.

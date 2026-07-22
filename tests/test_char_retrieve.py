@@ -11,14 +11,14 @@ a reimplementation can be checked against it byte-for-byte.
 Scope covers the human-readable rendering and input-edge behaviors left unpinned
 by the existing batteries:
 
-- ``rac find --explain`` human score-components line and attribution snippet
-  (``src/rac/output/human.py`` ``render_find_human``);
-- ``rac index`` human manifest layout, including the empty ``(none)`` output
+- ``decided find --explain`` human score-components line and attribution snippet
+  (``src/asdecided/output/human.py`` ``render_find_human``);
+- ``decided index`` human manifest layout, including the empty ``(none)`` output
   (``render_index_human``);
 - punctuation/whitespace-only queries that tokenize to nothing;
 - the case-sensitive ``--type`` filter (``search_index``);
 - the ``--top-level`` / ``--recursive`` CLI recursion flags on ``index``;
-- the ``rac resolve`` duplicate-ID human layout and sorted path order.
+- the ``decided resolve`` duplicate-ID human layout and sorted path order.
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ import json
 
 import pytest
 
-import rac.output.human as human
-from rac.cli import main
-from rac.services.resolve import find_artifacts
+import asdecided.output.human as human
+from asdecided.cli import main
+from asdecided.services.resolve import find_artifacts
 
 # --- corpora ------------------------------------------------------------------
 
@@ -157,7 +157,7 @@ def test_find_explain_human_body_snippet_bracket(catalog, capsys):
     )
 
 
-# --- Finding 3: `rac index` human manifest layout -----------------------------
+# --- Finding 3: `decided index` human manifest layout -----------------------------
 
 
 def test_index_human_row_layout(tmp_path, capsys):
@@ -267,7 +267,7 @@ def test_cli_index_top_level_wins_over_recursive(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["artifact_count"] == 1
 
 
-# --- Finding 7: `rac resolve` duplicate human layout --------------------------
+# --- Finding 7: `decided resolve` duplicate human layout --------------------------
 
 
 def test_cli_resolve_duplicate_human_layout(tmp_path, capsys):
@@ -277,7 +277,7 @@ def test_cli_resolve_duplicate_human_layout(tmp_path, capsys):
     (d / "copy.md").write_text(DECISION, encoding="utf-8")
     assert main(["resolve", CANONICAL_ID, str(tmp_path)]) == 1
     err = capsys.readouterr().err
-    assert err.startswith(f"rac: duplicate artifact ID: {CANONICAL_ID}\n\nFound in:\n- ")
+    assert err.startswith(f"decided: duplicate artifact ID: {CANONICAL_ID}\n\nFound in:\n- ")
     # The "- " path bullets are emitted in sorted() order.
     paths = [ln[2:] for ln in err.splitlines() if ln.startswith("- ")]
     assert paths == [

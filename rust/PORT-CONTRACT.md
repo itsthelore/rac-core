@@ -84,7 +84,7 @@ byte-neutral (section 01, verified in 06), so the oracle runs with defaults.
 6. **Version string is injectable.** The oracle emits a setuptools-scm
    git-describe version (`0.1.dev50+g…`) in `--version`, `export --json`
    (`rac_version`), and SARIF (`driver.version`). The Rust binary takes its
-   version from the `RAC_RS_VERSION` env var when set (spike-only seam); the
+   version from the `DECIDED_RS_VERSION` env var when set (spike-only seam); the
    parity harness sets it to the oracle's exact string so comparison stays
    byte-for-byte with no masking.
 7. **Git-derived fields come from real git.** Recency/staleness (`find`,

@@ -4,10 +4,10 @@ Scope: the B4 commands ported for roadmap:native-cli-closure —
 `rac skill`, `rac hook` (agent-integration installers, both WRITE), and
 `rac eval` (the ADR-066 grounding benchmark and CI gate). Every claim
 below was verified against the oracle (`.venv-oracle/bin/rac`,
-`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/rac/cli.py`
-(`cmd_skill`/`cmd_hook`/`cmd_eval`), `src/rac/core/{skills,hooks}.py`,
-`src/rac/services/{skill,hook,eval}.py`, `src/rac/skills/*/SKILL.md`,
-`src/rac/hooks/*.sh`, `src/rac/output/{human,json}.py`
+`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/asdecided/cli.py`
+(`cmd_skill`/`cmd_hook`/`cmd_eval`), `src/asdecided/core/{skills,hooks}.py`,
+`src/asdecided/services/{skill,hook,eval}.py`, `src/asdecided/skills/*/SKILL.md`,
+`src/asdecided/hooks/*.sh`, `src/asdecided/output/{human,json}.py`
 (`render_skill_*`, `render_hook_*`). Rust: new `rac-engine/src/skill.rs`,
 `hook.rs`, `eval.rs`, `sha256.rs`; vendored assets under
 `rac-engine/assets/{skills,hooks}/`; `output.rs` (`render_skill_*`,
@@ -143,7 +143,7 @@ The scored path is a pure function of (corpus bytes, query set,
 retrieval code): no embeddings, no LLM judge, no network, no clock.
 Exactly TWO nondeterministic fields exist, both in diagnostic
 `metadata`: `generated_at` (`datetime.now(UTC).isoformat()`) and
-`lore_version` (git-describe / `RAC_RS_VERSION` seam). The parity
+`lore_version` (git-describe / `DECIDED_RS_VERSION` seam). The parity
 harness masks precisely those two (`mask-json-field:metadata.
 generated_at`, `…lore_version`); `corpus_hash`, `query_set_hash`,
 `n_queries`, all metrics and all `per_query` rows compare RAW.

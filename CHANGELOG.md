@@ -6,6 +6,17 @@ details, release history over commit history.
 
 ## Unreleased
 
+**AsDecided is now the product and runtime surface.** The supported native
+executables are `decided` and `decided-mcp`; there is no `rac` executable,
+Python CLI fallback, or `RAC_*` environment compatibility layer. New
+repositories use `.decided/config.yaml` and `decisions/`. Existing repositories
+can preview and apply the explicit migration with `decided migrate layout .
+--dry-run` and `decided migrate layout .`; existing `RAC-*` artifact IDs and
+published machine-schema keys remain unchanged. Rust is the normal product
+engine, Explorer is retired, and ingest leaves core as an ancillary connector.
+The Python implementation remains only as an SDK/packaging bridge and bounded
+retirement-certification oracle.
+
 **Decisions on pull requests — the Herald action**
 (`pr-decision-surfacing`). A pull request that edits governed code now gets
 one advisory comment naming the live decisions whose declared `## Applies

@@ -21,7 +21,7 @@ uv tool install rac-core
 This puts a single command on your path: `rac`. Check it:
 
 ```bash
-rac --version
+decided --version
 ```
 
 ### No Python? Use the container image
@@ -30,7 +30,7 @@ Every release also publishes an official container image to GHCR, versioned
 in lockstep with the PyPI package — the image tag is the same SemVer version:
 
 ```bash
-docker run --rm -v "$PWD:/work" ghcr.io/itsthelore/rac:latest validate rac/
+docker run --rm -v "$PWD:/work" ghcr.io/itsthelore/rac:latest validate decisions/
 ```
 
 In CI, pin a release tag rather than `latest`, or pin by digest for
@@ -51,7 +51,7 @@ rac-gate:
     name: ghcr.io/itsthelore/rac:2026.6.1
     entrypoint: [""]
   script:
-    - rac gate rac/
+    - decided gate decisions/
 ```
 
 Bitbucket Pipelines:
@@ -61,10 +61,10 @@ pipelines:
   pull-requests:
     '**':
       - step:
-          name: rac gate
+          name: decided gate
           image: ghcr.io/itsthelore/rac:2026.6.1
           script:
-            - rac gate rac/
+            - decided gate decisions/
 ```
 
 Jenkins (declarative pipeline, docker agent):
@@ -73,8 +73,8 @@ Jenkins (declarative pipeline, docker agent):
 pipeline {
   agent { docker { image 'ghcr.io/itsthelore/rac:2026.6.1' } }
   stages {
-    stage('rac gate') {
-      steps { sh 'rac gate rac/' }
+    stage('decided gate') {
+      steps { sh 'decided gate decisions/' }
     }
   }
 }
@@ -88,24 +88,24 @@ and [Watchkeeper](watchkeeper.md)) over the raw image.
 The fastest path is one command. From your repository root:
 
 ```bash
-rac quickstart
+decided quickstart
 ```
 
-That establishes your repository identity (`.rac/config.yaml`) and scaffolds a
-first requirement under `rac/requirements/first-requirement.md`, then prints the
-single next step — `rac validate <path>`. Edit the `TODO` placeholders and you
-have a valid artifact. Use `--type decision` (or any name from `rac templates`)
+That establishes your repository identity (`.decided/config.yaml`) and scaffolds a
+first requirement under `decisions/requirements/first-requirement.md`, then prints the
+single next step — `decided validate <path>`. Edit the `TODO` placeholders and you
+have a valid artifact. Use `--type decision` (or any name from `decided templates`)
 to start with a different artifact type.
 
-> Prefer the steps explicitly? `rac init` establishes the identity namespace and
-> `rac new <type> <path>` scaffolds one artifact; `rac quickstart` just does both
+> Prefer the steps explicitly? `decided init` establishes the identity namespace and
+> `decided new <type> <path>` scaffolds one artifact; `decided quickstart` just does both
 > at once for an empty corpus. See [cli.md](cli.md).
 
 If you would rather hand-author the file, scaffold the body from a schema
 template instead:
 
 ```bash
-rac schema requirement --template > login-flow.md
+decided schema requirement --template > login-flow.md
 ```
 
 That writes a starter file with the sections a requirement should have. Open it and
@@ -132,15 +132,15 @@ first-class authentication flow, so access control is inconsistent across the ap
 ```
 
 > RAC classifies artifacts by their `##` section headings — no front matter to
-> memorize. (Identity ids in frontmatter are assigned for you by `rac new` and
-> `rac quickstart`.) See [artifacts.md](artifacts.md).
+> memorize. (Identity ids in frontmatter are assigned for you by `decided new` and
+> `decided quickstart`.) See [artifacts.md](artifacts.md).
 
 ## 3. Validate it
 
 `validate` checks a file (or a whole directory) for structural problems:
 
 ```bash
-rac validate login-flow.md
+decided validate login-flow.md
 ```
 
 ```text
@@ -159,7 +159,7 @@ but not required.
 `inspect` tells you what RAC thinks the file is and how complete it is:
 
 ```bash
-rac inspect login-flow.md
+decided inspect login-flow.md
 ```
 
 ```text
@@ -181,7 +181,7 @@ Missing Sections:
 `improve` suggests what to add next:
 
 ```bash
-rac improve login-flow.md
+decided improve login-flow.md
 ```
 
 ```text
@@ -199,7 +199,7 @@ Missing Recommended:
       • What would change the approach if it turned out false?
 ```
 
-Add a `## Risks` and `## Assumptions` section and run `rac inspect` again to watch
+Add a `## Risks` and `## Assumptions` section and run `decided inspect` again to watch
 the confidence climb.
 
 ## Where to go next

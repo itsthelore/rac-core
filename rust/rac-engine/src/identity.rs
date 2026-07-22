@@ -1,4 +1,4 @@
-//! Artifact identity (`rac.core.identity`), per PORT-CONTRACT.d/04 §3.
+//! Artifact identity (`decided.core.identity`), per PORT-CONTRACT.d/04 §3.
 //!
 //! Precedence: frontmatter id -> `## ID` section -> `spec.id_field` (dead
 //! today) -> filename-stem `^[A-Za-z]+-\d+` prefix -> whole stem. Pathlib

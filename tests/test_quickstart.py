@@ -1,10 +1,10 @@
-"""Tests for rac.services.quickstart and the `rac quickstart` CLI (v0.13.0).
+"""Tests for asdecided.services.quickstart and the `decided quickstart` CLI (v0.13.0).
 
 Pins the guided first-run contract: one command establishes identity and
 scaffolds a single starter artifact under rac/<family>/, only into an empty
 corpus (ADR-044), never overwriting; a populated corpus is refused (exit 1),
 a bad key or type is a usage error (exit 2), and the created artifact is a
-valid, classifiable artifact like any `rac new` output.
+valid, classifiable artifact like any `decided new` output.
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ import os
 
 import pytest
 
-from rac.cli import main
-from rac.core.classification import classify
-from rac.core.markdown import parse_file
-from rac.core.templates import TemplateNotFound
-from rac.core.validation import has_errors, validate
-from rac.services.init import InvalidRepositoryKey, RepositoryKeyConflict, init_repository
-from rac.services.quickstart import CorpusNotEmpty, quickstart
+from asdecided.cli import main
+from asdecided.core.classification import classify
+from asdecided.core.markdown import parse_file
+from asdecided.core.templates import TemplateNotFound
+from asdecided.core.validation import has_errors, validate
+from asdecided.services.init import InvalidRepositoryKey, RepositoryKeyConflict, init_repository
+from asdecided.services.quickstart import CorpusNotEmpty, quickstart
 
 # Deterministic generator for tests: a fixed, syntactically canonical suffix.
 FIXED_SUFFIX = "01JY4M8X2QZ7"
@@ -38,16 +38,16 @@ def test_quickstart_establishes_identity_and_scaffolds(tmp_path):
     assert result.created
     assert result.repository_key == "RAC"
     assert result.artifact.artifact_type == "requirement"
-    starter = tmp_path / "rac" / "requirements" / "first-requirement.md"
+    starter = tmp_path / "decisions" / "requirements" / "first-requirement.md"
     assert starter.is_file()
     assert result.artifact.path == str(starter)
     # The config namespace exists too.
-    assert (tmp_path / ".rac" / "config.yaml").is_file()
+    assert (tmp_path / ".decided" / "config.yaml").is_file()
 
 
 def test_quickstart_artifact_is_valid_and_classifies(tmp_path):
     quickstart(str(tmp_path), id_generator=fixed_generator)
-    starter = tmp_path / "rac" / "requirements" / "first-requirement.md"
+    starter = tmp_path / "decisions" / "requirements" / "first-requirement.md"
     product = parse_file(str(starter))
     assert not has_errors(validate(product))
     assert classify(product).type == "requirement"
@@ -58,7 +58,7 @@ def test_quickstart_respects_key_and_type(tmp_path):
         str(tmp_path), key="PROJ", artifact_type="decision", id_generator=fixed_generator
     )
     assert result.repository_key == "PROJ"
-    starter = tmp_path / "rac" / "decisions" / "first-decision.md"
+    starter = tmp_path / "decisions" / "decisions" / "first-decision.md"
     assert starter.is_file()
     assert result.artifact.id == "PROJ-01JY4M8X2QZ7"
 
@@ -66,9 +66,9 @@ def test_quickstart_respects_key_and_type(tmp_path):
 def test_quickstart_refuses_non_empty_corpus(tmp_path):
     # Seed one real artifact via init + create, then quickstart must refuse.
     init_repository(str(tmp_path), key="RAC")
-    rac_dir = tmp_path / "rac" / "requirements"
+    rac_dir = tmp_path / "decisions" / "requirements"
     rac_dir.mkdir(parents=True)
-    from rac.services.create import create_artifact
+    from asdecided.services.create import create_artifact
 
     create_artifact("requirement", str(rac_dir / "existing.md"), id_generator=fixed_generator)
     with pytest.raises(CorpusNotEmpty):
@@ -76,26 +76,26 @@ def test_quickstart_refuses_non_empty_corpus(tmp_path):
 
 
 def test_quickstart_refuses_before_writing_into_populated_corpus(tmp_path):
-    # A recognised artifact present but no .rac yet: refusal must not write
+    # A recognised artifact present but no .decided yet: refusal must not write
     # config or a starter file.
-    rac_dir = tmp_path / "rac" / "decisions"
+    rac_dir = tmp_path / "decisions" / "decisions"
     rac_dir.mkdir(parents=True)
     init_repository(str(tmp_path), key="RAC")
-    from rac.services.create import create_artifact
+    from asdecided.services.create import create_artifact
 
     create_artifact("decision", str(rac_dir / "d.md"), id_generator=fixed_generator)
-    (tmp_path / ".rac").rename(tmp_path / ".rac-stashed")  # remove identity again
+    (tmp_path / ".decided").rename(tmp_path / ".decided-stashed")  # remove identity again
     with pytest.raises(CorpusNotEmpty):
         quickstart(str(tmp_path), id_generator=fixed_generator)
-    assert not (tmp_path / ".rac").exists()
-    assert not (tmp_path / "rac" / "requirements").exists()
+    assert not (tmp_path / ".decided").exists()
+    assert not (tmp_path / "decisions" / "requirements").exists()
 
 
 def test_quickstart_unknown_type_raises_before_any_write(tmp_path):
     with pytest.raises(TemplateNotFound):
         quickstart(str(tmp_path), artifact_type="nonsense")
-    assert not (tmp_path / ".rac").exists()
-    assert not (tmp_path / "rac").exists()
+    assert not (tmp_path / ".decided").exists()
+    assert not (tmp_path / "decisions").exists()
 
 
 def test_quickstart_invalid_key_raises(tmp_path):
@@ -121,8 +121,8 @@ def test_cli_quickstart_human_exit_0(tmp_path, capsys, monkeypatch):
     assert rc == 0
     out = capsys.readouterr().out
     assert "Initialized repository key RAC" in out
-    assert "rac validate" in out
-    assert (tmp_path / "rac" / "requirements" / "first-requirement.md").is_file()
+    assert "decided validate" in out
+    assert (tmp_path / "decisions" / "requirements" / "first-requirement.md").is_file()
 
 
 def test_cli_quickstart_then_validate_passes(tmp_path, monkeypatch):
@@ -130,7 +130,7 @@ def test_cli_quickstart_then_validate_passes(tmp_path, monkeypatch):
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     assert main(["quickstart"]) == 0
-    assert main(["validate", "rac/requirements/first-requirement.md"]) == 0
+    assert main(["validate", "decisions/requirements/first-requirement.md"]) == 0
 
 
 def test_cli_quickstart_json_shape(tmp_path, capsys):
@@ -172,10 +172,10 @@ def test_cli_quickstart_missing_directory_exit_2(tmp_path):
     assert exc.value.code == 2
 
 
-# --- usage-sharing prompt parity with `rac init` (ADR-041) --------------------
+# --- usage-sharing prompt parity with `decided init` (ADR-041) --------------------
 #
 # quickstart is the new first-run entry point, so it carries the same one-time
-# consent question as `rac init`: TTY-gated, default No, never with --json,
+# consent question as `decided init`: TTY-gated, default No, never with --json,
 # asked at most once per machine.
 
 
@@ -191,7 +191,7 @@ def _consent_home(tmp_path, monkeypatch):
 
 
 def test_quickstart_prompt_yes_records_consent(tmp_path, _consent_home, monkeypatch, capsys):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, True, True)
@@ -205,7 +205,7 @@ def test_quickstart_prompt_yes_records_consent(tmp_path, _consent_home, monkeypa
 def test_quickstart_prompt_default_no_is_persisted_and_asked_once(
     tmp_path, _consent_home, monkeypatch
 ):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
@@ -228,7 +228,7 @@ def test_quickstart_prompt_default_no_is_persisted_and_asked_once(
 
 
 def test_quickstart_never_prompts_without_a_tty(tmp_path, _consent_home, monkeypatch):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, False, False)
@@ -242,7 +242,7 @@ def test_quickstart_never_prompts_without_a_tty(tmp_path, _consent_home, monkeyp
 
 
 def test_quickstart_json_never_prompts(tmp_path, _consent_home, monkeypatch, capsys):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, True, True)
@@ -261,38 +261,38 @@ def test_quickstart_json_never_prompts(tmp_path, _consent_home, monkeypatch, cap
 
 def test_cold_start_one_command_zero_config(tmp_path, monkeypatch):
     # The canonical cold start (REQ-002): from a clean directory with no
-    # .rac/config.yaml and no RAC_* environment, `rac quickstart` then
-    # `rac validate` reaches a passing first artifact — zero configuration, one
+    # .decided/config.yaml and no DECIDED_* environment, `decided quickstart` then
+    # `decided validate` reaches a passing first artifact — zero configuration, one
     # command before the check.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-    for var in [k for k in os.environ if k.startswith("RAC_")]:
+    for var in [k for k in os.environ if k.startswith("DECIDED_")]:
         monkeypatch.delenv(var, raising=False)
 
-    assert not (tmp_path / ".rac" / "config.yaml").exists()  # nothing pre-configured
+    assert not (tmp_path / ".decided" / "config.yaml").exists()  # nothing pre-configured
     assert main(["quickstart"]) == 0
-    artifact = tmp_path / "rac" / "requirements" / "first-requirement.md"
+    artifact = tmp_path / "decisions" / "requirements" / "first-requirement.md"
     assert artifact.is_file()
     assert main(["validate", str(artifact)]) == 0  # first artifact validates, exit 0
     # Zero config: the only state written is the identity file and the one
     # starter artifact — no account, env var, or extra config was required.
-    assert (tmp_path / ".rac" / "config.yaml").is_file()
+    assert (tmp_path / ".decided" / "config.yaml").is_file()
 
 
 def test_cold_start_three_command_path(tmp_path, monkeypatch):
     # REQ-002 also names the explicit path: init -> new -> (edit) -> validate.
-    # `rac new` does not create parent directories by design (create.py), so the
-    # family directory is made first — the one snag that `rac quickstart` removes.
+    # `decided new` does not create parent directories by design (create.py), so the
+    # family directory is made first — the one snag that `decided quickstart` removes.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     assert main(["init"]) == 0
-    (tmp_path / "rac" / "requirements").mkdir(parents=True)
-    assert main(["new", "requirement", "rac/requirements/login-flow.md"]) == 0
+    (tmp_path / "decisions" / "requirements").mkdir(parents=True)
+    assert main(["new", "requirement", "decisions/requirements/login-flow.md"]) == 0
     # The scaffold is structurally valid as written (the TODO placeholders are
     # content, not structure); editing is for meaning, not to pass validate.
-    assert main(["validate", "rac/requirements/login-flow.md"]) == 0
+    assert main(["validate", "decisions/requirements/login-flow.md"]) == 0
 
 
 def test_cold_start_machine_time_within_budget(tmp_path, monkeypatch):
@@ -310,6 +310,6 @@ def test_cold_start_machine_time_within_budget(tmp_path, monkeypatch):
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     start = time.perf_counter()
     assert main(["quickstart"]) == 0
-    assert main(["validate", "rac/requirements/first-requirement.md"]) == 0
+    assert main(["validate", "decisions/requirements/first-requirement.md"]) == 0
     elapsed = time.perf_counter() - start
     assert elapsed < 5.0, f"RAC cold-start commands took {elapsed:.2f}s; expected sub-second"

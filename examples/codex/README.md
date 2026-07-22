@@ -11,8 +11,8 @@ Codex-specific RAC code. A stranger can reproduce this from the file alone.
 pip install rac-core   # the `rac` CLI and the `lore` MCP server
 ```
 
-A repository with a RAC corpus under `rac/` (run `rac quickstart`, or use this
-repository's own `rac/`).
+A repository with a RAC corpus under `decisions/` (run `decided quickstart`, or use this
+repository's own `decisions/`).
 
 ## 1. Generate `AGENTS.md` (the push)
 
@@ -20,19 +20,19 @@ Codex reads `AGENTS.md` for project instructions. RAC generates one from your
 recorded decisions:
 
 ```bash
-rac export rac/ --agent-rules
+decided export decisions/ --agent-rules
 ```
 
 Writes `AGENTS.md` at the repo root, in a managed block (your own content is
 preserved). Codex discovers it from the project root; re-run the export when
-decisions change (`rac export rac/ --agent-rules --check` fails CI on drift).
+decisions change (`decided export decisions/ --agent-rules --check` fails CI on drift).
 
 ## 2. Add the `lore` MCP server (the pull)
 
 Either use the CLI:
 
 ```bash
-codex mcp add lore -- rac mcp --root .
+codex mcp add lore -- decided-mcp --root .
 ```
 
 …or add a `[mcp_servers.lore]` table to Codex's `config.toml` (a sample is in
@@ -57,8 +57,8 @@ on every call and never writes to the repo.
 ## 3. Enforcement is separate, and Codex-agnostic
 
 RAC supplies context and enforces *after* the edit (ADR-067) — it does not
-intercept Codex's loop. Whatever Codex writes is checked by `rac validate` and
-`rac relationships --validate` (and the GitHub Action / pre-merge gate) the same
+intercept Codex's loop. Whatever Codex writes is checked by `decided validate` and
+`decided relationships --validate` (and the GitHub Action / pre-merge gate) the same
 as any other contributor; the trust boundary is human PR review and CI. The
 per-edit pre-edit veto is Claude-Code-specific (see
 [`examples/claude-code/`](../claude-code/README.md)); with Codex you rely on the
@@ -74,6 +74,6 @@ unconnected run violates: [`examples/guide/`](../guide/demo.md).
 
 | Surface | Command | What Codex does with it |
 | --- | --- | --- |
-| `AGENTS.md` | `rac export rac/ --agent-rules` | Reads it as project instructions |
-| `lore` MCP | `codex mcp add lore -- rac mcp --root .` | Calls `find_decisions` / `get_related` on demand |
-| CI gate | `rac validate` · `rac relationships --validate` | Enforces on every PR |
+| `AGENTS.md` | `decided export decisions/ --agent-rules` | Reads it as project instructions |
+| `lore` MCP | `codex mcp add lore -- decided-mcp --root .` | Calls `find_decisions` / `get_related` on demand |
+| CI gate | `decided validate` · `decided relationships --validate` | Enforces on every PR |

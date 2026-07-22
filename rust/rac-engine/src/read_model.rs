@@ -1,4 +1,4 @@
-//! Store-served search (ADR-104) — `rac find` answered from the memory-
+//! Store-served search (ADR-104) — `decided find` answered from the memory-
 //! mapped base, byte-identical to the fresh walk (INDEX-PLAN B3).
 //!
 //! The candidate set comes from the term-major postings and only candidates
@@ -20,7 +20,7 @@ use crate::resolve::{
     CorpusStats, SearchResult,
 };
 
-/// `rac find` served from the store — reproduces `search_index_filtered`.
+/// `decided find` served from the store — reproduces `search_index_filtered`.
 pub fn store_search(
     reader: &MmapIndexReader,
     query: &str,

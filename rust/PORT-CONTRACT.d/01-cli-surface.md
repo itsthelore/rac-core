@@ -5,7 +5,7 @@ set** — `validate`, `find`, `resolve`, `relationships`, `review`, `stats`, `sc
 `export`, plus `--version` and top-level parser behavior. Output *content* (the exact
 bytes of each renderer) is a separate section; here we pin argv shapes, exit codes,
 which stream each outcome goes to, and the environment/cache neutralization needed for
-deterministic runs. Source: `src/rac/cli.py` (single argparse tree, one file). Entry
+deterministic runs. Source: `src/asdecided/cli.py` (single argparse tree, one file). Entry
 point is `rac.cli:main` (`pyproject.toml [project.scripts] rac = "rac.cli:main"`).
 
 All claims below verified against `.venv-oracle/bin/rac` unless marked **UNVERIFIED**.
@@ -169,7 +169,7 @@ Dispatch logic (cli.py:233):
    - if `--corpus` given → `_usage_error("--corpus applies to stdin ('-') or a single file")` (exit 2).
    - else validate the tree. Cache path (`validate_directory_incremental`) vs
      uncached (`validate_directory`) chosen by `_cache_enabled(args)` = `args.cache and
-     not os.environ.get("RAC_NO_CACHE")`. **Both paths are byte-identical** (ADR-106/112) —
+     not os.environ.get("DECIDED_NO_CACHE")`. **Both paths are byte-identical** (ADR-106/112) —
      see §6.
    - Output: `--sarif` → SARIF, `--json` → dir-json, else human — all to **stdout**.
    - Exit **0 if result.ok else 1**.
@@ -327,7 +327,7 @@ rac export [DIRECTORY=.]
 
 ### 5.1 Color — LANDMINE
 
-`src/rac/output/human.py:93`: `_USE_COLOR = sys.stdout.isatty()`, evaluated **at module
+`src/asdecided/output/human.py:93`: `_USE_COLOR = sys.stdout.isatty()`, evaluated **at module
 import time** (not per call). ANSI codes wrap PASS/FAIL/etc via `_c(text, code)` =
 `\033[{code}m{text}\033[0m`. Colors used: green=32, red=31, yellow=33, bold=1.
 
@@ -340,23 +340,23 @@ import time** (not per call). ANSI codes wrap PASS/FAIL/etc via `_c(text, code)`
 
 ### 5.2 Cache & env toggles
 
-- `RAC_NO_CACHE` (any non-empty value): disables cache environment-wide. `_cache_enabled`
-  = `args.cache and not os.environ.get("RAC_NO_CACHE")`. Affects `validate` (dir), `find`,
+- `DECIDED_NO_CACHE` (any non-empty value): disables cache environment-wide. `_cache_enabled`
+  = `args.cache and not os.environ.get("DECIDED_NO_CACHE")`. Affects `validate` (dir), `find`,
   `mcp`. **Does NOT change output bytes** — cached and uncached paths are contractually
   byte-identical (ADR-106/112); only latency differs. So cache on/off can never change
   stdout/exit. **BUT** `--verify` and the cache both touch git/stat freshness; still
-  output-neutral. For deterministic parity, run with `RAC_NO_CACHE=1` to force the simple
+  output-neutral. For deterministic parity, run with `DECIDED_NO_CACHE=1` to force the simple
   walk and eliminate any cache-state variability.
-- `RAC_CACHE_DIR`: overrides cache location (default `$XDG_CACHE_HOME/rac/derived`,
+- `DECIDED_CACHE_DIR`: overrides cache location (default `$XDG_CACHE_HOME/rac/derived`,
   `$XDG_CACHE_HOME/rac`). Output-neutral.
-- `RAC_MAX_FILE_BYTES` (`core/limits.py`): per-file byte cap. A file exceeding the cap
+- `DECIDED_MAX_FILE_BYTES` (`core/limits.py`): per-file byte cap. A file exceeding the cap
   produces a parse issue whose message references the cap — **this CAN change output
   bytes** (validation issues). For parity, leave unset (use the built-in default) and
   document the default in the parsing section.
-- `RAC_TIMING`, `RAC_PARALLEL_BUILD_FAULT`, `RAC_PARALLEL_BUILD_MIN_FILES`: perf/test
-  instrumentation. `RAC_TIMING` writes a `rac-timing:`/scorecard line to **stderr** only
+- `DECIDED_TIMING`, `DECIDED_PARALLEL_BUILD_FAULT`, `DECIDED_PARALLEL_BUILD_MIN_FILES`: perf/test
+  instrumentation. `DECIDED_TIMING` writes a `rac-timing:`/scorecard line to **stderr** only
   — leave unset for clean stderr.
-- `RAC_AUDIT_PATH`, `RAC_AUDIT_PRINCIPAL`: MCP audit only (out of covered set).
+- `DECIDED_AUDIT_PATH`, `DECIDED_AUDIT_PRINCIPAL`: MCP audit only (out of covered set).
 - `COLUMNS` / terminal width: affects argparse usage/help wrapping (§1) only.
 
 ### 5.3 Telemetry / consent — output-neutral but touches the filesystem
@@ -378,10 +378,10 @@ import time** (not per call). ANSI codes wrap PASS/FAIL/etc via `_c(text, code)`
 
 **Recommended deterministic invocation for the covered set:**
 ```
-RAC_NO_CACHE=1  (force simple walk; output-neutral, removes cache-state variance)
+DECIDED_NO_CACHE=1  (force simple walk; output-neutral, removes cache-state variance)
 XDG_STATE_HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME → scratch dirs (no stray writes/consent)
 stdout redirected to a file/pipe (color off)
-RAC_MAX_FILE_BYTES unset; COLUMNS irrelevant when stdout non-TTY
+DECIDED_MAX_FILE_BYTES unset; COLUMNS irrelevant when stdout non-TTY
 ```
 
 ### 5.4 Git-derived recency — LANDMINE for parity
@@ -398,7 +398,7 @@ this to the output/JSON section; the argv contract itself is stable.
 
 Per ADR-106/ADR-112 and the code comments, the cached (`validate_directory_incremental`,
 `_find_from_store`) and uncached (`validate_directory`, `find_artifacts`) paths are
-**contractually byte-identical**. Cache state, `--cache`/`--no-cache`, `RAC_NO_CACHE`, and
+**contractually byte-identical**. Cache state, `--cache`/`--no-cache`, `DECIDED_NO_CACHE`, and
 `--verify` change *latency and freshness detection*, never stdout bytes or exit code. The
 Rust port need not implement the persistent store to match output; it only needs the
 uncached walk semantics. (Any observed divergence would be an oracle bug worth logging in
@@ -451,7 +451,7 @@ Notes on the table:
 - `--top-level`/`--recursive` are two independent store_true flags (not an argparse mutex);
   recursion is default, `--top-level` disables it, both-set → top-level wins.
 - `--cache`(default True)/`--no-cache`(store_false dest=cache) are also not a mutex; they
-  set the same dest, last-wins. `RAC_NO_CACHE` overrides to off. Output-neutral (§6).
+  set the same dest, last-wins. `DECIDED_NO_CACHE` overrides to off. Output-neutral (§6).
 - `validate` `--json|--sarif` and `schema` `--json|--template` and `find` `--type|--decisions`
   and `export` `--html|--okf|--documents|--graph|--agent-rules` ARE argparse mutex groups
   (violation → `<prog>: error: argument X: not allowed with argument Y`, exit 2).

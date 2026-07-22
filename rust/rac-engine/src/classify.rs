@@ -1,4 +1,4 @@
-//! Deterministic classification (`rac.core.classification`), per
+//! Deterministic classification (`decided.core.classification`), per
 //! PORT-CONTRACT.d/04 §2.
 //!
 //! - synonym-aware section mapping is per-spec (`_mapped`), a *set*;

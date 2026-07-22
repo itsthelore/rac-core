@@ -1,6 +1,6 @@
 # Decisions on Pull Requests
 
-Lore's core promise — the agent or reviewer stops re-doing what the team
+AsDecided's core promise — the agent or reviewer stops re-doing what the team
 already ruled out — is only felt if someone thinks to ask. The **Herald**
 action asks at the one moment it matters most: a pull request editing
 governed code gets **one advisory comment** naming the recorded decisions
@@ -19,7 +19,7 @@ Watchkeeper, Gatekeeper, and Registrar wrappers.
 ## 1. Wire it up
 
 ```yaml
-name: Lore decisions
+name: AsDecided decisions
 on:
   pull_request:
 
@@ -58,12 +58,12 @@ One bullet per governing decision, deduplicated across paths and sorted by
 id:
 
 > - **[RAC-KTW0M81HX5C6 — ADR-033: Guide Response Budget](…)** (Accepted) —
->   applies to `src/rac/mcp/` — changed: `src/rac/mcp/server.py`
+>   applies to `src/decisions/mcp/` — changed: `src/decisions/mcp/server.py`
 >
 > …review recommended.
 
 The matched scope is the engine's answer, not a heuristic: the action shells
-to [`rac decisions-for --json`](cli.md#decisions-for) per changed path and
+to [`decided decisions-for --json`](cli.md#decisions-for) per changed path and
 re-derives nothing. Only **live** decisions appear — a superseded or
 deprecated decision no longer binds, by the same liveness rule the MCP
 `find_decisions` tool uses. When a PR touches nothing governed, no comment is
@@ -77,7 +77,7 @@ paths, no timestamps — so re-runs on an unchanged PR rewrite the same bytes.
 
 The comment only fires where decisions declare scope. Add an `## Applies To`
 section to a decision (paths are validated by
-[`rac relationships --validate`](relationships.md)):
+[`decided relationships --validate`](relationships.md)):
 
 ```markdown
 ## Applies To
@@ -87,7 +87,7 @@ section to a decision (paths are validated by
 
 Start with the handful of decisions that agents and reviewers actually
 violate — the comment's value is precision, and every entry you declare is
-also what grounds [`rac decisions-for`](cli.md#decisions-for) and the MCP
+also what grounds [`decided decisions-for`](cli.md#decisions-for) and the MCP
 path lookup.
 
 ## 4. Boundaries
@@ -98,4 +98,4 @@ path lookup.
 - **Post-edit, not interception.** The comment appears at review time; it
   does not intercept the agent mid-edit.
 - **Comment identity is your CI's.** The action posts with the workflow's
-  own token; Lore holds no credentials and no write path into the corpus.
+  own token; AsDecided holds no credentials and no write path into the corpus.

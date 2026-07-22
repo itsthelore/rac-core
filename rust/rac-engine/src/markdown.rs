@@ -3,7 +3,7 @@
 //! Bespoke CommonMark *block-boundary* tokenizer reproducing markdown-it-py
 //! 4.2.0's `"commonmark"` preset for the consumed surface only: `heading_open`
 //! (tag + 0-based start line) and `inline` (raw content + start line), plus
-//! the oracle's section-slicing walk on top (`src/rac/core/markdown.py`).
+//! the oracle's section-slicing walk on top (`src/asdecided/core/markdown.py`).
 //!
 //! The bake-off of PORT-CONTRACT decision 4 resolves to *bespoke*: external
 //! markdown crates are not in the dependency allowlist and the consumed
@@ -21,7 +21,7 @@ use std::sync::OnceLock;
 use crate::pycompat::{is_re_digit, py_casefold, py_is_space, py_repr_str, py_strip};
 
 // ---------------------------------------------------------------------------
-// Limits (src/rac/core/limits.py)
+// Limits (src/asdecided/core/limits.py)
 // ---------------------------------------------------------------------------
 
 pub const DEFAULT_MAX_FILE_BYTES: u128 = 1 << 20; // 1 MiB
@@ -111,9 +111,9 @@ pub fn max_file_bytes_from(raw: Option<&str>) -> u128 {
     DEFAULT_MAX_FILE_BYTES
 }
 
-/// The per-file byte cap, honoring `RAC_MAX_FILE_BYTES` (REQ-001).
+/// The per-file byte cap, honoring `DECIDED_MAX_FILE_BYTES` (REQ-001).
 pub fn max_file_bytes() -> u128 {
-    match std::env::var("RAC_MAX_FILE_BYTES") {
+    match std::env::var("DECIDED_MAX_FILE_BYTES") {
         Ok(v) => max_file_bytes_from(Some(&v)),
         Err(_) => DEFAULT_MAX_FILE_BYTES,
     }
@@ -126,7 +126,7 @@ fn exceeds_byte_cap(text: &str, cap: u128) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Data model (mirrors rac.core.models for the markdown-owned fields)
+// Data model (mirrors decided.core.models for the markdown-owned fields)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,7 +158,7 @@ pub struct SearchSection {
     pub lines: Vec<String>,
 }
 
-/// `split_frontmatter` result (rac.core.frontmatter.FrontmatterSplit).
+/// `split_frontmatter` result (decided.core.frontmatter.FrontmatterSplit).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrontmatterSplit {
     pub raw: Option<String>,
@@ -193,7 +193,7 @@ pub struct Product {
     pub parse_issues: Vec<Issue>,
 }
 
-/// Split a leading `---` frontmatter block (rac.core.frontmatter).
+/// Split a leading `---` frontmatter block (decided.core.frontmatter).
 pub fn split_frontmatter(text: &str) -> FrontmatterSplit {
     let lines: Vec<&str> = text.split('\n').collect();
     if lines.is_empty() || py_strip(lines[0]) != "---" {
@@ -2069,7 +2069,7 @@ pub fn consumed_events(body: &str) -> Vec<BlockEvent> {
 }
 
 // ---------------------------------------------------------------------------
-// The walk (rac.core.markdown._WalkState)
+// The walk (decided.core.markdown._WalkState)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2335,7 +2335,7 @@ fn oversize_issue(cap: u128, kind: &str) -> Issue {
         severity: "error",
         code: "artifact-oversize",
         message: format!(
-            "artifact exceeds the {cap}-byte {kind} cap (set RAC_MAX_FILE_BYTES to raise it)"
+            "artifact exceeds the {cap}-byte {kind} cap (set DECIDED_MAX_FILE_BYTES to raise it)"
         ),
         line: Some(1),
     }
@@ -2345,7 +2345,7 @@ fn oversize_issue(cap: u128, kind: &str) -> Issue {
 // parse / parse_file envelopes
 // ---------------------------------------------------------------------------
 
-/// Parse Markdown `text` into a `Product` (rac.core.markdown.parse), with the
+/// Parse Markdown `text` into a `Product` (decided.core.markdown.parse), with the
 /// byte cap taken from the environment.
 pub fn parse(text: &str, source_path: &str) -> Product {
     parse_with_cap(text, source_path, max_file_bytes())
@@ -2451,7 +2451,7 @@ fn unreadable_issue(err: &std::io::Error, path: &str) -> Issue {
     }
 }
 
-/// Read `path` and parse it (rac.core.markdown.parse_file).
+/// Read `path` and parse it (decided.core.markdown.parse_file).
 pub fn parse_file(path: &str) -> Product {
     parse_file_with_cap(path, max_file_bytes())
 }

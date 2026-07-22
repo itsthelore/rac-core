@@ -1,10 +1,10 @@
-//! Guide telemetry read-back (`src/rac/mcp/telemetry.py`) — ADR-040.
+//! Guide telemetry read-back (`src/asdecided/mcp/telemetry.py`) — ADR-040.
 //!
-//! Read side only: `rac mcp-stats` (and the guide half of `rac usage`)
+//! Read side only: `decided mcp-stats` (and the guide half of `decided usage`)
 //! summarizes the append-only JSONL log under
-//! `$XDG_STATE_HOME/rac/guide-telemetry.jsonl`. The recorder itself lives
+//! `$XDG_STATE_HOME/decisions/guide-telemetry.jsonl`. The recorder itself lives
 //! in the MCP serving path and stays a documented no-op seam in the Rust
-//! sidecar (`rust/rac-mcp/src/sidecar.rs`).
+//! sidecar (`rust/decided-mcp/src/sidecar.rs`).
 //!
 //! Corruption posture is pinned: a missing log is an empty log; a garbled
 //! line (non-JSON, or JSON that is not an object) is skipped and COUNTED;
@@ -24,7 +24,7 @@ use crate::pyjson;
 pub const SCHEMA_VERSION: &str = "1";
 const TELEMETRY_FILENAME: &str = "guide-telemetry.jsonl";
 
-pub const SHARE_ISSUE_URL: &str = "https://github.com/itsthelore/rac-core/issues/new";
+pub const SHARE_ISSUE_URL: &str = "https://github.com/itsthelore/decided-core/issues/new";
 pub const SHARE_TEMPLATE: &str = "guide-usage-report.yml";
 pub const SHARE_FIELD: &str = "report";
 

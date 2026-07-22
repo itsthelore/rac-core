@@ -1,6 +1,6 @@
 /*
- * Lore docs-site theme — translates the rac-localview design system
- * (rac/.. rac-localview/src/styles/tokens.css) onto MkDocs Material's slate
+ * AsDecided docs-site theme — translates the rac-localview design system
+ * (decisions/.. rac-localview/src/styles/tokens.css) onto MkDocs Material's slate
  * scheme, and styles the custom splash home (overrides/home.html).
  *
  * Five rules carried over from rac-localview/DESIGN.md:

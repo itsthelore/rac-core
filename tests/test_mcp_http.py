@@ -1,6 +1,6 @@
 """Shared HTTP MCP transport — parity, mandatory audit, CLI wiring (ADR-098).
 
-Initiative 1 of ``lore-at-team-scale`` (itsthelore/rac-core#263): ``rac mcp``
+Initiative 1 of ``lore-at-team-scale`` (itsthelore/rac-core#263): ``decided mcp``
 gains a streamable HTTP transport. These tests hold the requirement's contract
 (``rac-mcp-http-transport``):
 
@@ -26,11 +26,11 @@ from contextlib import closing
 import pytest
 from conftest import fixture_path
 
-from rac import cli
-from rac.mcp import audit
-from rac.mcp import transport as transport_mod
-from rac.mcp.server import build_server, run_server
-from rac.mcp.transport import AuditSinkUnavailable
+from asdecided import cli
+from asdecided.mcp import audit
+from asdecided.mcp import transport as transport_mod
+from asdecided.mcp.server import build_server, run_server
+from asdecided.mcp.transport import AuditSinkUnavailable
 
 CORPUS = fixture_path("mcp", "corpus")
 
@@ -44,7 +44,7 @@ CALLS: tuple[tuple[str, str, dict], ...] = (
     ("get_artifact", "get_artifact", {"id": DEC}),
     ("search_artifacts", "search_artifacts", {"query": "RAC-MCP"}),
     ("find_decisions:topic", "find_decisions", {"topic": "RAC"}),
-    ("find_decisions:path", "find_decisions", {"topic": "", "path": "src/rac/mcp/server.py"}),
+    ("find_decisions:path", "find_decisions", {"topic": "", "path": "src/asdecided/mcp/server.py"}),
     ("get_related", "get_related", {"id": REQ}),
     ("get_summary", "get_summary", {}),
 )
@@ -218,9 +218,9 @@ def test_run_server_stdio_default_does_not_require_audit(monkeypatch):
         def run(self, transport: str) -> None:
             calls.append(transport)
 
-    monkeypatch.setattr("rac.mcp.server.build_server", lambda *a, **k: _FakeServer())
-    monkeypatch.setattr("rac.mcp.server._maybe_start_sharing", lambda *a, **k: None)
-    monkeypatch.setattr("rac.mcp.server._check_corpus", lambda *a, **k: None)
+    monkeypatch.setattr("asdecided.mcp.server.build_server", lambda *a, **k: _FakeServer())
+    monkeypatch.setattr("asdecided.mcp.server._maybe_start_sharing", lambda *a, **k: None)
+    monkeypatch.setattr("asdecided.mcp.server._check_corpus", lambda *a, **k: None)
     assert run_server(CORPUS) == 0
     assert calls == ["stdio"]
 
@@ -244,7 +244,7 @@ def test_serve_http_configures_stateless_settings(monkeypatch):
 
 
 def _serve_with_audit(port: int, path: str, audit_recorder) -> threading.Thread:
-    from rac.mcp.server import build_server
+    from asdecided.mcp.server import build_server
 
     def _serve() -> None:
         server = build_server(str(CORPUS), audit_recorder=audit_recorder)
@@ -261,7 +261,7 @@ async def _call_as(port: int, path: str, principal: str | None, count: int) -> N
     from mcp.client.session import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
-    headers = {"X-Lore-Principal": principal} if principal is not None else {}
+    headers = {"X-AsDecided-Principal": principal} if principal is not None else {}
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as http_client:
         async with streamable_http_client(
             f"http://127.0.0.1:{port}{path}", http_client=http_client
@@ -273,7 +273,7 @@ async def _call_as(port: int, path: str, principal: str | None, count: int) -> N
 
 
 def test_concurrent_clients_are_attributed_distinctly(tmp_path):
-    from rac.mcp.audit import AuditRecorder
+    from asdecided.mcp.audit import AuditRecorder
 
     recorder = AuditRecorder(tmp_path / "audit.jsonl", "host <h@example.com>", transport="http")
     port, path = _free_port(), "/mcp"
@@ -302,7 +302,7 @@ def test_concurrent_clients_are_attributed_distinctly(tmp_path):
 
 
 def test_unasserted_http_call_is_not_the_host_identity(tmp_path):
-    from rac.mcp.audit import AuditRecorder
+    from asdecided.mcp.audit import AuditRecorder
 
     # A shared recorder resolves its construction principal without git; an
     # unasserted call is recorded with that fallback, never the host's identity.
@@ -330,14 +330,14 @@ def test_tool_output_is_identical_across_principals(tmp_path):
     from mcp.client.session import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
-    from rac.mcp.audit import AuditRecorder
+    from asdecided.mcp.audit import AuditRecorder
 
     recorder = AuditRecorder(tmp_path / "audit.jsonl", "unattributed", transport="http")
     port, path = _free_port(), "/mcp"
     _serve_with_audit(port, path, recorder)
 
     async def _get(principal: str) -> str:
-        async with httpx.AsyncClient(headers={"X-Lore-Principal": principal}, timeout=30.0) as hc:
+        async with httpx.AsyncClient(headers={"X-AsDecided-Principal": principal}, timeout=30.0) as hc:
             async with streamable_http_client(f"http://127.0.0.1:{port}{path}", http_client=hc) as (
                 read,
                 write,

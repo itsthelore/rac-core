@@ -7,7 +7,7 @@ product change and must be reviewed as one.
 
 To refresh the goldens after an intentional output change:
 
-    RAC_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py
+    DECIDED_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py
 
 then commit the diff.
 """
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
+from asdecided.cli import main
 
 REPO_ROOT = Path(__file__).parent.parent
 GOLDEN_DIR = Path(__file__).parent / "golden"
@@ -145,11 +145,11 @@ def test_golden(name, argv, expected_rc, capsys, monkeypatch):
     monkeypatch.chdir(REPO_ROOT)
     # Force plain output: golden files must not depend on whether the test
     # runner happens to attach a TTY.
-    monkeypatch.setattr("rac.output.human._USE_COLOR", False)
+    monkeypatch.setattr("asdecided.output.human._USE_COLOR", False)
     # Deterministic IDs for migrate cases (dry runs, so fixtures stay clean);
     # the suffix is valid Crockford base32. Same seam pattern as _USE_COLOR.
     monkeypatch.setattr(
-        "rac.services.migrate._DEFAULT_ID_GENERATOR",
+        "asdecided.services.migrate._DEFAULT_ID_GENERATOR",
         lambda key: f"{key}-00000000TEST",
     )
     # A relative state home keeps the mcp-stats log path machine-independent
@@ -160,13 +160,13 @@ def test_golden(name, argv, expected_rc, capsys, monkeypatch):
     out = _strip_git_derived_recency(capsys.readouterr().out, name)
 
     golden = GOLDEN_DIR / f"{name}.txt"
-    if os.environ.get("RAC_UPDATE_GOLDEN") == "1":
+    if os.environ.get("DECIDED_UPDATE_GOLDEN") == "1":
         golden.parent.mkdir(parents=True, exist_ok=True)
         golden.write_text(out, encoding="utf-8")
 
     assert rc == expected_rc
     assert out == golden.read_text(encoding="utf-8"), (
-        f"Output of `rac {' '.join(argv)}` drifted from {golden}.\n"
+        f"Output of `decided {' '.join(argv)}` drifted from {golden}.\n"
         "If the change is intentional, refresh with: "
-        "RAC_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py"
+        "DECIDED_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py"
     )

@@ -10,13 +10,13 @@ reproduce this from the file alone.
 pip install rac-core   # the `rac` CLI and the `lore` MCP server
 ```
 
-A repository with a RAC corpus under `rac/` (run `rac quickstart`, or use this
-repository's own `rac/`).
+A repository with a RAC corpus under `decisions/` (run `decided quickstart`, or use this
+repository's own `decisions/`).
 
 ## 1. Context file (the push)
 
 ```bash
-rac export rac/ --agent-rules
+decided export decisions/ --agent-rules
 ```
 
 This writes several agent-context files, two of which Cursor reads:
@@ -30,7 +30,7 @@ This writes several agent-context files, two of which Cursor reads:
   way the decisions reach Cursor through `AGENTS.md`.
 
 The managed block keeps your own content intact; re-run on change
-(`rac export rac/ --agent-rules --check` fails CI on drift).
+(`decided export decisions/ --agent-rules --check` fails CI on drift).
 
 ## 2. The `lore` MCP server (the pull)
 
@@ -40,7 +40,7 @@ Add `.cursor/mcp.json` in the repo root (project-scoped; a sample is in
 ```json
 {
   "mcpServers": {
-    "lore": { "command": "rac", "args": ["mcp", "--root", "."] }
+    "asdecided": { "command": "decided-mcp", "args": ["--root", "."] }
   }
 }
 ```
@@ -57,7 +57,7 @@ and never writes to the repo.
 
 RAC supplies context and enforces *after* the edit (ADR-067). There is no
 platform API to veto a Cursor agent edit before it lands, so Cursor relies on the
-post-edit guard: `rac validate` / `rac relationships --validate` and the GitHub
+post-edit guard: `decided validate` / `decided relationships --validate` and the GitHub
 Action / pre-merge gate, the same as any contributor. (The pre-edit veto is
 Claude-Code-specific — see [`examples/claude-code/`](../claude-code/README.md).)
 
@@ -71,6 +71,6 @@ unconnected run violates: [`examples/guide/`](../guide/demo.md).
 
 | Surface | Command | What Cursor does with it |
 | --- | --- | --- |
-| `AGENTS.md` | `rac export rac/ --agent-rules` | Reads it as project instructions |
-| `lore` MCP | `.cursor/mcp.json` → `rac mcp --root .` | Calls `find_decisions` / `get_related` on demand |
-| CI gate | `rac validate` · `rac relationships --validate` | Enforces on every PR |
+| `AGENTS.md` | `decided export decisions/ --agent-rules` | Reads it as project instructions |
+| `lore` MCP | `.cursor/mcp.json` → `decided-mcp --root .` | Calls `find_decisions` / `get_related` on demand |
+| CI gate | `decided validate` · `decided relationships --validate` | Enforces on every PR |

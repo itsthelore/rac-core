@@ -3,10 +3,10 @@
 Scope: the B6 modes ported for roadmap:native-cli-closure — the three
 previously STUBBED `rac export` write modes. Every claim below was
 verified against the oracle (`.venv-oracle/bin/rac`,
-`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/rac/cli.py`
+`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/asdecided/cli.py`
 (`cmd_export`, `_cmd_agent_rules`, `_agent_rules_root`),
-`src/rac/output/{portal,okf}.py`, `src/rac/services/{agent_rules,
-recency}.py`, `src/rac/core/okf.py`, `src/rac/output/{human,json}.py`.
+`src/asdecided/output/{portal,okf}.py`, `src/asdecided/services/{agent_rules,
+recency}.py`, `src/asdecided/core/okf.py`, `src/asdecided/output/{human,json}.py`.
 Rust: new `rac-engine/src/{portal,agent_rules,okf}.rs`; the vendored
 shell under `rac-engine/assets/portal/`; `gitinfo.rs`
 (`first_committed`), `pycompat.rs` (`py_normpath`/`py_abspath`/
@@ -51,7 +51,7 @@ ported default mode, byte-shared) after `_escape_for_script`: two literal
 exit 2.
 
 The embedded payload carries `corpus.rac_version`, so byte parity of the
-written file requires the `RAC_RS_VERSION` seam set to the oracle's
+written file requires the `DECIDED_RS_VERSION` seam set to the oracle's
 version (the html cases pin `0.1.dev50+g21c8be403`; no JSON-field mask
 can apply to an HTML capture). Everything else is deterministic.
 

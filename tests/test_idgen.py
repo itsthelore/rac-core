@@ -1,4 +1,4 @@
-"""Tests for rac.core.idgen — opaque artifact ID generation (ADR-026).
+"""Tests for asdecided.core.idgen — opaque artifact ID generation (ADR-026).
 
 The generator must be branch-safe and offline: deterministic under injected
 clock/entropy, collision-resistant under real entropy, Crockford-canonical,
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import re
 
-from rac.core.idgen import ALPHABET, SUFFIX_LENGTH, generate_id
-from rac.core.metadata import is_valid_id
+from asdecided.core.idgen import ALPHABET, SUFFIX_LENGTH, generate_id
+from asdecided.core.metadata import is_valid_id
 
 CANONICAL = re.compile(r"^RAC-[0-9A-HJKMNP-TV-Z]{12}$")
 

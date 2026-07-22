@@ -1,6 +1,6 @@
 # 03 — `rac.core.markdown`: Markdown → Product extraction (parity landmine #2)
 
-Source of truth: `/home/user/rac-core/src/rac/core/markdown.py` (frozen oracle).
+Source of truth: `/home/user/rac-core/src/asdecided/core/markdown.py` (frozen oracle).
 Parser: **markdown-it-py 4.2.0**, preset `"commonmark"`, one module-level shared
 instance (`_PARSER = MarkdownIt("commonmark")`). All behavior below was verified
 empirically with `.venv-oracle/bin/python` unless marked UNVERIFIED.
@@ -260,14 +260,14 @@ from `requirement_lines` in document order.
 
 ## 9. `parse(text, source_path="")` envelope
 
-1. `cap = max_file_bytes()`: `RAC_MAX_FILE_BYTES` env override (int; `<= 0` or
+1. `cap = max_file_bytes()`: `DECIDED_MAX_FILE_BYTES` env override (int; `<= 0` or
    unparseable → default `1048576`).
 2. Byte cap check `exceeds_byte_cap(text, cap)` — measured in **UTF-8 bytes** of
    the decoded text (fast path: `len(text) > cap` → over;
    `len(text) <= cap // 4` → under; else encode and compare). Over →
    degraded `Product(title=None, source_path=…, parse_issues=[Issue("error",
    "artifact-oversize", f"artifact exceeds the {cap}-byte parse cap (set "
-   "RAC_MAX_FILE_BYTES to raise it)", 1)])` — note **"parse cap"** wording,
+   "DECIDED_MAX_FILE_BYTES to raise it)", 1)])` — note **"parse cap"** wording,
    distinct from `parse_file`'s "file cap"; everything else default/empty.
 3. `split_frontmatter(text)` (splits on `\n`; opener line 0 must strip to `---`;
    closer strips to `---` or `...`): `body` excludes the block,
@@ -310,7 +310,7 @@ from `requirement_lines` in document order.
 
 1. `cap = max_file_bytes()`; `os.path.getsize(path)`; `size > cap` → degraded
    Product with `Issue("error", "artifact-oversize", f"artifact exceeds the
-   {cap}-byte file cap (set RAC_MAX_FILE_BYTES to raise it)", 1)` — **"file
+   {cap}-byte file cap (set DECIDED_MAX_FILE_BYTES to raise it)", 1)` — **"file
    cap"** wording here.
 2. `open(path, "rb").read(cap + 1)`; any `OSError` (stat or read) → degraded
    Product with `Issue("error", "unreadable-artifact", f"cannot read artifact:
@@ -331,7 +331,7 @@ from `requirement_lines` in document order.
 
 ## 12. Constants (from `limits.py`)
 
-`DEFAULT_MAX_FILE_BYTES = 1048576` (env `RAC_MAX_FILE_BYTES`),
+`DEFAULT_MAX_FILE_BYTES = 1048576` (env `DECIDED_MAX_FILE_BYTES`),
 `MAX_FIELD_CHARS = 262144` (code points, per normalized-h2 section),
 `MAX_CAPTURED_LINES = 50000` (total non-blank captured lines per document).
 Frontmatter caps (`MAX_FRONTMATTER_BYTES = 65536`, `MAX_FRONTMATTER_DEPTH = 32`)

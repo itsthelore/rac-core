@@ -1407,7 +1407,7 @@ mod tests {
             base_items.iter().map(|(path, item)| (path.as_str(), item)),
         );
         assert_eq!(
-            identity.resolve(" rac-111111111111 ").outcome,
+            identity.resolve(" RAC-111111111111 ").outcome,
             OUTCOME_RESOLVED
         );
         assert_eq!(identity.status_for_path("b.md"), Some("Accepted"));
@@ -1699,7 +1699,7 @@ mod tests {
         );
         for (query, artifact_type, tags, live_only) in [
             ("delta", None, vec![], false),
-            ("rac 111111111111", Some("decision"), vec![], false),
+            ("RAC 111111111111", Some("decision"), vec![], false),
             ("delta delta", None, vec![], false),
             ("delta", None, vec!["alpha".to_string()], false),
             ("zzzz-no-match", None, vec![], false),
@@ -1736,7 +1736,7 @@ mod tests {
         assert!(Arc::ptr_eq(&shared_postings, &search.base_postings));
         items.remove("a.md");
         items.extend(parsed);
-        for query in ["delta", "rac 333333333333", "delta delta"] {
+        for query in ["delta", "RAC 333333333333", "delta delta"] {
             assert_search_matches_fresh(&search, &items, query, None, &[], false);
         }
         assert_search_matches_fresh(

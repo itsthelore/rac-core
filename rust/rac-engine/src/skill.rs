@@ -1,8 +1,8 @@
-//! Bundled agent skills — `rac skill` (PORT-CONTRACT.d/15).
+//! Bundled agent skills — `decided skill` (PORT-CONTRACT.d/15).
 //!
-//! Port of `src/rac/core/skills.py` (registry + resource loading) and
-//! `src/rac/services/skill.py` (`install_skills`). The packaged `SKILL.md`
-//! resources are embedded verbatim from `rust/rac-engine/assets/skills/`,
+//! Port of `src/asdecided/core/skills.py` (registry + resource loading) and
+//! `src/asdecided/services/skill.py` (`install_skills`). The packaged `SKILL.md`
+//! resources are embedded verbatim from `rust/decided-engine/assets/skills/`,
 //! vendored byte-identical copies of the Python package files — a unit test
 //! below pins that identity, because the installed file must be
 //! byte-identical to what the oracle installs (skill brief, landmine 1).
@@ -22,36 +22,31 @@ pub struct SkillSpec {
 
 /// Bundled skills, in registry order (`BUNDLED_SKILLS`). `install` with no
 /// name installs all of them; `list` enumerates them.
-pub const BUNDLED_SKILLS: [SkillSpec; 5] = [
+pub const BUNDLED_SKILLS: [SkillSpec; 4] = [
     SkillSpec {
-        name: "rac-artifacts",
-        description: "Author and maintain Lore (RAC) Markdown artifacts with the rac CLI.",
+        name: "decided-artifacts",
+        description: "Author and maintain AsDecided Markdown artifacts with the decided CLI.",
     },
     SkillSpec {
-        name: "rac-review",
-        description: "Review a Lore (RAC) corpus and work findings worst-first.",
+        name: "decided-review",
+        description: "Review an AsDecided corpus and work findings worst-first.",
     },
     SkillSpec {
-        name: "rac-ingest",
-        description: "Convert legacy documents into valid, linked Lore (RAC) artifacts.",
+        name: "decided-import",
+        description: "Reformat one document into one valid AsDecided artifact, with human review.",
     },
     SkillSpec {
-        name: "rac-import",
-        description: "Reformat one document into one valid Lore (RAC) artifact, with human review.",
-    },
-    SkillSpec {
-        name: "rac-capture",
-        description: "Capture a new decision or requirement into a valid Lore (RAC) artifact.",
+        name: "decided-capture",
+        description: "Capture a new decision or requirement into a valid AsDecided artifact.",
     },
 ];
 
 /// The embedded `SKILL.md` bytes, index-aligned with [`BUNDLED_SKILLS`].
-pub(crate) const SKILL_BYTES: [&[u8]; 5] = [
-    include_bytes!("../assets/skills/rac-artifacts/SKILL.md"),
-    include_bytes!("../assets/skills/rac-review/SKILL.md"),
-    include_bytes!("../assets/skills/rac-ingest/SKILL.md"),
-    include_bytes!("../assets/skills/rac-import/SKILL.md"),
-    include_bytes!("../assets/skills/rac-capture/SKILL.md"),
+pub(crate) const SKILL_BYTES: [&[u8]; 4] = [
+    include_bytes!("../assets/skills/decided-artifacts/SKILL.md"),
+    include_bytes!("../assets/skills/decided-review/SKILL.md"),
+    include_bytes!("../assets/skills/decided-import/SKILL.md"),
+    include_bytes!("../assets/skills/decided-capture/SKILL.md"),
 ];
 
 /// `available_skills()` — bundled skill names, registry order.
@@ -73,7 +68,7 @@ pub struct InstalledSkill {
     pub path: String,
 }
 
-/// Result of a `rac skill install` run.
+/// Result of a `decided skill install` run.
 pub struct SkillInstallation {
     pub skills: Vec<InstalledSkill>,
 }
@@ -127,11 +122,11 @@ pub fn install_skills(
         .collect();
     if !existing.is_empty() {
         let message = if existing.len() == 1 {
-            format!("{} already exists; rac skill install never overwrites", existing[0])
+            format!("{} already exists; decided skill install never overwrites", existing[0])
         } else {
             let listing: Vec<String> = existing.iter().map(|p| format!("  - {p}")).collect();
             format!(
-                "{} skill files already exist; rac skill install never overwrites:\n{}",
+                "{} skill files already exist; decided skill install never overwrites:\n{}",
                 existing.len(),
                 listing.join("\n")
             )
@@ -162,14 +157,12 @@ mod tests {
     use super::*;
 
     /// The embedded resources must be byte-identical to the Python package
-    /// files the oracle installs (skill brief, landmine 1). Sizes pinned
-    /// from the extraction probe as a second, independent check.
+    /// files the retirement oracle installs.
     #[test]
     fn embedded_bytes_equal_python_package_files() {
-        let sizes = [3428usize, 3700, 4046, 6546, 8021];
         for (i, spec) in BUNDLED_SKILLS.iter().enumerate() {
             let py_path = format!(
-                "{}/../../src/rac/skills/{}/SKILL.md",
+                "{}/../../src/asdecided/skills/{}/SKILL.md",
                 env!("CARGO_MANIFEST_DIR"),
                 spec.name
             );
@@ -180,12 +173,6 @@ mod tests {
                 "embedded {} differs from the Python package file",
                 spec.name
             );
-            assert!(
-                sizes.contains(&SKILL_BYTES[i].len()),
-                "unexpected embedded size {} for {}",
-                SKILL_BYTES[i].len(),
-                spec.name
-            );
         }
     }
 
@@ -193,7 +180,7 @@ mod tests {
     fn registry_order_and_names() {
         assert_eq!(
             available_skills(),
-            vec!["rac-artifacts", "rac-review", "rac-ingest", "rac-import", "rac-capture"]
+            vec!["decided-artifacts", "decided-review", "decided-import", "decided-capture"]
         );
     }
 }

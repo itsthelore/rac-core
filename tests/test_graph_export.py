@@ -1,4 +1,4 @@
-"""Tests for `rac export --graph` (v0.25.0 WS2, requirement rac-corpus-graph-export,
+"""Tests for `decided export --graph` (v0.25.0 WS2, requirement rac-corpus-graph-export,
 ADR-074).
 
 The graph projection surfaces the *typed* relationship graph (ADR-055) for graph
@@ -14,8 +14,8 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.services.export import build_graph_export
+from asdecided.cli import main
+from asdecided.services.export import build_graph_export
 
 EXIT_USAGE = 2
 
@@ -83,7 +83,7 @@ def test_build_graph_deterministic():
 
 
 def _corpus_with_tickets(tmp_path, provider: str | None) -> None:
-    config = tmp_path / ".rac"
+    config = tmp_path / ".decided"
     config.mkdir()
     body = "repository_key: ACME\n"
     if provider is not None:
@@ -123,7 +123,7 @@ def test_external_ticket_provider_is_none_when_unset(tmp_path):
 
 def _corpus_with_verified_by(tmp_path, provider: str | None) -> None:
     """A requirement declaring ## Verified By, with an optional ticketing provider."""
-    config = tmp_path / ".rac"
+    config = tmp_path / ".decided"
     config.mkdir()
     body = "repository_key: ACME\n"
     if provider is not None:

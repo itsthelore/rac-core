@@ -1,8 +1,8 @@
 # 04 — Classification, Identity, and Validation
 
-Source modules: `src/rac/core/classification.py`, `src/rac/core/artifacts.py`,
-`src/rac/core/identity.py`, `src/rac/core/idgen.py`, `src/rac/core/metadata.py`,
-`src/rac/core/validation.py`, `src/rac/core/schema.py`, `src/rac/core/overrides.py`.
+Source modules: `src/asdecided/core/classification.py`, `src/asdecided/core/artifacts.py`,
+`src/asdecided/core/identity.py`, `src/asdecided/core/idgen.py`, `src/asdecided/core/metadata.py`,
+`src/asdecided/core/validation.py`, `src/asdecided/core/schema.py`, `src/asdecided/core/overrides.py`.
 Upstream inputs (`Product`, section map) come from the parser (`markdown.py`,
 `frontmatter.py`) — see the parser contract section; the `## section` normalization
 and requirement extraction rules that feed classification/validation are summarized
@@ -361,7 +361,7 @@ if conflict: append Issue("error", "conflicting-identity", MSG)
 No-op returning `[]` unless ALL hold: `provider` truthy and ≠ `"none"`;
 `provider` is a known key in `TICKETING_PROVIDERS`; `spec` exists AND
 `"related tickets" in spec.optional`. `provider` defaults to `None` on the pure
-`validate` path — the service layer injects it from `.rac/config.yaml`
+`validate` path — the service layer injects it from `.decided/config.yaml`
 `ticketing.provider`. Providers and their entry validators:
 
 | provider | key regex | URL accepted | label |
@@ -570,7 +570,7 @@ Applied by the **service layer** (`validate_product` / `validate_corpus`), not b
   type ceiling downgrades errors only); then if `ov.rules.get(code)` is set →
   `sev = that` (per-rule wins over ceiling; value ∈ `error|warning|off`).
 - `off` → finding dropped; else severity replaced (order preserved). Overrides
-  come from committed `.rac/config.yaml` `validation.rules` / `validation.types`.
+  come from committed `.decided/config.yaml` `validation.rules` / `validation.types`.
 Deterministic given repo state. The Rust port replicates this to match exit codes.
 
 ---

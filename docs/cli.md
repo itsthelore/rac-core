@@ -5,7 +5,7 @@ one: its purpose, inputs, outputs, and exit codes.
 
 ```bash
 rac <command> [arguments] [options]
-rac --version
+decided --version
 rac <command> --help
 ```
 
@@ -17,7 +17,7 @@ These apply across every command.
   instead of the human-readable report. JSON output is a stable contract intended
   for tools, IDEs, CI, and agents.
 - **Standard input** — `validate`, `inspect`, and `improve` accept `-` in place of a
-  file to read Markdown from stdin (e.g. `cat file.md | rac validate -`).
+  file to read Markdown from stdin (e.g. `cat file.md | decided validate -`).
 - **Recursion** — directory commands (`validate`, `stats`, `inspect`,
   `relationships`, `review`, `portfolio`, `index`, `explorer`) recurse into
   subdirectories by default. Pass `--top-level`
@@ -38,7 +38,7 @@ These apply across every command.
 Validate an artifact — or every artifact in a directory — for structural and
 content issues.
 
-- **Input:** `rac validate <path>` — a Markdown file, a directory, or `-` for stdin.
+- **Input:** `decided validate <path>` — a Markdown file, a directory, or `-` for stdin.
 - **Options:** `--json` · `--top-level` · `--recursive` (directory mode) ·
   `--no-cache` / `--verify` (directory-validation cache controls) ·
   `--corpus DIR` (stdin / single-file mode — see below)
@@ -51,13 +51,13 @@ change does work proportional to what changed rather than to corpus size. It is
 disposable and byte-identical to the uncached run: a changed config invalidates
 the affected results, and a corrupt or missing cache recomputes from scratch.
 `--no-cache` revalidates every file from disk for one invocation (setting
-`RAC_NO_CACHE=1` does the same environment-wide), and `--verify` forces the
+`DECIDED_NO_CACHE=1` does the same environment-wide), and `--verify` forces the
 freshness check to re-read every file's bytes — the full-hash floor that
 catches the one rewrite shape the default stat scan accepts (a size- and
 mtime-preserving in-place rewrite, ADR-105's S5).
 
 ```bash
-rac validate login-flow.md
+decided validate login-flow.md
 ```
 
 ```text
@@ -75,11 +75,11 @@ Given a directory, `validate` classifies every `*.md` file and validates each
 against its own artifact schema:
 
 ```bash
-rac validate rac/
+decided validate decisions/
 ```
 
 ```text
-PASS  rac/ — 66 artifact(s) checked: 66 valid, 24 skipped (unknown type).
+PASS  decisions/ — 66 artifact(s) checked: 66 valid, 24 skipped (unknown type).
 ```
 
 Files that match no known schema are **skipped**, not failed — being a plain
@@ -90,14 +90,14 @@ reports `summary` counts plus a per-file `files[]` list with `status`
 
 ### Corpus-aware single-document validation (`--corpus`)
 
-Plain `rac validate -` is single-document: it cannot resolve cross-artifact
+Plain `decided validate -` is single-document: it cannot resolve cross-artifact
 references, so it cannot tell that a *proposed* edit introduces a reference to a
 decision the team has retired. Pass `--corpus DIR` (with stdin `-` or a single
 file) to validate the proposed document **and** resolve its outbound references
 against the live corpus at `DIR`:
 
 ```bash
-cat proposed-roadmap.md | rac validate - --corpus rac/
+cat proposed-roadmap.md | decided validate - --corpus decisions/
 ```
 
 ```text
@@ -131,8 +131,8 @@ Corpus references
 This is the engine seam the generated Claude Code pre-edit hook pipes proposed
 content into; see [Agent integration](governance.md#agent-integration-context-supply-and-enforcement).
 Validation stays in `rac` — the hook computes nothing
-([ADR-067](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-067-agent-integration-boundary.md),
-[ADR-063](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)).
+([ADR-067](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-067-agent-integration-boundary.md),
+[ADR-063](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-063-non-python-clients-are-thin.md)).
 
 ---
 
@@ -140,12 +140,12 @@ Validation stays in `rac` — the hook computes nothing
 
 Compare two versions of a requirement file and report what changed.
 
-- **Input:** `rac diff <old> <new>` — two Markdown files.
+- **Input:** `decided diff <old> <new>` — two Markdown files.
 - **Options:** `--json`
 - **Exit codes:** `0` success · `2` file not found / unreadable
 
 ```bash
-rac diff examples/example_dashboard_v1.md examples/example_dashboard_v2.md
+decided diff examples/example_dashboard_v1.md examples/example_dashboard_v2.md
 ```
 
 ```text
@@ -170,18 +170,18 @@ Modified Requirements
 
 Summarize a directory of artifacts: counts, quality signals, and per-type breakdowns.
 
-- **Input:** `rac stats <directory>` — scanned recursively for `*.md`.
+- **Input:** `decided stats <directory>` — scanned recursively for `*.md`.
 - **Options:** `--json`
 - **Exit codes:** `0` analyzable content found, or an empty corpus (day-one is
   not a failure) · `1` files exist but none are valid known artifacts · `2` not
   a directory
 
 On an empty corpus, `stats` (like `validate`, `review`, and `portfolio`) exits 0
-and prints a next-step line pointing at `rac quickstart`. The summary JSON
+and prints a next-step line pointing at `decided quickstart`. The summary JSON
 carries an additive `empty` boolean.
 
 ```bash
-rac stats rac/
+decided stats decisions/
 ```
 
 Reports feature/requirement/decision/roadmap/design counts, missing recommended
@@ -195,15 +195,15 @@ sections, and a list of files that matched no schema (not errors — see
 Convert a document (DOCX, PDF, HTML, PPTX, XLSX, or Markdown) into RAC-compatible
 Markdown.
 
-- **Input:** `rac ingest <file>` — the source document.
+- **Input:** `decided ingest <file>` — the source document.
 - **Options:** `-o, --output <path>` (write to a file; errors if it exists unless
   `--force`) · `--stdout` (explicit stdout, the default) · `--force` · `--json`
 - **Exit codes:** `0` success · `1` conversion failed · `2` unsupported type / file not found / output exists without `--force`
 
 ```bash
-rac ingest spec.docx                 # preview Markdown on stdout
-rac ingest spec.docx -o spec.md      # write to a file
-rac ingest report.pdf -o report.md --force
+decided ingest spec.docx                 # preview Markdown on stdout
+decided ingest spec.docx -o spec.md      # write to a file
+decided ingest report.pdf -o report.md --force
 ```
 
 Conversion uses optional extras. Install the readers you need:
@@ -212,14 +212,14 @@ Conversion uses optional extras. Install the readers you need:
 
 ### Note-tool exports (Obsidian, Logseq, Notion, Roam)
 
-Point `rac ingest` at a **note-tool export** and it normalises the whole graph —
+Point `decided ingest` at a **note-tool export** and it normalises the whole graph —
 each note becomes a RAC-shaped draft, and the link graph you already drew is
 carried in as **candidate `## Related` references** rather than flattened to
 plain text. Obsidian, Logseq, Notion, and Roam are supported today; the
 converters need no extra to install.
 
-- **Input:** `rac ingest <dir>` — an export directory (an Obsidian vault, a
-  Logseq graph, or a Notion "Markdown & CSV" export) — or `rac ingest <graph>.json`
+- **Input:** `decided ingest <dir>` — an export directory (an Obsidian vault, a
+  Logseq graph, or a Notion "Markdown & CSV" export) — or `decided ingest <graph>.json`
   for a Roam JSON export. The tool is auto-detected; force a directory's with
   `--from obsidian|logseq|notion|roam`. Logseq's `pages/` and `journals/` notes
   are walked, its `[[page links]]` resolve like Obsidian's, and block references
@@ -234,9 +234,9 @@ converters need no extra to install.
   review. `--json` emits the full structured result.
 
 ```bash
-rac ingest ./my-vault                    # preview: notes, resolved links, ambiguities
-rac ingest ./my-vault -o drafts/         # write reviewable drafts
-rac ingest ./my-export --from obsidian -o drafts/
+decided ingest ./my-vault                    # preview: notes, resolved links, ambiguities
+decided ingest ./my-vault -o drafts/         # write reviewable drafts
+decided ingest ./my-export --from obsidian -o drafts/
 ```
 
 What the normaliser does, deterministically and offline (identical export →
@@ -251,7 +251,7 @@ byte-identical drafts, nothing dropped):
   complete, faithful draft.
 
 The drafts are for **human review**: promote the candidate links and finalise the
-artifact frontmatter, then `rac validate`. This is an import step, not an
+artifact frontmatter, then `decided validate`. This is an import step, not an
 auto-commit.
 
 ---
@@ -261,14 +261,14 @@ auto-commit.
 Identify a document's artifact type and which sections are present or missing. Works
 on a single file or a whole directory.
 
-- **Input:** `rac inspect <file|directory>` — or `-` for stdin (single file only).
+- **Input:** `decided inspect <file|directory>` — or `-` for stdin (single file only).
 - **Options:** `--json` · `--verbose` (classification breakdown and score, single
   file only) · `--top-level` · `--recursive`
 - **Exit codes:** `0` (a completed inspection always succeeds — `Unknown` is a valid result)
 
 ```bash
-rac inspect login-flow.md
-rac inspect . --json            # aggregate type counts for a directory
+decided inspect login-flow.md
+decided inspect . --json            # aggregate type counts for a directory
 ```
 
 ```text
@@ -291,13 +291,13 @@ Missing Sections:
 
 Suggest the sections an artifact is missing, optionally as ready-to-paste templates.
 
-- **Input:** `rac improve <file>` — or `-` for stdin.
+- **Input:** `decided improve <file>` — or `-` for stdin.
 - **Options:** `--json` *or* `--template` (mutually exclusive)
 - **Exit codes:** `0` (suggestions are advice, not failure)
 
 ```bash
-rac improve login-flow.md             # list missing sections
-rac improve login-flow.md --template  # emit Markdown stubs to paste in
+decided improve login-flow.md             # list missing sections
+decided improve login-flow.md --template  # emit Markdown stubs to paste in
 ```
 
 ---
@@ -306,16 +306,16 @@ rac improve login-flow.md --template  # emit Markdown stubs to paste in
 
 Show registered artifact schemas and starter templates.
 
-- **Input:** `rac schema [name]` — `requirement`, `decision`, `roadmap`, `prompt`, or `design`.
+- **Input:** `decided schema [name]` — `requirement`, `decision`, `roadmap`, `prompt`, or `design`.
 - **Options:** `--list` (list all schema names) · `--json` *or* `--template`
   (mutually exclusive) · `--list` cannot be combined with a schema name
 - **Exit codes:** `0` success · `2` unknown schema name or flag misuse
 
 ```bash
-rac schema --list                  # the five artifact types
-rac schema requirement             # required / recommended / optional sections
-rac schema decision --template     # starter Markdown for a decision
-rac schema roadmap --json          # machine-readable schema
+decided schema --list                  # the five artifact types
+decided schema requirement             # required / recommended / optional sections
+decided schema decision --template     # starter Markdown for a decision
+decided schema roadmap --json          # machine-readable schema
 ```
 
 ---
@@ -325,7 +325,7 @@ rac schema roadmap --json          # machine-readable schema
 Inspect — and optionally validate — explicit references between artifacts in a file
 or directory.
 
-- **Input:** `rac relationships <path>` — a directory or a single Markdown file.
+- **Input:** `decided relationships <path>` — a directory or a single Markdown file.
 - **Options:** `--validate` (resolve every reference; exit `1` on any broken,
   ambiguous, self-referencing, or duplicate-identifier finding) · `--json` ·
   `--top-level` · `--recursive`
@@ -333,8 +333,8 @@ or directory.
   issues · `2` path not found
 
 ```bash
-rac relationships rac/              # list the references RAC discovered
-rac relationships rac/ --validate   # check that every reference resolves
+decided relationships decisions/              # list the references RAC discovered
+decided relationships decisions/ --validate   # check that every reference resolves
 ```
 
 Finding no relationships is **not** an error. See [relationships.md](relationships.md)
@@ -351,7 +351,7 @@ references and the artifact's own identity move together. The engine owns the ed
 set; editors and other clients preview and invoke it, never computing references
 themselves (ADR-063).
 
-- **Input:** `rac rename <old-id> <new-id> <directory>` — the existing id (or one
+- **Input:** `decided rename <old-id> <new-id> <directory>` — the existing id (or one
   of its aliases), the new human id (e.g. `ADR-099`), and the corpus to scan.
 - **Options:** `--apply` (write the edits; default is a dry-run preview) · `--json`
   (the stable plan/result contract, ADR-007) · `--top-level`
@@ -361,9 +361,9 @@ themselves (ADR-063).
   `2` not a directory
 
 ```bash
-rac rename ADR-001 ADR-099 rac/            # dry run — preview the edit set
-rac rename ADR-001 ADR-099 rac/ --apply    # apply it; references + identity move together
-rac rename ADR-001 ADR-099 rac/ --json     # the plan as a stable dict
+decided rename ADR-001 ADR-099 decisions/            # dry run — preview the edit set
+decided rename ADR-001 ADR-099 decisions/ --apply    # apply it; references + identity move together
+decided rename ADR-001 ADR-099 decisions/ --json     # the plan as a stable dict
 ```
 
 **What it rewrites.** Two things, deterministically:
@@ -392,7 +392,7 @@ identity). Every refusal leaves the corpus untouched and exits `1`.
   ordered by path then line (ADR-002).
 - **Reversible** — applying `rename <new> <old>` after a rename restores the
   original bytes. No semantic inference happens anywhere.
-- **Clean afterwards** — after `--apply`, `rac relationships <dir> --validate` is
+- **Clean afterwards** — after `--apply`, `decided relationships <dir> --validate` is
   clean: every inbound reference resolves to the renamed artifact.
 
 The `--json` plan is `{ ok, reason, old_ref, new_ref, target_path,
@@ -408,7 +408,7 @@ files and lines as a preview, and on confirm applies it — the extension previe
 and invokes the engine plan, it never computes references (ADR-063). The
 **add relationship** code action inserts a resolvable reference into the right
 `## Related X` section, and the missing-section quick-fix bodies are sourced from
-`rac schema <type>` so they cannot drift from the canonical schema.
+`decided schema <type>` so they cannot drift from the canonical schema.
 
 ---
 
@@ -417,15 +417,15 @@ and invokes the engine plan, it never computes references (ADR-063). The
 Review an entire repository in one command: validate every artifact, check
 every relationship, and report what needs attention — worst problems first.
 
-- **Input:** `rac review <directory>` — scanned recursively for `*.md`.
+- **Input:** `decided review <directory>` — scanned recursively for `*.md`.
 - **Options:** `--json` · `--top-level` · `--recursive` · `--stale-after [DAYS]`
 - **Exit codes:** `0` no blocking issues · `1` invalid artifacts or broken
   relationships found · `2` not a directory
 
 ```bash
-rac review rac/
-rac review rac/ --stale-after        # nudge if nothing written in 14 days
-rac review rac/ --stale-after 30     # custom window
+decided review decisions/
+decided review decisions/ --stale-after        # nudge if nothing written in 14 days
+decided review decisions/ --stale-after 30     # custom window
 ```
 
 `--stale-after [DAYS]` adds an advisory **write-cadence** finding when no
@@ -436,28 +436,28 @@ or on an empty corpus. The framing is capture cadence, not work tracking
 (ADR-017).
 
 Review also surfaces the advisory **`suspect-artifact` drift** finding — the same
-git-native signal `rac doctor` reports, beside the cadence nudge: a referring
+git-native signal `decided doctor` reports, beside the cadence nudge: a referring
 artifact whose resolved relationship target was committed more recently than it
 was. It is advisory (never changes the exit code) and silent outside git. See the
 [`doctor` section](#suspect-artifact) for the full definition.
 
 ## doctor
 
-One front door for **corpus health**. `rac doctor` runs validation and
+One front door for **corpus health**. `decided doctor` runs validation and
 relationship-integrity checks in a single pass and adds the diagnostics no other
 command provides, returning one verdict with a paste-ready fix per finding. It is
 deterministic and offline (no AI, no network) and never edits content — every
 finding is a report or a suggestion you act on (ADR-065).
 
-- **Input:** `rac doctor <directory>` — scanned recursively for `*.md`.
+- **Input:** `decided doctor <directory>` — scanned recursively for `*.md`.
 - **Options:** `--json` · `--hub-threshold N` (default 20) · `--top-level` ·
   `--recursive`
 - **Exit codes:** `0` no errors (warnings are advisory and do not fail) · `1` a
   structural-validation or relationship-integrity **error** · `2` not a directory
 
 ```bash
-rac doctor rac/
-rac doctor rac/ --json
+decided doctor decisions/
+decided doctor decisions/ --json
 ```
 
 Finding codes (the `error`-severity ones set the exit code; `warning`-severity
@@ -465,8 +465,8 @@ ones are advisory and exit `0`):
 
 | Code | Severity | Meaning |
 | --- | --- | --- |
-| `invalid-artifact` | error | structural validation failed (see `rac validate`) |
-| `relationship-*` | error / warning | relationship-integrity issues (see `rac relationships --validate`) |
+| `invalid-artifact` | error | structural validation failed (see `decided validate`) |
+| `relationship-*` | error / warning | relationship-integrity issues (see `decided relationships --validate`) |
 | `orphaned-artifact` | warning | nothing references this artifact |
 | `high-fan-out-hub` | warning | more resolved edges than `--hub-threshold` |
 | `injection-style-content` | warning | instruction-like content flagged for review |
@@ -483,7 +483,7 @@ the validated graph gets as complete as the prose already implies (ADR-082).
 
 It **suggests, never applies** (ADR-082): the detector writes no edge — promotion
 stays a reviewed human edit (ADR-074, ADR-065), so it never changes the
-`rac validate` / `rac relationships --validate` contract and always exits `0`.
+`decided validate` / `decided relationships --validate` contract and always exits `0`.
 Matching is deterministic and offline (ADR-002, ADR-066): a mention is a body
 token that resolves — through the same resolver validation uses — to another
 artifact by **canonical id, `<letters>-<digits>` filename ref, or declared
@@ -506,35 +506,35 @@ It is derived purely from git history and the validated relationship graph
 (ADR-045, ADR-074): only declared, resolvable references participate, so external
 references (tickets, `verified by`) are excluded (ADR-087). It is advisory (always
 exits `0`) and degrades to nothing outside a git repository or where history
-cannot answer (shallow clones, untracked files). `rac review` surfaces the same
+cannot answer (shallow clones, untracked files). `decided review` surfaces the same
 finding through its advisory channel. To clear one, review the referrer and commit
 any update it needs — a newer commit on the referrer resolves the finding.
 
 ## coverage
 
 Report typed **traceability coverage gaps** over the corpus relationship graph —
-where the knowledge graph is incomplete, distinct from `rac doctor`'s integrity
+where the knowledge graph is incomplete, distinct from `decided doctor`'s integrity
 checks. Three deterministic gap classes: **unscheduled** requirements (no roadmap
 references them), **unapplied** decisions (no requirement or roadmap references
 them), and **unscoped** roadmaps (referencing no requirement).
 
-- **Input:** `rac coverage <directory>` — scanned recursively for `*.md`.
+- **Input:** `decided coverage <directory>` — scanned recursively for `*.md`.
 - **Options:** `--json`
 - **Exit code:** always `0` — coverage is **advisory**, a completeness signal for
   human judgement, never a build failure (a roadmap may precede its requirements,
   a decision may be recorded before anything applies it). It stays out of the
-  `rac gate` enforcement path (ADR-049).
+  `decided gate` enforcement path (ADR-049).
 
 ```bash
-rac coverage rac/
-rac coverage rac/ --json
+decided coverage decisions/
+decided coverage decisions/ --json
 ```
 
 ```text
 Repository Review
 =================
 
-Directory:  rac/
+Directory:  decisions/
 Artifacts:  90
 
   Requirement    19
@@ -560,8 +560,8 @@ Findings are grouped by priority, highest impact first:
 | 3 | Unrecognized artifacts (no schema matched) | no — advisory |
 | 4 | Missing recommended information | no — advisory |
 
-Every finding carries a concrete suggested action (`rac validate <file>`,
-`rac relationships <dir> --validate`, `rac improve <file> --template`, …) and
+Every finding carries a concrete suggested action (`decided validate <file>`,
+`decided relationships <dir> --validate`, `decided improve <file> --template`, …) and
 an `impact` sentence explaining why it matters (additive in v0.8.11), and
 the report ends with the same health score `portfolio` computes. The `--json`
 form is a stable contract (`schema_version: "1"`) with `ok`, `artifacts`,
@@ -581,19 +581,19 @@ classify every finding as **blocking** or **advisory** under the corpus
 enforcement policy. The single enforcement entry point — one exit code, one SARIF
 document — used by the PR-gate Action.
 
-- **Input:** `rac gate <directory>` — scanned recursively for `*.md`.
+- **Input:** `decided gate <directory>` — scanned recursively for `*.md`.
 - **Options:** `--json` · `--sarif` (mutually exclusive) · `--top-level`
 - **Exit codes:** `0` nothing blocking · `1` a blocking finding (or malformed
-  `.rac/config.yaml`) · `2` not a directory
+  `.decided/config.yaml`) · `2` not a directory
 
 ```bash
-rac gate rac/                # human summary
-rac gate rac/ --json         # stable JSON contract (schema_version "1")
-rac gate rac/ --sarif        # one SARIF 2.1.0 document over all findings
+decided gate decisions/                # human summary
+decided gate decisions/ --json         # stable JSON contract (schema_version "1")
+decided gate decisions/ --sarif        # one SARIF 2.1.0 document over all findings
 ```
 
 Which findings block versus merely annotate is governed by an optional
-`enforcement:` section in `.rac/config.yaml` (`blocking` / `advisory` / `off`
+`enforcement:` section in `.decided/config.yaml` (`blocking` / `advisory` / `off`
 lists of finding codes). With no policy, the gate's verdict is exactly
 `validate ∧ relationships ∧ review`. The `--json` envelope carries `ok`,
 `blocking_count`, `advisory_count`, and `findings[]` (each with `source`, `code`,
@@ -610,8 +610,8 @@ added, modified, or removed, and how validation, relationships, and repository
 statistics moved. `review` answers "what needs attention now?"; `watchkeeper`
 answers "what changed, and how did it move the repository?".
 
-- **Input:** `rac watchkeeper [directory]` — the corpus to compare (default:
-  `rac/` when present, else the current directory). The working tree is the
+- **Input:** `decided watchkeeper [directory]` — the corpus to compare (default:
+  `decisions/` when present, else the current directory). The working tree is the
   head state.
 - **Options:** `--base REF` (default `main`) · `--head REF` ·
   `--format human|json|github` · `--json` (alias for `--format json`) ·
@@ -628,7 +628,7 @@ materialized read-only via `git archive` (ADR-043): nothing mutates your
 repository, and only the corpus subpath is extracted.
 
 ```bash
-rac watchkeeper rac --base main
+decided watchkeeper rac --base main
 ```
 
 ```text
@@ -727,7 +727,7 @@ which the runner turns into inline annotations. `--no-annotate` suppresses
 the stderr stream:
 
 ```bash
-rac watchkeeper rac --base "origin/$GITHUB_BASE_REF" --format github > "$GITHUB_STEP_SUMMARY"
+decided watchkeeper rac --base "origin/$GITHUB_BASE_REF" --format github > "$GITHUB_STEP_SUMMARY"
 ```
 
 The `--json` form is a stable contract (`schema_version: "1"`) with `base`,
@@ -750,12 +750,12 @@ reusable workflow, see **[watchkeeper.md](watchkeeper.md)**.
 A one-screen repository intelligence summary: artifact counts by type, validity,
 completeness, relationship coverage, an attention list, and a health score.
 
-- **Input:** `rac portfolio <directory>` — scanned recursively for `*.md`.
+- **Input:** `decided portfolio <directory>` — scanned recursively for `*.md`.
 - **Options:** `--json` · `--top-level` · `--recursive`
 - **Exit codes:** `0` success · `2` not a directory
 
 ```bash
-rac portfolio rac/
+decided portfolio decisions/
 ```
 
 ---
@@ -765,20 +765,20 @@ rac portfolio rac/
 Produce a flat inventory of every artifact — id, type, title, and path — so other
 tools can build navigation without re-scanning files.
 
-- **Input:** `rac index [directory]` — defaults to the current directory; scanned
+- **Input:** `decided index [directory]` — defaults to the current directory; scanned
   recursively for `*.md`.
 - **Options:** `--json` · `--top-level` · `--recursive`
 - **Exit codes:** `0` success · `2` not a directory
 
 ```bash
-rac index rac/
-rac index rac/ --json
+decided index decisions/
+decided index decisions/ --json
 ```
 
 ```json
 {
   "schema_version": "1",
-  "directory": "rac/requirements/",
+  "directory": "decisions/requirements/",
   "recursive": true,
   "artifact_count": 4,
   "artifacts": [
@@ -786,7 +786,7 @@ rac index rac/ --json
       "id": "rac-documentation-structure",
       "type": "unknown",
       "title": "REQ-Documentation-Structure",
-      "path": "rac/requirements/rac-documentation-structure.md"
+      "path": "decisions/requirements/rac-documentation-structure.md"
     }
   ]
 }
@@ -800,23 +800,23 @@ Project the corpus into a derived view. One walk, several mutually-exclusive
 modes; the default writes the viewer JSON payload to stdout. Exports are build
 artifacts — existing output is overwritten.
 
-- **Input:** `rac export [directory]` — scanned recursively for `*.md` (default: current directory).
+- **Input:** `decided export [directory]` — scanned recursively for `*.md` (default: current directory).
 - **Modes:** *(default)* viewer JSON to stdout · `--html` (self-contained Portal file) · `--okf` (OKF v0.1 Markdown bundle) · `--documents` (JSONL for memory/RAG backends) · `--graph` (typed node+edge JSON for graph backends) · `--agent-rules` (per-client agent-context files; see its own behaviour)
 - **Options:** `--out <path>` (only `--html`/`--okf`/`--agent-rules`; the stdout modes are pipeable) · `--json` (no-op for the default mode)
 - **Exit codes:** `0` success · `2` not a directory, or `--out` given to a stdout mode
 
 ```bash
-rac export rac/                      # viewer JSON to stdout
-rac export rac/ --documents          # JSONL, one record per artifact
-rac export rac/ --graph              # typed node+edge graph
-rac export rac/ --html --out lore.html
+decided export decisions/                      # viewer JSON to stdout
+decided export decisions/ --documents          # JSONL, one record per artifact
+decided export decisions/ --graph              # typed node+edge graph
+decided export decisions/ --html --out lore.html
 ```
 
 ### Exporting to external memory / RAG / graph backends
 
 `--documents` and `--graph` exist to feed RAC's recorded decisions into the tools
 teams already run, so an agent can recall fuzzily there and then **verify in
-Lore**. They are additive (ADR-007): the default viewer JSON is unchanged, and
+AsDecided**. They are additive (ADR-007): the default viewer JSON is unchanged, and
 nothing here computes embeddings — that stays in the consuming backend (ADR-002,
 ADR-066). The connectors themselves live in the separate `lore-connectors`
 companion, one module per backend rather than a repo per provider (ADR-073).
@@ -837,19 +837,19 @@ ingestion denominators, so most targets need no bespoke code:
   (`supersedes`, `related_*`) and direction, so the backend gets RAC's validated
   decision graph instead of one inferred from prose.
 
-**How the answer is then validated (verify-in-Lore).** The backend gives
-*recall*; Lore gives the *authoritative answer*. After a backend surfaces a
+**How the answer is then validated (verify-in-AsDecided).** The backend gives
+*recall*; AsDecided gives the *authoritative answer*. After a backend surfaces a
 candidate, the agent:
 
 1. reads the canonical `id` from the record's metadata (or the node/edge);
-2. re-fetches the current artifact from Lore by that `id` (the `get_artifact`
-   MCP tool, or `rac resolve`);
-3. uses Lore's lifecycle status to drop a retired or superseded decision
+2. re-fetches the current artifact from AsDecided by that `id` (the `get_artifact`
+   MCP tool, or `decided resolve`);
+3. uses AsDecided's lifecycle status to drop a retired or superseded decision
    (`find_decisions` filters these);
-4. acts on **Lore's verbatim text**, never the backend's possibly-rewritten copy.
+4. acts on **AsDecided's verbatim text**, never the backend's possibly-rewritten copy.
 
 RAC does not validate or sync the backend's store — verification happens on
-read, in Lore. The exported copy is a pointer, kept fresh by re-running the
+read, in AsDecided. The exported copy is a pointer, kept fresh by re-running the
 export; the canonical `id` is what makes the round-trip reliable.
 
 ---
@@ -867,10 +867,10 @@ it. The workspace is live (v0.8.9): Explorer watches the repository and
 reloads itself when artifacts change on disk.
 
 Explorer is a presentation layer over the same services the CLI uses: everything
-it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
-`rac find`, and friends (ADR-015). It never edits artifacts (ADR-024).
+it shows is also available through `decided portfolio`, `decided index`, `decided resolve`,
+`decided find`, and friends (ADR-015). It never edits artifacts (ADR-024).
 
-- **Input:** `rac explorer [directory]` — defaults to `rac/` when present
+- **Input:** `decided explorer [directory]` — defaults to `decisions/` when present
   (ADR-018), else the current directory; scanned recursively for `*.md`.
 - **Options:** `--top-level` · `--recursive` (no `--json`: the surface is interactive)
 - **Keys:** `/` summons the command palette from anywhere · `↑ ↓` navigate ·
@@ -887,12 +887,12 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   `list [type]` · `health` · `stats` · `recommendations` · `new <type> <path>` ·
   `import <source> [target]` · `relationships <ref>` · `resume` ·
   `schema [type]` · `settings` · `home` · `help` · `quit` — anything else is
-  a search, resolved with `rac resolve` / `rac find` semantics. Full results render in the context panel (the layout
+  a search, resolved with `decided resolve` / `decided find` semantics. Full results render in the context panel (the layout
   never jumps), where `f` narrows artifact results by type — all → each type
   present → all. `/browse <type>` lists that type in the results panel in
   every grouping mode; bare `/browse` focuses the sidebar. `/schema` lists
   the registered artifact types; `/schema decision` renders the type's
-  expected sections, the same facts `rac schema` reports.
+  expected sections, the same facts `decided schema` reports.
 - **Sidebar:** every artifact under "Artifacts", mirroring the repository's
   directory structure by default — directories as collapsible nodes (name
   with a trailing `/` and an artifact count), nested exactly as on disk.
@@ -908,7 +908,7 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   keyboard, scrolls with `j`/`k`/PgUp/PgDn, and artifact references inside
   the text open in place, so the corpus reads like a wiki), **Inspection**
   (status, completeness, and the artifact's validation diagnostics — the
-  same issues `rac validate` reports), **Links** (the knowledge graph as
+  same issues `decided validate` reports), **Links** (the knowledge graph as
   text — a dependency chain to what the artifact relates to, an Impact
   Analysis block naming what a change may affect, and a lineage chain;
   connected artifacts open on Enter, so the graph traverses one hop at a
@@ -936,14 +936,14 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   (never overwriting). Long conversions report progress.
   `/new <type> <path>` starts an artifact from its canonical template: the
   preview shows the sections with the ID noted as assigned on write, `y`
-  confirms, and the write goes through the same Core service as `rac new` —
+  confirms, and the write goes through the same Core service as `decided new` —
   the ID is minted against the repository index, existing files refuse,
   missing directories refuse, and an uninitialized repository points you at
-  `rac init`. On success the Explorer reloads and opens the new artifact,
+  `decided init`. On success the Explorer reloads and opens the new artifact,
   ready for `e`; bare `/new` lists the creatable types.
 - **Stats:** `/stats` opens a portfolio dashboard — per-type counts with
   validity, requirement/metric/risk totals, decision status and category
-  breakdowns, and relationship counts — the same facts `rac stats` reports,
+  breakdowns, and relationship counts — the same facts `decided stats` reports,
   collected off the UI thread on request.
 - **Portfolio list:** `/list` opens a sortable table of every artifact — type
   tag, id, status, link count, recency, and title. `/list <type>` (for example
@@ -984,9 +984,9 @@ it shows is also available through `rac portfolio`, `rac index`, `rac resolve`,
   a swapping context region — or `split`, a master-detail layout where the
   portfolio list drives a persistent reading pane; switching applies live), and
   the editor command —
-  persisted to `$XDG_CONFIG_HOME/rac/explorer.json` (no login, cloud, or
+  persisted to `$XDG_CONFIG_HOME/decisions/explorer.json` (no login, cloud, or
   sync). Explorer remembers recently opened repositories plus the last
-  artifact and view per repository (under `$XDG_STATE_HOME/rac/`); `.` or
+  artifact and view per repository (under `$XDG_STATE_HOME/decisions/`); `.` or
   `/resume` takes you back to where you were.
 - **Exit codes:** `0` session quit · `2` not a directory, or the `explorer` extra is
   not installed
@@ -995,10 +995,10 @@ The TUI dependency ships as an optional extra, so the core install stays light:
 
 ```bash
 pip install 'rac-core[explorer]'
-rac explorer rac/
+decided explorer decisions/
 ```
 
-Without the extra, `rac explorer` prints the install hint above and exits `2`.
+Without the extra, `decided explorer` prints the install hint above and exits `2`.
 
 ---
 
@@ -1009,14 +1009,14 @@ read-only tools, client configuration, and team setup are documented in the
 [MCP server guide](mcp.md).
 
 ```bash
-rac mcp --root /path/to/repo
-rac mcp --root /path/to/repo --telemetry
+decided-mcp --root /path/to/repo
+decided-mcp --root /path/to/repo --telemetry
 ```
 
 - **`--root PATH`** — repository root to serve (default: current directory)
 - **`--telemetry`** — record tool-call counts and metadata (never arguments
-  or content) to a local log under `$XDG_STATE_HOME/rac/` (default
-  `~/.local/state/rac/guide-telemetry.jsonl`); off by default, announced on
+  or content) to a local log under `$XDG_STATE_HOME/decisions/` (default
+  `~/.local/state/decisions/guide-telemetry.jsonl`); off by default, announced on
   stderr when on
 - **Exit codes:** `0` server shutdown on client disconnect · `2` `--root` is
   not a directory
@@ -1031,9 +1031,9 @@ An empty or missing log is a valid answer — telemetry is opt-in and off by
 default.
 
 ```bash
-rac mcp-stats           # human summary
-rac mcp-stats --json    # the same summary as JSON (the shareable export)
-rac mcp-stats --share   # prefilled GitHub usage-report issue URL
+decided-mcp-stats           # human summary
+decided-mcp-stats --json    # the same summary as JSON (the shareable export)
+decided-mcp-stats --share   # prefilled GitHub usage-report issue URL
 ```
 
 `--share` prints a URL that opens a prefilled usage-report issue containing
@@ -1049,16 +1049,16 @@ RAC sends nothing itself. `--json` and `--share` are mutually exclusive.
 
 Summarize recorded **CLI usage** alongside the Guide MCP tools — per-command and
 per-tool call counts, errors, session count, and a recent-activity trend. When
-sharing consent is recorded (`rac telemetry on`), each completed `rac` command
+sharing consent is recorded (`decided telemetry on`), each completed `rac` command
 appends one **content-free** event (subcommand name, outcome, duration — never
-argv, paths, or artifact ids) to a local log; `rac usage` reads it back.
-`rac mcp-stats` stays Guide-only for back-compat; `rac usage` covers both logs
+argv, paths, or artifact ids) to a local log; `decided usage` reads it back.
+`decided-mcp-stats` stays Guide-only for back-compat; `decided usage` covers both logs
 (ADR-046).
 
 ```bash
-rac usage           # human summary of CLI + Guide usage
-rac usage --json    # the same summary as JSON
-rac usage --share   # prefilled GitHub usage-report issue URL (counts only)
+decided usage           # human summary of CLI + Guide usage
+decided usage --json    # the same summary as JSON
+decided usage --share   # prefilled GitHub usage-report issue URL (counts only)
 ```
 
 An empty or missing log is a valid answer — telemetry is opt-in and off by
@@ -1071,26 +1071,26 @@ default. `--json` and `--share` are mutually exclusive.
 ## telemetry
 
 Show or change anonymous usage-sharing consent (ADR-041). With consent on,
-`rac mcp` sends at most one anonymous daily ping — a random install id, the
+`decided-mcp` sends at most one anonymous daily ping — a random install id, the
 version, and an active-repo count; never paths, queries, or repository
-content. Sharing is independent of the local `rac mcp --telemetry` flag.
+content. Sharing is independent of the local `decided-mcp --telemetry` flag.
 
 ```bash
-rac telemetry                          # status (default): what is shared, and whether sending is possible
-rac telemetry on                       # opt in; mints a random install id
-rac telemetry off                      # opt out; nothing else changes
-rac telemetry off --enterprise         # hard-lock the ping off (forces the kill state, refuses 'on')
-rac telemetry off --enterprise --unlock  # remove the enterprise hard-lock
+decided telemetry                          # status (default): what is shared, and whether sending is possible
+decided telemetry on                       # opt in; mints a random install id
+decided telemetry off                      # opt out; nothing else changes
+decided telemetry off --enterprise         # hard-lock the ping off (forces the kill state, refuses 'on')
+decided telemetry off --enterprise --unlock  # remove the enterprise hard-lock
 ```
 
 `status` also reports when the build has no endpoint key configured — in
 that state nothing is sent even with consent. Consent lives at
-`~/.config/rac/telemetry.json`.
+`~/.config/decisions/telemetry.json`.
 
 **Enterprise hard-lock (ADR-086).** For regulated installs that must *prove* the
-ping is off, `rac telemetry off --enterprise` forces the kill state at runtime
+ping is off, `decided telemetry off --enterprise` forces the kill state at runtime
 (independent of the build's endpoint key), records a persistent lock, and refuses
-`rac telemetry on` until it is removed with `rac telemetry off --enterprise
+`decided telemetry on` until it is removed with `decided telemetry off --enterprise
 --unlock`. While locked, `status` reports `Sharing: locked (enterprise)`. The lock
 governs the anonymous ping only.
 
@@ -1104,24 +1104,24 @@ governs the anonymous ping only.
 Create a new artifact from its canonical bundled template, with a
 system-assigned opaque ID written as YAML frontmatter. The generated file uses
 the same structure the validators expect: edit the `TODO` placeholders and it
-passes `rac validate`.
+passes `decided validate`.
 
-- **Input:** `rac new <type> <output-path>` — type is `requirement`,
+- **Input:** `decided new <type> <output-path>` — type is `requirement`,
   `decision`, `roadmap`, `prompt`, or `design`; the output path is taken
   literally (no filename derivation, no extension magic).
 - **Options:** `--json`
 - **Exit codes:** `0` created · `1` packaged template missing or malformed
   repository config · `2` unsupported type, output file already exists, output
-  directory missing, or repository not initialized (run `rac init` first)
+  directory missing, or repository not initialized (run `decided init` first)
 
-`rac new` never overwrites an existing file and never creates directories. The
-repository key comes from the nearest `.rac/config.yaml` (see [`init`](#init));
+`decided new` never overwrites an existing file and never creates directories. The
+repository key comes from the nearest `.decided/config.yaml` (see [`init`](#init));
 the assigned ID is permanent — it survives renames, moves, and type changes.
 
 ```bash
-rac init
-rac new requirement rac/requirements/user-authentication.md
-rac new decision rac/decisions/adr-029-example.md --json
+decided init
+decided new requirement decisions/requirements/user-authentication.md
+decided new decision decisions/decisions/adr-029-example.md --json
 ```
 
 ```json
@@ -1129,7 +1129,7 @@ rac new decision rac/decisions/adr-029-example.md --json
   "schema_version": "1",
   "created": true,
   "type": "decision",
-  "path": "rac/decisions/adr-029-example.md",
+  "path": "decisions/decisions/adr-029-example.md",
   "id": "RAC-01JY4M8X2QZ7"
 }
 ```
@@ -1150,17 +1150,17 @@ type: decision
 
 ## templates
 
-List the canonical artifact templates available to `rac new`. The set is the
+List the canonical artifact templates available to `decided new`. The set is the
 artifact spec registry itself — the same source that drives classification and
 validation.
 
-- **Input:** `rac templates`
+- **Input:** `decided templates`
 - **Options:** `--json`
 - **Exit codes:** `0` success
 
 ```bash
-rac templates
-rac templates --json
+decided templates
+decided templates --json
 ```
 
 ```json
@@ -1175,24 +1175,24 @@ rac templates --json
 
 ## init
 
-Establish the repository identity namespace: a `.rac/config.yaml` holding the
-`repository_key` that prefixes every ID assigned by `rac new`. The key is
+Establish the repository identity namespace: a `.decided/config.yaml` holding the
+`repository_key` that prefixes every ID assigned by `decided new`. The key is
 configuration, not artifact meaning — it never dictates folder structure.
 
-- **Input:** `rac init [directory]` — defaults to the current directory.
+- **Input:** `decided init [directory]` — defaults to the current directory.
 - **Options:** `--key KEY` (default `RAC`; 2–10 uppercase alphanumeric
   characters starting with a letter) · `--ticketing PROVIDER` · `--profile NAME`
   · `--org-endpoint URL` · `--json`
 - **`--ticketing PROVIDER`** records the external ticketing system for
   `## Related Tickets` references (ADR-087) as `ticketing.provider` in
-  `.rac/config.yaml` — one of `jira`, `github`, `linear`, `azure-devops`,
+  `.decided/config.yaml` — one of `jira`, `github`, `linear`, `azure-devops`,
   `servicenow`, or `none`. Omit it to leave the provider unset (tickets stay
-  unvalidated). Written at creation; edit `.rac/config.yaml` to change it later.
+  unvalidated). Written at creation; edit `.decided/config.yaml` to change it later.
   See [relationships](relationships.md#external-tickets).
 - **`--profile NAME`** applies a built-in **configuration** profile on a fresh
   init (ADR-088) — `default` or `enterprise`. It writes *configuration only*,
   never authored prose, and **never overwrites an existing file**:
-  - `default` — writes the lore MCP client wiring for Claude Code (`.mcp.json`)
+  - `default` — writes the AsDecided MCP client wiring for Claude Code (`.mcp.json`)
     and Cursor (`.cursor/mcp.json`).
   - `enterprise` — the client wiring **plus** an `enforcement:` policy stanza
     (ADR-049) committing relationship-integrity findings as gate-blocking, so the
@@ -1200,10 +1200,10 @@ configuration, not artifact meaning — it never dictates folder structure.
     escalate per repo with `validation:` overrides (ADR-053) if desired.
 
   Profiles are creation-time configuration, composable with `--key`/`--ticketing`
-  and the [`quickstart`](#quickstart) scaffold. Plain `rac init` (no `--profile`)
+  and the [`quickstart`](#quickstart) scaffold. Plain `decided init` (no `--profile`)
   is unchanged. A parent-corpus line is added once corpus federation ships
   (ADR-089); until then the enterprise profile is hollow on it.
-- **`--org-endpoint URL`** wires the shared **org Lore endpoint** (ADR-117): it
+- **`--org-endpoint URL`** wires the shared **org AsDecided endpoint** (ADR-117): it
   ensures a `lore-org` entry — `{"type": "http", "url": URL}` — under
   `mcpServers` in `.mcp.json` and `.cursor/mcp.json`. Unlike a profile, org
   wiring is an explicit operator action, so it also applies to an
@@ -1218,25 +1218,25 @@ configuration, not artifact meaning — it never dictates folder structure.
   JSON; nothing is written) · `2` invalid key, unknown ticketing provider,
   unknown profile, invalid org endpoint, or not a directory
 
-After a successful init on a real terminal, `rac init` asks one one-time
-question — "Share anonymous usage to help shape Lore? [y/N]" — defaulting to
+After a successful init on a real terminal, `decided init` asks one one-time
+question — "Share anonymous usage to help shape AsDecided? [y/N]" — defaulting to
 No. Either answer is persisted, so it is asked at most once per machine; it
-never appears with `--json`, in pipes, or in CI. See `rac telemetry`.
+never appears with `--json`, in pipes, or in CI. See `decided telemetry`.
 
 ```bash
-rac init
-rac init --key PROJ
-rac init --key ACME --ticketing jira
-rac init --key ACME --profile enterprise
-rac init --org-endpoint https://lore.example.com/mcp
-rac init docs/ --json
+decided init
+decided init --key PROJ
+decided init --key ACME --ticketing jira
+decided init --key ACME --profile enterprise
+decided init --org-endpoint https://lore.example.com/mcp
+decided init docs/ --json
 ```
 
 ```json
 {
   "schema_version": "1",
   "repository_key": "PROJ",
-  "config_path": ".rac/config.yaml",
+  "config_path": ".decided/config.yaml",
   "created": true,
   "profile": "enterprise",
   "files_written": [".mcp.json", ".cursor/mcp.json"],
@@ -1250,37 +1250,37 @@ rac init docs/ --json
 ## quickstart
 
 Guided first run: establish the repository identity **and** scaffold a first
-artifact in one step. It is `rac init` followed by `rac new`, collapsed into a
+artifact in one step. It is `decided init` followed by `decided new`, collapsed into a
 single command, so a new user reaches a validatable artifact without assembling
 the sequence. It writes one starter artifact (the canonical template, with a
-system-assigned id) under `rac/<family>/`, and only into an empty corpus — a
+system-assigned id) under `decisions/<family>/`, and only into an empty corpus — a
 corpus that already holds an artifact is refused, untouched (ADR-044).
 
-- **Input:** `rac quickstart [directory]` — defaults to the current directory.
+- **Input:** `decided quickstart [directory]` — defaults to the current directory.
 - **Options:** `--key KEY` (default `RAC`) · `--type TYPE` (default
-  `requirement`; any name from `rac templates`) · `--json`
+  `requirement`; any name from `decided templates`) · `--json`
 - **Exit codes:** `0` identity established and starter artifact created · `1`
   the corpus already has artifacts, or a different key is established (nothing
   written) · `2` invalid key, unknown type, or not a directory
 
-Like `rac init`, on a real terminal it asks the one-time usage-sharing question
+Like `decided init`, on a real terminal it asks the one-time usage-sharing question
 (never with `--json`, in pipes, or in CI).
 
 ```bash
-rac quickstart
-rac quickstart --type decision
-rac quickstart docs/ --key PROJ --json
+decided quickstart
+decided quickstart --type decision
+decided quickstart docs/ --key PROJ --json
 ```
 
 ```json
 {
   "schema_version": "1",
   "repository_key": "RAC",
-  "config_path": "./.rac/config.yaml",
+  "config_path": "./.decided/config.yaml",
   "created": true,
   "artifact": {
     "type": "requirement",
-    "path": "rac/requirements/first-requirement.md",
+    "path": "decisions/requirements/first-requirement.md",
     "id": "RAC-..."
   }
 }
@@ -1296,15 +1296,15 @@ case-insensitive and covers canonical IDs and legacy aliases (`## ID` values,
 filename prefixes, stems), so lookups survive renames, moves, and identity
 migration.
 
-- **Input:** `rac resolve <ID> [directory]` — directory defaults to the
+- **Input:** `decided resolve <ID> [directory]` — directory defaults to the
   current directory.
 - **Options:** `--json` · `--top-level` · `--recursive`
 - **Exit codes:** `0` resolved · `1` not found, or duplicate ID (paths listed
   on stderr; never silently resolved by path order) · `2` not a directory
 
 ```bash
-rac resolve RAC-01JY4M8X2QZ7 rac/
-rac resolve adr-015 rac/ --json
+decided resolve RAC-01JY4M8X2QZ7 decisions/
+decided resolve adr-015 decisions/ --json
 ```
 
 ```json
@@ -1313,7 +1313,7 @@ rac resolve adr-015 rac/ --json
   "id": "RAC-01JY4M8X2QZ7",
   "type": "decision",
   "title": "Markdown Is the Canonical Source Format",
-  "path": "rac/decisions/markdown-first.md"
+  "path": "decisions/decisions/markdown-first.md"
 }
 ```
 
@@ -1330,7 +1330,7 @@ with sorted path as the tiebreak. No embeddings or semantic scoring — identica
 bytes and query yield a byte-identical order. An empty result is a valid outcome,
 not an error.
 
-- **Input:** `rac find <query> [directory]` — directory defaults to the
+- **Input:** `decided find <query> [directory]` — directory defaults to the
   current directory.
 - **Options:** `--type TYPE` (only match one artifact type) · `--tag TAG`
   (repeatable; only artifacts carrying every given tag) · `--no-cache` /
@@ -1349,17 +1349,17 @@ carrying both — and is case-insensitive. A tagged hit surfaces its `tags`
 additively (present only when non-empty). The `search_artifacts` MCP tool takes
 the same `tags` argument.
 
-**`rac find` serves from the persistent index store by default (ADR-112, née
+**`decided find` serves from the persistent index store by default (ADR-112, née
 ADR-110's opt-in).** The query is answered from the memory-mapped derived index
 (ADR-104) instead of a fresh walk — a warm run against an unchanged corpus
 skips the parse and graph rebuild, with freshness confirmed by a persisted stat
 manifest (every file is stat'ed; only stat-changed files are re-read); a cold
 run builds fresh and writes the store for next time. The output is
-byte-identical to the uncached `rac find` for every mode. The store is
+byte-identical to the uncached `decided find` for every mode. The store is
 disposable and content-addressed (any byte change rebuilds it), lives under
-`RAC_CACHE_DIR` / `$XDG_CACHE_HOME`, and is safe to delete — it costs only
+`DECIDED_CACHE_DIR` / `$XDG_CACHE_HOME`, and is safe to delete — it costs only
 latency. `--no-cache` restores the plain walk for one invocation
-(`RAC_NO_CACHE=1` restores it environment-wide — the right lever for a genuine
+(`DECIDED_NO_CACHE=1` restores it environment-wide — the right lever for a genuine
 one-off query, which skips the cold build), and `--verify` re-reads every
 file's bytes when checking freshness — the full-hash floor that catches the one
 rewrite shape the stat scan accepts (a size- and mtime-preserving in-place
@@ -1377,7 +1377,7 @@ can see which result has decayed without opening it (ADR-045). `last_committed`
 is the ISO date of the file's most recent commit; `age_days` is its age in whole
 days; `stale` is `true` when that age exceeds the freshness threshold. The
 threshold defaults to **180 days** and is configurable per repository in
-`.rac/config.yaml`:
+`.decided/config.yaml`:
 
 ```yaml
 freshness:
@@ -1392,10 +1392,10 @@ than a fabricated date; in the human output a stale match is flagged inline with
 `⚠ stale (Nd)`.
 
 ```bash
-rac find markdown rac/
-rac find explorer rac/ --type decision
-rac find "canonical format" rac/ --json
-rac find markdown rac/ --explain        # show the relevance-score breakdown
+decided find markdown decisions/
+decided find explorer decisions/ --type decision
+decided find "canonical format" decisions/ --json
+decided find markdown decisions/ --explain        # show the relevance-score breakdown
 ```
 
 ```json
@@ -1409,7 +1409,7 @@ rac find markdown rac/ --explain        # show the relevance-score breakdown
       "id": "RAC-01JY4M8X2QZ7",
       "type": "decision",
       "title": "Markdown Is the Canonical Source Format",
-      "path": "rac/decisions/markdown-first.md",
+      "path": "decisions/decisions/markdown-first.md",
       "recency": {
         "last_committed": "2026-01-04T12:00:00+00:00",
         "age_days": 181,
@@ -1437,31 +1437,31 @@ repository-relative form): a **literal path/directory** entry covers the query
 when the query equals it or is nested beneath it; a **glob** covers it
 segment-aware (`*` within a segment, `**` across — `src/**/*.py` matches
 `src/a/b.py`); **component-name** entries never match a path. The query resolves
-against the repository root (the nearest `.rac/`).
+against the repository root (the nearest `.decided/`).
 
-- **Input:** `rac decisions-for <path> [directory]` — the corpus directory
+- **Input:** `decided decisions-for <path> [directory]` — the corpus directory
   defaults to the current directory.
 - **Options:** `--json` · `--top-level` · `--recursive`
 - **Exit codes:** `0` lookup completed (matches or none) · `2` the corpus
   directory is not a directory
 
 ```bash
-rac decisions-for src/rac/mcp/server.py rac/
-rac decisions-for .github/workflows/tests.yml rac/ --json
+decided decisions-for src/decisions/mcp/server.py decisions/
+decided decisions-for .github/workflows/tests.yml decisions/ --json
 ```
 
 ```json
 {
   "schema_version": "1",
-  "query": "src/rac/mcp/server.py",
+  "query": "src/decisions/mcp/server.py",
   "in_repository": true,
   "decisions": [
     {
       "id": "RAC-KTQ63DRPK57V",
       "title": "ADR-023: Clean-Break Internal Refactors",
       "status": "Accepted",
-      "path": "rac/decisions/adr-023-clean-break-internal-refactors.md",
-      "matching_entry": "src/rac/"
+      "path": "decisions/decisions/adr-023-clean-break-internal-refactors.md",
+      "matching_entry": "src/decisions/"
     }
   ]
 }
@@ -1482,8 +1482,8 @@ recognized artifact without a frontmatter block gains the canonical envelope
 body is preserved byte-for-byte. Idempotent — re-running changes nothing, and
 a document repaired to classify is picked up by the next run.
 
-- **Input:** `rac migrate metadata <directory>` — requires an initialized
-  repository (`rac init`).
+- **Input:** `decided migrate metadata <directory>` — requires an initialized
+  repository (`decided init`).
 - **Options:** `--dry-run` (report without writing) · `--json` ·
   `--top-level` · `--recursive`
 - **Exit codes:** `0` completed, including nothing to migrate · `1`
@@ -1494,15 +1494,15 @@ Artifacts that already carry frontmatter — valid or broken — are never
 touched; documents that do not classify are listed, never guessed at.
 
 ```bash
-rac migrate metadata rac/ --dry-run   # preview
-rac migrate metadata rac/             # migrate
-rac migrate metadata rac/ --json
+decided migrate metadata decisions/ --dry-run   # preview
+decided migrate metadata decisions/             # migrate
+decided migrate metadata decisions/ --json
 ```
 
 ```json
 {
   "schema_version": "1",
-  "directory": "rac/",
+  "directory": "decisions/",
   "recursive": true,
   "dry_run": false,
   "summary": {
@@ -1513,7 +1513,7 @@ rac migrate metadata rac/ --json
   },
   "files": [
     {
-      "path": "rac/decisions/adr-001-markdown-first.md",
+      "path": "decisions/decisions/adr-001-markdown-first.md",
       "status": "migrated",
       "id": "RAC-01JY4M8X2QZ7",
       "type": "decision"
@@ -1533,8 +1533,8 @@ Skill content ships with the distribution as package resources, so
 installation works from an installed wheel without this repository, network
 access, or AI involvement.
 
-- **Input:** `rac skill install [name]` — with no name, every bundled skill;
-  with a name, exactly that skill. `rac skill list` — enumerate the bundle.
+- **Input:** `decided skill install [name]` — with no name, every bundled skill;
+  with a name, exactly that skill. `decided skill list` — enumerate the bundle.
 - **Options:** `--dir PATH` (target project directory; default: current
   directory; install only) · `--json`
 - **Exit codes:** `0` installed / listed · `1` a target skill file already
@@ -1542,20 +1542,20 @@ access, or AI involvement.
   (broken installation) · `2` `--dir` is not a directory, or an unknown
   skill name (the available skills are listed)
 
-`rac skill install` writes each skill to
+`decided skill install` writes each skill to
 `.claude/skills/<name>/SKILL.md` under the target directory — the documented
 Claude Code project-level discovery path — creating parent directories as
 needed. An existing skill file is never overwritten. The no-name form is
 all-or-nothing: every target path is checked first, and if any exists the
 command refuses with exit `1`, reports the existing path(s), and writes
 nothing. To add a single missing skill alongside ones already installed,
-name it: `rac skill install rac-review`.
+name it: `decided skill install rac-review`.
 
 ```bash
-rac skill install                       # all bundled skills, current project
-rac skill install rac-review            # one skill by name
-rac skill install --dir ../app --json   # into another project
-rac skill list                          # what is bundled
+decided skill install                       # all bundled skills, current project
+decided skill install rac-review            # one skill by name
+decided skill install --dir ../app --json   # into another project
+decided skill list                          # what is bundled
 ```
 
 ```text
@@ -1600,7 +1600,7 @@ artifacts and blocks the commit on errors). Hook scripts ship with the
 distribution as package resources, so installation works from an installed
 wheel without this repository.
 
-- **Input:** `rac hook install` — install one hook. `rac hook list` —
+- **Input:** `decided hook install` — install one hook. `decided hook list` —
   enumerate the bundle.
 - **Options:** `--style post-commit|pre-commit` (default: `post-commit`;
   install only) · `--dir PATH` (target git repository; default: current
@@ -1610,7 +1610,7 @@ wheel without this repository.
   installation) · `2` `--dir` is not a directory, has no `.git`, or an unknown
   `--style`
 
-`rac hook install` writes the script to `<dir>/.git/hooks/<style>` and makes it
+`decided hook install` writes the script to `<dir>/.git/hooks/<style>` and makes it
 executable. An existing hook file is never overwritten. The default
 `post-commit` hook is non-blocking by design — the nudge builds the write habit
 without punishing it; choose `--style pre-commit` only when you want validation
@@ -1618,9 +1618,9 @@ enforced at commit time. Because `.git/hooks` is not version-controlled, run the
 install once per clone (or manage `core.hooksPath` yourself).
 
 ```bash
-rac hook install                       # post-commit advisory nudge
-rac hook install --style pre-commit    # blocking artifact validation
-rac hook list                          # what is bundled
+decided hook install                       # post-commit advisory nudge
+decided hook install --style pre-commit    # blocking artifact validation
+decided hook list                          # what is bundled
 ```
 
 ```json

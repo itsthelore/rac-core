@@ -62,9 +62,9 @@ fn worker_count_is_invisible_in_the_store_bytes_and_faults_degrade() {
 
     // Fault → serial floor: the fan-out is discarded whole and the build
     // completes serially with identical structures.
-    std::env::set_var("RAC_PARALLEL_BUILD_FAULT", "1");
+    std::env::set_var("DECIDED_PARALLEL_BUILD_FAULT", "1");
     let (faulted, stats) = build_derived_index_parallel(directory, true, Some(4));
-    std::env::remove_var("RAC_PARALLEL_BUILD_FAULT");
+    std::env::remove_var("DECIDED_PARALLEL_BUILD_FAULT");
     assert_eq!(stats.workers, 1, "a fault must land on the serial floor");
     let cache = std::env::temp_dir().join(format!("rac-pb-test-fault-{}", std::process::id()));
     let _ = fs::remove_dir_all(&cache);

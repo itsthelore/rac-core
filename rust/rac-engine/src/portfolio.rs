@@ -1,5 +1,5 @@
-//! Repository intelligence summary (`rac.services.portfolio`), the byte-derived
-//! core `rac review` composes. Walk -> per-artifact validation/completeness ->
+//! Repository intelligence summary (`decided.services.portfolio`), the byte-derived
+//! core `decided review` composes. Walk -> per-artifact validation/completeness ->
 //! relationship summary + gate -> attention items + health score.
 
 use crate::classify::missing_sections;

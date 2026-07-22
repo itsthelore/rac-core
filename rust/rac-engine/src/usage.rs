@@ -1,12 +1,12 @@
-//! CLI usage telemetry (`src/rac/usage.py`) — ADR-046, content-free,
+//! CLI usage telemetry (`src/asdecided/usage.py`) — ADR-046, content-free,
 //! consent-gated, local-only.
 //!
 //! Two halves, both consent-shaped:
-//! - the READ-BACK (`rac usage`): a unified summary over the CLI-usage log
-//!   (`$XDG_STATE_HOME/rac/rac-usage.jsonl`) and the Guide log (via
+//! - the READ-BACK (`decided usage`): a unified summary over the CLI-usage log
+//!   (`$XDG_STATE_HOME/decisions/decided-usage.jsonl`) and the Guide log (via
 //!   `telemetry::summarize`), with no consent gate on reads;
 //! - the RECORDER: one content-free event appended after every dispatched
-//!   command, if and only if consent is recorded (`rac telemetry on`).
+//!   command, if and only if consent is recorded (`decided telemetry on`).
 //!   Write-only observability: silent on every failure path, never alters
 //!   output or exit codes, and skipped entirely for parse-level exits
 //!   (argparse errors, `--version`/`-h`) exactly like the oracle's
@@ -27,14 +27,14 @@ use crate::pyjson;
 use crate::telemetry::{summary_value, LogNotUtf8, TelemetrySummary};
 
 pub const SCHEMA_VERSION: &str = "1";
-const USAGE_FILENAME: &str = "rac-usage.jsonl";
+const USAGE_FILENAME: &str = "decided-usage.jsonl";
 pub const OUTCOME_OK: &str = "ok";
 pub const OUTCOME_ERROR: &str = "error";
 
 /// `recent` keeps the last N distinct UTC dates; the oracle's default.
 const RECENT_DAYS: usize = 7;
 
-pub const SHARE_ISSUE_URL: &str = "https://github.com/itsthelore/rac-core/issues/new";
+pub const SHARE_ISSUE_URL: &str = "https://github.com/itsthelore/decided-core/issues/new";
 pub const SHARE_TEMPLATE: &str = "guide-usage-report.yml";
 pub const SHARE_FIELD: &str = "report";
 

@@ -1,5 +1,5 @@
 //! Corpus file discovery — a byte-exact port of `find_markdown_files`
-//! (`src/rac/core/fs.py`) and the walk seam, per PORT-CONTRACT.d/09 §1.
+//! (`src/asdecided/core/fs.py`) and the walk seam, per PORT-CONTRACT.d/09 §1.
 //!
 //! Landmines reproduced here:
 //! - Extension filter is the literal glob `*.md`, **case-sensitive** on Linux:
@@ -175,10 +175,10 @@ fn join_display(prefix: &str, components: &[String]) -> String {
 
 /// Normalize a directory argument the way `str(Path(directory))` does
 /// (PurePosixPath semantics, PORT-CONTRACT.d/09 §1.6):
-/// - trailing slashes stripped (`rac/` -> `rac`)
-/// - leading `./` stripped (`./rac/` -> `rac`)
-/// - repeated slashes collapsed (`rac//` -> `rac`), interior `.` removed
-///   (`rac/./x` -> `rac/x`)
+/// - trailing slashes stripped (`decisions/` -> `decided`)
+/// - leading `./` stripped (`./decisions/` -> `decided`)
+/// - repeated slashes collapsed (`decisions//` -> `decided`), interior `.` removed
+///   (`decisions/./x` -> `decisions/x`)
 /// - `..` preserved; absolute stays absolute
 /// - the empty / `.` argument normalizes to `.`
 pub fn normalize_root(directory: &str) -> String {

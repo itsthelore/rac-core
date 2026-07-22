@@ -1,4 +1,4 @@
-//! Agent-rules projection (`rac.services.agent_rules`) — `rac export
+//! Agent-rules projection (`decided.services.agent_rules`) — `decided export
 //! --agent-rules [--check]`, per PORT-CONTRACT.d/17 §3.
 //!
 //! Distils the live corpus (Accepted, non-retired decisions) into a
@@ -24,8 +24,8 @@ const BEGIN_PREFIX: &str = "<!-- BEGIN RAC MANAGED BLOCK (digest: ";
 const BEGIN_SUFFIX: &str = ") -->";
 const END_MARKER: &str = "<!-- END RAC MANAGED BLOCK -->";
 
-const GENERATED_HEADER: &str = "<!-- Managed by `rac export --agent-rules`. \
-     Edit decisions in rac/, not here; content outside this block is preserved. -->";
+const GENERATED_HEADER: &str = "<!-- Managed by `decided export --agent-rules`. \
+     Edit decisions in decisions/, not here; content outside this block is preserved. -->";
 
 /// One per-client target file (selector + root-relative path), in the
 /// oracle's fixed `TARGETS` order.
@@ -120,7 +120,7 @@ fn py_path_join(a: &str, b: &str) -> String {
 }
 
 /// `_agent_rules_root(directory, out)` — explicit `--out` wins; else the
-/// parent of a `rac/`-named directory (or `.` when that parent is `.`),
+/// parent of a `decisions/`-named directory (or `.` when that parent is `.`),
 /// else the directory itself.
 pub fn agent_rules_root(directory: &str, out: Option<&str>) -> String {
     if let Some(o) = out {
@@ -128,7 +128,7 @@ pub fn agent_rules_root(directory: &str, out: Option<&str>) -> String {
     }
     let path = py_path_str(directory.trim_end_matches('/'));
     let name = path.rsplit('/').next().unwrap_or("");
-    if name == "rac" {
+    if name == "decisions" {
         let parent = match path.rfind('/') {
             Some(idx) if idx > 0 => &path[..idx],
             Some(_) => "/",
@@ -224,7 +224,7 @@ fn render_managed_block(entries: &[AgentRulesEntry], digest: &str) -> String {
     let mut lines = vec![
         format!("{BEGIN_PREFIX}{digest}{BEGIN_SUFFIX}"),
         GENERATED_HEADER.to_string(),
-        "## Settled decisions (RAC)".to_string(),
+        "## Settled decisions (AsDecided)".to_string(),
         String::new(),
         "These decisions are already accepted. Do not re-open or contradict them; \
          ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the \
@@ -396,14 +396,14 @@ mod tests {
 
     #[test]
     fn root_resolution() {
-        assert_eq!(agent_rules_root("rac", None), ".");
-        assert_eq!(agent_rules_root("rac/", None), ".");
-        assert_eq!(agent_rules_root("./rac", None), ".");
-        assert_eq!(agent_rules_root("proj/rac", None), "proj");
-        assert_eq!(agent_rules_root("proj/sub/rac", None), "proj/sub");
-        assert_eq!(agent_rules_root("/abs/rac", None), "/abs");
+        assert_eq!(agent_rules_root("decisions", None), ".");
+        assert_eq!(agent_rules_root("decisions/", None), ".");
+        assert_eq!(agent_rules_root("./decisions", None), ".");
+        assert_eq!(agent_rules_root("proj/decisions", None), "proj");
+        assert_eq!(agent_rules_root("proj/sub/decisions", None), "proj/sub");
+        assert_eq!(agent_rules_root("/abs/decisions", None), "/abs");
         assert_eq!(agent_rules_root("corpus", None), "corpus");
-        assert_eq!(agent_rules_root("proj/rac", Some("custom")), "custom");
+        assert_eq!(agent_rules_root("proj/decisions", Some("custom")), "custom");
     }
 
     #[test]

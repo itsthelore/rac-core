@@ -1,9 +1,9 @@
-"""Tests for org endpoint wiring — `rac init --org-endpoint <url>` (ADR-117).
+"""Tests for org endpoint wiring — `decided init --org-endpoint <url>` (ADR-117).
 
 Org wiring is an explicit operator action, not creation-time configuration: it
 applies on fresh and already-initialized repositories alike, merges into an
 existing client config touching only the `lore-org` key, is idempotent, and
-without the flag `rac init` is byte-identical to the previous engine
+without the flag `decided init` is byte-identical to the previous engine
 (`rac-org-endpoint-wiring`).
 """
 
@@ -13,9 +13,9 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.services.init import InvalidOrgEndpoint, init_repository
-from rac.services.profiles import (
+from asdecided.cli import main
+from asdecided.services.init import InvalidOrgEndpoint, init_repository
+from asdecided.services.profiles import (
     ORG_SERVER_KEY,
     MalformedClientConfig,
     org_server_entry,
@@ -75,8 +75,8 @@ def test_org_endpoint_applies_to_initialized_repo(tmp_path):
     assert not result.created
     assert result.org_endpoint == _URL
     assert _mcp(tmp_path)["mcpServers"][ORG_SERVER_KEY] == _ENTRY
-    # .rac/config.yaml is untouched by org wiring.
-    config = (tmp_path / ".rac" / "config.yaml").read_text(encoding="utf-8")
+    # .decided/config.yaml is untouched by org wiring.
+    config = (tmp_path / ".decided" / "config.yaml").read_text(encoding="utf-8")
     assert config == "repository_key: ACME\n"
 
 
@@ -130,7 +130,7 @@ def test_idempotent_init_reports_no_files(tmp_path):
 def test_non_http_url_rejected_before_any_write(tmp_path):
     with pytest.raises(InvalidOrgEndpoint):
         init_repository(str(tmp_path), key="ACME", org_endpoint="lore.example.com/mcp")
-    assert not (tmp_path / ".rac").exists()
+    assert not (tmp_path / ".decided").exists()
     assert not (tmp_path / ".mcp.json").exists()
 
 

@@ -1,4 +1,4 @@
-"""`rac gate` and the pre-edit hook at scale — the single-walk perf guards (v0.21.19).
+"""`decided gate` and the pre-edit hook at scale — the single-walk perf guards (v0.21.19).
 
 `build_gate` (v0.21.14) composes validation, relationships, and review. Until
 v0.21.19 each of those re-walked and re-parsed the whole corpus, so the gate paid
@@ -26,11 +26,11 @@ import time
 
 import pytest
 
-from rac.core.markdown import parse
-from rac.services.gate import build_gate
-from rac.services.relationships import validate_relationships
-from rac.services.review import build_review
-from rac.services.validate import validate_directory, validate_stdin_against_corpus
+from asdecided.core.markdown import parse
+from asdecided.services.gate import build_gate
+from asdecided.services.relationships import validate_relationships
+from asdecided.services.review import build_review
+from asdecided.services.validate import validate_directory, validate_stdin_against_corpus
 
 DECISIONS = 600
 REQUIREMENTS = 600
@@ -121,7 +121,7 @@ def test_gate_single_walk_no_slower_than_components(large_corpus):
     a future change cannot silently alter gate semantics while "optimizing" the
     corpus walk away.
     """
-    from rac.services.gate import (
+    from asdecided.services.gate import (
         _VALIDATE_DEFAULT,
         EMPTY_POLICY,
         ENFORCEMENT_ADVISORY,
@@ -138,7 +138,7 @@ def test_gate_single_walk_no_slower_than_components(large_corpus):
     )
 
     # Recompose the report the multi-walk way, with no policy (the synthetic
-    # corpus declares no .rac/config.yaml, so EMPTY_POLICY matches build_gate).
+    # corpus declares no .decided/config.yaml, so EMPTY_POLICY matches build_gate).
     validation = validate_directory(large_corpus)
     relationships = validate_relationships(large_corpus)
     review = build_review(large_corpus)

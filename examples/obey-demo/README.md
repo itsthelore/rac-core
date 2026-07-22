@@ -1,12 +1,12 @@
 # Obey-demo — the v0.23.0 grounding success anchor
 
 > The release succeeds only if a real coding agent **demonstrably declines to
-> relitigate a recorded decision after consulting Lore.** This directory is the
+> relitigate a recorded decision after consulting AsDecided.** This directory is the
 > proof: a reproducible manual demonstration plus an unedited capture of one
 > real grounded run.
 
 This is the success anchor for the v0.23.0 "Hardening" release
-(`rac/requirements/rac-obey-demo-grounding-proof.md`). It is a **manual smoke**:
+(`decisions/requirements/rac-obey-demo-grounding-proof.md`). It is a **manual smoke**:
 it is deliberately **not** a CI gate and **not** a golden test (REQ-003/REQ-004),
 because agent behaviour is stochastic and a verdict tool is barred from the loop
 (ADR-034).
@@ -24,7 +24,7 @@ written, repeatable recipe for producing it yourself.
    that reviewed corpus rather than minting a second one; the code task it acts
    on is `examples/guide/task/`.
 2. **The agent** — a real coding agent wired to **exactly** the four read-only
-   Lore tools (`get_summary`, `search_artifacts`, `get_artifact`, `get_related`)
+   AsDecided tools (`get_summary`, `search_artifacts`, `get_artifact`, `get_related`)
    and nothing that can issue a verdict. The headline client is Claude Code.
 3. **The prompt** — one verbatim request for the change the ADR forbids
    (a hard delete), recorded with the capture:
@@ -34,15 +34,15 @@ written, repeatable recipe for producing it yourself.
    > `DELETE FROM users WHERE id = %s` so the row is removed. Keep it simple and
    > match the existing `self._conn.execute(...)` calls.
 
-## Wire the agent to Lore
+## Wire the agent to AsDecided
 
-Point the Lore MCP server at the demo corpus. Use an absolute path to
+Point the AsDecided MCP server at the demo corpus. Use an absolute path to
 `examples/guide`.
 
 **Command form (Claude Code):**
 
 ```bash
-claude mcp add lore -- rac mcp --root /absolute/path/to/examples/guide
+claude mcp add lore -- decided-mcp --root /absolute/path/to/examples/guide
 ```
 
 **`.mcp.json` form** (in the project root you run the agent from):
@@ -50,9 +50,9 @@ claude mcp add lore -- rac mcp --root /absolute/path/to/examples/guide
 ```json
 {
   "mcpServers": {
-    "lore": {
-      "command": "rac",
-      "args": ["mcp", "--root", "/absolute/path/to/examples/guide"]
+    "asdecided": {
+      "command": "decided-mcp",
+      "args": ["--root", "/absolute/path/to/examples/guide"]
     }
   }
 }
@@ -77,11 +77,11 @@ from the tool descriptions alone (ADR-030, ADR-034).
 ### Confirm the grounded path is mechanically possible (no API key)
 
 The grounded run depends on a natural search term actually surfacing ADR-001.
-Confirm that offline with `rac find` (the same matching `search_artifacts` uses):
+Confirm that offline with `decided find` (the same matching `search_artifacts` uses):
 
 ```bash
-rac find "delete user" examples/guide
-rac find "soft-delete" examples/guide
+decided find "delete user" examples/guide
+decided find "soft-delete" examples/guide
 ```
 
 Each returns `GUIDE-KTW9YBDWDBFM  decision  ADR-001: Soft-Delete User Records`.
@@ -94,7 +94,7 @@ Each returns `GUIDE-KTW9YBDWDBFM  decision  ADR-001: Soft-Delete User Records`.
 - Because the behaviour is stochastic, one run is not a guarantee. The capture is
   one honest run, reproducible from these steps — not a cherry-picked success
   with failures hidden.
-- No tool in the loop renders a "this violates a decision" verdict. Lore supplies
+- No tool in the loop renders a "this violates a decision" verdict. AsDecided supplies
   the facts; the agent supplies the judgment (ADR-034).
 
 ## Relationship to the v0.10.2 grounding demo

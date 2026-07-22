@@ -1,11 +1,11 @@
 # Port Contract 05 — Relationships (`rac relationships`)
 
-Source of truth: `src/rac/services/relationships.py` (1477 LOC), plus its pure
-foundation `src/rac/services/references.py`, the edge schema
-`src/rac/core/relationship_types.py`, identity `src/rac/core/identity.py`,
-scope helpers `src/rac/services/scope_paths.py`, and the renderers
-`src/rac/output/{human,json,sarif}.py`. CLI wiring: `cmd_relationships` in
-`src/rac/cli.py`.
+Source of truth: `src/asdecided/services/relationships.py` (1477 LOC), plus its pure
+foundation `src/asdecided/services/references.py`, the edge schema
+`src/asdecided/core/relationship_types.py`, identity `src/asdecided/core/identity.py`,
+scope helpers `src/asdecided/services/scope_paths.py`, and the renderers
+`src/asdecided/output/{human,json,sarif}.py`. CLI wiring: `cmd_relationships` in
+`src/asdecided/cli.py`.
 
 This section specifies the `rac relationships` command end to end: how
 relationship sections become typed edges, how references are extracted and
@@ -90,7 +90,7 @@ return sorted(found)
 
 - Only `*.md` (not `.markdown`) in directory mode.
 - Any path component (relative to root) starting with `.` is skipped (`.git`,
-  `.venv`, `.rac`, dotfiles). The check is on `relative_to(root).parts`, so the
+  `.venv`, `.decided`, dotfiles). The check is on `relative_to(root).parts`, so the
   root directory's own name is not tested.
 - **`sorted(found)`** — Python sorts `Path` objects by their string tuple parts.
   For output ordering, path strings are `str(entry.path)`, which is the
@@ -502,9 +502,9 @@ single artifact appearing multiple times under one alias key cannot happen
   (absolute rejected); split `PurePosixPath(text).parts`, drop `.`, any `..` →
   None (escape rejected); join remaining with `/`; None if empty.
 - `repository_root(directory)`: `Path(directory).resolve()`, walk up
-  `(resolved, *parents)`, return first dir containing `.rac/config.yaml`, else the
-  resolved directory. **In this repo `.rac/config.yaml` exists at root**, so
-  `applies_to` paths like `src/rac/` resolve against the repo root. In an
+  `(resolved, *parents)`, return first dir containing `.decided/config.yaml`, else the
+  resolved directory. **In this repo `.decided/config.yaml` exists at root**, so
+  `applies_to` paths like `src/asdecided/` resolve against the repo root. In an
   un-initialized tree the root is the resolved arg dir. `(root/normalized).exists()`
   follows symlinks and matches file OR directory.
 
@@ -679,7 +679,7 @@ must emit a matching version string, for SARIF byte parity.
 Runner-up landmines worth guarding: TTY-gated ANSI color (`sys.stdout.isatty()`
 → no escapes when piped); `str.title()` label casing; em-dash `—`/middle-dot `·`
 raw-UTF-8 in human labels; scope checks touch the real working tree via
-`repository_root` (`.rac/config.yaml` discovery); frontmatter `id` strictness
+`repository_root` (`.decided/config.yaml` discovery); frontmatter `id` strictness
 gates whether references resolve at all.
 
 ## 9. Open questions / unverified

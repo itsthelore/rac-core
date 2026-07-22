@@ -1,7 +1,7 @@
 # Index store on-disk format (ADR-104 / ADR-106 / ADR-112)
 
 Durable byte-level specification of the persistent derived-index store,
-extracted from the frozen Python oracle (`src/rac/services/index_format.py`,
+extracted from the frozen Python oracle (`src/asdecided/services/index_format.py`,
 `index_store.py`, `derived_cache.py`, `freshness.py`) for the native port
 (roadmap:native-derived-index). **Store byte-identity is the chosen parity
 surface**: for the same corpus bytes the Rust writer must produce a store
@@ -179,10 +179,10 @@ ASCII), no trailing newline. Gate on read: parse, must be a dict with
 
 ## 8. Cache directory resolution ladder
 
-`RAC_CACHE_DIR` (non-empty) → `$XDG_CACHE_HOME/rac/derived` →
+`DECIDED_CACHE_DIR` (non-empty) → `$XDG_CACHE_HOME/rac/derived` →
 `~/.cache/rac/derived` → `<system tmp>/rac-cache/rac/derived` (homeless
-floor). `--no-cache` or non-empty `RAC_NO_CACHE` disables the cache
-entirely (`args.cache and not os.environ.get("RAC_NO_CACHE")`).
+floor). `--no-cache` or non-empty `DECIDED_NO_CACHE` disables the cache
+entirely (`args.cache and not os.environ.get("DECIDED_NO_CACHE")`).
 
 ## 9. Validation-result store (`.vseg`, ADR-106)
 
@@ -239,4 +239,4 @@ that catches it.
 - **`rac index` / `rac resolve` never consume the cache**; only `find`,
   `validate`, and the MCP server do. `rac index` may *write* nothing —
   it is a plain walk.
-- **RAC_TIMING** writes stderr only; never a parity surface.
+- **DECIDED_TIMING** writes stderr only; never a parity surface.

@@ -22,17 +22,17 @@ import shutil
 import pytest
 from conftest import fixture_path
 
-from rac import cli
-from rac.core.corpus import corpus_content_hash
-from rac.services import derived_cache
-from rac.services.derived_cache import (
+from asdecided import cli
+from asdecided.core.corpus import corpus_content_hash
+from asdecided.services import derived_cache
+from asdecided.services.derived_cache import (
     DerivedIndexCache,
     build_derived_index,
     from_json_obj,
     to_json_obj,
 )
-from rac.services.index import build_repository_index
-from rac.services.resolve import (
+from asdecided.services.index import build_repository_index
+from asdecided.services.resolve import (
     field_tokens_for_entries,
     find_decisions,
     find_decisions_in,
@@ -49,7 +49,7 @@ TOOL_CALLS: tuple[tuple[str, dict], ...] = (
     ("get_artifact", {"id": DEC}),
     ("search_artifacts", {"query": "RAC-MCP"}),
     ("find_decisions", {"topic": "RAC"}),
-    ("find_decisions", {"topic": "", "path": "src/rac/mcp/server.py"}),
+    ("find_decisions", {"topic": "", "path": "src/asdecided/mcp/server.py"}),
     ("get_related", {"id": REQ}),
     ("get_summary", {}),
 )
@@ -107,7 +107,7 @@ def _tool_text(server, name, args) -> str:
 
 
 def test_cache_on_matches_cache_off_across_all_tools(tmp_path):
-    from rac.mcp.server import build_server
+    from asdecided.mcp.server import build_server
 
     off = build_server(CORPUS)
     on = build_server(CORPUS, cache=DerivedIndexCache(tmp_path / "cache"))
@@ -128,7 +128,7 @@ def test_search_index_parity_with_injected_field_tokens():
 
 
 def test_find_decisions_parity_with_derived_core():
-    from rac.core.corpus import walk_corpus
+    from asdecided.core.corpus import walk_corpus
 
     entries = list(walk_corpus(CORPUS))
     index = build_repository_index(CORPUS).artifacts
@@ -149,7 +149,7 @@ def test_second_call_is_a_hit_not_a_rebuild(tmp_path, monkeypatch):
     # The cold miss now builds through the parallel cold-build seam (ADR-107); the
     # rebuild counter observes that entrypoint. Intent is unchanged: the second
     # unchanged-corpus call must read the store, not rebuild.
-    from rac.services import parallel_build
+    from asdecided.services import parallel_build
 
     builds: list[int] = []
     original = parallel_build.build_derived_index_parallel
@@ -267,14 +267,14 @@ def test_cache_flag_defaults_on_with_no_cache_escape():
 def test_rac_no_cache_env_disables_the_default(monkeypatch):
     parser = cli.build_parser()
     args = parser.parse_args(["find", "q", CORPUS])
-    monkeypatch.delenv("RAC_NO_CACHE", raising=False)
+    monkeypatch.delenv("DECIDED_NO_CACHE", raising=False)
     assert cli._cache_enabled(args) is True
-    monkeypatch.setenv("RAC_NO_CACHE", "1")
+    monkeypatch.setenv("DECIDED_NO_CACHE", "1")
     assert cli._cache_enabled(args) is False
 
 
 def test_run_server_cache_enabled_builds_a_cache(monkeypatch):
-    from rac.mcp import server as mcp_server
+    from asdecided.mcp import server as mcp_server
 
     captured: dict = {}
 

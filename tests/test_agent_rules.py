@@ -1,4 +1,4 @@
-"""Tests for `rac export --agent-rules [--check]` (roadmap v0.21.15, ADR-067).
+"""Tests for `decided export --agent-rules [--check]` (roadmap v0.21.15, ADR-067).
 
 The agent-rules projection is a distilled, drift-guarded view of the *live*
 corpus. These tests pin the boundary ADR-067 fixes:
@@ -20,8 +20,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from rac.cli import main
-from rac.services.agent_rules import (
+from asdecided.cli import main
+from asdecided.services.agent_rules import (
     STATE_IN_SYNC,
     STATE_MISSING,
     STATE_STALE,

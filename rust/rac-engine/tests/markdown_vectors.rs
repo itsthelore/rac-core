@@ -178,8 +178,8 @@ fn load(file: &str) -> Value {
 #[test]
 fn synthetic_vectors_match_oracle() {
     assert!(
-        std::env::var_os("RAC_MAX_FILE_BYTES").is_none(),
-        "RAC_MAX_FILE_BYTES must be unset for vector replay"
+        std::env::var_os("DECIDED_MAX_FILE_BYTES").is_none(),
+        "DECIDED_MAX_FILE_BYTES must be unset for vector replay"
     );
     let v = load("markdown.json");
     let cases = v["cases"].as_array().expect("cases present");

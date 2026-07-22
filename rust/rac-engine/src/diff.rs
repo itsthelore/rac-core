@@ -1,4 +1,4 @@
-//! AST diff (`rac.services.diff`): compare two parsed products and classify
+//! AST diff (`decided.services.diff`): compare two parsed products and classify
 //! the changes. Pure AST work — no git, no revisions, no raw-text diffing.
 //!
 //! - Requirements match by ID: same ID + same text -> unchanged (omitted);

@@ -1,8 +1,8 @@
-"""Structural tests for the RAC validate composite action (v0.17.2, ADR-058).
+"""Structural tests for the AsDecided validate composite action (ADR-058).
 
-The action is a thin wrapper over `rac validate --sarif`; its behaviour is owned
+The action is a thin wrapper over `decided validate --sarif`; its behaviour is owned
 by the (separately tested) CLI. These tests pin the action's *contract* — that it
-stays a composite action that runs `rac validate --sarif`, uploads SARIF, and
+stays a composite action that runs `decided validate --sarif`, uploads SARIF, and
 re-surfaces the CLI exit code — so the wiring cannot silently drift.
 """
 
@@ -22,21 +22,21 @@ def _action() -> dict:
 def test_action_is_composite():
     a = _action()
     assert a["runs"]["using"] == "composite"
-    assert a["name"] == "RAC validate"
+    assert a["name"] == "AsDecided validate"
 
 
 def test_action_declares_expected_inputs():
     inputs = _action()["inputs"]
-    for name in ("path", "upload-sarif", "sarif-file", "rac-version", "install-from"):
+    for name in ("path", "upload-sarif", "sarif-file", "decided-version", "install-from"):
         assert name in inputs, f"missing input: {name}"
-    assert inputs["path"]["default"] == "rac"
+    assert inputs["path"]["default"] == "decisions"
     assert inputs["upload-sarif"]["default"] == "true"
 
 
-def test_action_runs_rac_validate_sarif():
+def test_action_runs_decided_validate_sarif():
     steps = _action()["runs"]["steps"]
     run_steps = " ".join(s.get("run", "") for s in steps)
-    assert "rac validate" in run_steps
+    assert "decided validate" in run_steps
     assert "--sarif" in run_steps
 
 
@@ -58,3 +58,4 @@ def test_action_install_supports_source_for_dogfood():
     # `install-from: source` lets the repo dogfood the action with uses: ./validate-action.
     run_steps = " ".join(s.get("run", "") for s in _action()["runs"]["steps"])
     assert "GITHUB_ACTION_PATH" in run_steps
+    assert "cargo build --release --locked -p decided -p decided-mcp" in run_steps

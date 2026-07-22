@@ -34,22 +34,22 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.core.corpus import walk_corpus
-from rac.mcp.server import build_server
-from rac.services import derived_cache
-from rac.services.derived_cache import (
+from asdecided.core.corpus import walk_corpus
+from asdecided.mcp.server import build_server
+from asdecided.services import derived_cache
+from asdecided.services.derived_cache import (
     DerivedIndexCache,
     build_derived_index,
     from_json_obj,
     to_json_obj,
 )
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.scope import decisions_for_path
+from asdecided.services.portfolio import build_portfolio_summary
+from asdecided.services.scope import decisions_for_path
 
 CORPUS = fixture_path("mcp", "corpus")
 
 # A scoped-code path the fixtures below declare `## Applies To`, and the path-mode
-# query used throughout — inside the (non-git, no-.rac) corpus, so it normalises
+# query used throughout — inside the (non-git, no-.decided) corpus, so it normalises
 # to itself and `in_repository` is True.
 SCOPE_PATH = "src/foo.py"
 

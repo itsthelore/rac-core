@@ -1,4 +1,4 @@
-//! rac-engine — experimental Rust port of the rac-core engine
+//! decided-engine — experimental Rust port of the decided-core engine
 //! (roadmap:native-engine-spike). The Python tree at `src/` is the frozen
 //! oracle; the binding behavior contract is `rust/PORT-CONTRACT.md`.
 //!
@@ -8,7 +8,7 @@
 //! - `pyjson`: the Python `json.dumps`-shaped writer (indent=2 and JSONL).
 //! - `frontmatter`: bounded PyYAML-1.1 SafeLoader subset.
 //! - `markdown`: CommonMark block-boundary tokenizer (headings + inline raw).
-//! - `spec`: artifact specs loaded from the shared `src/rac/spec/artifact-specs.json`.
+//! - `spec`: artifact specs loaded from the shared `src/asdecided/spec/artifact-specs.json`.
 //! - `walk`: corpus discovery in component-wise sorted-path order.
 //! - `parse`: file -> parsed artifact (frontmatter + sections + fields).
 //! - `classify`: deterministic classification over specs.

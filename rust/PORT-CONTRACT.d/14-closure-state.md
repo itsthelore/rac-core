@@ -5,9 +5,9 @@ roadmap:native-cli-closure — `rac usage`, `rac mcp-stats`,
 `rac telemetry` — plus the cross-cutting ADR-046 usage recorder they
 imply. Every claim below was verified against the oracle
 (`.venv-oracle/bin/rac`, `0.1.dev50+g21c8be403`, Python 3.11.15).
-Source files: `src/rac/cli.py` (`cmd_usage`/`cmd_mcp_stats`/
-`cmd_telemetry`, `main`), `src/rac/usage.py`, `src/rac/consent.py`,
-`src/rac/mcp/telemetry.py`, `src/rac/output/{human,json}.py`
+Source files: `src/asdecided/cli.py` (`cmd_usage`/`cmd_mcp_stats`/
+`cmd_telemetry`, `main`), `src/asdecided/usage.py`, `src/asdecided/consent.py`,
+`src/asdecided/mcp/telemetry.py`, `src/asdecided/output/{human,json}.py`
 (`render_mcp_stats_*`). Rust: new `rac-engine/src/consent.rs`,
 `usage.rs`, `telemetry.rs`; `output.rs` (`render_mcp_stats_*`,
 `render_usage_*`); `commands.rs` (`cmd_mcp_stats`/`cmd_usage`/
@@ -198,7 +198,7 @@ unobservable outside the unrefereed log.
 ## 5. Determinism boundary and referee strategy
 
 - `telemetry on` mints install_id/salt (32 lowercase hex) and
-  consented_at (UTC seconds Z) with NO oracle seam (no `RAC_ID_SEED`
+  consented_at (UTC seconds Z) with NO oracle seam (no `DECIDED_ID_SEED`
   analogue exists in consent.py; the Python tree is frozen), so the
   harness gained `mask-consent-mint`: 32-hex runs at word boundaries →
   `<MASKED-HEX32>`, `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z` →

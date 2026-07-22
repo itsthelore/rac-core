@@ -1,6 +1,6 @@
-//! Structural validation (`rac.core.validation`), severity overrides
-//! (`rac.core.overrides`), OKF conformance (`rac.services.okf_conformance`),
-//! and the `.rac/config.yaml` loaders (`rac.services.init`) — per
+//! Structural validation (`decided.core.validation`), severity overrides
+//! (`decided.core.overrides`), OKF conformance (`decided.services.okf_conformance`),
+//! and the `.decided/config.yaml` loaders (`decided.services.init`) — per
 //! PORT-CONTRACT.d/04 §4-6.
 //!
 //! Emission order is the contract: [metadata issues][ticketing issues]
@@ -258,7 +258,7 @@ pub fn has_errors(issues: &[Issue]) -> bool {
     issues.iter().any(|i| i.severity == "error")
 }
 
-/// `rac.core.validation.validate(product, ticketing_provider, artifact_type)`.
+/// `decided.core.validation.validate(product, ticketing_provider, artifact_type)`.
 pub fn validate(
     artifact: &Artifact,
     ticketing_provider_name: Option<&str>,
@@ -844,7 +844,7 @@ pub fn check_okf_conformance(
                 entry.path,
                 format!(
                     "artifact type {} has no OKF type mapping; add it to \
-                     rac.core.okf.OKF_TYPE so the artifact is carried in the \
+                     decided.core.okf.OKF_TYPE so the artifact is carried in the \
                      OKF bundle (ADR-048)",
                     py_repr_str(entry.artifact_type)
                 ),
@@ -895,16 +895,16 @@ fn add_okf(
 }
 
 // ---------------------------------------------------------------------------
-// .rac/config.yaml loaders (rac.services.init)
+// .decided/config.yaml loaders (decided.services.init)
 // ---------------------------------------------------------------------------
 
-/// `find_config_file(start_dir)`: the nearest `.rac/config.yaml` at or above
+/// `find_config_file(start_dir)`: the nearest `.decided/config.yaml` at or above
 /// the resolved `start_dir`.
 pub fn find_config_file(start_dir: &str) -> Option<PathBuf> {
     let resolved = resolve_path(start_dir);
     let mut current: Option<&Path> = Some(resolved.as_path());
     while let Some(dir) = current {
-        let candidate = dir.join(".rac").join("config.yaml");
+        let candidate = dir.join(".decided").join("config.yaml");
         if candidate.is_file() {
             return Some(candidate);
         }
@@ -994,7 +994,7 @@ pub fn load_overrides(start_dir: &str) -> SeverityOverrides {
 }
 
 /// `load_freshness_threshold(start_dir)` (ADR-045): the
-/// `freshness.stale_after_days` from the nearest `.rac/config.yaml`.
+/// `freshness.stale_after_days` from the nearest `.decided/config.yaml`.
 /// Defaults to 180 when there is no config, no `freshness` mapping, or the
 /// value is not a positive int — YAML 1.1 bools are explicitly rejected
 /// (`true`/`false` are not day counts even though `bool` is an `int`
@@ -1026,12 +1026,12 @@ pub fn load_ticketing_provider(start_dir: &str) -> Option<String> {
 }
 
 /// `repository_root(directory)` (scope_paths): nearest dir at or above the
-/// resolved directory holding `.rac/config.yaml`, else the resolved dir.
+/// resolved directory holding `.decided/config.yaml`, else the resolved dir.
 pub fn repository_root(directory: &str) -> PathBuf {
     let resolved = resolve_path(directory);
     let mut current: Option<&Path> = Some(resolved.as_path());
     while let Some(dir) = current {
-        if dir.join(".rac").join("config.yaml").is_file() {
+        if dir.join(".decided").join("config.yaml").is_file() {
             return dir.to_path_buf();
         }
         current = dir.parent();

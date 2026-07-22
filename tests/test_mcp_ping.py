@@ -16,9 +16,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from rac import __version__, consent
-from rac.cli import main
-from rac.consent import (
+from asdecided import __version__, consent
+from asdecided.cli import main
+from asdecided.consent import (
     Consent,
     consent_path,
     consent_recorded,
@@ -27,8 +27,8 @@ from rac.consent import (
     opt_out,
     save_consent,
 )
-from rac.mcp import ping, server
-from rac.mcp.ping import (
+from asdecided.mcp import ping, server
+from asdecided.mcp.ping import (
     ACTIVE_REPOS_FILENAME,
     PING_EVENT,
     SOCKET_TIMEOUT_SECONDS,
