@@ -79,7 +79,7 @@
         ],
         [
           "related tickets",
-          "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+          "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
         ],
         [
           "verified by",
@@ -238,7 +238,7 @@
         ],
         [
           "related tickets",
-          "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+          "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
         ],
         [
           "applies to",
@@ -403,7 +403,7 @@
         ],
         [
           "related tickets",
-          "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+          "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
         ]
       ],
       "guidance": [
@@ -558,7 +558,7 @@
         ],
         [
           "related tickets",
-          "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+          "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
         ]
       ],
       "guidance": [
@@ -759,7 +759,7 @@
         ],
         [
           "related tickets",
-          "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+          "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
         ]
       ],
       "guidance": [
