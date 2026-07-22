@@ -25,6 +25,29 @@ an answer — only its speed:
 Nothing here uses AI or approximation: retrieval stays deterministic and lexical
 (ADR-037/038/066).
 
+## Supported scale envelope
+
+RAC's current recommended production envelope is **up to 5,000 artifacts** on
+a single node. At that S1 tier, the Rust delta engine targets warm freshness at
+or below 25 ms p95 and one-file mutation publication at or below 150 ms p95.
+
+This is a performance promise, not a hard corpus limit. RAC continues to accept
+larger corpora, but operation above the certified envelope is best-effort until
+the corresponding scale tier is promoted:
+
+| tier | corpus | release objective |
+| --- | ---: | --- |
+| S1 | 5,000 | production baseline and default delta cutover |
+| S2 | 10,000 | preserve the S1 interactive budget where practical |
+| S3 | 25,000 | mutation publication comfortably below 500 ms |
+| S4 | 50,000 | bounded incremental publication and compaction |
+| S5 | 100,000 | mutation publication below 1 second |
+
+Every promotion requires the complete cold, warm, edit, add, delete, rename,
+compaction, and peak-memory matrix plus validity, determinism, freshness, and
+cache/no-cache equality. Higher-tier engineering is demand-led; an uncertified
+tier does not delay improvements or releases inside the current envelope.
+
 ## 1. A persistent, memory-mapped index
 
 The derived index is a persistent **memory-mapped segment store** (ADR-104), not
