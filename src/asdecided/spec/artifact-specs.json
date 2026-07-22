@@ -1,9 +1,9 @@
 {
   "_meta": {
-    "role": "Canonical machine-readable artifact-spec registry: the ordered ARTIFACT_SPECS (requirement, decision, roadmap, prompt, design) and relationship-section descriptions, read by BOTH RAC engines — the Python engine (asdecided.core.artifacts) and the Rust engine (rac-engine::spec). ADR-063 Guard 1: one shared, language-neutral source of truth, so classification/validation cannot drift between engines.",
-    "canonical_upstream": "itsthelore/rac-spec (schema/artifact-specs.json). This file is the in-repo vendored copy both in-tree engines embed; a sync gate keeps it byte-identical to the upstream. Do not hand-edit: change the upstream and re-sync.",
+    "role": "Canonical machine-readable artifact-spec registry: the ordered ARTIFACT_SPECS (requirement, decision, roadmap, prompt, design) and relationship-section descriptions, read by BOTH RAC engines — the Python engine (rac.core.artifacts) and the Rust engine (rac-engine::spec). ADR-063 Guard 1: one shared, language-neutral source of truth, so classification/validation cannot drift between engines.",
+    "canonical": "This file, in itsthelore/rac-spec, is the upstream source of truth. Implementations vendor it (rac-core: src/rac/spec/artifact-specs.json) and a sync gate keeps each vendored copy's artifact_specs and relationship_descriptions payloads identical to this file's. Edit here; downstream copies re-sync — never the reverse.",
     "consumers": [
-      "asdecided.core.artifacts (Python)",
+      "rac.core.artifacts (Python)",
       "rac-engine::spec (Rust, include_str!)"
     ]
   },
@@ -52,7 +52,7 @@
         "related prompts": "Prompt artifacts this artifact references",
         "related designs": "Design artifacts this artifact references",
         "related requirements": "Requirement artifacts this artifact references",
-        "related tickets": "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)",
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)",
         "verified by": "External tests or traces that verify this capability; targets are file paths, not in-corpus artifacts (ADR-096)"
       },
       "guidance": {
@@ -138,7 +138,7 @@
         "related roadmaps": "Roadmap artifacts this artifact references",
         "related designs": "Design artifacts this artifact references",
         "related decisions": "Decision artifacts this artifact references",
-        "related tickets": "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)",
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)",
         "applies to": "Code paths or components this decision governs; path entries are existence-checked, component names recorded as labels (ADR-019, decision-to-code-proximity)"
       },
       "guidance": {
@@ -220,7 +220,7 @@
         "related prompts": "Prompt artifacts this artifact references",
         "related designs": "Design artifacts this artifact references",
         "related roadmaps": "Roadmap artifacts this artifact references",
-        "related tickets": "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
       },
       "guidance": {
         "outcomes": [
@@ -296,7 +296,7 @@
         "related decisions": "Decision artifacts this artifact references",
         "related roadmaps": "Roadmap artifacts this artifact references",
         "related designs": "Design artifacts this artifact references",
-        "related tickets": "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
       },
       "guidance": {
         "objective": [
@@ -392,7 +392,7 @@
         "related decisions": "Decision artifacts this artifact references",
         "related roadmaps": "Roadmap artifacts this artifact references",
         "related prompts": "Prompt artifacts this artifact references",
-        "related tickets": "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)"
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
       },
       "guidance": {
         "context": [
@@ -454,7 +454,7 @@
     "related prompts": "Prompt artifacts this artifact references",
     "related designs": "Design artifacts this artifact references",
     "supersedes": "The artifact this one supersedes",
-    "related tickets": "External tickets this artifact traces to; provider set by .decided/config.yaml ticketing.provider (ADR-087)",
+    "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)",
     "verified by": "External tests or traces that verify this capability; targets are file paths, not in-corpus artifacts (ADR-096)",
     "applies to": "Code paths or components this decision governs; path entries are existence-checked, component names recorded as labels (ADR-019, decision-to-code-proximity)"
   }
