@@ -1158,6 +1158,15 @@ impl DeltaDocuments {
         self.upserts.len() + self.tombstones.len()
     }
 
+    pub fn live_len(&self) -> usize {
+        let replaced = self
+            .upserts
+            .keys()
+            .filter(|path| self.base.contains_key(*path))
+            .count();
+        self.base.len() - self.tombstones.len() - replaced + self.upserts.len()
+    }
+
     pub fn changed_paths(&self) -> Vec<String> {
         self.upserts
             .keys()
@@ -1367,6 +1376,7 @@ mod tests {
         assert_eq!(documents.base_len(), 2);
         assert_eq!(documents.upsert_len(), 2);
         assert_eq!(documents.tombstone_len(), 1);
+        assert_eq!(documents.live_len(), 2);
         assert_eq!(documents.changed_paths(), vec!["a.md", "b.md", "d.md"]);
         let live: Vec<String> = documents
             .ordered_items(["a.md", "d.md"])
@@ -1378,6 +1388,7 @@ mod tests {
         documents.promote(["a.md", "d.md"]);
         assert_eq!(documents.base_len(), 2);
         assert_eq!(documents.delta_len(), 0);
+        assert_eq!(documents.live_len(), 2);
     }
 
     #[test]
