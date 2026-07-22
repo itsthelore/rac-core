@@ -1,0 +1,201 @@
+:root {
+  color-scheme: light dark;
+  font: 14px/1.5 system-ui, -apple-system, sans-serif;
+}
+body {
+  margin: 0;
+}
+#app {
+  padding: 16px 18px;
+}
+h1 {
+  font-size: 16px;
+  margin: 0 0 10px;
+}
+textarea,
+input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+label {
+  display: block;
+  margin: 8px 0;
+  font-weight: 600;
+}
+label input,
+label textarea {
+  margin-top: 4px;
+  font-weight: 400;
+}
+.row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+button {
+  font: inherit;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.hint {
+  font-size: 12px;
+  opacity: 0.8;
+  margin: 0 0 8px;
+}
+.bodyfield {
+  margin: 8px 0;
+}
+.bodyhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.bodyhead .lbl {
+  font-weight: 600;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.seg-btn {
+  border: 0;
+  border-radius: 0;
+  padding: 3px 10px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.seg-btn[aria-selected="true"] {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 1;
+  font-weight: 600;
+}
+/* Rendered markdown — deliberately quiet, so it reads as normal prose. */
+.rendered {
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-height: 196px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.rendered h1,
+.rendered h2,
+.rendered h3,
+.rendered h4,
+.rendered h5,
+.rendered h6 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 12px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  opacity: 0.65;
+}
+.rendered > :first-child {
+  margin-top: 0;
+}
+.rendered p {
+  margin: 0 0 8px;
+}
+.rendered ul,
+.rendered ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.rendered li {
+  margin: 2px 0;
+}
+.rendered li > ul,
+.rendered li > ol {
+  margin: 2px 0;
+}
+.rendered a {
+  color: #2563eb;
+}
+.rendered img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+.rendered hr {
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  margin: 12px 0;
+}
+.rendered blockquote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid color-mix(in srgb, currentColor 25%, transparent);
+  opacity: 0.85;
+}
+.rendered table {
+  border-collapse: collapse;
+  margin: 0 0 8px;
+}
+.rendered th,
+.rendered td {
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  padding: 3px 8px;
+  text-align: left;
+}
+.rendered code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.rendered pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.rendered pre code {
+  padding: 0;
+  background: none;
+}
+#result {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.9;
+  word-break: break-all;
+}
+.dest {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 11px;
+  opacity: 0.6;
+}
+.dest-branch {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.dest-sep {
+  opacity: 0.5;
+}
+.dest-mode {
+  margin-left: auto;
+}

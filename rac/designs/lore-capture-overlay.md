@@ -76,11 +76,38 @@ model (ADR-077)** governs: the author's in-app confirmation is *fidelity*, not a
 trust boundary; an **independent** maintainer's PR merge is the trust boundary
 (ADR-065). The app's own confirmation never lands anything in the trusted corpus.
 
+### Write granularity — save is a commit, promotion is a (batched) PR
+
+The pull request is the **trust boundary** (ADR-077 Gate 2), not the save action,
+so its *granularity* is a configuration choice that does not weaken the model. A
+PR per captured artifact is real overhead — a notification, a merge, a branch
+cleanup each time — that buys nothing in a repo with one maintainer, where a
+solo PR is self-approval theatre. The overlay therefore offers three **write
+modes**, all of which keep the writer to *proposing* only:
+
+- **Per-capture** — a branch and a draft PR for every capture. Highest ceremony;
+  fits a repo where each decision warrants its own review thread.
+- **Rolling (default)** — append each capture to one shared branch with a single
+  rolling **batch draft PR**, so a maintainer reviews on their cadence rather than
+  per artifact. This is "save is a commit, promotion is a PR" with the PR cadence
+  decoupled from the capture cadence; it keeps Gate 2 while removing the per-doc
+  overhead.
+- **Direct** — commit to a branch with no PR, for a solo/personal repo with no
+  independent reviewer. It still never targets the base branch directly; content
+  lands on a branch, so ADR-065's "no untrusted content onto `main` unreviewed"
+  holds.
+
+The mode changes only *when and how often* a PR is opened, never *who merges* —
+the host has no approve/merge capability in any mode. A small read-only line in
+the modal shows where the capture will land (repository, branch, mode), so the
+author always sees the destination.
+
 ### Settings
 
-A small settings surface holds the three things the app needs: the **gateway**
-(endpoint, key, model), the **target repository + GitHub App** install, and the
-**global hotkey**. Nothing else is stored; the app is not a content store
+A small settings surface holds the four things the app needs: the **gateway**
+(endpoint, key, model), the **target repository + GitHub App** install, the
+**global hotkey**, and the **write mode** (per-capture / rolling / direct, with
+the capture branch). Nothing else is stored; the app is not a content store
 (ADR-024) — it emits artifacts to git and keeps no canonical copy.
 
 ### Distribution
@@ -98,7 +125,10 @@ renders in the OS webview).
   reimplements no engine behaviour.
 - **Two gates; the writer only proposes (ADR-065, ADR-077).** In-app confirm is
   fidelity; an independent PR merge is the trust boundary; the app's GitHub
-  identity never approves or merges.
+  identity never approves or merges — in *any* write mode.
+- **PR granularity is configurable, the trust boundary is not.** Per-capture,
+  rolling batch, or direct-commit changes only when a PR opens, never who merges;
+  no mode writes untrusted content onto the base branch unreviewed.
 - **Not a content store (ADR-024).** Emit to git; store only configuration.
 - **A `lore-*` product in its own repo (ADR-068).** Not engine code in `rac-core`.
 - **Summon-a-modal, not watch-the-screen.** No Accessibility/Screen-Recording
@@ -155,6 +185,9 @@ properties are inherited rather than re-argued.
   token, and where the installation token is cached on-device.
 - **Offline behaviour**: capture-and-queue when there is no network, draft PR on
   reconnect.
+- **Rolling-batch lifecycle**: when to "cut" a batch PR (size, age, or manual),
+  and how a captured artifact behaves if it is edited again before the batch
+  merges.
 - **Live-viewer tie-in**: should the overlay also host the repo-watching
   `rac export` viewer (Thread A of `lore-frontend-optionality`), or stay
   capture-only?
