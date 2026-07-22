@@ -27,7 +27,7 @@ use crate::relationships::CorpusItem;
 pub enum TrackerModel {
     View(MmapIndexReader),
     Snapshot(DerivedIndex),
-    /// P6 preview generation. The document overlay is immutable for the
+    /// P6 production generation. The document overlay is immutable for the
     /// lifetime of this served model and is published only after every
     /// incremental projection has been staged successfully.
     Delta(Box<DeltaGeneration>),
@@ -49,9 +49,8 @@ pub struct FreshnessTracker {
     /// advances for mutation-window snapshots that have not compacted.
     serving_generation: u64,
     delta_paths: HashSet<String>,
-    /// Present only for the opt-in P6 preview. Default serving retains the
-    /// established snapshot lifecycle until the later delta slices pass the
-    /// referee and scale gates.
+    /// Present for the production P6 delta lifecycle. The explicit snapshot
+    /// fallback leaves these absent.
     delta_documents: Option<DeltaDocuments>,
     delta_identity: Option<IdentityGeneration>,
     delta_search: Option<SearchGeneration>,
@@ -68,14 +67,20 @@ pub struct FreshnessTracker {
 }
 
 impl FreshnessTracker {
+    /// Production S1 freshness: immutable base plus cumulative delta.
     pub fn new(cache_dir: PathBuf, root: &str, threshold: Option<usize>) -> Self {
+        Self::new_delta(cache_dir, root, threshold, true)
+    }
+
+    /// Explicit rollback path retained for the first S1 soak release.
+    pub fn new_snapshot(cache_dir: PathBuf, root: &str, threshold: Option<usize>) -> Self {
         Self::new_with_watcher(cache_dir, root, threshold, true)
     }
 
     /// Force the authoritative stat rung. Used by fallback/parity tests and
     /// remains the behavior on platforms without a synchronous watcher.
     pub fn new_stat(cache_dir: PathBuf, root: &str, threshold: Option<usize>) -> Self {
-        Self::new_with_watcher(cache_dir, root, threshold, false)
+        Self::new_delta(cache_dir, root, threshold, false)
     }
 
     fn new_with_watcher(
@@ -110,15 +115,13 @@ impl FreshnessTracker {
         }
     }
 
-    /// Opt in to the P6 generation preview. This is intentionally a
-    /// separate constructor so normal MCP serving cannot adopt the preview by
-    /// accident.
-    pub fn new_delta_preview(
+    fn new_delta(
         cache_dir: PathBuf,
         root: &str,
         threshold: Option<usize>,
+        watcher_enabled: bool,
     ) -> Self {
-        let mut tracker = Self::new_with_watcher(cache_dir, root, threshold, true);
+        let mut tracker = Self::new_with_watcher(cache_dir, root, threshold, watcher_enabled);
         tracker.delta_documents = Some(DeltaDocuments::empty());
         tracker.delta_identity = Some(IdentityGeneration::empty());
         tracker.delta_search = Some(SearchGeneration::empty());
@@ -148,7 +151,7 @@ impl FreshnessTracker {
             .map_or_else(|| self.delta_paths.len(), DeltaDocuments::delta_len)
     }
 
-    pub fn delta_preview_enabled(&self) -> bool {
+    pub fn delta_enabled(&self) -> bool {
         self.delta_documents.is_some()
     }
 
@@ -206,7 +209,7 @@ impl FreshnessTracker {
         if !cold {
             let recompute_started = crate::timing::start();
             if self.delta_documents.is_some() {
-                self.rebuild_delta_preview(&changed);
+                self.rebuild_delta(&changed);
             } else {
                 self.apply(&changed);
                 self.rebuild_model();
@@ -223,7 +226,7 @@ impl FreshnessTracker {
         // phases feed the RAC_TIMING scorecard (ADR-107).
         let parse_start = std::time::Instant::now();
         if self.delta_documents.is_some() {
-            self.rebuild_delta_preview(&changed);
+            self.rebuild_delta(&changed);
         } else {
             self.apply(&changed);
         }
@@ -363,7 +366,7 @@ impl FreshnessTracker {
 
     /// Build a complete candidate generation from staged overlays, then swap
     /// every serving field only after all projections succeed.
-    fn rebuild_delta_preview(&mut self, changed: &BTreeSet<String>) {
+    fn rebuild_delta(&mut self, changed: &BTreeSet<String>) {
         let current: HashSet<&str> = self.manifest.iter().map(|(rel, _)| rel.as_str()).collect();
         let root = PathBuf::from(&self.root_str);
         let present: Vec<PathBuf> = changed
@@ -396,32 +399,32 @@ impl FreshnessTracker {
                 let identity = self
                     .delta_identity
                     .as_ref()
-                    .expect("preview identity")
+                    .expect("delta identity")
                     .stage(changed, &parsed);
                 let search = self
                     .delta_search
                     .as_ref()
-                    .expect("preview search")
+                    .expect("delta search")
                     .stage(changed, &parsed);
                 let graph = self
                     .delta_graph
                     .as_ref()
-                    .expect("preview graph")
+                    .expect("delta graph")
                     .stage(changed, &parsed, &identity);
                 let scope = self
                     .delta_scope
                     .as_ref()
-                    .expect("preview scope")
+                    .expect("delta scope")
                     .stage(changed, &parsed);
                 let summary = self
                     .delta_summary
                     .as_ref()
-                    .expect("preview summary")
+                    .expect("delta summary")
                     .stage(changed, &parsed);
                 let documents = self
                     .delta_documents
                     .as_ref()
-                    .expect("preview documents")
+                    .expect("delta documents")
                     .stage(changed, parsed);
                 (documents, identity, search, graph, scope, summary)
             } else {
@@ -582,23 +585,23 @@ impl FreshnessTracker {
             documents.promote(ordered_paths);
             self.delta_identity
                 .as_mut()
-                .expect("preview identity")
+                .expect("delta identity")
                 .promote();
             self.delta_search
                 .as_mut()
-                .expect("preview search")
+                .expect("delta search")
                 .promote();
             self.delta_graph
                 .as_mut()
-                .expect("preview graph")
+                .expect("delta graph")
                 .promote();
             self.delta_scope
                 .as_mut()
-                .expect("preview scope")
+                .expect("delta scope")
                 .promote();
             self.delta_summary
                 .as_mut()
-                .expect("preview summary")
+                .expect("delta summary")
                 .promote();
             // P6 removes snapshot shedding for its parsed document base so
             // the first post-compaction edit remains change-bound.

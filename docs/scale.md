@@ -37,7 +37,7 @@ the corresponding scale tier is promoted:
 
 | tier | corpus | release objective |
 | --- | ---: | --- |
-| S1 | 5,000 | production baseline and default delta cutover |
+| S1 | 5,000 | production baseline; delta is the default freshness lifecycle |
 | S2 | 10,000 | preserve the S1 interactive budget where practical |
 | S3 | 25,000 | mutation publication comfortably below 500 ms |
 | S4 | 50,000 | bounded incremental publication and compaction |

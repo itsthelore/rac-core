@@ -4,7 +4,7 @@ Date: 2026-07-22
 
 Decision: ADR-119
 
-Result: **certified for a 5,000-artifact production envelope; cutover pending**
+Result: **certified and cut over for the 5,000-artifact production envelope**
 
 ## Purpose
 
@@ -66,9 +66,8 @@ target/release/examples/p6_scale snapshot CORPUS CACHE_DIR 7
 target/release/examples/p6_scale delta CORPUS CACHE_DIR 7
 ```
 
-For the remaining 5,000-file memory gate, run the same commands under macOS
-`/usr/bin/time -l` and record `maximum resident set size`. This run did not
-capture trustworthy peak RSS, so gate 5 is explicitly unresolved.
+Peak RSS is measured by running the same complete lifecycle command under
+macOS `/usr/bin/time -l` and recording `maximum resident set size`.
 
 ## Results
 
@@ -145,11 +144,41 @@ Each tier requires correctness invariants, peak-RSS evidence, and the complete
 lifecycle matrix. Demand or a clearly reusable architectural improvement—not
 the existence of the next round number—triggers work on a higher tier.
 
+## S1 cutover certification
+
+Issue #375 repeated the complete 5,000-file matrix on a regenerated,
+validation-clean seed-1234 corpus before changing the production constructor.
+
+| lifecycle operation | snapshot | delta | S1 gate |
+|---|---:|---:|---|
+| cold | 983.42 ms | 2272.48 ms | measured, non-interactive |
+| warm p95 | 10.69 ms | 17.60 ms | pass: <=25 ms |
+| edit p95 | 513.60 ms | 140.08 ms | pass: <=150 ms |
+| add p95 | 552.60 ms | 127.69 ms | pass: <=150 ms |
+| delete p95 | 894.60 ms | 114.68 ms | pass: <=150 ms |
+| rename p95 | 526.84 ms | 104.76 ms | pass: <=150 ms |
+| threshold compaction | 1502.16 ms | 1440.16 ms | pass: delta 4.1% faster |
+| maximum resident set | 466 MiB | 593 MiB | pass |
+
+The S1 memory budget is at most 768 MiB peak RSS and at most 1.5 times the
+snapshot lifecycle. Delta used 1.27 times snapshot RSS, incurred no swaps, and
+remained 175 MiB below the absolute budget.
+
+The release-mode `p6_soak` certification then ran 100 unchanged reads and 21
+certified transitions over three rounds, including edit, restore, add, delete,
+rename, rename-back, threshold compaction, and first edit after compaction. It
+reported zero validity, determinism, freshness, cache/no-cache, or persisted
+segment byte-equality divergence. The first post-compaction edit parsed one
+file.
+
+With every S1 gate satisfied, `FreshnessTracker::new()` now selects the delta
+lifecycle used by normal MCP serving. `FreshnessTracker::new_snapshot()` keeps
+the established snapshot implementation as an explicit rollback path for the
+initial soak release.
+
 ## Verdict
 
 P6's architecture and correctness work is complete, and S1 is certified on
-latency and correctness. Default cutover is now blocked only on the 5,000-file
-peak-RSS measurement and bounded soak, not on speculative 100,000-file demand.
-Keep `FreshnessTracker::new_delta_preview` explicit until those two gates pass.
-After cutover, preserve the higher-scale matrix as roadmap and regression
-evidence rather than a release blocker.
+latency, memory, lifecycle safety, and correctness. Delta is the production
+default; snapshot is the explicit rollback path. Preserve the higher-scale
+matrix as roadmap and regression evidence rather than a release blocker.

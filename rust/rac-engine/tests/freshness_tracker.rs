@@ -28,7 +28,7 @@ fn base_delta_compaction_lifecycle() {
 
     // Threshold 2: the second delta path triggers compaction — observable
     // without a 10k-file corpus.
-    let mut tracker = FreshnessTracker::new(cache.clone(), &root, Some(2));
+    let mut tracker = FreshnessTracker::new_snapshot(cache.clone(), &root, Some(2));
     #[cfg(target_os = "linux")]
     assert_eq!(tracker.mode(), "inotify");
     #[cfg(not(target_os = "linux"))]
@@ -79,7 +79,7 @@ fn base_delta_compaction_lifecycle() {
             assert_eq!(derived.index_entries.len(), 2);
         }
         TrackerModel::View(_) => panic!("one change below threshold must serve the snapshot"),
-        TrackerModel::Delta(_) => panic!("default tracker must not serve the P6 preview"),
+        TrackerModel::Delta(_) => panic!("snapshot fallback must not serve delta generations"),
     }
     assert_eq!(tracker.serving_generation(), 4);
 
@@ -124,9 +124,11 @@ fn detection_barrier_catches_immediate_nested_mutation() {
     fs::create_dir_all(&nested).unwrap();
     fs::write(nested.join("adr-2-two.md"), DOC.replace("ADR-1", "ADR-2")).unwrap();
     match tracker.read_model(false) {
-        TrackerModel::Snapshot(derived) => assert_eq!(derived.index_entries.len(), 2),
+        TrackerModel::Delta(delta) => {
+            assert_eq!(delta.materialize_derived(&root, true).index_entries.len(), 2)
+        }
         TrackerModel::View(_) => panic!("nested mutation must open the delta window"),
-        TrackerModel::Delta(_) => panic!("default tracker must not serve the P6 preview"),
+        TrackerModel::Snapshot(_) => panic!("default tracker must serve the delta generation"),
     }
     assert!(tracker.last_detect_scanned());
     assert_eq!(tracker.serving_generation(), generation + 1);
@@ -157,9 +159,11 @@ fn watcher_setup_and_runtime_failure_degrade_to_stat() {
     tracker.read_model(false);
     fs::remove_dir_all(&corpus).unwrap();
     match tracker.read_model(false) {
-        TrackerModel::Snapshot(derived) => assert!(derived.index_entries.is_empty()),
-        TrackerModel::View(_) => panic!("root removal must be served as an empty snapshot"),
-        TrackerModel::Delta(_) => panic!("default tracker must not serve the P6 preview"),
+        TrackerModel::Delta(delta) => {
+            assert!(delta.materialize_derived(&root, true).index_entries.is_empty())
+        }
+        TrackerModel::View(_) => panic!("root removal must open an empty delta generation"),
+        TrackerModel::Snapshot(_) => panic!("default tracker must serve the delta generation"),
     }
     assert_eq!(tracker.mode(), "stat");
     assert!(tracker.last_detect_scanned());
@@ -185,7 +189,7 @@ fn store_hashes(cache_dir: &Path, corpus_hash: &str) -> Vec<(String, String)> {
 
 fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
     let TrackerModel::Delta(generation) = model else {
-        panic!("expected a preview delta generation");
+        panic!("expected a delta generation");
     };
     let candidate_cache = scratch(&format!("{tag}-candidate"));
     let fresh_cache = scratch(&format!("{tag}-fresh"));
@@ -206,7 +210,7 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
     assert_eq!(
         store_hashes(&candidate_cache, key),
         store_hashes(&fresh_cache, key),
-        "preview generation must be byte-identical to a fresh derivation"
+        "delta generation must be byte-identical to a fresh derivation"
     );
     let fresh_items = rac_engine::relationships::corpus_items(root, true);
     assert_eq!(
@@ -326,15 +330,15 @@ fn assert_delta_matches_fresh(model: &TrackerModel, root: &str, tag: &str) {
 }
 
 #[test]
-fn delta_preview_stages_mutations_compacts_and_keeps_parsed_base() {
+fn default_delta_stages_mutations_compacts_and_keeps_parsed_base() {
     let corpus = scratch("p6-corpus");
     let cache = scratch("p6-cache");
     fs::write(corpus.join("adr-1-base.md"), DOC).unwrap();
     fs::write(corpus.join("adr-2-two.md"), DOC.replace("ADR-1", "ADR-2")).unwrap();
     let root = corpus.to_string_lossy().into_owned();
-    let mut tracker = FreshnessTracker::new_delta_preview(cache.clone(), &root, Some(3));
+    let mut tracker = FreshnessTracker::new(cache.clone(), &root, Some(3));
 
-    assert!(tracker.delta_preview_enabled());
+    assert!(tracker.delta_enabled());
     assert!(matches!(tracker.read_model(false), TrackerModel::View(_)));
     assert_eq!(tracker.base_generation(), 1);
     assert_eq!(tracker.delta_base_documents(), 2);
@@ -351,7 +355,7 @@ fn delta_preview_stages_mutations_compacts_and_keeps_parsed_base() {
     let base = tracker.base_generation();
     let model = tracker.read_model(false);
     let TrackerModel::Delta(generation) = model else {
-        panic!("one edit must open the preview delta");
+        panic!("one edit must open the delta generation");
     };
     assert_eq!(generation.base_generation, base);
     assert_eq!(generation.serving_generation, serving);

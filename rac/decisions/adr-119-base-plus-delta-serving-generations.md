@@ -153,6 +153,16 @@ not require satisfying speculative 100,000-artifact latency targets. Higher
 tiers must repeat the same correctness, lifecycle, and memory evidence before
 their performance promises are published.
 
+P6.8 completes S1 adoption. The complete lifecycle peaked at 593 MiB RSS for
+delta versus 466 MiB for snapshot, passing the S1 limits of 768 MiB and 1.5
+times snapshot. A three-round release-mode soak performed 100 unchanged reads
+and 21 certified lifecycle transitions with zero validity, determinism,
+freshness, cache/no-cache, or persisted-segment divergence. The repeated valid
+corpus matrix measured 17.60 ms warm p95, 104.76-140.08 ms mutation p95, and
+1.44 s threshold compaction versus 1.50 s for snapshot. The normal constructor
+therefore selects delta; `new_snapshot` remains the explicit rollback path for
+the initial soak release.
+
 ## Alternatives Considered
 
 ### Mutate the currently served structures in place
