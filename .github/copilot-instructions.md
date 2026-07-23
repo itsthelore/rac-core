@@ -1,6 +1,6 @@
 <!-- BEGIN RAC MANAGED BLOCK (digest: 85425bcf952c265e10a1016ee63073a5ba3e17ec4c43f3ffb9aaca019c3f3562) -->
-<!-- Managed by `rac export --agent-rules`. Edit decisions in rac/, not here; content outside this block is preserved. -->
-## Settled decisions (RAC)
+<!-- Managed by `decided export --agent-rules`. Edit decisions in decisions/, not here; content outside this block is preserved. -->
+## Settled decisions (AsDecided)
 
 These decisions are already accepted. Do not re-open or contradict them; ask the `lore` MCP tools (`get_artifact`, `search_artifacts`) for the full text before proposing a change that touches one.
 
@@ -44,7 +44,7 @@ These decisions are already accepted. Do not re-open or contradict them; ask the
 - **RAC-KV4ZAGWPAA6X** — ADR-059: Reuse a Single Markdown Parser Instance _(Architecture)_
 - **RAC-KV4ZAHVNGH2J** — ADR-060: Share Structural Validation Across Per-Type Validators _(Architecture)_
 - **RAC-KV5112MVD0AM** — ADR-061: Roadmaps Carry an "Achieved" Terminal Lifecycle Status _(Architecture)_
-- **RAC-KV5DJYE5FGH0** — ADR-062: The Python SDK's Public Surface Is `rac.__all__` _(Architecture)_
+- **RAC-KV5DJYE5FGH0** — ADR-062: The Python SDK's Public Surface Is `asdecided.__all__` _(Architecture)_
 - **RAC-KV68XJGEXBNB** — ADR-064: Multi-Repo Extraction Strategy for the itsthelore Organisation _(Architecture)_
 - **RAC-KV6ADYFGC3H4** — ADR-063: Non-Python Clients Are Thin Clients Over the Contract _(Architecture)_
 - **RAC-KV6KFBDZ4D23** — ADR-065: Artifact Content Is Untrusted Input; the Trust Boundary Is Human PR Review _(Architecture)_

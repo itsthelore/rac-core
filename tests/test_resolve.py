@@ -1,4 +1,4 @@
-"""Tests for rac.services.resolve and `rac resolve` / `rac find` (v0.7.12).
+"""Tests for asdecided.services.resolve and `decided resolve` / `decided find` (v0.7.12).
 
 Exact resolution has three outcomes — resolved, not found, duplicate — and a
 duplicate is never resolved by path order. Resolution survives renames,
@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.services.resolve import (
+from asdecided.cli import main
+from asdecided.services.resolve import (
     OUTCOME_DUPLICATE,
     OUTCOME_NOT_FOUND,
     OUTCOME_RESOLVED,
@@ -173,7 +173,7 @@ def test_search_empty_repository_valid_no_match(tmp_path):
 
 
 def test_tokenize_splits_on_boundaries_and_camelcase():
-    from rac.services.resolve import tokenize
+    from asdecided.services.resolve import tokenize
 
     assert tokenize("soft-delete") == ["soft", "delete"]
     assert tokenize("relationships") == ["relationships"]
@@ -323,7 +323,7 @@ def test_body_snippet_is_first_matching_line_in_document_order(tmp_path):
 
 
 def test_resolve_in_index_matches_directory_resolution(repo):
-    from rac.services.index import build_repository_index
+    from asdecided.services.index import build_repository_index
 
     entries = build_repository_index(str(repo)).artifacts
     for ref in (CANONICAL_ID, "adr-002", "nope"):
@@ -333,7 +333,7 @@ def test_resolve_in_index_matches_directory_resolution(repo):
 
 
 def test_search_index_matches_directory_search(repo):
-    from rac.services.index import build_repository_index
+    from asdecided.services.index import build_repository_index
 
     entries = build_repository_index(str(repo)).artifacts
     for query, artifact_type in (("decision", None), ("legacy", "decision"), ("zzz", None)):
@@ -343,7 +343,7 @@ def test_search_index_matches_directory_search(repo):
 
 
 def test_seams_accept_repository_model_artifacts(repo):
-    from rac.services.repository import load_repository
+    from asdecided.services.repository import load_repository
 
     artifacts = load_repository(str(repo)).artifacts
     resolved = resolve_in_index(artifacts, CANONICAL_ID)

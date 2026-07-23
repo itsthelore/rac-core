@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Generate mdhtml (body_html) test vectors from the Python oracle.
 
-Drives markdown-it-py 4.2.0 exactly as rac.services.export does
+Drives markdown-it-py 4.2.0 exactly as asdecided.services.export does
 (`MarkdownIt("commonmark", {"html": False})`) over a C0-control-char grid —
 every char U+0001-U+001F at every block position where Python `str.strip()`
 semantics can diverge from ASCII trimming (markdown-it-py strips

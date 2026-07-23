@@ -9,15 +9,15 @@ recency-free command over an example corpus. This runner replays every case
 against one or more engines and asserts each reproduces the golden bytes exactly
 — certifying the engine against the specification, not against another engine.
 
-Point RAC_SPEC_DIR (or --spec-dir) at a rac-spec checkout. Give one or more
+Point DECIDED_SPEC_DIR (or --spec-dir) at a rac-spec checkout. Give one or more
 engines as `label=command` pairs (command is shell-split, run from the rac-spec
-root). With no engines and no RAC_SPEC_DIR, the runner skips with exit 0 so CI
+root). With no engines and no DECIDED_SPEC_DIR, the runner skips with exit 0 so CI
 stays green until rac-spec is wired in.
 
 Usage:
-    RAC_SPEC_DIR=/path/to/rac-spec python rust/tools/conformance_certify.py \
+    DECIDED_SPEC_DIR=/path/to/rac-spec python rust/tools/conformance_certify.py \
         --engine "python=/path/.venv/bin/rac" \
-        --engine "rust=/path/rust/target/release/rac"
+        --engine "rust=/path/rust/target/release/decided"
 
 Exit 0 = every engine reproduces every case (or skipped); 1 = a mismatch;
 2 = setup error.
@@ -36,14 +36,14 @@ from pathlib import Path
 
 def run_case(cmd: list[str], argv: list[str], cwd: Path) -> tuple[int, bytes]:
     env = dict(os.environ)
-    env.update({"RAC_NO_CACHE": "1", "LC_ALL": "C", "TZ": "UTC", "COLUMNS": "80"})
+    env.update({"DECIDED_NO_CACHE": "1", "LC_ALL": "C", "TZ": "UTC", "COLUMNS": "80"})
     p = subprocess.run(cmd + argv, cwd=cwd, capture_output=True, env=env)
     return p.returncode, p.stdout
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--spec-dir", default=os.environ.get("RAC_SPEC_DIR"))
+    ap.add_argument("--spec-dir", default=os.environ.get("DECIDED_SPEC_DIR"))
     ap.add_argument(
         "--engine",
         action="append",
@@ -54,7 +54,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if not args.spec_dir:
-        print("SKIP: no --spec-dir / RAC_SPEC_DIR — rac-spec not available")
+        print("SKIP: no --spec-dir / DECIDED_SPEC_DIR — rac-spec not available")
         return 0
     spec_dir = Path(args.spec_dir)
     manifest_path = spec_dir / "conformance/output-parity.json"

@@ -1,15 +1,15 @@
-//! Scaffold writes — `rac new`, `rac init`, `rac quickstart`,
-//! `rac migrate metadata` (PORT-CONTRACT.d/16).
+//! Scaffold writes — `decided new`, `decided init`, `decided quickstart`,
+//! `decided migrate metadata` (PORT-CONTRACT.d/16).
 //!
-//! Ports of `src/rac/core/idgen.py` (`generate_id`), `src/rac/core/
-//! templates.py` (`load_template`), `src/rac/services/init.py`
+//! Ports of `src/asdecided/core/idgen.py` (`generate_id`), `src/asdecided/core/
+//! templates.py` (`load_template`), `src/asdecided/services/init.py`
 //! (`init_repository`, `load_repository_config`, `write_mcp_configs` via
-//! `src/rac/services/profiles.py`), `src/rac/services/create.py`
-//! (`create_artifact`), `src/rac/services/quickstart.py` (`quickstart`),
-//! and `src/rac/services/migrate.py` (`migrate_metadata`).
+//! `src/asdecided/services/profiles.py`), `src/asdecided/services/create.py`
+//! (`create_artifact`), `src/asdecided/services/quickstart.py` (`quickstart`),
+//! and `src/asdecided/services/migrate.py` (`migrate_metadata`).
 //!
 //! The packaged template bodies are embedded verbatim from
-//! `rust/rac-engine/assets/templates/`, vendored byte-identical copies of
+//! `rust/decided-engine/assets/templates/`, vendored byte-identical copies of
 //! the Python package files — a unit test below pins that identity, because
 //! the written artifact must be byte-identical to what the oracle writes.
 //!
@@ -27,7 +27,7 @@ use crate::validate::find_config_file;
 use crate::walk::py_join;
 
 // ---------------------------------------------------------------------------
-// Errors (rac.services.{create,init,quickstart,migrate} exception classes)
+// Errors (decided.services.{create,init,quickstart,migrate} exception classes)
 // ---------------------------------------------------------------------------
 
 /// The scaffold failure contract, message-shaped like the oracle's
@@ -42,7 +42,7 @@ pub enum ScaffoldError {
     OutputPathExists(String),
     /// `OutputDirectoryMissing` — no auto-create (usage).
     OutputDirectoryMissing(String),
-    /// `MissingRepositoryConfig` — run `rac init` first (usage).
+    /// `MissingRepositoryConfig` — run `decided init` first (usage).
     MissingRepositoryConfig(String),
     /// `InvalidRepositoryKey` — bad key syntax (usage).
     InvalidRepositoryKey(String),
@@ -88,7 +88,7 @@ fn template_not_found(artifact_type: &str) -> ScaffoldError {
 fn missing_repository_config(start_dir: &str) -> ScaffoldError {
     ScaffoldError::MissingRepositoryConfig(format!(
         "no repository identity found at or above {start_dir}; \
-         run `rac init` to establish a repository key first"
+         run `decided init` to establish a repository key first"
     ))
 }
 
@@ -105,7 +105,7 @@ fn id_generation_exhausted() -> ScaffoldError {
 }
 
 // ---------------------------------------------------------------------------
-// Opaque id generation (rac.core.idgen, ADR-026)
+// Opaque id generation (decided.core.idgen, ADR-026)
 // ---------------------------------------------------------------------------
 
 /// Crockford base32: no I, L, O, U (visually ambiguous).
@@ -160,7 +160,7 @@ pub fn generate_id(repository_key: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Canonical templates (rac.core.templates, ADR-021)
+// Canonical templates (decided.core.templates, ADR-021)
 // ---------------------------------------------------------------------------
 
 /// The embedded template bodies, index-aligned with `available_schemas()`
@@ -192,7 +192,7 @@ pub fn render_frontmatter(artifact_id: &str, artifact_type: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Repository identity config (rac.services.init)
+// Repository identity config (decided.services.init)
 // ---------------------------------------------------------------------------
 
 /// `KEY_RE = ^[A-Z][A-Z0-9]{1,9}$` — with Python `$` also matching just
@@ -257,7 +257,7 @@ fn read_config(config_path: &str) -> Result<RepositoryConfig, ScaffoldError> {
     })
 }
 
-/// `load_repository_config(start_dir)` — the nearest `.rac/config.yaml` at
+/// `load_repository_config(start_dir)` — the nearest `.decided/config.yaml` at
 /// or above the RESOLVED `start_dir`, read strictly, or None.
 pub fn load_repository_config(start_dir: &str) -> Result<Option<RepositoryConfig>, ScaffoldError> {
     match find_config_file(start_dir) {
@@ -267,17 +267,17 @@ pub fn load_repository_config(start_dir: &str) -> Result<Option<RepositoryConfig
 }
 
 // ---------------------------------------------------------------------------
-// Init profiles (rac.services.profiles, ADR-088)
+// Init profiles (decided.services.profiles, ADR-088)
 // ---------------------------------------------------------------------------
 
 /// The lore MCP server wiring, identical for Claude Code (`.mcp.json`) and
 /// Cursor (`.cursor/mcp.json`).
-pub const MCP_JSON: &str = "{\n  \"mcpServers\": {\n    \"lore\": {\n      \"command\": \"rac\",\n      \"args\": [\"mcp\", \"--root\", \".\"]\n    }\n  }\n}\n";
+pub const MCP_JSON: &str = "{\n  \"mcpServers\": {\n    \"asdecided\": {\n      \"command\": \"decided-mcp\",\n      \"args\": [\"--root\", \".\"]\n    }\n  }\n}\n";
 
 /// The enterprise profile's committed enforcement stanza (ADR-049/088) —
 /// appended verbatim after the repository key.
 const ENTERPRISE_CONFIG: &str = "\
-# Enterprise profile (ADR-088): relationship-integrity findings block `rac gate`,
+# Enterprise profile (ADR-088): relationship-integrity findings block `decided gate`,
 # committed explicitly so the enforcement policy is auditable (ADR-049).
 enforcement:
   blocking:
@@ -398,7 +398,7 @@ fn write_org_endpoint(directory: &str, url: &str) -> Result<Vec<String>, Scaffol
     Ok(written)
 }
 
-/// Outcome of one `rac init` run (stable JSON contract, ADR-007).
+/// Outcome of one `decided init` run (stable JSON contract, ADR-007).
 pub struct InitResult {
     pub repository_key: String,
     pub config_path: String,
@@ -428,7 +428,7 @@ pub fn init_repository(
             return Err(invalid_org_endpoint(url));
         }
     }
-    let config_path = py_join(directory, &[".rac", "config.yaml"]);
+    let config_path = py_join(directory, &[".decided", "config.yaml"]);
     if Path::new(&config_path).is_file() {
         let existing = read_config(&config_path)?;
         if existing.repository_key != key {
@@ -487,7 +487,7 @@ pub fn init_repository(
 }
 
 // ---------------------------------------------------------------------------
-// Artifact creation (rac.services.create)
+// Artifact creation (decided.services.create)
 // ---------------------------------------------------------------------------
 
 /// Result of one artifact creation (`bytes_written` is in the oracle's
@@ -553,7 +553,7 @@ pub fn create_artifact(
     let body = load_template(artifact_type)?; // validates the type first
     if Path::new(output_path).exists() {
         return Err(ScaffoldError::OutputPathExists(format!(
-            "{output_path} already exists; rac new never overwrites"
+            "{output_path} already exists; decided new never overwrites"
         )));
     }
     let parent = py_parent(output_path);
@@ -566,7 +566,7 @@ pub fn create_artifact(
         return Err(missing_repository_config(&parent));
     };
     // repository_root = str(Path(config_path).parent.parent) — the resolved
-    // config path's grandparent (the directory holding `.rac/`).
+    // config path's grandparent (the directory holding `.decided/`).
     let repository_root = Path::new(&config.config_path)
         .parent()
         .and_then(Path::parent)
@@ -588,10 +588,10 @@ pub fn create_artifact(
 }
 
 // ---------------------------------------------------------------------------
-// Quickstart (rac.services.quickstart, ADR-044)
+// Quickstart (decided.services.quickstart, ADR-044)
 // ---------------------------------------------------------------------------
 
-/// Outcome of one `rac quickstart` run.
+/// Outcome of one `decided quickstart` run.
 pub struct QuickstartResult {
     pub repository_key: String,
     pub config_path: String,
@@ -601,7 +601,7 @@ pub struct QuickstartResult {
 
 /// `quickstart(directory, key, artifact_type)` — validate the type first,
 /// refuse a non-empty corpus BEFORE any write, establish identity, then
-/// scaffold `<dir>/rac/<type>s/first-<type>.md`.
+/// scaffold `<dir>/decisions/<type>s/first-<type>.md`.
 ///
 /// Check order is load-bearing (measured): bad type (exit 2) beats a
 /// non-empty corpus (exit 1) beats a bad key (exit 2 when reached). Note
@@ -620,8 +620,8 @@ pub fn quickstart(
     let items = corpus_items(directory, true);
     if let Some(existing) = items.iter().find(|item| item.spec.is_some()) {
         return Err(ScaffoldError::CorpusNotEmpty(format!(
-            "corpus already has artifacts (e.g. {}); rac quickstart only \
-             scaffolds an empty corpus \u{2014} use `rac new` to add more",
+            "corpus already has artifacts (e.g. {}); decided quickstart only \
+             scaffolds an empty corpus \u{2014} use `decided new` to add more",
             existing.path
         )));
     }
@@ -629,11 +629,11 @@ pub fn quickstart(
     let init_result = init_repository(directory, key, None, None, None)?;
 
     let family = format!("{artifact_type}s");
-    let art_dir = py_join(directory, &["rac", &family]);
+    let art_dir = py_join(directory, &["decisions", &family]);
     std::fs::create_dir_all(&art_dir)
         .map_err(|e| malformed_config(&art_dir, &format!("invalid YAML: {e}")))?;
     let file_name = format!("first-{artifact_type}.md");
-    let out_path = py_join(directory, &["rac", &family, &file_name]);
+    let out_path = py_join(directory, &["decisions", &family, &file_name]);
     let artifact = create_artifact(artifact_type, &out_path)?;
 
     Ok(QuickstartResult {
@@ -645,7 +645,7 @@ pub fn quickstart(
 }
 
 // ---------------------------------------------------------------------------
-// Metadata migration (rac.services.migrate, ADR-025)
+// Metadata migration (decided.services.migrate, ADR-025)
 // ---------------------------------------------------------------------------
 
 /// Stable per-file statuses (part of the JSON contract, ADR-007).
@@ -764,7 +764,7 @@ mod tests {
     fn embedded_templates_equal_python_package_files() {
         for (i, name) in available_schemas().iter().enumerate() {
             let py_path = format!(
-                "{}/../../src/rac/templates/{name}.md",
+                "{}/../../src/asdecided/templates/{name}.md",
                 env!("CARGO_MANIFEST_DIR")
             );
             let py_bytes = std::fs::read(&py_path)
@@ -799,7 +799,7 @@ mod tests {
         assert!(valid_repository_key("RAC\n"));
     }
 
-    /// RAC-KXBPS7SRM6ZB REQ-002: the native `rac new` must succeed when the
+    /// RAC-KXBPS7SRM6ZB REQ-002: the native `decided new` must succeed when the
     /// repository walk encounters unparseable/hostile Markdown. The oracle
     /// CRASHES on this fixture (an unhashable YAML mapping key — a list —
     /// raises `TypeError` inside `_no_duplicates` during the id-collision
@@ -811,9 +811,9 @@ mod tests {
         let root = std::path::Path::new(&base)
             .join(format!("scaffold_hostile_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join("rac/decisions")).unwrap();
-        std::fs::create_dir_all(root.join(".rac")).unwrap();
-        std::fs::write(root.join(".rac/config.yaml"), "repository_key: RAC\n").unwrap();
+        std::fs::create_dir_all(root.join("decisions/decisions")).unwrap();
+        std::fs::create_dir_all(root.join(".decided")).unwrap();
+        std::fs::write(root.join(".decided/config.yaml"), "repository_key: RAC\n").unwrap();
         // The pinned oracle-crash repro: a YAML mapping with a LIST key.
         let hostile = format!(
             "{}/../fuzz/pinned/oracle-crashes/unhashable-key/repro.md",
@@ -821,9 +821,9 @@ mod tests {
         );
         let hostile_bytes = std::fs::read(&hostile)
             .unwrap_or_else(|e| panic!("cannot read {hostile}: {e}"));
-        std::fs::write(root.join("rac/decisions/case.md"), hostile_bytes).unwrap();
+        std::fs::write(root.join("decisions/decisions/case.md"), hostile_bytes).unwrap();
 
-        let out = root.join("rac/decisions/new.md").to_string_lossy().into_owned();
+        let out = root.join("decisions/decisions/new.md").to_string_lossy().into_owned();
         let created = match create_artifact("decision", &out) {
             Ok(created) => created,
             Err(e) => panic!("create_artifact failed on a hostile corpus: {}", e.message()),

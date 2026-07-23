@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rac.core.corpus import corpus_content_hash
-from rac.services.freshness import FileState, corpus_hash_from_manifest, stat_scan
-from rac.services.index_store import (
+from asdecided.core.corpus import corpus_content_hash
+from asdecided.services.freshness import FileState, corpus_hash_from_manifest, stat_scan
+from asdecided.services.index_store import (
     manifest_root_key,
     manifest_store_root,
     open_freshness_manifest,
@@ -22,7 +22,7 @@ from rac.services.index_store import (
 
 
 def _state(path: Path) -> FileState:
-    from rac.core.corpus import content_hash
+    from asdecided.core.corpus import content_hash
 
     st = path.stat()
     return FileState(content_hash=content_hash(path), size=st.st_size, mtime_ns=st.st_mtime_ns)
@@ -104,7 +104,7 @@ def test_warm_scan_against_persisted_manifest_reads_no_bytes(tmp_path, monkeypat
     key = manifest_root_key(str(tmp_path))
     write_freshness_manifest(cache, key, manifest)
 
-    import rac.services.freshness as freshness
+    import asdecided.services.freshness as freshness
 
     reads: list[str] = []
     real = freshness.content_hash
@@ -137,7 +137,7 @@ def _cache_corpus(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_load_or_build_persists_the_manifest_and_warms_by_stat(tmp_path, monkeypatch):
-    from rac.services.derived_cache import DerivedIndexCache
+    from asdecided.services.derived_cache import DerivedIndexCache
 
     root, cache_dir = _cache_corpus(tmp_path)
     cache = DerivedIndexCache(cache_dir)
@@ -145,7 +145,7 @@ def test_load_or_build_persists_the_manifest_and_warms_by_stat(tmp_path, monkeyp
     key = manifest_root_key(str(root))
     assert open_freshness_manifest(cache_dir, key), "a cold run must persist the manifest"
 
-    import rac.services.freshness as freshness
+    import asdecided.services.freshness as freshness
 
     reads: list[str] = []
     real = freshness.content_hash
@@ -156,7 +156,7 @@ def test_load_or_build_persists_the_manifest_and_warms_by_stat(tmp_path, monkeyp
 
 
 def test_ordinary_edit_is_detected_through_the_manifest(tmp_path):
-    from rac.services.derived_cache import DerivedIndexCache, build_derived_index
+    from asdecided.services.derived_cache import DerivedIndexCache, build_derived_index
 
     root, cache_dir = _cache_corpus(tmp_path)
     cache = DerivedIndexCache(cache_dir)
@@ -175,7 +175,7 @@ def test_s5_rewrite_is_the_accepted_miss_and_verify_repairs(tmp_path):
     """
     import os
 
-    from rac.services.derived_cache import DerivedIndexCache, build_derived_index
+    from asdecided.services.derived_cache import DerivedIndexCache, build_derived_index
 
     root, cache_dir = _cache_corpus(tmp_path)
     cache = DerivedIndexCache(cache_dir)
@@ -196,7 +196,7 @@ def test_s5_rewrite_is_the_accepted_miss_and_verify_repairs(tmp_path):
 
 
 def test_corrupt_manifest_self_heals_through_full_confirm(tmp_path):
-    from rac.services.derived_cache import DerivedIndexCache, build_derived_index
+    from asdecided.services.derived_cache import DerivedIndexCache, build_derived_index
 
     root, cache_dir = _cache_corpus(tmp_path)
     cache = DerivedIndexCache(cache_dir)
@@ -213,8 +213,8 @@ def test_manifest_present_store_deleted_rebuilds_and_rewrites(tmp_path):
     # rebuilds, and rewrites the store — never a wrong answer.
     import shutil
 
-    from rac.services.derived_cache import DerivedIndexCache, build_derived_index
-    from rac.services.index_store import store_root
+    from asdecided.services.derived_cache import DerivedIndexCache, build_derived_index
+    from asdecided.services.index_store import store_root
 
     root, cache_dir = _cache_corpus(tmp_path)
     cache = DerivedIndexCache(cache_dir)
@@ -227,12 +227,12 @@ def test_manifest_present_store_deleted_rebuilds_and_rewrites(tmp_path):
 
 
 def test_default_cache_dir_survives_a_homeless_environment(monkeypatch):
-    from rac.services.derived_cache import default_cache_dir
+    from asdecided.services.derived_cache import default_cache_dir
 
     def _no_home() -> Path:
         raise RuntimeError("no usable home directory")
 
-    monkeypatch.delenv("RAC_CACHE_DIR", raising=False)
+    monkeypatch.delenv("DECIDED_CACHE_DIR", raising=False)
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
     monkeypatch.setattr(Path, "home", staticmethod(_no_home))
     assert default_cache_dir().name  # resolves somewhere instead of raising

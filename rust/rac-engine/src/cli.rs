@@ -20,7 +20,7 @@ use crate::output::rac_version;
 
 /// Root subcommand table, in argparse declaration order (the order the
 /// `invalid choice` message quotes).
-const SUBCOMMANDS: [&str; 33] = [
+const SUBCOMMANDS: [&str; 32] = [
     "validate",
     "diff",
     "stats",
@@ -38,7 +38,6 @@ const SUBCOMMANDS: [&str; 33] = [
     "portfolio",
     "index",
     "export",
-    "explorer",
     "mcp",
     "mcp-stats",
     "telemetry",
@@ -57,7 +56,7 @@ const SUBCOMMANDS: [&str; 33] = [
 ];
 
 fn version_line() -> String {
-    format!("rac {}", rac_version())
+    format!("decided {}", rac_version())
 }
 
 fn print_stdout(text: &str) {
@@ -91,10 +90,10 @@ fn argparse_error(prog: &str, message: &str) -> u8 {
 }
 
 /// Leftover-token rejection; argparse reports these against the root prog
-/// (`rac`), not the subcommand.
+/// (`decided`), not the subcommand.
 fn unrecognized(extras: &[String]) -> u8 {
     argparse_error(
-        "rac",
+        "decided",
         &format!("unrecognized arguments: {}", extras.join(" ")),
     )
 }
@@ -135,7 +134,7 @@ pub fn run(args: &[String]) -> u8 {
 fn run_dispatch(args: &[String]) -> u8 {
     let mut it = args.iter();
     let first = match it.next() {
-        None => return argparse_error("rac", "the following arguments are required: command"),
+        None => return argparse_error("decided", "the following arguments are required: command"),
         Some(a) if a == "--version" => {
             skip_usage_record();
             print_stdout(&version_line());
@@ -144,21 +143,21 @@ fn run_dispatch(args: &[String]) -> u8 {
         Some(a) if a == "-h" || a == "--help" => {
             // Help body is out of parity scope; emit a stub to stdout.
             skip_usage_record();
-            print_stdout("usage: rac [-h] [--version] <command> ...");
+            print_stdout("usage: decided [-h] [--version] <command> ...");
             return 0;
         }
         Some(a) => a,
     };
 
     if first.starts_with('-') {
-        return argparse_error("rac", &format!("unrecognized arguments: {first}"));
+        return argparse_error("decided", &format!("unrecognized arguments: {first}"));
     }
     // `retrieve` (ADR-113, oracle-next 0.1.dev55+gf2091befd) dispatches but is
     // deliberately NOT in SUBCOMMANDS: the mainline oracle's `invalid choice`
     // message does not list it, and that message's bytes are pinned by the
     // mainline parity suite (case `err-unknown-subcommand`).
     if first != "retrieve" && !SUBCOMMANDS.contains(&first.as_str()) {
-        return argparse_error("rac", &invalid_choice_message(first));
+        return argparse_error("decided", &invalid_choice_message(first));
     }
 
     let rest: Vec<&String> = it.collect();
@@ -191,7 +190,7 @@ fn run_dispatch(args: &[String]) -> u8 {
         }
         if rest.iter().any(|a| a.as_str() == "-h" || a.as_str() == "--help") {
             skip_usage_record();
-            print_stdout(&format!("usage: rac {first} ..."));
+            print_stdout(&format!("usage: decided {first} ..."));
             return 0;
         }
     }
@@ -229,7 +228,7 @@ fn run_dispatch(args: &[String]) -> u8 {
         "rename" => run_rename(&rest),
         "migrate" => run_migrate(&rest),
         other => {
-            eprintln!("rac-rs: subcommand '{other}' is not yet implemented");
+            eprintln!("decided-rs: subcommand '{other}' is not yet implemented");
             2
         }
     }
@@ -275,7 +274,7 @@ fn take_opt_value(
 }
 
 fn run_validate(rest: &[&String]) -> u8 {
-    let prog = "rac validate";
+    let prog = "decided validate";
     let mut file: Option<String> = None;
     let mut json = false;
     let mut sarif = false;
@@ -347,7 +346,7 @@ fn run_validate(rest: &[&String]) -> u8 {
 }
 
 fn run_diff(rest: &[&String]) -> u8 {
-    let prog = "rac diff";
+    let prog = "decided diff";
     let mut old: Option<String> = None;
     let mut new: Option<String> = None;
     let mut json = false;
@@ -391,7 +390,7 @@ fn run_diff(rest: &[&String]) -> u8 {
 }
 
 fn run_inspect(rest: &[&String]) -> u8 {
-    let prog = "rac inspect";
+    let prog = "decided inspect";
     let mut file: Option<String> = None;
     let mut verbose = false;
     let mut top_level = false;
@@ -435,7 +434,7 @@ fn run_inspect(rest: &[&String]) -> u8 {
 }
 
 fn run_improve(rest: &[&String]) -> u8 {
-    let prog = "rac improve";
+    let prog = "decided improve";
     let mut file: Option<String> = None;
     let mut json = false;
     let mut template = false;
@@ -487,7 +486,7 @@ fn run_improve(rest: &[&String]) -> u8 {
 }
 
 fn run_relationships(rest: &[&String]) -> u8 {
-    let prog = "rac relationships";
+    let prog = "decided relationships";
     let mut path: Option<String> = None;
     let mut validate = false;
     let mut sarif = false;
@@ -534,7 +533,7 @@ fn run_relationships(rest: &[&String]) -> u8 {
 }
 
 fn run_stats(rest: &[&String]) -> u8 {
-    let prog = "rac stats";
+    let prog = "decided stats";
     let mut directory: Option<String> = None;
     let mut json = false;
     let mut extras: Vec<String> = Vec::new();
@@ -568,7 +567,7 @@ fn run_stats(rest: &[&String]) -> u8 {
 }
 
 fn run_portfolio(rest: &[&String]) -> u8 {
-    let prog = "rac portfolio";
+    let prog = "decided portfolio";
     let mut directory: Option<String> = None;
     let mut json = false;
     let mut top_level = false;
@@ -609,7 +608,7 @@ fn run_portfolio(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac index [directory] [--json] [--top-level]` — optional positional
+/// `decided index [directory] [--json] [--top-level]` — optional positional
 /// (default '.', like the sibling export parser), version/json/scope
 /// parents. No cache flags: index never consumes the cache.
 fn run_index(rest: &[&String]) -> u8 {
@@ -685,7 +684,7 @@ fn run_coverage(rest: &[&String]) -> u8 {
 }
 
 fn run_decisions_for(rest: &[&String]) -> u8 {
-    let prog = "rac decisions-for";
+    let prog = "decided decisions-for";
     let mut path: Option<String> = None;
     let mut directory: Option<String> = None;
     let mut json = false;
@@ -730,7 +729,7 @@ fn run_decisions_for(rest: &[&String]) -> u8 {
 }
 
 fn run_gate(rest: &[&String]) -> u8 {
-    let prog = "rac gate";
+    let prog = "decided gate";
     let mut directory: Option<String> = None;
     let mut json = false;
     let mut sarif = false;
@@ -787,7 +786,7 @@ fn run_gate(rest: &[&String]) -> u8 {
 }
 
 fn run_doctor(rest: &[&String]) -> u8 {
-    let prog = "rac doctor";
+    let prog = "decided doctor";
     let mut directory: Option<String> = None;
     let mut json = false;
     let mut top_level = false;
@@ -924,21 +923,21 @@ fn parse_json_share_group(prog: &str, rest: &[&String]) -> Result<(bool, bool), 
 }
 
 fn run_mcp_stats(rest: &[&String]) -> u8 {
-    match parse_json_share_group("rac mcp-stats", rest) {
+    match parse_json_share_group("decided mcp-stats", rest) {
         Ok((json, share)) => cmd_mcp_stats(&McpStatsArgs { json, share }) as u8,
         Err(code) => code,
     }
 }
 
 fn run_usage(rest: &[&String]) -> u8 {
-    match parse_json_share_group("rac usage", rest) {
+    match parse_json_share_group("decided usage", rest) {
         Ok((json, share)) => cmd_usage(&UsageArgs { json, share }) as u8,
         Err(code) => code,
     }
 }
 
 fn run_telemetry(rest: &[&String]) -> u8 {
-    let prog = "rac telemetry";
+    let prog = "decided telemetry";
     let mut action: Option<String> = None;
     let mut enterprise = false;
     let mut unlock = false;
@@ -998,13 +997,13 @@ fn run_telemetry(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac skill <action> [name] [--dir DIR] [--json]` — order-aware: the
+/// `decided skill <action> [name] [--dir DIR] [--json]` — order-aware: the
 /// `action` positional's choice set is validated when the token is
 /// CONSUMED (an invalid action beats a later `--version`; an earlier
 /// `--version` wins), a second positional defers to the end-of-parse
 /// `unrecognized arguments`, exactly like argparse.
 fn run_skill(rest: &[&String]) -> u8 {
-    let prog = "rac skill";
+    let prog = "decided skill";
     let mut action: Option<String> = None;
     let mut name: Option<String> = None;
     let mut dir: String = ".".to_string();
@@ -1073,13 +1072,13 @@ fn run_skill(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac hook <action> [--style STYLE] [--dir DIR] [--json]` — order-aware
+/// `decided hook <action> [--style STYLE] [--dir DIR] [--json]` — order-aware
 /// like skill; additionally `--style`'s choice set is validated when its
 /// VALUE is consumed (so `--style bogus --version` exits 2 while
 /// `--version --style bogus` prints the version), making the service-level
 /// unknown-style error unreachable via the CLI.
 fn run_hook(rest: &[&String]) -> u8 {
-    let prog = "rac hook";
+    let prog = "decided hook";
     let mut action: Option<String> = None;
     let mut style: String = "post-commit".to_string(); // hooks.DEFAULT_STYLE
     let mut dir: String = ".".to_string();
@@ -1170,7 +1169,7 @@ fn run_hook(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac watchkeeper [directory] [--base REV] [--head REV]
+/// `decided watchkeeper [directory] [--base REV] [--head REV]
 /// [--format {human,json,github}] [--json] [--fail-on {error,warning,none}]
 /// [--no-annotate]` — order-aware: `--format`/`--fail-on` are
 /// argparse-choice-validated when their VALUE is consumed and a missing
@@ -1180,7 +1179,7 @@ fn run_hook(rest: &[&String]) -> u8 {
 /// still wins), and extra positionals defer to the end-of-parse
 /// `unrecognized arguments`.
 fn run_watchkeeper(rest: &[&String]) -> u8 {
-    let prog = "rac watchkeeper";
+    let prog = "decided watchkeeper";
     let mut directory: Option<String> = None;
     let mut base: String = "main".to_string();
     let mut head: Option<String> = None;
@@ -1296,12 +1295,12 @@ fn run_watchkeeper(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac eval [--check | --update-baseline] [--json] [--root ROOT]
+/// `decided eval [--check | --update-baseline] [--json] [--root ROOT]
 /// [--queries QUERIES] [--baseline BASELINE] [--config CONFIG]` — no
 /// positionals; the mode mutex errors at the ENCOUNTER of the conflicting
 /// flag (so it beats a later `--version`), like argparse.
 fn run_eval(rest: &[&String]) -> u8 {
-    let prog = "rac eval";
+    let prog = "decided eval";
     let mut check = false;
     let mut update_baseline = false;
     let mut json = false;
@@ -1392,7 +1391,7 @@ fn run_eval(rest: &[&String]) -> u8 {
 }
 
 fn run_resolve(rest: &[&String]) -> u8 {
-    let prog = "rac resolve";
+    let prog = "decided resolve";
     let mut id: Option<String> = None;
     let mut directory: Option<String> = None;
     let mut json = false;
@@ -1437,7 +1436,7 @@ fn run_resolve(rest: &[&String]) -> u8 {
 }
 
 fn run_find(rest: &[&String]) -> u8 {
-    let prog = "rac find";
+    let prog = "decided find";
     let mut query: Option<String> = None;
     let mut directory: Option<String> = None;
     let mut artifact_type: Option<String> = None;
@@ -1565,7 +1564,7 @@ fn py_parse_int(value: &str) -> Option<i64> {
 }
 
 fn run_retrieve(rest: &[&String]) -> u8 {
-    let prog = "rac retrieve";
+    let prog = "decided retrieve";
     let mut task: Option<String> = None;
     let mut directory: Option<String> = None;
     let mut scope: Option<String> = None;
@@ -1720,7 +1719,7 @@ fn looks_like_negative_number(s: &str) -> bool {
 }
 
 fn run_review(rest: &[&String]) -> u8 {
-    let prog = "rac review";
+    let prog = "decided review";
     let mut directory: Option<String> = None;
     let mut json = false;
     let mut sarif = false;
@@ -1804,7 +1803,7 @@ fn run_review(rest: &[&String]) -> u8 {
 }
 
 fn run_export(rest: &[&String]) -> u8 {
-    let prog = "rac export";
+    let prog = "decided export";
     let mut directory: Option<String> = None;
     let mut json = false;
     let mut html = false;
@@ -1942,7 +1941,7 @@ fn is_client_choice(v: &str) -> bool {
 }
 
 fn run_schema(rest: &[&String]) -> u8 {
-    let prog = "rac schema";
+    let prog = "decided schema";
     let mut schema: Option<String> = None;
     let mut list = false;
     let mut json = false;
@@ -2017,7 +2016,7 @@ fn run_templates(rest: &[&String]) -> u8 {
 }
 
 fn run_new(rest: &[&String]) -> u8 {
-    let prog = "rac new";
+    let prog = "decided new";
     let mut artifact_type: Option<String> = None;
     let mut output_path: Option<String> = None;
     let mut json = false;
@@ -2066,13 +2065,13 @@ fn run_new(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac init [directory] [--key KEY] [--ticketing PROVIDER] [--profile
+/// `decided init [directory] [--key KEY] [--ticketing PROVIDER] [--profile
 /// NAME] [--json]` — order-aware: `--ticketing`/`--profile` are
 /// argparse-choice-validated when their VALUE is consumed (an invalid
 /// choice beats a later `--version`; an earlier `--version` wins), and a
 /// missing option value errors at its own position too.
 fn run_init(rest: &[&String]) -> u8 {
-    let prog = "rac init";
+    let prog = "decided init";
     let mut directory: Option<String> = None;
     let mut key: String = "RAC".to_string(); // init.DEFAULT_KEY
     let mut ticketing: Option<String> = None;
@@ -2162,7 +2161,7 @@ fn run_init(rest: &[&String]) -> u8 {
             }
             other if other == "--org-endpoint" || other.starts_with("--org-endpoint=") => {
                 // Free string like --key: the http(s) check is the service
-                // layer's `rac:` usage error, not an argparse choice.
+                // layer's `decided:` usage error, not an argparse choice.
                 match take_opt_value(prog, "--org-endpoint", other, rest, &mut i) {
                     Ok(v) => org_endpoint = Some(v),
                     Err(code) => return code,
@@ -2187,13 +2186,13 @@ fn run_init(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac quickstart [directory] [--key KEY] [--type TYPE] [--json]` —
+/// `decided quickstart [directory] [--key KEY] [--type TYPE] [--json]` —
 /// order-aware only for the value-taking options: a MISSING `--key`/
 /// `--type` value errors at its own position (beating a later
 /// `--version`), while their values are free strings validated by the
 /// service (so `--key bad --version` prints the version, measured).
 fn run_quickstart(rest: &[&String]) -> u8 {
-    let prog = "rac quickstart";
+    let prog = "decided quickstart";
     let mut directory: Option<String> = None;
     let mut key: String = "RAC".to_string(); // init.DEFAULT_KEY
     let mut artifact_type: String = "requirement".to_string(); // quickstart.DEFAULT_TYPE
@@ -2256,7 +2255,7 @@ fn run_quickstart(rest: &[&String]) -> u8 {
 }
 
 fn run_rename(rest: &[&String]) -> u8 {
-    let prog = "rac rename";
+    let prog = "decided rename";
     let mut old: Option<String> = None;
     let mut new: Option<String> = None;
     let mut directory: Option<String> = None;
@@ -2319,12 +2318,12 @@ fn run_rename(rest: &[&String]) -> u8 {
     }) as u8
 }
 
-/// `rac migrate {metadata} <directory> [--dry-run] [--top-level]
+/// `decided migrate {metadata} <directory> [--dry-run] [--top-level]
 /// [--recursive] [--json]` — order-aware: the `target` positional's choice
 /// set is validated when the token is CONSUMED (an invalid target beats a
 /// later `--version`; an earlier `--version` wins).
 fn run_migrate(rest: &[&String]) -> u8 {
-    let prog = "rac migrate";
+    let prog = "decided migrate";
     let mut target: Option<String> = None;
     let mut directory: Option<String> = None;
     let mut dry_run = false;
@@ -2337,11 +2336,11 @@ fn run_migrate(rest: &[&String]) -> u8 {
         let arg = arg.as_str();
         if positional_only || arg == "-" || !arg.starts_with('-') {
             if target.is_none() {
-                if arg != "metadata" {
+                if arg != "metadata" && arg != "layout" {
                     return argparse_error(
                         prog,
                         &format!(
-                            "argument target: invalid choice: '{arg}' (choose from 'metadata')"
+                            "argument target: invalid choice: '{arg}' (choose from 'metadata', 'layout')"
                         ),
                     );
                 }

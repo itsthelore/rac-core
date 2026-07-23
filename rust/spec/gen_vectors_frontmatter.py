@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate frontmatter conformance vectors from the oracle.
 
-Drives `rac.core.frontmatter.split_frontmatter`, `_load_frontmatter_mapping`,
-`parse_frontmatter`, and `rac.core.markdown.parse_file` over the full
+Drives `asdecided.core.frontmatter.split_frontmatter`, `_load_frontmatter_mapping`,
+`parse_frontmatter`, and `asdecided.core.markdown.parse_file` over the full
 PORT-CONTRACT.d/02 case matrix and dumps:
 
 - split:   delimiter-rule cases (text -> raw/body/offset/unterminated)
@@ -11,7 +11,7 @@ PORT-CONTRACT.d/02 case matrix and dumps:
            internal-oracle-divergence issue — PORT-CONTRACT decision 3)
 - files:   byte-level parse_file cases (oversize/unreadable/lossy decode);
            temp paths are substituted with {PATH}
-- env_cap: RAC_MAX_FILE_BYTES parsing table
+- env_cap: DECIDED_MAX_FILE_BYTES parsing table
 - ids:     normalize_id / is_valid_id edge cases
 
 Deterministic: fixed case lists; set encodings sorted by canonical JSON.
@@ -29,14 +29,14 @@ import os
 import tempfile
 from pathlib import Path
 
-from rac.core.frontmatter import (
+from asdecided.core.frontmatter import (
     _load_frontmatter_mapping,
     parse_frontmatter,
     split_frontmatter,
 )
-from rac.core.limits import max_file_bytes
-from rac.core.markdown import parse_file
-from rac.core.metadata import is_valid_id, normalize_id
+from asdecided.core.limits import max_file_bytes
+from asdecided.core.markdown import parse_file
+from asdecided.core.metadata import is_valid_id, normalize_id
 
 OUT = Path(__file__).resolve().parents[1] / "rac-engine/tests/vectors/frontmatter.json"
 
@@ -674,10 +674,10 @@ def gen_parse_case(raw: str):
 
 
 def gen_file_case(case):
-    old = os.environ.pop("RAC_MAX_FILE_BYTES", None)
+    old = os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
     try:
         if case["env"] is not None:
-            os.environ["RAC_MAX_FILE_BYTES"] = case["env"]
+            os.environ["DECIDED_MAX_FILE_BYTES"] = case["env"]
         data = case.get("bytes")
         if "repeat" in case:
             ch, n = case["repeat"]
@@ -709,21 +709,21 @@ def gen_file_case(case):
             }
             return out
     finally:
-        os.environ.pop("RAC_MAX_FILE_BYTES", None)
+        os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
         if old is not None:
-            os.environ["RAC_MAX_FILE_BYTES"] = old
+            os.environ["DECIDED_MAX_FILE_BYTES"] = old
 
 
 def gen_env_cap(value):
-    old = os.environ.pop("RAC_MAX_FILE_BYTES", None)
+    old = os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
     try:
         if value is not None:
-            os.environ["RAC_MAX_FILE_BYTES"] = value
+            os.environ["DECIDED_MAX_FILE_BYTES"] = value
         return {"value": value, "expected": max_file_bytes()}
     finally:
-        os.environ.pop("RAC_MAX_FILE_BYTES", None)
+        os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
         if old is not None:
-            os.environ["RAC_MAX_FILE_BYTES"] = old
+            os.environ["DECIDED_MAX_FILE_BYTES"] = old
 
 
 def main() -> None:

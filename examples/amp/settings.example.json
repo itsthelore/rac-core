@@ -1,8 +1,8 @@
 {
   "amp.mcpServers": {
-    "lore": {
-      "command": "rac",
-      "args": ["mcp", "--root", "."]
+    "asdecided": {
+      "command": "decided-mcp",
+      "args": ["--root", "."]
     }
   }
 }

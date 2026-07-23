@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate walk-order test vectors from the oracle (`rac.core.fs`).
+"""Generate walk-order test vectors from the oracle (`asdecided.core.fs`).
 
 Builds several tricky temp trees (nested dirs, dash-vs-slash sort traps, hidden
 dirs/files, symlinks, uppercase .MD vs .md), runs the SAME code path the CLI
@@ -21,7 +21,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from rac.core.fs import find_markdown_files
+from asdecided.core.fs import find_markdown_files
 
 OUT = Path(__file__).resolve().parents[1] / "rac-engine/tests/vectors/walk.json"
 

@@ -16,11 +16,11 @@ import asyncio
 import json
 import os
 
-from rac.core.corpus import CorpusCache, content_hash, walk_corpus
-from rac.mcp.server import build_server
-from rac.services.doctor import diagnose
-from rac.services.relationships import validate_relationships
-from rac.services.validate import validate_directory
+from asdecided.core.corpus import CorpusCache, content_hash, walk_corpus
+from asdecided.mcp.server import build_server
+from asdecided.services.doctor import diagnose
+from asdecided.services.relationships import validate_relationships
+from asdecided.services.validate import validate_directory
 
 DECISION = (
     "---\nschema_version: 1\nid: {id}\ntype: decision\n---\n# {title}\n\n"

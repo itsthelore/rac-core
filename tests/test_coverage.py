@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from rac.cli import main
-from rac.services.coverage import (
+from asdecided.cli import main
+from asdecided.services.coverage import (
     GAP_UNAPPLIED,
     GAP_UNSCHEDULED,
     GAP_UNSCOPED,

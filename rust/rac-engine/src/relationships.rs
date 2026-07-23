@@ -1,10 +1,10 @@
-//! Relationship extraction and validation (`rac.services.references`,
-//! `rac.services.relationships`, `rac.core.relationship_types`), per
+//! Relationship extraction and validation (`decided.services.references`,
+//! `decided.services.relationships`, `decided.core.relationship_types`), per
 //! PORT-CONTRACT.d/05.
 //!
 //! Covers the surfaces the validate/corpus parity gate needs:
 //! `validate_relationships` (directory), `validate_relationships_file`, and
-//! `validate_document_against_corpus` (the `rac validate - --corpus` seam).
+//! `validate_document_against_corpus` (the `decided validate - --corpus` seam).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -43,7 +43,7 @@ pub fn relationship_severity(code: &str) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
-// Edge registry (rac.core.relationship_types)
+// Edge registry (decided.core.relationship_types)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
@@ -160,7 +160,7 @@ pub fn edge_spec(name: &str) -> Option<&'static EdgeSpec> {
 }
 
 // ---------------------------------------------------------------------------
-// Reference extraction (rac.services.references)
+// Reference extraction (decided.services.references)
 // ---------------------------------------------------------------------------
 
 /// `parse_references(body)`: one reference per non-empty line, one leading
@@ -186,7 +186,7 @@ pub fn extract_relationships_full(
     collect_relationships(artifact, spec, true)
 }
 
-/// `extract_relationships(product, spec)` — the `rac inspect` extractor:
+/// `extract_relationships(product, spec)` — the `decided inspect` extractor:
 /// identical to the full variant except `supersedes` is excluded (it stays a
 /// top-level scalar in inspect output, ADR-007).
 pub fn extract_relationships(
@@ -391,7 +391,7 @@ impl RelationshipValidation {
 }
 
 // ---------------------------------------------------------------------------
-// Scope entries (rac.services.scope_paths)
+// Scope entries (decided.services.scope_paths)
 // ---------------------------------------------------------------------------
 
 /// `classify_scope_entry(entry)` -> "glob" | "path" | "component".
@@ -975,7 +975,7 @@ pub fn validate_relationships_file(path: &str) -> RelationshipValidation {
 }
 
 /// `validate_document_against_corpus(product, source_path, directory)` — the
-/// `rac validate - --corpus DIR` seam (ADR-067).
+/// `decided validate - --corpus DIR` seam (ADR-067).
 pub fn validate_document_against_corpus(
     artifact: &Artifact,
     source_path: &str,
@@ -1009,7 +1009,7 @@ pub fn validate_document_against_corpus(
 }
 
 // ---------------------------------------------------------------------------
-// Resolved relationship objects (rac.services.relationships.Relationship)
+// Resolved relationship objects (decided.services.relationships.Relationship)
 // ---------------------------------------------------------------------------
 
 /// One declared cross-artifact reference with its resolution outcome
@@ -1079,7 +1079,7 @@ pub fn relationships_from_corpus(items: &[CorpusItem]) -> Vec<Relationship> {
 }
 
 // ---------------------------------------------------------------------------
-// Relationship summary (rac.services.relationships.RelationshipSummary)
+// Relationship summary (decided.services.relationships.RelationshipSummary)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]

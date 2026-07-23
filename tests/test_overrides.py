@@ -1,9 +1,9 @@
 """Tests for validation severity overrides — warnings-first onboarding (ADR-053).
 
 Covers the pure model (`resolve_severity`/`apply_overrides`), the config loader
-(`load_overrides` over `.rac/config.yaml`, including the YAML `off`->False
+(`load_overrides` over `.decided/config.yaml`, including the YAML `off`->False
 coercion and malformed-config errors), and end-to-end behaviour through
-`rac validate`: a corpus that fails by default goes green once a type or rule is
+`decided validate`: a corpus that fails by default goes green once a type or rule is
 downgraded, precedence (rule beats the type ceiling), suppression, and that an
 absent `validation` section is a pure no-op.
 """
@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import pytest
 
-from rac.cli import main
-from rac.core.models import Issue
-from rac.core.overrides import EMPTY, SeverityOverrides, apply_overrides, resolve_severity
-from rac.services.init import MalformedRepositoryConfig, load_overrides
+from asdecided.cli import main
+from asdecided.core.models import Issue
+from asdecided.core.overrides import EMPTY, SeverityOverrides, apply_overrides, resolve_severity
+from asdecided.services.init import MalformedRepositoryConfig, load_overrides
 
 # A decision that classifies (context/decision/consequences/status) but carries an
 # out-of-enum status, so it fails with `invalid-decision-status` by default.
@@ -42,8 +42,8 @@ Bogus
 
 
 def _repo(tmp_path, config: str, artifact: str = BAD_DECISION):
-    (tmp_path / ".rac").mkdir()
-    (tmp_path / ".rac" / "config.yaml").write_text(config, encoding="utf-8")
+    (tmp_path / ".decided").mkdir()
+    (tmp_path / ".decided" / "config.yaml").write_text(config, encoding="utf-8")
     (tmp_path / "d.md").write_text(artifact, encoding="utf-8")
     return str(tmp_path)
 
@@ -109,7 +109,7 @@ def test_load_overrides_rejects_off_for_whole_type(tmp_path):
         load_overrides(repo)
 
 
-# --- end to end through `rac validate` ---------------------------------------
+# --- end to end through `decided validate` ---------------------------------------
 
 
 def test_validate_fails_without_overrides(tmp_path, capsys):
@@ -142,9 +142,9 @@ def test_rule_overrides_type_ceiling(tmp_path):
 
 def test_okf_finding_is_downgradable(tmp_path):
     # A typed artifact named index.md triggers okf-reserved-filename-collision.
-    (tmp_path / ".rac").mkdir()
+    (tmp_path / ".decided").mkdir()
     (tmp_path / "index.md").write_text(BAD_DECISION.replace("Bogus", "Accepted"), encoding="utf-8")
-    cfg_path = tmp_path / ".rac" / "config.yaml"
+    cfg_path = tmp_path / ".decided" / "config.yaml"
     cfg_path.write_text("repository_key: RAC\n", encoding="utf-8")
     assert main(["validate", str(tmp_path)]) == 1  # collision fails by default
     cfg_path.write_text(

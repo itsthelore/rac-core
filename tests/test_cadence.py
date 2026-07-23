@@ -1,4 +1,4 @@
-"""Tests for the write-cadence nudge in `rac review` (v0.13.3).
+"""Tests for the write-cadence nudge in `decided review` (v0.13.3).
 
 The nudge is off by default, informational, and never changes the review's
 exit status (ADR-017: capture cadence, not work tracking). It fires only when
@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
-from rac.services.review import (
+from asdecided.cli import main
+from asdecided.services.review import (
     PRIORITY_STALE_CORPUS,
     REVIEW_STALE_CORPUS,
     build_review,

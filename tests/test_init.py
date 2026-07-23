@@ -1,7 +1,7 @@
-"""Tests for rac.services.init and the `rac init` CLI (v0.7.11).
+"""Tests for asdecided.services.init and the `decided init` CLI (v0.7.11).
 
-`rac init` establishes the repository identity namespace: fresh init writes
-.rac/config.yaml, re-running with the same key is idempotent, a different key
+`decided init` establishes the repository identity namespace: fresh init writes
+.decided/config.yaml, re-running with the same key is idempotent, a different key
 is an error (never a silent rewrite), and discovery walks upward.
 """
 
@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.services.init import (
+from asdecided.cli import main
+from asdecided.services.init import (
     InvalidRepositoryKey,
     InvalidTicketingProvider,
     MalformedRepositoryConfig,
@@ -29,7 +29,7 @@ def test_fresh_init_writes_config(tmp_path):
     result = init_repository(str(tmp_path), key="PROJ")
     assert result.created
     assert result.repository_key == "PROJ"
-    config = tmp_path / ".rac" / "config.yaml"
+    config = tmp_path / ".decided" / "config.yaml"
     assert config.read_text(encoding="utf-8") == "repository_key: PROJ\n"
 
 
@@ -55,7 +55,7 @@ def test_invalid_keys_rejected(tmp_path, key):
 
 
 def test_malformed_config_is_reported(tmp_path):
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text("nonsense: true\n", encoding="utf-8")
     with pytest.raises(MalformedRepositoryConfig):
@@ -77,7 +77,7 @@ def test_discovery_walks_upward(tmp_path):
 def test_init_writes_ticketing_provider(tmp_path):
     result = init_repository(str(tmp_path), key="ACME", ticketing="jira")
     assert result.created
-    config = (tmp_path / ".rac" / "config.yaml").read_text(encoding="utf-8")
+    config = (tmp_path / ".decided" / "config.yaml").read_text(encoding="utf-8")
     assert config == "repository_key: ACME\nticketing:\n  provider: jira\n"
     assert load_ticketing_provider(str(tmp_path)) == "jira"
 
@@ -97,7 +97,7 @@ def test_load_ticketing_provider_absent_when_no_config(tmp_path):
 
 
 def test_load_ticketing_provider_rejects_unknown_value(tmp_path):
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text(
         "repository_key: ACME\nticketing:\n  provider: bogus\n", encoding="utf-8"
@@ -107,7 +107,7 @@ def test_load_ticketing_provider_rejects_unknown_value(tmp_path):
 
 
 def test_load_ticketing_provider_rejects_non_mapping(tmp_path):
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text(
         "repository_key: ACME\nticketing: jira\n", encoding="utf-8"
@@ -192,7 +192,7 @@ def _consent_home(tmp_path, monkeypatch):
 
 
 def test_init_prompt_yes_records_consent(tmp_path, _consent_home, monkeypatch, capsys):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, True, True)
@@ -205,7 +205,7 @@ def test_init_prompt_yes_records_consent(tmp_path, _consent_home, monkeypatch, c
 
 
 def test_init_prompt_default_no_is_persisted_and_asked_once(tmp_path, _consent_home, monkeypatch):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, True, True)
@@ -227,7 +227,7 @@ def test_init_prompt_default_no_is_persisted_and_asked_once(tmp_path, _consent_h
 
 
 def test_init_prompt_eof_means_no(tmp_path, _consent_home, monkeypatch):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, True, True)
@@ -241,7 +241,7 @@ def test_init_prompt_eof_means_no(tmp_path, _consent_home, monkeypatch):
 
 
 def test_init_never_prompts_without_a_tty(tmp_path, _consent_home, monkeypatch):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, False, False)
@@ -255,7 +255,7 @@ def test_init_never_prompts_without_a_tty(tmp_path, _consent_home, monkeypatch):
 
 
 def test_init_json_never_prompts(tmp_path, _consent_home, monkeypatch, capsys):
-    from rac import consent
+    from asdecided import consent
 
     (tmp_path / "repo").mkdir()
     _tty(monkeypatch, True, True)

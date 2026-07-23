@@ -1,6 +1,6 @@
-//! Safe artifact-id rename — `rac rename` (PORT-CONTRACT.d/16 §4).
+//! Safe artifact-id rename — `decided rename` (PORT-CONTRACT.d/16 §4).
 //!
-//! Port of `src/rac/services/rename.py` (`compute_rename`, `apply_rename`):
+//! Port of `src/asdecided/services/rename.py` (`compute_rename`, `apply_rename`):
 //! the deterministic, reversible corpus-wide edit set for renaming one
 //! artifact identity. Resolution reuses the relationship validation alias
 //! index; the raw reference TEXT is the source of truth — an edit replaces

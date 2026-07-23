@@ -14,7 +14,7 @@ guarantee:
     and an oversize file builds byte-identically parallel vs serial, because the
     workers call the one true ``parse_file`` (lossy ``errors="replace"`` decode,
     BOM-defeats-frontmatter, the byte-cap oversize issue), never a reimplementation.
-    The byte cap is lowered through ``RAC_MAX_FILE_BYTES``, which spawned workers
+    The byte cap is lowered through ``DECIDED_MAX_FILE_BYTES``, which spawned workers
     inherit, so the cap applies in workers and serial alike.
 (c) **Post-compaction snapshot shed** — after a compaction the tracker drops its
     resident ``Product`` snapshot and re-serves from the mmap base; RSS stays
@@ -26,8 +26,8 @@ guarantee:
 (d) **Worker-crash resilience** — a worker exception degrades to the serial path,
     never a corrupt or partial store: the fault-injected build's segments equal a
     clean serial build's, and it reports ``workers == 1`` (it fell back).
-(e) **RAC_TIMING line shape** — the cold build emits one ``rac-timing:`` line to
-    stderr under ``RAC_TIMING``, absent by default, stdout untouched.
+(e) **DECIDED_TIMING line shape** — the cold build emits one ``decided-timing:`` line to
+    stderr under ``DECIDED_TIMING``, absent by default, stdout untouched.
 
 Runtime is kept under a minute: the parity corpora are small (spawn overhead
 dominates there) and only the RSS test uses a few thousand files.
@@ -42,10 +42,10 @@ import os
 import re
 from pathlib import Path
 
-from rac.services.derived_cache import DerivedIndexCache, build_derived_index
-from rac.services.freshness import FreshnessTracker
-from rac.services.index_store import open_read_model, store_dir, write_store
-from rac.services.parallel_build import build_derived_index_parallel
+from asdecided.services.derived_cache import DerivedIndexCache, build_derived_index
+from asdecided.services.freshness import FreshnessTracker
+from asdecided.services.index_store import open_read_model, store_dir, write_store
+from asdecided.services.parallel_build import build_derived_index_parallel
 
 _BUNDLE_VERSION = "3"
 
@@ -70,7 +70,7 @@ def _build_corpus(root: Path, n: int) -> Path:
 
 
 def _corpus_hash(directory: str) -> str:
-    from rac.core.corpus import corpus_content_hash
+    from asdecided.core.corpus import corpus_content_hash
 
     return corpus_content_hash(directory)
 
@@ -160,7 +160,7 @@ def test_parse_semantics_parity_parallel_vs_serial(tmp_path, monkeypatch):
     )
     # An oversize file, under a lowered cap that spawned workers inherit via the
     # environment — parse_file emits the artifact-oversize issue in both paths.
-    monkeypatch.setenv("RAC_MAX_FILE_BYTES", "1500")
+    monkeypatch.setenv("DECIDED_MAX_FILE_BYTES", "1500")
     (root / "oversize.md").write_text(
         "---\nschema_version: 1\nid: RAC-000000009003\ntype: decision\n---\n# Big\n\n"
         + "x " * 2000,
@@ -265,7 +265,7 @@ def test_streaming_write_never_holds_the_whole_encoded_store(tmp_path):
     The byte-parity of the streamed store is pinned elsewhere."""
     import tracemalloc
 
-    from rac.services.index_store import _iter_segment_files
+    from asdecided.services.index_store import _iter_segment_files
 
     root = _build_corpus(tmp_path / "corpus", 4_000)
     corpus_hash = _corpus_hash(str(root))
@@ -332,7 +332,7 @@ def test_worker_fault_degrades_to_serial_never_a_corrupt_store(tmp_path, monkeyp
 
     # Every worker faults (env inherited across spawn); the build must fall back to
     # the single-process path and produce the identical store, never a partial one.
-    monkeypatch.setenv("RAC_PARALLEL_BUILD_FAULT", "1")
+    monkeypatch.setenv("DECIDED_PARALLEL_BUILD_FAULT", "1")
     derived, stats = build_derived_index_parallel(str(root), workers=4)
     assert stats.workers == 1, "a worker fault must degrade to the single-process path"
     assert write_store(tmp_path / "recovered", _corpus_hash(str(root)), _BUNDLE_VERSION, derived)
@@ -343,11 +343,11 @@ def test_worker_fault_degrades_to_serial_never_a_corrupt_store(tmp_path, monkeyp
 
 
 # =============================================================================
-# (e) RAC_TIMING line shape — stderr-only, opt-in.
+# (e) DECIDED_TIMING line shape — stderr-only, opt-in.
 # =============================================================================
 
 _TIMING_RE = re.compile(
-    r"rac-timing: build_parse_ms=[\d.]+ build_derive_ms=[\d.]+ "
+    r"decided-timing: build_parse_ms=[\d.]+ build_derive_ms=[\d.]+ "
     r"build_write_ms=[\d.]+ workers=\d+ files=\d+"
 )
 
@@ -358,14 +358,14 @@ def test_timing_line_is_stderr_only_and_opt_in(tmp_path, capsys, monkeypatch):
     # Absent by default on both streams.
     DerivedIndexCache(tmp_path / "cache_quiet").load_or_build(str(root))
     quiet = capsys.readouterr()
-    assert "rac-timing" not in quiet.err
-    assert "rac-timing" not in quiet.out
+    assert "decided-timing" not in quiet.err
+    assert "decided-timing" not in quiet.out
 
-    # Present on stderr (only) under RAC_TIMING, on the cold build.
-    monkeypatch.setenv("RAC_TIMING", "1")
+    # Present on stderr (only) under DECIDED_TIMING, on the cold build.
+    monkeypatch.setenv("DECIDED_TIMING", "1")
     DerivedIndexCache(tmp_path / "cache_timed").load_or_build(str(root))
     timed = capsys.readouterr()
-    assert "rac-timing" not in timed.out, "stdout is a frozen contract"
+    assert "decided-timing" not in timed.out, "stdout is a frozen contract"
     assert _TIMING_RE.search(timed.err), f"timing line shape wrong: {timed.err!r}"
 
 
@@ -380,9 +380,9 @@ def test_stale_format_store_is_replaced_not_bricked(tmp_path):
     """
     root = _build_corpus(tmp_path / "corpus", 40)
     cache = DerivedIndexCache(tmp_path / "cache")
-    from rac.core.corpus import corpus_content_hash
-    from rac.services.derived_cache import SCHEMA_VERSION
-    from rac.services.index_store import ReadModelView
+    from asdecided.core.corpus import corpus_content_hash
+    from asdecided.services.derived_cache import SCHEMA_VERSION
+    from asdecided.services.index_store import ReadModelView
 
     corpus_hash = corpus_content_hash(str(root))
     derived = build_derived_index(str(root))

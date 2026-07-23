@@ -33,5 +33,5 @@ def _isolated_xdg(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(base / "config"))
     monkeypatch.setenv("XDG_STATE_HOME", str(base / "state"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(base / "cache"))
-    monkeypatch.delenv("RAC_CACHE_DIR", raising=False)
-    monkeypatch.delenv("RAC_NO_CACHE", raising=False)
+    monkeypatch.delenv("DECIDED_CACHE_DIR", raising=False)
+    monkeypatch.delenv("DECIDED_NO_CACHE", raising=False)

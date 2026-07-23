@@ -1,13 +1,13 @@
 # Validation: overrides & SARIF
 
-`rac validate` is RAC's write-time gate: it fails when any artifact carries an
+`decided validate` is RAC's write-time gate: it fails when any artifact carries an
 error-severity finding, and (over a directory) when the corpus is not a
 conformant OKF v0.1 bundle. Two features make that gate adoptable in CI on a
 real, pre-existing repository.
 
 ## Per-type standards checks
 
-Beyond structure, `rac validate` lints each type against the standards it cites
+Beyond structure, `decided validate` lints each type against the standards it cites
 (ADR-056) — all deterministic, no AI:
 
 | Code | Severity | Standard |
@@ -21,17 +21,17 @@ Beyond structure, `rac validate` lints each type against the standards it cites
 
 The BCP-14 error is the only gate-breaker; the rest are warnings, and all are
 overridable below. (RAC's own corpus predates these checks and disables them in
-its `.rac/config.yaml` — the warnings-first path in action.)
+its `.decided/config.yaml` — the warnings-first path in action.)
 
 ## Severity overrides (warnings-first onboarding)
 
-Pointing `rac validate` at a legacy corpus for the first time can surface many
+Pointing `decided validate` at a legacy corpus for the first time can surface many
 pre-existing findings at once. Rather than fail the build on all of them, a
 repository can downgrade or silence specific findings in its committed
-`.rac/config.yaml`, then tighten the gate over time. The decision behind this is
-[ADR-053](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-053-validation-severity-overrides.md).
-Overrides are **repository-wide**: a downgrade applies to `rac review`,
-`rac watchkeeper`, and `rac portfolio` as well as `rac validate`.
+`.decided/config.yaml`, then tighten the gate over time. The decision behind this is
+[ADR-053](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-053-validation-severity-overrides.md).
+Overrides are **repository-wide**: a downgrade applies to `decided review`,
+`decided watchkeeper`, and `decided portfolio` as well as `decided validate`.
 
 Add an optional `validation` section:
 
@@ -47,7 +47,7 @@ validation:
 ```
 
 - **`rules`** sets a finding's severity by its stable code (the `[code]` shown in
-  `rac validate` output, e.g. `invalid-decision-status`). `off` suppresses the
+  `decided validate` output, e.g. `invalid-decision-status`). `off` suppresses the
   finding entirely.
 - **`types`** caps a whole artifact type at `error` or `warning`. A `warning`
   ceiling downgrades that type's errors so they no longer fail the run.
@@ -60,8 +60,8 @@ policy (a per-developer file would not keep CI green). Determinism holds: the
 same corpus *and config* yield the same findings and exit code. An absent
 `validation` section is a pure no-op — the default gate is strict.
 
-Overrides are repository-wide (ADR-053): a downgrade applies to `rac review`,
-`rac watchkeeper`, and `rac portfolio` as well as `rac validate`, so a
+Overrides are repository-wide (ADR-053): a downgrade applies to `decided review`,
+`decided watchkeeper`, and `decided portfolio` as well as `decided validate`, so a
 warnings-first policy is consistent across every surface.
 
 A typical onboarding path: start by capping noisy types to `warning`, get CI
@@ -70,14 +70,14 @@ cleaned up.
 
 ## SARIF output for GitHub Code Scanning
 
-`rac validate <dir> --sarif` emits a [SARIF 2.1.0](https://json-schema.org/)
+`decided validate <dir> --sarif` emits a [SARIF 2.1.0](https://json-schema.org/)
 document covering core validation findings and OKF conformance findings, so a CI
 job can upload it and have GitHub Code Scanning annotate findings inline on a
 pull request. The decision behind this is
-[ADR-054](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-054-sarif-validation-output.md).
+[ADR-054](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-054-sarif-validation-output.md).
 
 ```bash
-rac validate rac/ --sarif > rac.sarif
+decided validate decisions/ --sarif > rac.sarif
 ```
 
 - `--sarif` is mutually exclusive with `--json`, and applies to directory
@@ -87,7 +87,7 @@ rac validate rac/ --sarif > rac.sarif
 - Output is deterministic and offline: results are sorted, no timestamps are
   emitted, and the same corpus state produces a byte-identical document.
 
-The exit code is unchanged by the output format: `rac validate` still exits `1`
+The exit code is unchanged by the output format: `decided validate` still exits `1`
 when an error-severity finding remains after overrides, and `0` otherwise.
 
 A worked example of the output is checked in at
@@ -102,26 +102,26 @@ CI gate can surface cross-artifact integrity and review findings inline alongsid
 validation (v0.21.13):
 
 ```bash
-rac relationships rac/ --validate --sarif > relationships.sarif
-rac review rac/ --sarif > review.sarif
+decided relationships decisions/ --validate --sarif > relationships.sarif
+decided review decisions/ --sarif > review.sarif
 ```
 
-- `rac relationships --validate --sarif` annotates each broken, ambiguous,
+- `decided relationships --validate --sarif` annotates each broken, ambiguous,
   self-referencing, retired-target (superseded), wrong-type, cyclic, or
   duplicate-identifier finding on the referencing artifact. Referential-integrity
   and graph-shape breakages map to `error`; advisory findings (self-reference,
   unsupported edge, retired-target reference) map to `warning`. `--sarif` requires
   `--validate`, and the exit code is unchanged: `1` when any finding is present.
-- `rac review --sarif` annotates each prioritized finding with its suggested
+- `decided review --sarif` annotates each prioritized finding with its suggested
   action in the message; the advisory `info` severity maps to the SARIF `note`
   level. The exit code is unchanged: `1` when a priority 1–2 finding remains.
 
 ## Running in CI (GitHub Action)
 
-A composite GitHub Action wraps `rac validate --sarif` and uploads the result to
+A composite GitHub Action wraps `decided validate --sarif` and uploads the result to
 GitHub Code Scanning, so findings annotate the pull request inline. The decision
 behind it is
-[ADR-058](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-058-validation-github-action.md);
+[ADR-058](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-058-validation-github-action.md);
 it is a thin wrapper — the `rac` CLI stays the source of truth.
 
 ```yaml
@@ -138,12 +138,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: itsthelore/rac-core/validate-action@v0
         with:
-          path: rac/
+          path: decisions/
 ```
 
 Inputs: `path` (default `rac`), `upload-sarif` (default `true`), `sarif-file`,
 `rac-version` (pin a release), and `install-from` (`pypi` or `source`). Errors
-fail the check; warnings — including findings downgraded in `.rac/config.yaml` —
+fail the check; warnings — including findings downgraded in `.decided/config.yaml` —
 annotate without failing, so a legacy repo can adopt the gate green on day one and
 tighten over time.
 
@@ -155,15 +155,15 @@ tighten over time.
 (The Watchkeeper action at the repository root is the complementary PR-review
 surface — see [Watchkeeper](watchkeeper.md).)
 
-### The full PR gate (`rac gate`)
+### The full PR gate (`decided gate`)
 
-To carry the whole contract into one required check, `rac gate` composes
+To carry the whole contract into one required check, `decided gate` composes
 validation, relationship integrity, and review into a single enforced verdict
 under the corpus **enforcement policy**, and emits one combined SARIF document
 (v0.21.14). The `pr-gate-action` runs it and uploads that single SARIF to Code
 Scanning under one category (`rac-gate`), failing when any finding is *blocking*.
 It is the same thin wrapper — the engine decides what is blocking, the action
-computes nothing ([ADR-063](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)):
+computes nothing ([ADR-063](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-063-non-python-clients-are-thin.md)):
 
 ```yaml
 # .github/workflows/rac.yml
@@ -179,24 +179,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: itsthelore/rac-core/pr-gate-action@v0
         with:
-          path: rac/
+          path: decisions/
 ```
 
 Inputs mirror `validate-action`: `path` (default `rac`), `upload-sarif` (default
 `true`), `sarif-dir` (default `rac-sarif`, now one `gate.sarif`), `rac-version`,
 and `install-from` (`pypi` or `source`).
 
-`rac gate <dir>` is also runnable locally — `--json` and `--sarif` produce the
+`decided gate <dir>` is also runnable locally — `--json` and `--sarif` produce the
 machine contracts, the exit code is `0` when nothing is blocking and `1`
 otherwise. **Which findings are blocking versus advisory is governed centrally**
-by an `enforcement:` section in the committed `.rac/config.yaml`. See
+by an `enforcement:` section in the committed `.decided/config.yaml`. See
 [Governance](governance.md) for the policy shape, the default classifications,
 and how to standardise one policy across a fleet of repositories.
 
 ## See also
 
-- [Governance](governance.md) — the `enforcement:` policy and `rac gate`.
+- [Governance](governance.md) — the `enforcement:` policy and `decided gate`.
 - [Security posture](security.md) — the no-egress guarantee, SBOM, and how to verify it.
-- [CLI Reference](cli.md) — all `rac validate` flags and exit codes.
+- [CLI Reference](cli.md) — all `decided validate` flags and exit codes.
 - [OKF Profile](okf-profile.md) — the conformance findings SARIF also reports.
-- [Repository Workflow](repo-workflow.md) — `rac init` and `.rac/config.yaml`.
+- [Repository Workflow](repo-workflow.md) — `decided init` and `.decided/config.yaml`.

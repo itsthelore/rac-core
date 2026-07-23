@@ -101,6 +101,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17"
 
 [[package]]
+name = "decided"
+version = "0.0.1"
+dependencies = [
+ "rac-engine",
+]
+
+[[package]]
+name = "decided-mcp"
+version = "0.0.1"
+dependencies = [
+ "rac-engine",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -332,13 +348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rac"
-version = "0.0.1"
-dependencies = [
- "rac-engine",
-]
-
-[[package]]
 name = "rac-engine"
 version = "0.0.1"
 dependencies = [
@@ -346,15 +355,6 @@ dependencies = [
  "markdown-it",
  "memmap2",
  "rayon",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rac-mcp"
-version = "0.0.1"
-dependencies = [
- "rac-engine",
  "serde",
  "serde_json",
 ]

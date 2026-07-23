@@ -5,9 +5,9 @@ RAC stores product knowledge the same way [Google Cloud's Open Knowledge Format
 does — a Git tree of Markdown files with YAML front matter. This page is RAC's
 **informative profile** of OKF **v0.1 Draft**: it defines how a RAC repository
 presents itself as a conformant OKF bundle. It is a derived, interoperability
-view; RAC Core and `rac validate` remain the source of truth, and adopting this
+view; RAC Core and `decided validate` remain the source of truth, and adopting this
 profile loosens none of RAC's guarantees. The decision behind it is
-[ADR-048](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-048-okf-carrier-profile.md),
+[ADR-048](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-048-okf-carrier-profile.md),
 scoped by the `rac-okf-carrier-profile` requirement.
 
 > The key words MUST, SHOULD, and MAY in this document are to be interpreted as
@@ -16,15 +16,15 @@ scoped by the `rac-okf-carrier-profile` requirement.
 
 ## Producing a bundle
 
-`rac export <dir> --okf` writes the bundle described here:
+`decided export <dir> --okf` writes the bundle described here:
 
 ```bash
-rac export rac/ --okf --out okf-bundle/
+decided export decisions/ --okf --out okf-bundle/
 ```
 
 It emits one Markdown file per typed artifact (front matter projecting the OKF
 `type`), plus a generated `index.md` and `log.md`, mirroring the corpus layout.
-The bundle is a derived build artifact, parallel to `rac export --json` and
+The bundle is a derived build artifact, parallel to `decided export --json` and
 `--html`; it never feeds back into RAC.
 
 Each bundle artifact also carries OKF's descriptive fields where RAC has them
@@ -69,12 +69,12 @@ a derived front-matter projection.
 
 ## Checking conformance (write-time gate)
 
-Conformance is enforced, not just produced on export. Running `rac validate` over
+Conformance is enforced, not just produced on export. Running `decided validate` over
 a corpus checks OKF v0.1 conformance as part of the run (ADR-048, ADR-049):
 
 ```bash
-rac validate rac/
-# … PASS  rac/ — N artifact(s) checked: N valid, 0 invalid. OKF v0.1: conformant.
+decided validate decisions/
+# … PASS  decisions/ — N artifact(s) checked: N valid, 0 invalid. OKF v0.1: conformant.
 ```
 
 The check is deterministic and per-artifact. It reports, with a file-named,
@@ -88,7 +88,7 @@ fixable diagnostic, and fails the `validate` exit code:
 Untyped documents are excluded (ADR-010): they are legitimately skipped and the
 bundle already omits them, so an `index.md`/`log.md` that is an untyped entry
 point is recognized, never flagged. Referential integrity ("links resolve") stays
-with `rac relationships --validate`. The directory `validate` JSON carries an
+with `decided relationships --validate`. The directory `validate` JSON carries an
 additive `okf` section (ADR-007). Per ADR-052, `rac-core` — the OKF-superset
 frontmatter envelope (`schema_version`, `id`, `type`, `relationships`, `tags`) —
 is defined in code and enforced this way; RAC ships no JSON Schema `rac-core` file
@@ -110,18 +110,18 @@ the front door for a human or agent that has never seen the bundle.
 # Knowledge Index
 
 ## Decisions
-- [ADR-048: OKF as an Informative Carrier Profile](rac/decisions/adr-048-okf-carrier-profile.md)
+- [ADR-048: OKF as an Informative Carrier Profile](decisions/decisions/adr-048-okf-carrier-profile.md)
   — RAC adopts OKF as an informative carrier profile and derived export target.
 
 ## Requirements
-- [REQ-OKF-Carrier-Profile](rac/requirements/rac-okf-carrier-profile.md)
+- [REQ-OKF-Carrier-Profile](decisions/requirements/rac-okf-carrier-profile.md)
   — conformance, derived bundle export, and the no-loosening invariant.
 ```
 
 ### `log.md` — date-grouped history
 
 An OKF bundle SHOULD ship a `log.md` recording how the corpus evolved, grouped
-by date, newest-first. RAC derives this from Git history of the `rac/` tree
+by date, newest-first. RAC derives this from Git history of the `decisions/` tree
 (consistent with ADR-045: recency is derived from Git, not stored in front
 matter), so it never drifts from reality.
 
@@ -145,8 +145,8 @@ link, so the relationship survives for permissive OKF consumers.
 ```markdown
 # Citations
 
-- [ADR-016: Relationships as Explicit Structural References](rac/decisions/adr-016-relationships-as-structural-references.md)
-- [ADR-007: JSON Contract Stability](rac/decisions/adr-007-json-contract-stability.md)
+- [ADR-016: Relationships as Explicit Structural References](decisions/decisions/adr-016-relationships-as-structural-references.md)
+- [ADR-007: JSON Contract Stability](decisions/decisions/adr-007-json-contract-stability.md)
 ```
 
 ## Status of this profile

@@ -11,7 +11,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from rac.mcp.server import build_server
+from asdecided.mcp.server import build_server
 
 SECURITY_MD = Path(__file__).parent.parent / "SECURITY.md"
 

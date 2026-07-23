@@ -1,10 +1,10 @@
-"""Tests for `rac export --documents` (v0.25.0 WS1, requirement
+"""Tests for `decided export --documents` (v0.25.0 WS1, requirement
 rac-corpus-documents-export).
 
 The JSONL projection is a stable, additive contract (ADR-007) feeding external
 memory/RAG backends: one record per classified artifact, a Markdown body (not the
 viewer's HTML), and metadata carrying the canonical id/type/status for the
-verify-in-Lore loop. These tests pin the shape, the determinism (ADR-002), and
+verify-in-AsDecided loop. These tests pin the shape, the determinism (ADR-002), and
 that the default viewer JSON is left untouched.
 """
 
@@ -15,8 +15,8 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.services.export import build_corpus_export, build_documents_export
+from asdecided.cli import main
+from asdecided.services.export import build_corpus_export, build_documents_export
 
 EXIT_USAGE = 2
 
@@ -50,7 +50,7 @@ def test_record_carries_verify_metadata_and_canonical_id():
     export = build_documents_export(fixture_path("export"))
     record = export.documents[0].to_dict(export.corpus_name)
     assert record["schema_version"] == "1"
-    assert record["id"] == "RAC-00000000EXP1"  # the verify-in-Lore re-fetch hook
+    assert record["id"] == "RAC-00000000EXP1"  # the verify-in-AsDecided re-fetch hook
     assert record["type"] == "decision"
     assert record["status"] == "Accepted"
     meta = record["metadata"]

@@ -917,9 +917,9 @@ mod tests {
     #[test]
     fn relpath_contract_examples() {
         // Absolute inputs keep relpath cwd-independent in the test.
-        assert_eq!(py_relpath("/x/rac/decisions/a.md", "/x/rac"), "decisions/a.md");
-        assert_eq!(py_relpath("/x/rac", "/x/rac"), ".");
-        assert_eq!(py_relpath("/x/other/a.md", "/x/rac"), "../other/a.md");
-        assert_eq!(py_relpath("/x/rac/a.md", "/x/rac/"), "a.md");
+        assert_eq!(py_relpath("/x/decisions/decisions/a.md", "/x/decisions"), "decisions/a.md");
+        assert_eq!(py_relpath("/x/decisions", "/x/decisions"), ".");
+        assert_eq!(py_relpath("/x/other/a.md", "/x/decisions"), "../other/a.md");
+        assert_eq!(py_relpath("/x/decisions/a.md", "/x/decisions/"), "a.md");
     }
 }

@@ -1,7 +1,7 @@
 # Security Model
 
 This document describes the trust and threat model for **RAC Core** and the
-**Lore** read-only MCP server in this repository. It is scoped to that surface:
+**AsDecided** read-only MCP server in this repository. It is scoped to that surface:
 it explains what the read-only guarantee does and does not protect, and how to
 report a vulnerability. It deliberately does **not** promise a vulnerability-
 response SLA, a content sanitizer, or any automated per-artifact trust verdict.
@@ -10,7 +10,7 @@ response SLA, a content sanitizer, or any automated per-artifact trust verdict.
 
 RAC stores product knowledge — requirements, decisions (ADRs), designs,
 roadmaps, and prompts — as Markdown artifacts in a git repository. A coding
-agent reads that content through the Lore MCP tools and treats it as
+agent reads that content through the AsDecided MCP tools and treats it as
 authoritative grounding.
 
 **Artifact content is authoritative because a human reviewed and merged it in a
@@ -53,7 +53,7 @@ primary attack surface — not the server.
 becomes trusted grounding — without a human accepting it. Two deterministic,
 offline *aids* support that review; neither is a guarantee and neither is a gate:
 
-- **`rac doctor`** flags instruction-like / injection-style content as a
+- **`decided doctor`** flags instruction-like / injection-style content as a
   WARNING for a human to look at (owned by the doctor diagnostic). It is a
   heuristic review aid: it never auto-edits content, never hard-fails a run on
   its own, and makes no claim that flagged content *is* unsafe — only that a

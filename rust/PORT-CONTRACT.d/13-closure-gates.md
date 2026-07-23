@@ -3,10 +3,10 @@
 Scope: the B2 enforcement/health commands ported for
 roadmap:native-cli-closure — `rac gate`, `rac doctor`. Every claim below
 was verified against the oracle (`.venv-oracle/bin/rac`,
-`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/rac/cli.py`
-(`cmd_gate`/`cmd_doctor`), `src/rac/services/{gate,doctor,links,drift,
-recency,init}.py`, `src/rac/output/{human,json,sarif}.py`. Rust: new
-`rac-engine/src/gate.rs` (gate service + the STRICT `.rac/config.yaml`
+`0.1.dev50+g21c8be403`, Python 3.11.15). Source files: `src/asdecided/cli.py`
+(`cmd_gate`/`cmd_doctor`), `src/asdecided/services/{gate,doctor,links,drift,
+recency,init}.py`, `src/asdecided/output/{human,json,sarif}.py`. Rust: new
+`rac-engine/src/gate.rs` (gate service + the STRICT `.decided/config.yaml`
 loaders) and `doctor.rs` (doctor service + the links + injection ports),
 `review.rs` (`review_from_portfolio` made pub; `suspect_drift`/
 `drift_problem` shared with doctor), `frontmatter.rs`
@@ -61,7 +61,7 @@ One corpus, three analyses, one policy pass:
 - Sort: `(path, line or 0, source, code, message)`.
 
 ### 1.4 The enforcement policy + STRICT config loading
-`.rac/config.yaml` is discovered by the nearest-ancestor walk
+`.decided/config.yaml` is discovered by the nearest-ancestor walk
 (`find_config_file`). The gate is the ONE command where a malformed
 config raises: `rac: malformed repository config <abs path>: <reason>`
 on stderr, exit 1, empty stdout. Reasons (byte-verified against the
@@ -105,7 +105,7 @@ oracle for the structural class):
   advisory); level from the intrinsic severity (`info` → `note`);
   results sorted by `(uri, line or 0, ruleId, message)`;
   `driver.version` is the setuptools-scm string (mask-version / the
-  `RAC_RS_VERSION` seam). A relationship finding's already-encoded path
+  `DECIDED_RS_VERSION` seam). A relationship finding's already-encoded path
   is quoted AGAIN by the SARIF renderer (oracle double-`quote()`;
   `%` → `%25` on exotic paths) — mirrored by construction.
 
@@ -208,7 +208,7 @@ short-circuits before any git call). The live-repo case is the empty
 
 `rust/parity-cases-closure.json`: `gate-*` (18), `doctor-*` (21).
 Fixtures under `rust/fixtures/closure/{gate,doctor}/` — each fixture
-corpus carries its own `.rac/config.yaml` (`repository_key: RAC` plus
+corpus carries its own `.decided/config.yaml` (`repository_key: RAC` plus
 the policy/malformed variants) so the nearest-config walk never reaches
 the live repository root's overrides. Proven oracle-vs-oracle over the
 whole closure file (121/121) before the port, then oracle-vs-rust

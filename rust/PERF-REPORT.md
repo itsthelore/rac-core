@@ -145,7 +145,7 @@ stat-scan of a 427-file corpus prices at ~1 ms, so the deferred
 inotify rung buys nothing at this scale (it becomes interesting at
 100k+ files, where the seam it slots into still exists).
 
-Methodology: `RAC_CACHE_DIR` pointed at a scratch dir per engine;
-no-cache = `RAC_NO_CACHE=1`; cold = first cache-on run against an
+Methodology: `DECIDED_CACHE_DIR` pointed at a scratch dir per engine;
+no-cache = `DECIDED_NO_CACHE=1`; cold = first cache-on run against an
 empty cache dir; warm = median of 7 subsequent runs. MCP per-call
 numbers from a single long-lived server driven over stdio.

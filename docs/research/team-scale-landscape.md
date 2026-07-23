@@ -1,12 +1,12 @@
-# Team-Scale Knowledge Tooling — Competitive Landscape & Lessons for Lore
+# Team-Scale Knowledge Tooling — Competitive Landscape & Lessons for AsDecided
 
 > **Status: research document, not a RAC artifact.** Per ADR-010 ("Documents Are
 > Not Artifacts") and ADR-024 ("RAC Is Not a Content Store"), this is reference /
-> working material, not part of the validated `rac/` corpus. Its *actionable*
+> working material, not part of the validated `decisions/` corpus. Its *actionable*
 > conclusions are captured as corpus artifacts — see "What this produced" below.
 >
 > **Scope:** how software teams of 20+ engineers (not indie hackers) adopt, govern,
-> and sustain knowledge tools, and what Lore (RAC) should learn.
+> and sustain knowledge tools, and what AsDecided (RAC) should learn.
 > **Method:** multi-angle web research across four adjacent product categories plus
 > a cross-cutting failure-mode pass, with adversarial verification and
 > evidence-vs-marketing tagging. Confidence and primary sources cited inline.
@@ -19,7 +19,7 @@
 Across every category the finding is the same: **capture is solved and identical
 everywhere (Markdown-in-git, immutable records, status + supersession). What decides
 survival at 20+ is (a) fighting staleness/trust-collapse, (b) discovery, and (c)
-riding the existing workflow.** Lore's no-database / files-in-git / PR-review / MCP
+riding the existing workflow.** AsDecided's no-database / files-in-git / PR-review / MCP
 design is *structurally aligned with nearly every sustaining mechanism the evidence
 supports* — its single biggest exposure is the **freshness-signal gap**, which is
 both the best-documented cause of abandonment *and* the gap no agent-context
@@ -27,7 +27,7 @@ competitor has solved.
 
 One-sentence positioning that the research supports:
 
-> **Lore is the shared, git-native, deterministic source of truth for product
+> **AsDecided is the shared, git-native, deterministic source of truth for product
 > *decisions* — the knowledge class no agent-context tool governs and no team can
 > afford from enterprise requirements management — winning on the freshness/drift
 > problem (now empirically the #1 adoption determinant) and the no-embeddings bet
@@ -43,11 +43,11 @@ One-sentence positioning that the research supports:
 
 - **Files-in-git + PR review is now an industry pattern, not a compromise.** Cursor
   (`.cursor/rules/*.mdc`) and Amp (`AGENTS.md`) are git-committed Markdown reviewed
-  through the normal PR flow — Lore's exact substrate. [high]
+  through the normal PR flow — AsDecided's exact substrate. [high]
   ([Cursor rules](https://cursor.com/docs/context/rules), [Amp](https://ampcode.com/news/AGENT.md))
 - **Sourcegraph publicly abandoned embeddings** for enterprise context (third-party
   code transmission, vector-DB maintenance, poor scaling) and replaced them with
-  deterministic search — strong external validation of Lore's no-embeddings stance
+  deterministic search — strong external validation of AsDecided's no-embeddings stance
   (ADR-066). [high] ([Sourcegraph](https://sourcegraph.com/blog/how-cody-understands-your-codebase))
 - **"Shared team memory" is oversold.** Cursor Memories and Augment's base index are
   **per-user**; real org memory (Augment Cosmos) is preview-only — a genuinely
@@ -60,7 +60,7 @@ One-sentence positioning that the research supports:
   consistency-by-default, never compliance-by-guarantee — exactly the boundary
   ADR-067 already encodes (context-supply + post-edit enforcement). [high]
 - **None of them ship freshness, expiry, or ownership metadata on the rules
-  themselves** — the gap Lore can own. [high]
+  themselves** — the gap AsDecided can own. [high]
 
 ### 2. Decision & spec tooling
 
@@ -83,9 +83,9 @@ the code." [high on mechanics, medium on failure-mode blogs]
 [Backstage](https://backstage.io/docs/architecture-decisions/),
 [ThoughtWorks](https://www.thoughtworks.com/radar/techniques/lightweight-architecture-decision-records))
 
-> Note for Lore: Log4brains deliberately avoids fixed numbered filenames to prevent
-> multi-dev merge collisions — Lore's minted opaque IDs (`RAC-…`) already solve this.
-> And `rac review`/`doctor`/`coverage` *automate the "Gardener" role* that the
+> Note for AsDecided: Log4brains deliberately avoids fixed numbered filenames to prevent
+> multi-dev merge collisions — AsDecided's minted opaque IDs (`RAC-…`) already solve this.
+> And `decided review`/`doctor`/`coverage` *automate the "Gardener" role* that the
 > evidence says is the manual antidote to the abandonment curve.
 
 **Spec-driven dev.** Spec Kit / Kiro / Tessl invert the source of truth ("intent is
@@ -94,14 +94,14 @@ is **AI-mediated and human-gated, not deterministic** (Spec Kit has no blocking
 gates; Kiro's "neuro-symbolic" analysis uses LLM + SMT). **Their central, openly
 unsolved problem is spec↔code drift** — there is an "Ask HN: specs go stale" thread
 and no vendor documents a deterministic anti-drift mechanism; the recurring critique
-is "SDD is waterfall." Kiro independently uses **EARS** (which Lore validates
+is "SDD is waterfall." Kiro independently uses **EARS** (which AsDecided validates
 deterministically). [high]
 ([Spec Kit](https://github.com/github/spec-kit),
 [Kiro](https://kiro.dev/docs/specs/), [Kiro deep analysis](https://kiro.dev/blog/deep-spec-analysis/),
 [Tessl](https://tessl.io/blog/tessl-launches-spec-driven-framework-and-registry/),
 ["waterfall" critique](https://news.ycombinator.com/item?id=45935763))
 
-> Note for Lore: **Lore sidesteps SDD's core unsolved problem** — it doesn't generate
+> Note for AsDecided: **AsDecided sidesteps SDD's core unsolved problem** — it doesn't generate
 > code from artifacts, it records *decisions an agent consults*, so there's no
 > spec→code sync to rot. And it does deterministically the structural slice Kiro
 > needs an LLM+SMT solver for.
@@ -121,10 +121,10 @@ medium on third-party pricing]
 [DOORS Next perf](https://www.ibm.com/support/pages/ibm-doors-next-7x-performance-considerations),
 [Polarion](https://www.siemens.com/en-us/products/polarion/requirements/))
 
-> Note for Lore: **"suspect links" is the proven enterprise drift mechanism** — Lore
+> Note for AsDecided: **"suspect links" is the proven enterprise drift mechanism** — AsDecided
 > can deliver a deterministic, git-native version (commit diffs + the validated
 > graph) without the per-seat tax, SVN bottleneck, or lock-in. Their fatal flaw
-> (friction/cost/lock-in, not capability) is Lore's wedge.
+> (friction/cost/lock-in, not capability) is AsDecided's wedge.
 
 ### 3. Internal developer portals
 
@@ -134,13 +134,13 @@ medium on third-party pricing]
   `spec.owner`); Backstage's own docs say it is explicitly *not* for runtime auth.
   [high] ([Backstage descriptor](https://backstage.io/docs/features/software-catalog/descriptor-format/))
 - **Scorecards = deterministic checks** grouped into maturity levels (OpsLevel
-  bronze/silver/gold; a baseline check flags orphaned/ownerless services) — Lore's
-  `rac validate`/`review` analog. [high] ([OpsLevel](https://docs.opslevel.com/docs/scorecards))
+  bronze/silver/gold; a baseline check flags orphaned/ownerless services) — AsDecided's
+  `decided validate`/`review` analog. [high] ([OpsLevel](https://docs.opslevel.com/docs/scorecards))
 - **Drift is the real enemy**; portals fight it with auto-discovery + orphan/drift
-  detection (Backstage `backstage.io/orphan` + `orphanStrategy`). Lore can't
+  detection (Backstage `backstage.io/orphan` + `orphanStrategy`). AsDecided can't
   auto-discover (no crawler/DB) but counters with **git-derived staleness** (ADR-045).
   [high] ([Backstage life-of-an-entity](https://backstage.io/docs/features/software-catalog/life-of-an-entity/))
-- **TechDocs = Markdown in the same repo as code, updated in the same PR** — Lore's
+- **TechDocs = Markdown in the same repo as code, updated in the same PR** — AsDecided's
   exact model, proven at Spotify scale (280+ teams, 2,000+ services). [high]
 - Adoption: **"usage can be mandated, but adoption must be earned"** — top-down
   mandates correlate with *lower* developer satisfaction; portals become shelfware
@@ -167,9 +167,9 @@ medium on third-party pricing]
   docs as "the source of truth for Claude, ChatGPT, Cursor." AI *surfaces* gaps but
   doesn't fix decay. [high]
 
-> Note for Lore: its freshness primitive is *structurally stronger* — **git history
+> Note for AsDecided: its freshness primitive is *structurally stronger* — **git history
 > is deterministic recency (ADR-045) and PR review is enforced attestation —
-> "verification you can't fake"** — plus `rac validate`/`relationships` as
+> "verification you can't fake"** — plus `decided validate`/`relationships` as
 > machine-checkable rot detection no wiki has. The inherited risk: **PR review raises
 > contribution cost — the exact friction that kills wikis at 20+** (mitigate with
 > agent-assisted authoring + fast gates).
@@ -185,7 +185,7 @@ medium on third-party pricing]
 - **Documentation quality has a measured payoff.** DORA: high-quality docs make teams
   "more than twice as likely" to hit performance targets, and amplify every technical
   practice. **DORA 2025 explicitly endorses "connecting AI tools to internal
-  documentation, codebases, and *decision logs*"** — Lore's exact use case, named.
+  documentation, codebases, and *decision logs*"** — AsDecided's exact use case, named.
   AI is an "amplifier" that magnifies good docs and exposes bad. [high / medium-high]
   ([DORA docs](https://dora.dev/capabilities/documentation-quality/),
   [DORA 2025](https://dora.dev/dora-report-2025/))
@@ -205,18 +205,18 @@ medium on third-party pricing]
   ([Willison](https://simonwillison.net/tags/model-context-protocol/))
 - **Honest gap:** there is **no published proof that curated decision context lifts
   coding-agent task success.** The strongest defensible claim is that context-rot +
-  context-engineering evidence supports *selective* delivery. Lore's grounding-eval
+  context-engineering evidence supports *selective* delivery. AsDecided's grounding-eval
   (ADR-066) is the way to *be* the one who proves it. [high confidence in the gap]
 
 ---
 
-## What determines whether a 20-person team adopts vs abandons Lore (impact-ordered)
+## What determines whether a 20-person team adopts vs abandons AsDecided (impact-ordered)
 
 | # | Lesson | Tag | Action |
 |---|---|---|---|
 | 1 | Lives in the PR/git workflow, not a separate destination | **FITS** (strongest) | This *is* docs-as-code — the #1 sustaining mechanism. Lead with it. |
 | 2 | Staleness → trust collapse is the top killer; git+PR review is proven-insufficient | **RISK** (no DB; recency from git, ADR-045) | Surface git-derived staleness loudly + a deterministic "suspect" drift gate. Highest-leverage build. → `future/freshness-and-drift-detection` |
-| 3 | Automate the "Gardener" (the manual health-review that's the documented ADR antidote) | **POSITIONING** | `rac review`/`doctor`/`coverage` = machine-checkable health no wiki/portal has. Make it a scheduled CI report. |
+| 3 | Automate the "Gardener" (the manual health-review that's the documented ADR antidote) | **POSITIONING** | `decided review`/`doctor`/`coverage` = machine-checkable health no wiki/portal has. Make it a scheduled CI report. |
 | 4 | "Verification you can't fake" | **POSITIONING** | Enforced PR review + immutable git history vs competitors' self-clicked verify buttons. |
 | 5 | Effortless consumption — context comes to the agent | **FITS** | The read-only MCP server pushes context in-flow; counters the "go to the wiki" abandonment driver. |
 | 6 | …but keep the surface LEAN (context tax + context rot) | **POSITIONING / RISK** | Few tools, small descriptions, retrieve-on-demand (ADR-033). CLI-first (ADR-005) may out-adopt MCP. → `future/lean-context-delivery` |
@@ -232,19 +232,19 @@ medium on third-party pricing]
 ## Competitive landscape & positioning
 
 - **Closest single competitor concept:** `mcp-adr-analysis-server` — an MCP server that
-  serves/analyzes ADRs to agents. Lore differentiates by being full artifact families
+  serves/analyzes ADRs to agents. AsDecided differentiates by being full artifact families
   + deterministic validation + a validated graph, not ADR analysis alone.
   ([repo](https://github.com/tosin2013/mcp-adr-analysis-server))
 - **Patterns to borrow:** Spec Kit's `constitution` (governed project principles),
   Backstage's catalog-coupled ADR discovery (`adr-location`).
 - **The whitespace:** every agent-context tool stores **coding rules** or **indexed
-  code**; none governs **product decisions / requirements / roadmaps**. That is Lore's
+  code**; none governs **product decisions / requirements / roadmaps**. That is AsDecided's
   uncontested niche.
 - **The wedge against enterprise RM:** the traceability + governance value of
   DOORS/Jama/Polarion (suspect links, baselines, review), git-native — no per-seat
   collaboration tax, zero lock-in (it's just Markdown), no SVN bottleneck,
   deterministic — for teams priced out of or crushed by enterprise RM.
-- **Lore's defensible middle** sits between lightweight MCP file/notes servers
+- **AsDecided's defensible middle** sits between lightweight MCP file/notes servers
   (deterministic but unstructured) and enterprise RAG-over-docs (embeddings,
   precision-poor for decisions): deterministic + *structured artifacts* + a *validated
   graph*.
@@ -256,9 +256,9 @@ medium on third-party pricing]
 1. **No published proof curated decision context lifts agent task success.** Evidence
    supports *selective* delivery (context rot), not "decisions demonstrably make
    agents better." Grounding-eval (ADR-066) is the answer and a moat.
-2. **The freshness gap is real and is Lore's softest spot** — but also the gap nobody
+2. **The freshness gap is real and is AsDecided's softest spot** — but also the gap nobody
    else has solved, so it is a differentiator to win, not just a risk to cover.
-3. **Decision rationale cannot be auto-generated**, so Lore can *detect and surface*
+3. **Decision rationale cannot be auto-generated**, so AsDecided can *detect and surface*
    staleness, not make it "structurally impossible" the way generated API docs can.
 4. **MCP resources are under-adopted** (clients favor tools); agent-context conventions
    (AGENTS.md / CLAUDE.md / Cursor rules) are unsettled — don't over-commit to one
@@ -276,11 +276,11 @@ medium on third-party pricing]
 The *actionable* findings were distilled into unscheduled `future/` roadmap items
 (this document is the reference behind them):
 
-- `rac/roadmaps/future/freshness-and-drift-detection.md` — loud git-derived staleness
+- `decisions/roadmaps/future/freshness-and-drift-detection.md` — loud git-derived staleness
   + a deterministic git-native "suspect links" drift gate (lesson #2/#3/#4).
-- `rac/roadmaps/future/decision-to-code-proximity.md` — declared code-scope references
+- `decisions/roadmaps/future/decision-to-code-proximity.md` — declared code-scope references
   so the governing decision surfaces at the point of work (lesson #7).
-- `rac/roadmaps/future/lean-context-delivery.md` — measure/bound the agent-facing
+- `decisions/roadmaps/future/lean-context-delivery.md` — measure/bound the agent-facing
   footprint and keep a first-class CLI path (lesson #6).
 
 The competitive *positioning* conclusions belong with the `rac-growth-positioning`

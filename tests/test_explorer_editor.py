@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import rac.explorer.editor as editor_mod
-from rac.explorer.editor import open_in_editor, resolve_editor
+import asdecided.explorer.editor as editor_mod
+from asdecided.explorer.editor import open_in_editor, resolve_editor
 
 
 def test_resolve_prefers_visual_then_editor(monkeypatch):
@@ -58,7 +58,7 @@ def test_resolve_preference_beats_environment(monkeypatch):
 
 
 def test_terminal_editors_are_detected():
-    from rac.explorer.editor import is_terminal_editor
+    from asdecided.explorer.editor import is_terminal_editor
 
     assert is_terminal_editor("vim")
     assert is_terminal_editor("/usr/bin/nvim -u NONE")

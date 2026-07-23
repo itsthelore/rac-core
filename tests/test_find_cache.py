@@ -1,6 +1,6 @@
-"""`rac find` cache byte-parity with the uncached walk (ADR-112, née ADR-110).
+"""`decided find` cache byte-parity with the uncached walk (ADR-112, née ADR-110).
 
-One-shot `rac find` serves from the persistent index store by default. The
+One-shot `decided find` serves from the persistent index store by default. The
 contract is that its output is byte-identical to `--no-cache` for every mode,
 cold (store just written) and warm (store reused), and that a cold run writes
 the store for the next invocation. When the store cannot be written,
@@ -15,7 +15,7 @@ import io
 
 import pytest
 
-from rac.cli import main
+from asdecided.cli import main
 
 
 def _decision(ident: str, title: str, *, tags: str, body: str) -> str:
@@ -36,7 +36,7 @@ def corpus(tmp_path, monkeypatch):
         _decision("RAC-01JY4M8X2QB2", "Beta", tags="[performance]", body="shared beta"),
         encoding="utf-8",
     )
-    monkeypatch.setenv("RAC_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DECIDED_CACHE_DIR", str(tmp_path / "cache"))
     return tmp_path
 
 
@@ -70,7 +70,7 @@ def test_find_cache_is_byte_identical_to_the_walk(corpus, extra):
 
 
 def test_cold_default_run_writes_the_store(corpus):
-    from rac.services.index_store import store_root
+    from asdecided.services.index_store import store_root
 
     _run(["find", "shared", str(corpus), "--json"])
     root = store_root(corpus / "cache")
@@ -80,15 +80,15 @@ def test_cold_default_run_writes_the_store(corpus):
 def test_no_cache_and_rac_no_cache_write_nothing(corpus, monkeypatch):
     _run(["find", "shared", str(corpus), "--json", "--no-cache"])
     assert not (corpus / "cache").exists(), "--no-cache must not touch the cache dir"
-    monkeypatch.setenv("RAC_NO_CACHE", "1")
+    monkeypatch.setenv("DECIDED_NO_CACHE", "1")
     _run(["find", "shared", str(corpus), "--json"])
-    assert not (corpus / "cache").exists(), "RAC_NO_CACHE must disable the default cache"
+    assert not (corpus / "cache").exists(), "DECIDED_NO_CACHE must disable the default cache"
 
 
 def test_cache_falls_back_to_fresh_when_store_unwritable(corpus, monkeypatch):
     # When the store can't be written, load_or_build returns a fresh DerivedIndex
     # and the CLI serves from that — the default path must still equal the walk.
-    from rac.services.derived_cache import DerivedIndexCache
+    from asdecided.services.derived_cache import DerivedIndexCache
 
     monkeypatch.setattr(DerivedIndexCache, "_write_store", lambda self, h, d: False)
     rc_walk, walk = _run(["find", "shared", str(corpus), "--json", "--no-cache"])
@@ -122,13 +122,13 @@ def test_s5_rewrite_serves_stale_until_verify(corpus):
 
 def test_default_find_survives_a_homeless_environment(corpus, monkeypatch):
     # Default-on must never fail a query because no cache location resolves
-    # (ADR-112 degrade-never-fail): no HOME, no XDG_CACHE_HOME, no RAC_CACHE_DIR.
+    # (ADR-112 degrade-never-fail): no HOME, no XDG_CACHE_HOME, no DECIDED_CACHE_DIR.
     from pathlib import Path
 
     def _no_home() -> Path:
         raise RuntimeError("no usable home directory")
 
-    monkeypatch.delenv("RAC_CACHE_DIR", raising=False)
+    monkeypatch.delenv("DECIDED_CACHE_DIR", raising=False)
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
     monkeypatch.delenv("HOME", raising=False)
     monkeypatch.setattr(Path, "home", staticmethod(_no_home))

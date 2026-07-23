@@ -1,257 +1,105 @@
-# Lore
+# AsDecided
 
-<!-- mcp-name: io.github.tcballard/lore -->
+**Engineering decisions your agents can follow.**
+Build, as decided.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-light.png">
-  <img alt="Lore — agents that know why. Deterministic. Read-only. No RAG, no guessing." src="https://raw.githubusercontent.com/itsthelore/rac-core/main/rac/assets/images/lore-header-light.png">
-</picture>
+AsDecided keeps requirements, decisions, designs, roadmaps, and prompts as
+typed Markdown in your repository. Its native Rust engine validates that
+knowledge, retrieves the relevant decisions deterministically, and serves it
+read-only to agents over MCP.
 
-<p align="center">
-<a href="#quickstart">Quickstart</a> ·
-<a href="#how-it-compares">How it compares</a> ·
-<a href="#how-it-works">How it works</a> ·
-<a href="https://itsthelore.github.io/rac-core/">Docs</a> ·
-<a href="https://itsthelore.github.io/rac-core/cli/">CLI</a> ·
-<a href="https://github.com/itsthelore/rac-core/blob/main/CHANGELOG.md">Changelog</a>
-</p>
-
-<p align="center">
-<a href="https://github.com/itsthelore/rac-core/actions/workflows/ci.yml"><img src="https://github.com/itsthelore/rac-core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-<a href="https://pypi.org/project/rac-core/"><img src="https://img.shields.io/pypi/v/rac-core" alt="PyPI"></a>
-<a href="https://pypi.org/project/rac-core/"><img src="https://img.shields.io/pypi/pyversions/rac-core" alt="Python"></a>
-<a href="https://mypy-lang.org/"><img src="https://img.shields.io/badge/types-Mypy-blue.svg" alt="Typed"></a>
-<a href="https://github.com/itsthelore/rac-core/blob/main/LICENSE"><img src="https://img.shields.io/github/license/itsthelore/rac-core" alt="License: Apache 2.0"></a>
-</p>
-
-> **Give your coding agent the decisions your team already made — so it stops re-doing things you ruled out.**
-
-Lore keeps your team's recorded knowledge — requirements, decisions, designs, roadmaps, and prompts — as typed Markdown in your repo and serves it **read-only** to Claude Code, Cursor, and Claude Desktop over MCP, so the agent cites your decisions instead of violating them. No RAG, no embeddings, no model call to decide what's relevant — retrieval is deterministic and reproducible. It is built on **RAC — Requirements as Code**, the open-source engine underneath; the package, CLI, and MCP server ship under the `rac` name.
-
-## How it compares
-
-Lore isn't a search index or a memory tool — it's the **deterministic system of
-record** an agent grounds against. Fuzzy retrieval (RAG, agent memory) is good at
-finding *what's near* a loose question; Lore is good at returning the *exact,
-current* decision and declining the ones you've superseded. They compose well —
-recall fuzzily, then verify in Lore.
-
-| | Lore | Fuzzy retrieval (RAG / agent memory) |
-|---|---|---|
-| Good at | the exact, current decision | finding what's *near* a question |
-| Retrieval | deterministic, reproducible | similarity-ranked, varies by run |
-| Role | source of truth, read-only | a fast index or working copy |
-| In CI | enforced (`rac validate` / `rac gate`) | not its job |
-
-## Quickstart
-
-1. **Install** the engine:
-
-   ```bash
-   pip install rac-core
-   ```
-
-2. **Scaffold** identity and your first artifact:
-
-   ```bash
-   rac quickstart
-   ```
-
-3. **Connect your agent** (Claude Code, from your repo root):
-
-   ```bash
-   claude mcp add lore -- rac mcp
-   ```
-
-4. **Enforce** in CI so bad knowledge never lands:
-
-   ```bash
-   rac validate rac/ && rac gate rac/
-   ```
+No embeddings, model call, or hosted index is required. The same repository
+state produces the same answer.
 
 ## Install
 
-| Command | Gets you |
-|---|---|
-| `pip install rac-core` | the `rac` CLI + the `lore` MCP server |
-| `pip install 'rac-core[ingest]'` | + DOCX / HTML import |
-| `pip install 'rac-core[ingest-all]'` | + PDF / PPTX / XLSX import |
-| `pip install 'rac-core[explorer]'` | + the terminal Explorer (`rac explorer`) |
+The distribution is still published from this repository as `rac-core` while
+the registry and repository rename are handled as a separate release gate:
 
-Requires Python 3.11+. `uv tool install rac-core` also works.
-
-### The native engine
-
-On Linux x86_64, macOS (Apple Silicon), and Windows x86_64, `pip install rac-core`
-also brings a **compiled Rust engine**, and `rac` runs it automatically for the
-CLI and the MCP server — same output, byte-for-byte, much faster (a warm search
-over 5,000 files drops from seconds to tens of milliseconds). It is transparent:
-you run the same `rac` commands. On any other platform, or if you prefer, the
-pure-Python engine runs instead — install never depends on the binary.
-
-Document `ingest` always runs on Python (it wraps a Python converter), and so
-does the terminal `explorer`. To pin an engine explicitly — for debugging, or to
-compare — set `RAC_ENGINE=python` or `RAC_ENGINE=rust` in the environment.
-
-## How it works
-
-<p align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="rac/assets/images/lore-how-it-works-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="rac/assets/images/lore-how-it-works-light.svg">
-  <img alt="How Lore works: typed Markdown in your repo flows through the deterministic rac engine into the read-only lore MCP server, which serves your agent." src="rac/assets/images/lore-how-it-works-light.svg" width="900">
-</picture>
-</p>
-
-- **Typed Markdown, in your repo.** Every artifact is plain Markdown with a tiny
-  frontmatter envelope; the engine classifies it deterministically and validates
-  it against a per-type schema.
-- **Read-only at serve time.** The MCP server only ever reads; the trust boundary
-  is human PR review, and the agent cannot mutate the store.
-- **Enforced at write time.** `rac validate` and `rac gate` reject malformed
-  artifacts, broken or ambiguous links, and references to superseded decisions —
-  in CI, before the knowledge lands.
-- **Air-gapped by design.** The engine makes no LLM calls and no network calls;
-  the only egress is a consent-gated, content-free usage ping that is off by
-  default, and regulated installs can prove it stays off with `rac telemetry off
-  --enterprise` ([security posture](docs/security.md), ADR-086).
-
-## Connect your agent
-
-Claude Code (from your repo root):
-
-```bash
-claude mcp add lore -- rac mcp
+```sh
+pip install rac-core
 ```
 
-Claude Desktop / Cursor (`mcpServers` in the client config):
+This installs exactly two executable surfaces:
+
+- `decided` — the native Rust CLI
+- `decided-mcp` — the native read-only MCP server
+
+There is no `rac` command, Python CLI fallback, or `RAC_*` environment-variable
+compatibility layer.
+
+## Start a repository
+
+```sh
+decided quickstart
+decided validate decisions/
+decided gate decisions/
+```
+
+New repositories use:
+
+```text
+.decided/config.yaml
+decisions/
+```
+
+Existing artifact IDs such as `RAC-ABC123DEF456` are durable identities and do
+not change with the product name.
+
+## Migrate an existing repository
+
+Migration is explicit and never runs during an ordinary command. Inspect the
+plan first:
+
+```sh
+decided migrate layout . --dry-run
+```
+
+Then apply it:
+
+```sh
+decided migrate layout .
+```
+
+The migration moves `.rac/` to `.decided/` and `rac/` to `decisions/`. It
+refuses to overwrite either destination.
+
+## MCP
+
+Configure clients to run the native server directly:
 
 ```json
 {
   "mcpServers": {
-    "lore": { "command": "rac", "args": ["mcp", "--root", "/absolute/path/to/your/repo"] }
+    "asdecided": {
+      "command": "decided-mcp",
+      "args": ["--root", "."]
+    }
   }
 }
 ```
 
-## Author and enforce artifacts
+## Runtime controls
 
-```bash
-rac quickstart             # set up identity + scaffold your first artifact
-rac new decision adr.md    # scaffold a typed artifact (mints the id)
-rac validate rac/          # check every artifact in a directory
-rac inspect requirement.md # see its type and completeness
-rac review rac/            # full repository review, worst problems first
-rac gate rac/              # the merge gate: validate + relationships + review
-```
+Native runtime controls use the `DECIDED_*` namespace, including
+`DECIDED_CACHE_DIR`, `DECIDED_NO_CACHE`, `DECIDED_TIMING`,
+`DECIDED_MAX_FILE_BYTES`, `DECIDED_AUDIT_PATH`, and
+`DECIDED_AUDIT_PRINCIPAL`.
 
-## Import an existing decision
+Stable machine-readable fields such as `rac_version`, and existing `RAC-*`
+artifact IDs, remain unchanged where they are part of a published contract.
 
-Already have decisions in Confluence, Notion, or loose Markdown? The `rac-import`
-agent skill turns **one** existing document into **one** valid artifact, with a
-human-review step before anything is written:
+## Architecture
 
-```bash
-rac skill install rac-import
-```
+Rust is the product engine and the only normal CLI/MCP runtime. Python remains
+only as packaging/SDK support and a bounded retirement-certification oracle;
+it is not a second supported command implementation. Document ingestion lives
+outside the core as an ancillary Python connector, and Explorer is retired.
 
-Then ask your agent, in plain language: *"import this decision doc into Lore."* It
-drafts from **only** what your document says, shows you the proposed type, title,
-and relationships to confirm, scaffolds with `rac new`, and closes on
-`rac validate`. For multi-format or bulk conversion, use the `rac-ingest` skill.
-
-## Export the corpus
-
-```bash
-rac export rac/ --html --out lore.html   # the Portal: the whole graph, one file
-rac export rac/ --okf                    # a conformant Open Knowledge Format bundle
-rac export rac/ --documents              # JSONL for memory/RAG backends
-rac export rac/ --graph                  # the typed decision graph for graph backends
-```
-
-The `--documents` and `--graph` modes feed external memory, RAG, and graph tools
-so an agent can recall fuzzily there and then **verify in Lore** — see the
-[CLI reference](https://itsthelore.github.io/rac-core/cli/#export). The connectors
-themselves live in the separate `lore-connectors` companion.
-
-## Python API
-
-The engine is a library too; its public surface is `rac.__all__`.
-
-```python
-from rac import parse_file, classify, find_artifacts
-
-art = parse_file("rac/decisions/adr-001-markdown-first.md")
-print(classify(art).type)                  # -> "decision"
-
-result = find_artifacts("rac/", "caching")  # returns a SearchResult
-for hit in result.matches:
-    print(hit.id, hit.title)
-```
-
-## How it relates to OKF
-
-Google's Open Knowledge Format (OKF) standardises the *carrier* — a Git tree of
-Markdown with YAML front matter — and is deliberately permissive. RAC writes that
-same carrier and adds what OKF leaves to the consumer: **write-time enforcement**
-in CI. `rac validate` and `rac relationships --validate` reject malformed
-artifacts, broken links, and references to superseded decisions, deterministically,
-before the knowledge lands. `rac export --okf` turns any RAC repo into a conformant
-OKF bundle — so the two compose rather than compete.
-
-## Who it's for
-
-- **Teams running coding agents heavily** (Claude Code, Cursor) tired of the agent ignoring decisions the team already made.
-- **Teams who already write ADRs** and want those decisions to actually shape what the agent does.
-- **Anyone who wants the *why* behind their software versioned alongside the code.**
-
-## Documentation
-
-**Full documentation: <https://itsthelore.github.io/rac-core/>**
-
-- [Quickstart](https://itsthelore.github.io/rac-core/quickstart/) — install and author your first artifact
-- [MCP server](https://itsthelore.github.io/rac-core/mcp/) — tools, client configuration, examples
-- [CLI reference](https://itsthelore.github.io/rac-core/cli/) — every command, flag, and exit code
-
-## Origin
-
-Lore is the product surface of **RAC — Requirements as Code**, the open-source
-engine underneath; the package, CLI, and MCP server ship under the `rac` name, and
-`lore` is the server identity and brand.
-[Wayfinder](https://github.com/itsthelore/wayfinder-router), the deterministic
-prompt-complexity router, began as a `route` experiment inside RAC and was split
-into its own tool — routing is a runtime concern, not a knowledge one.
-
-## Repository layout
-
-```text
-rac-core/
-  src/rac/        the engine: CLI, core, services, output, the in-process MCP
-                  server (rac mcp), and bundled skills, templates, and git hooks
-  rac/            the dogfood corpus — requirements, decisions, designs, roadmaps,
-                  and prompts that govern the project itself
-  tests/          per-service batteries plus core / cli / artifacts coverage (ADR-027)
-  docs/           the documentation site (MkDocs)
-  examples/       the grounding demo, woven into the corpus and the test fixtures
-  rac-localview/  the Portal / graph viewer, vendored into the engine
-```
-
-## Test
-
-```bash
-pip install -e .[dev]
-python -m pytest
-```
-
-`ruff check`, `ruff format --check`, and `mypy src/` run in CI alongside the
-per-service batteries (ADR-027).
-
-## Project status
-
-Lore is early and evolving quickly. The MCP server ships today. Contributions,
-ideas, and experiments welcome — see [CONTRIBUTING.md](https://github.com/itsthelore/rac-core/blob/main/CONTRIBUTING.md).
+The authoritative language-neutral compatibility fixtures live in
+[`rac-spec`](https://github.com/itsthelore/rac-spec). Live-corpus validation is
+based on validity, determinism, freshness, and cache/no-cache equality.
 
 ## License
 
-[Apache License 2.0](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

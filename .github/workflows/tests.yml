@@ -1,13 +1,8 @@
-name: Tests
+name: Python bridge
 
-# Reusable workflow — the single definition of how RAC's test suite runs.
-# Called by ci.yml (push to main) and by python-publish.yml (release gate),
-# so the test steps live in one place rather than being duplicated.
-#
-# Tests are split into one "battery" per .py service (plus grouped core / cli /
-# artifacts) and run across every supported Python version, so the Actions UI
-# names the service + version that failed (e.g. "relationships (py3.11)")
-# instead of a single opaque "pytest (3.11)". See ADR-027.
+# Rust is the product engine and owns normal behavioral CI. Python is tested
+# only as the packaging/SDK bridge; the bounded retirement oracle lives in the
+# native Rust workflow against rac-spec.
 
 on:
   workflow_call:
@@ -16,189 +11,40 @@ permissions:
   contents: read
 
 jobs:
-  # Static quality gates (v0.7.14): lint, format, and types fail the suite
-  # just like a battery. One Python version is enough — the rules target 3.11.
-  lint:
-    name: lint (ruff + mypy)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install package with dev extras
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
-
-      - name: ruff check
-        run: python -m ruff check src/ tests/
-
-      - name: ruff format --check
-        run: python -m ruff format --check src/ tests/
-
-      - name: mypy
-        run: python -m mypy src/
-
-  pytest:
-    name: ${{ matrix.battery.name }} (py${{ matrix.python-version }})
+  bridge:
+    name: packaging + SDK (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-        # One battery per .py service, plus grouped core / cli / artifacts.
-        # Every tests/test_*.py belongs to exactly one battery (no orphans) —
-        # enforced by tests/test_ci_batteries.py in the core battery.
-        battery:
-          - name: core
-            paths: "tests/test_validate.py tests/test_validate_corpus_stdin.py tests/test_okf_conformance.py tests/test_overrides.py tests/test_requirement_standards.py tests/test_sarif.py tests/test_parser.py tests/test_schema.py tests/test_schema_agreement.py tests/test_identity.py tests/test_frontmatter.py tests/test_metadata_identity.py tests/test_idgen.py tests/test_ci_batteries.py tests/test_corpus.py tests/test_operations.py tests/test_sdk_surface.py tests/test_sbom.py"
-          - name: cli
-            paths: "tests/test_cli.py"
-          - name: compare
-            paths: "tests/test_compare.py"
-          - name: artifacts
-            paths: "tests/test_design.py tests/test_roadmap.py tests/test_prompt.py tests/test_decision_metadata.py"
-          - name: create
-            paths: "tests/test_create.py tests/test_templates.py"
-          - name: diff
-            paths: "tests/test_diff.py"
-          - name: export
-            paths: "tests/test_export_cmd.py tests/test_export_okf.py tests/test_documents_export.py tests/test_graph_export.py tests/test_agent_rules.py"
-          - name: improve
-            paths: "tests/test_improve.py"
-          - name: index
-            paths: "tests/test_index.py"
-          - name: ingest
-            paths: "tests/test_ingest.py tests/test_note_ingest.py"
-          - name: init
-            paths: "tests/test_init.py tests/test_profiles.py tests/test_org_endpoint.py"
-          - name: quickstart
-            paths: "tests/test_quickstart.py tests/test_empty_corpus.py"
-          - name: inspect
-            paths: "tests/test_inspect.py"
-          - name: intent
-            paths: "tests/test_intent.py"
-          - name: migrate
-            paths: "tests/test_migrate.py"
-          - name: portfolio
-            paths: "tests/test_portfolio.py"
-          - name: repository
-            paths: "tests/test_repository.py tests/test_repository_perf.py tests/test_gate_perf.py"
-          - name: explorer
-            paths: "tests/test_explorer_adapter.py tests/test_explorer_app.py tests/test_explorer_cli.py tests/test_explorer_commands.py tests/test_explorer_editor.py tests/test_explorer_isolation.py tests/test_explorer_workspace.py"
-          - name: mcp
-            paths: "tests/test_mcp_server.py tests/test_mcp_tools.py tests/test_mcp_isolation.py tests/test_mcp_telemetry.py tests/test_mcp_ping.py tests/test_mcp_audit.py tests/test_mcp_http.py tests/test_derived_cache.py tests/test_mcp_surface_budget.py"
-          - name: relationships
-            paths: "tests/test_relationships.py tests/test_relationships_cmd.py tests/test_relationship_validation.py tests/test_relationship_graph.py tests/test_lifecycle_status.py tests/test_rename.py"
-          - name: resolve
-            paths: "tests/test_resolve.py tests/test_find_decisions.py tests/test_scope.py tests/test_explain.py tests/test_selective_retrieval.py tests/test_find_cache.py tests/test_find_manifest.py"
-          - name: eval
-            paths: "tests/test_eval.py"
-          - name: review
-            paths: "tests/test_review.py tests/test_cadence.py"
-          - name: doctor
-            paths: "tests/test_doctor.py tests/test_links.py tests/test_drift.py"
-          - name: coverage-report
-            paths: "tests/test_coverage.py"
-          - name: usage
-            paths: "tests/test_usage.py"
-          - name: robustness
-            paths: "tests/test_robustness.py"
-          - name: idempotent
-            paths: "tests/test_idempotent.py"
-          - name: trust
-            paths: "tests/test_trust_model.py"
-          - name: revisions
-            paths: "tests/test_revisions.py"
-          - name: recency
-            paths: "tests/test_recency.py tests/test_provenance.py"
-          - name: skill
-            paths: "tests/test_skill.py"
-          - name: hook
-            paths: "tests/test_hook.py"
-          - name: stats
-            paths: "tests/test_stats.py"
-          - name: release
-            paths: "tests/test_release_version.py"
-          - name: watchkeeper
-            paths: "tests/test_watchkeeper.py tests/test_validate_action.py tests/test_pr_gate_action.py tests/test_gate.py tests/test_no_egress.py"
-          # Characterization battery (roadmap rebuild-scale, Phase 0.5): pins
-          # observable behavior that was unpinned before the examiner froze.
-          # Movement-B bundle B1 (ADR-103) adds test_b1_read_model.py here — it
-          # pins the unified read-model's byte-parity and cache invariants. Bundle
-          # B2 (ADR-104) adds test_b2_index_store.py — the persistent mmap store's
-          # parity-vs-fresh-build, prefix-range, corruption, and RSS pins. Bundle
-          # B3 (ADR-105) adds test_b3_freshness.py — the event-sourced serving
-          # tracker's mutation-class parity, delta/compaction, degraded-mode, and
-          # accepted-staleness pins. Bundle B3b (ADR-104) adds
-          # test_b3b_postings_search.py — the postings-served search's parity
-          # (store vs walk and across the delta window), work-boundedness, and
-          # broad-term match_count pins. Bundle B4 (ADR-106) adds
-          # test_b4_incremental_validate.py — incremental `rac validate DIR
-          # --cache`: per-file (content-hash x config-fingerprint) result reuse,
-          # byte-parity across mutation classes, ancestor-config invalidation,
-          # S5 accepted staleness, and corrupt-store recompute. Bundle B5 (ADR-107)
-          # adds test_b5_scale_hardening.py — the parallel cold build's worker-count
-          # determinism (byte-identical store + serving), parse-semantics parity,
-          # post-compaction snapshot-shed RSS bound, worker-crash serial fallback,
-          # and the RAC_TIMING line shape. Bundle B6 (ADR-108) adds
-          # test_b6_parallel_merge.py — the fragment-merge fan-out's per-mutation-class
-          # byte-parity against the serial derive (resolution outcomes, duplicate
-          # identity, range/status, tag-only, scope/live, cross-chunk and uneven
-          # partitions), in-process and end-to-end across a real worker split.
-          - name: characterization
-            paths: "tests/test_char_enforce.py tests/test_char_retrieve.py tests/test_char_graph.py tests/test_char_report.py tests/test_char_mcp.py tests/test_char_author.py tests/test_char_compare.py tests/test_char_ingest.py tests/test_char_ops.py tests/test_char_core.py tests/test_b1_read_model.py tests/test_b2_index_store.py tests/test_b3_freshness.py tests/test_b3b_postings_search.py tests/test_b4_incremental_validate.py tests/test_b5_scale_hardening.py tests/test_b5b_point_resolution.py tests/test_b6_parallel_merge.py"
-          # Trust gates (v0.7.9): dogfood validates RAC's own rac/ corpus,
-          # golden pins CLI stdout byte-for-byte against committed files.
-          - name: dogfood
-            paths: "tests/test_dogfood.py"
-          - name: golden
-            paths: "tests/test_golden.py"
     steps:
       - uses: actions/checkout@v5
         with:
-          # setuptools-scm derives the version from git tags; fetch them so the
-          # editable install can resolve a version (mirrors python-publish.yml).
           fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install package with dev/test extras
+      - name: Install bridge test dependencies
         run: |
           python -m pip install --upgrade pip
-          # The dev extra pulls pytest plus the document libraries that
-          # tests/test_ingest.py uses to generate fixtures.
-          python -m pip install -e .[dev]
+          python -m pip install -e . pytest ruff
 
-      - name: Run ${{ matrix.battery.name }} battery
-        run: python -m pytest -q ${{ matrix.battery.paths }}
+      - name: Lint maintained bridge surfaces
+        run: >-
+          python -m ruff check
+          src/asdecided/__init__.py
+          src/asdecided/dispatch.py
+          src/asdecided/release.py
+          tests/test_dispatch.py
+          tests/test_sdk_surface.py
+          tests/test_release_version.py
 
-  # Coverage visibility (v0.7.14): one full-suite run on py3.11 with a
-  # term-missing report in the job log. Report-only — no threshold gate yet
-  # (measure first, gate later; see the v0.7.14 roadmap Non-Goals).
-  coverage:
-    name: coverage (py3.11, report-only)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install package with dev extras
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
-
-      - name: Run full suite with coverage
-        run: python -m pytest -q --cov=src/rac --cov-report=term-missing
+      - name: Test packaging and SDK contract
+        run: >-
+          python -m pytest -q
+          tests/test_dispatch.py
+          tests/test_sdk_surface.py
+          tests/test_release_version.py

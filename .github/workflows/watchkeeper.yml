@@ -7,7 +7,7 @@
 #     watchkeeper:
 #       uses: itsthelore/rac-core/.github/workflows/watchkeeper.yml@<tag>
 #       with:
-#         path: rac
+#         path: decisions
 #
 # Pin an exact release tag. No moving major tag is published: package
 # versions derive from git tags via setuptools-scm, and a floating tag
@@ -21,7 +21,7 @@ on:
         description: "Corpus directory to compare."
         type: string
         required: false
-        default: "rac"
+        default: "decisions"
       base:
         description: "Base revision (empty: origin/<PR base branch>)."
         type: string
@@ -37,7 +37,7 @@ on:
         type: boolean
         required: false
         default: true
-      rac-version:
+      decided-version:
         description: "Exact rac-core version from PyPI (empty: latest)."
         type: string
         required: false
@@ -66,4 +66,4 @@ jobs:
           base: ${{ inputs.base }}
           fail-on: ${{ inputs.fail-on }}
           annotate: ${{ inputs.annotate }}
-          rac-version: ${{ inputs.rac-version }}
+          decided-version: ${{ inputs.decided-version }}

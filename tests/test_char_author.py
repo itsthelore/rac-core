@@ -18,22 +18,22 @@ from __future__ import annotations
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.schema import schema_reference
-from rac.core.templates import load_template
-from rac.output.templates import render_schema_template
-from rac.services.init import init_repository, load_enforcement_policy
+from asdecided.cli import main
+from asdecided.core.schema import schema_reference
+from asdecided.core.templates import load_template
+from asdecided.output.templates import render_schema_template
+from asdecided.services.init import init_repository, load_enforcement_policy
 
 
 def _parse_id(stdout: str) -> str:
-    """The system-assigned ID from a `rac new` / `rac quickstart` `ID:` line."""
+    """The system-assigned ID from a `decided new` / `decided quickstart` `ID:` line."""
     for line in stdout.splitlines():
         if line.startswith("ID: "):
             return line[len("ID: ") :]
     raise AssertionError(f"no ID line in output: {stdout!r}")
 
 
-# --- Finding 1 (HIGH): `rac new` human next-step framing ----------------------
+# --- Finding 1 (HIGH): `decided new` human next-step framing ----------------------
 
 
 def test_cli_new_human_exact(tmp_path, capsys):
@@ -50,7 +50,7 @@ def test_cli_new_human_exact(tmp_path, capsys):
     )
 
 
-# --- Finding 2 (HIGH): `rac quickstart` human body + Initialized/Using verbs ---
+# --- Finding 2 (HIGH): `decided quickstart` human body + Initialized/Using verbs ---
 
 
 def test_cli_quickstart_human_initialized_exact(tmp_path, capsys, monkeypatch):
@@ -90,7 +90,7 @@ def test_cli_quickstart_human_using_verb_exact(tmp_path, capsys, monkeypatch):
     )
 
 
-# --- Finding 3 (MEDIUM): `rac init` Config:/Wrote: human lines -----------------
+# --- Finding 3 (MEDIUM): `decided init` Config:/Wrote: human lines -----------------
 
 
 def test_cli_init_profile_default_human_exact(tmp_path, capsys):
@@ -100,7 +100,7 @@ def test_cli_init_profile_default_human_exact(tmp_path, capsys):
     captured = capsys.readouterr().out
     assert captured == (
         f"Initialized repository key ACME\n"
-        f"Config: {tmp_path / '.rac' / 'config.yaml'}\n"
+        f"Config: {tmp_path / '.decided' / 'config.yaml'}\n"
         f"Profile: default\n"
         f"Wrote: {tmp_path / '.mcp.json'}\n"
         f"Wrote: {tmp_path / '.cursor' / 'mcp.json'}\n"
@@ -112,7 +112,7 @@ def test_cli_init_plain_human_exact(tmp_path, capsys):
     assert main(["init", str(tmp_path), "--key", "PROJ"]) == 0
     captured = capsys.readouterr().out
     assert captured == (
-        f"Initialized repository key PROJ\nConfig: {tmp_path / '.rac' / 'config.yaml'}\n"
+        f"Initialized repository key PROJ\nConfig: {tmp_path / '.decided' / 'config.yaml'}\n"
     )
 
 
@@ -137,14 +137,14 @@ def test_enterprise_blocking_code_set_is_exact(tmp_path):
 
 
 def test_enterprise_config_bytes_exact(tmp_path):
-    # The full committed .rac/config.yaml: repository key, both comment lines,
+    # The full committed .decided/config.yaml: repository key, both comment lines,
     # and the eight blocking codes in their exact order.
     init_repository(str(tmp_path), key="ACME", profile="enterprise")
-    config = (tmp_path / ".rac" / "config.yaml").read_text(encoding="utf-8")
+    config = (tmp_path / ".decided" / "config.yaml").read_text(encoding="utf-8")
     assert config == (
         "repository_key: ACME\n"
         "# Enterprise profile (ADR-088): relationship-integrity findings block "
-        "`rac gate`,\n"
+        "`decided gate`,\n"
         "# committed explicitly so the enforcement policy is auditable (ADR-049).\n"
         "enforcement:\n"
         "  blocking:\n"
@@ -326,13 +326,13 @@ def test_schema_derived_template_render_bytes_are_independently_anchored(name):
     assert render_schema_template(ref) == _TEMPLATE_BYTES[name]
 
 
-# --- Finding 7 (MEDIUM): `rac inspect <file>` human layout --------------------
+# --- Finding 7 (MEDIUM): `decided inspect <file>` human layout --------------------
 
 
 def test_cli_inspect_single_file_human_exact(capsys, monkeypatch):
     # Plain output (no ANSI): pins the Confidence line format, the Present/
     # Missing Sections headers, the ✓/✗ markers, and Title-case section names.
-    monkeypatch.setattr("rac.output.human._USE_COLOR", False)
+    monkeypatch.setattr("asdecided.output.human._USE_COLOR", False)
     assert main(["inspect", fixture_path("inspect", "requirement.md")]) == 0
     assert capsys.readouterr().out == (
         "Artifact Type: Requirement\n"
@@ -349,11 +349,11 @@ def test_cli_inspect_single_file_human_exact(capsys, monkeypatch):
     )
 
 
-# --- Finding 8 (LOW): `rac inspect <dir>` lists every type, even at zero -------
+# --- Finding 8 (LOW): `decided inspect <dir>` lists every type, even at zero -------
 
 
 def test_cli_inspect_directory_human_exact(capsys, monkeypatch):
-    monkeypatch.setattr("rac.output.human._USE_COLOR", False)
+    monkeypatch.setattr("asdecided.output.human._USE_COLOR", False)
     assert main(["inspect", fixture_path("inspect")]) == 0
     assert capsys.readouterr().out == (
         "Files Inspected: 4\n"

@@ -18,7 +18,7 @@ Campaign-2 matrix additions over campaign 1:
   - review corpus [--json|--sarif],
   - relationships corpus [--json] (inspection arm, no --validate),
   - validate - (stdin) [--json] [--corpus corpus],
-  - RAC_MAX_FILE_BYTES env variation on validate,
+  - DECIDED_MAX_FILE_BYTES env variation on validate,
   - path-argument edge forms (trailing slash, ./ prefix, doubled slash,
     .markdown extension as a direct file argument),
   - multi-file corpora (auxiliary artifacts next to the mutated primary).
@@ -31,7 +31,7 @@ hostile inputs:
     [--json|--template],
   - portfolio / coverage / decisions-for [--json],
   - gate [--json|--sarif] with no config, a pinned policy config, and the
-    MUTATED PRIMARY as `.rac/config.yaml` (hostile-config arm),
+    MUTATED PRIMARY as `.decided/config.yaml` (hostile-config arm),
   - doctor [--json] [--hub-threshold 0] (non-git sandbox: drift phase
     deterministically empty),
   - export --graph, export --agent-rules --check (read-only drift arm),
@@ -94,7 +94,7 @@ CAMPAIGN_LOG = os.path.join(FUZZ_DIR, "campaign.log")
 
 # The version seam: makes the Rust binary report the oracle's setuptools-scm
 # version so --version / SARIF driver.version compare raw (see parity-cases).
-RAC_RS_VERSION = "0.1.dev50+g21c8be403"
+DECIDED_RS_VERSION = "0.1.dev50+g21c8be403"
 
 RUN_TIMEOUT_S = 30
 TIMEOUT_EXIT = -9999  # sentinel exit code for a timed-out engine
@@ -118,12 +118,12 @@ def parity_env(xdg_root: str) -> dict:
     env["XDG_CONFIG_HOME"] = os.path.join(xdg_root, "config")
     env["XDG_STATE_HOME"] = os.path.join(xdg_root, "state")
     env["XDG_CACHE_HOME"] = os.path.join(xdg_root, "cache")
-    env["RAC_NO_CACHE"] = "1"
+    env["DECIDED_NO_CACHE"] = "1"
     env["LC_ALL"] = "C"
     env["TZ"] = "UTC"
     env["COLUMNS"] = "80"
     env["PYTHONHASHSEED"] = "0"
-    env["RAC_RS_VERSION"] = RAC_RS_VERSION
+    env["DECIDED_RS_VERSION"] = DECIDED_RS_VERSION
     for leaf in ("config", "state", "cache"):
         os.makedirs(os.path.join(xdg_root, leaf), exist_ok=True)
     return env
@@ -833,7 +833,7 @@ CORE_COMMANDS = [
     cmd("stats-dir-json", ["stats", "corpus", "--json"]),
 ]
 
-# RAC_MAX_FILE_BYTES probe values (plus data-length-derived boundary values
+# DECIDED_MAX_FILE_BYTES probe values (plus data-length-derived boundary values
 # added at build time). Mixes valid, boundary, non-positive, unparseable,
 # underscore/sign/whitespace forms, huge (beyond i64/u64) and non-ASCII
 # decimal digits (CPython int() accepts them).
@@ -935,11 +935,11 @@ def build_commands(rng: random.Random, data: bytes) -> list:
         cmd("validate-stdin-json", ["validate", "-", "--json"], stdin="primary"),
         cmd("validate-stdin-corpus-json",
             ["validate", "-", "--corpus", "corpus", "--json"], stdin="primary"),
-        # RAC_MAX_FILE_BYTES env variation
+        # DECIDED_MAX_FILE_BYTES env variation
         cmd("validate-file-maxbytes", ["validate", "corpus/case.md", "--json"],
-            env={"RAC_MAX_FILE_BYTES": mb}),
+            env={"DECIDED_MAX_FILE_BYTES": mb}),
         cmd("validate-dir-maxbytes", ["validate", "corpus"],
-            env={"RAC_MAX_FILE_BYTES": mb}),
+            env={"DECIDED_MAX_FILE_BYTES": mb}),
         # path-argument edge forms
         cmd("validate-dir-slash", ["validate", "corpus/"]),
         cmd("validate-dir-dot", ["validate", "./corpus", "--json"]),
@@ -978,9 +978,9 @@ def build_commands(rng: random.Random, data: bytes) -> list:
         cmd("gate-dir-json", ["gate", "corpus", "--json"]),
         cmd("gate-dir-sarif", ["gate", "corpus", "--sarif"]),
         cmd("gate-policy-config", ["gate", "corpus", "--json"],
-            files={"corpus/.rac/config.yaml": GATE_POLICY_CONFIG}),
+            files={"corpus/.decided/config.yaml": GATE_POLICY_CONFIG}),
         cmd("gate-hostile-config", ["gate", "corpus"],
-            copy_as="corpus/.rac/config.yaml"),
+            copy_as="corpus/.decided/config.yaml"),
         cmd("doctor-dir", ["doctor", "corpus"]),
         cmd("doctor-dir-json", ["doctor", "corpus", "--json"]),
         cmd("doctor-hub0", ["doctor", "corpus", "--hub-threshold", "0"]),
@@ -1226,7 +1226,7 @@ class Fuzzer:
         base_env = worker.env
         env_line = " ".join(
             f"{k}={base_env[k]}"
-            for k in ("LC_ALL", "TZ", "COLUMNS", "RAC_NO_CACHE", "PYTHONHASHSEED", "RAC_RS_VERSION")
+            for k in ("LC_ALL", "TZ", "COLUMNS", "DECIDED_NO_CACHE", "PYTHONHASHSEED", "DECIDED_RS_VERSION")
         )
         for k, v in spec["env"].items():
             env_line += f" {k}={v!r}"

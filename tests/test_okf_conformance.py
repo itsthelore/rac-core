@@ -3,7 +3,7 @@
 Covers the golden (a clean corpus passes), the adversarial cases (a typed
 artifact at a reserved filename, and a registered type with no OKF mapping), and
 the negative boundary (untyped documents and untyped reserved entry points are
-never flagged — ADR-010). The CLI is checked end-to-end through ``rac validate``.
+never flagged — ADR-010). The CLI is checked end-to-end through ``decided validate``.
 """
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ import json
 
 from conftest import fixture_path
 
-import rac.services.okf_conformance as okf_mod
-from rac.cli import main
-from rac.core.corpus import walk_corpus
-from rac.services.okf_conformance import (
+import asdecided.services.okf_conformance as okf_mod
+from asdecided.cli import main
+from asdecided.core.corpus import walk_corpus
+from asdecided.services.okf_conformance import (
     CODE_RESERVED_FILENAME,
     CODE_UNMAPPED_TYPE,
     check_okf_conformance,

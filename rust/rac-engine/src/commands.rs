@@ -26,7 +26,7 @@ pub const STATUS_INVALID: &str = "invalid";
 pub const STATUS_SKIPPED: &str = "skipped";
 
 fn usage_error(message: &str) -> i32 {
-    eprintln!("rac: {message}");
+    eprintln!("decided: {message}");
     EXIT_USAGE
 }
 
@@ -43,7 +43,7 @@ fn emit(text: String) {
 }
 
 // ---------------------------------------------------------------------------
-// Service results (rac.services.validate)
+// Service results (decided.services.validate)
 // ---------------------------------------------------------------------------
 
 pub struct FileValidation {
@@ -158,7 +158,7 @@ pub fn validate_directory(directory: &str, recursive: bool) -> DirectoryValidati
     }
 }
 
-/// A fingerprint of the ancestor-walked `.rac/config.yaml` governing
+/// A fingerprint of the ancestor-walked `.decided/config.yaml` governing
 /// `directory` — the per-file cache key's config half (ADR-106).
 fn config_fingerprint(directory: &str) -> String {
     let mut hasher = crate::sha256::Sha256::new();
@@ -206,7 +206,7 @@ pub fn validate_directory_incremental_in(
     use crate::index_store::{
         open_validation_store, write_validation_store, FileState, ValidationCacheRow,
     };
-    let timing = std::env::var_os("RAC_TIMING").is_some();
+    let timing = std::env::var_os("DECIDED_TIMING").is_some();
     let cache_dir = cache_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(crate::derived_cache::default_cache_dir);
@@ -368,7 +368,7 @@ pub fn validate_directory_incremental_in(
 
     if timing {
         eprintln!(
-            "rac-timing: detect_ms={detect_ms:.3} recompute_ms={recompute_ms:.3} files_changed={}",
+            "decided-timing: detect_ms={detect_ms:.3} recompute_ms={recompute_ms:.3} files_changed={}",
             changed.len()
         );
     }
@@ -603,7 +603,7 @@ fn read_markdown_input(target: &str, command: &str) -> Result<String, i32> {
     let suffix = py_suffix_lower(target);
     if suffix != ".md" && suffix != ".markdown" {
         return Err(usage_error(&format!(
-            "{command} expects a Markdown file; convert it first with: rac ingest {target}"
+            "{command} expects a Markdown file; convert it first with: decided ingest {target}"
         )));
     }
     match std::fs::read(target) {
@@ -619,7 +619,7 @@ fn read_markdown_input(target: &str, command: &str) -> Result<String, i32> {
                 Err(EXIT_VALIDATION_FAILED)
             }
         },
-        // OSError -> `rac: cannot read <t>: <err>`, exit 2.
+        // OSError -> `decided: cannot read <t>: <err>`, exit 2.
         Err(e) => Err(usage_error(&format!("cannot read {target}: {e}"))),
     }
 }
@@ -717,7 +717,7 @@ pub fn cmd_relationships(args: &RelationshipsArgs) -> i32 {
         if suffix != ".md" && suffix != ".markdown" {
             return usage_error(&format!(
                 "relationships expects a Markdown file or directory; \
-                 convert it first with: rac ingest {}",
+                 convert it first with: decided ingest {}",
                 args.path
             ));
         }
@@ -821,7 +821,7 @@ pub struct IndexArgs {
     pub top_level: bool,
 }
 
-/// `rac index` — the plain-walk inventory; never touches the cache.
+/// `decided index` — the plain-walk inventory; never touches the cache.
 pub fn cmd_index(args: &IndexArgs) -> i32 {
     if !Path::new(&args.directory).is_dir() {
         return usage_error(&format!("not a directory: {}", args.directory));
@@ -897,7 +897,7 @@ pub struct GateArgs {
 
 /// One enforcement entry point: validation + relationships + review under
 /// the corpus policy. Blocking findings fail (exit 1); a malformed
-/// `.rac/config.yaml` is an operational error — `rac: <message>`, exit 1
+/// `.decided/config.yaml` is an operational error — `decided: <message>`, exit 1
 /// (NOT the exit-2 usage class). The not-a-directory check runs BEFORE the
 /// config load, so a bad path wins exit 2 even beside a malformed config.
 pub fn cmd_gate(args: &GateArgs) -> i32 {
@@ -907,7 +907,7 @@ pub fn cmd_gate(args: &GateArgs) -> i32 {
     let report = match crate::gate::build_gate(&args.directory, !args.top_level) {
         Ok(report) => report,
         Err(exc) => {
-            eprintln!("rac: {}", exc.message());
+            eprintln!("decided: {}", exc.message());
             return EXIT_VALIDATION_FAILED;
         }
     };
@@ -944,15 +944,15 @@ pub struct WatchkeeperArgs {
 /// materialized via `git archive`. Failure policy (v0.12.2): `error` fails
 /// on a review recommendation, `warning` also on any warning-severity
 /// finding, `none` never fails. Revision/repository errors are the exit-2
-/// usage class (`rac: <msg>`).
+/// usage class (`decided: <msg>`).
 pub fn cmd_watchkeeper(args: &WatchkeeperArgs) -> i32 {
     let directory = match &args.directory {
         Some(d) => d.clone(),
-        // ADR-018: rac/ is the conventional knowledge root — compare it when
+        // `decisions/` is the conventional knowledge root — compare it when
         // it exists; otherwise the current directory.
         None => {
-            if Path::new("rac").is_dir() {
-                "rac".to_string()
+            if Path::new("decisions").is_dir() {
+                "decisions".to_string()
             } else {
                 ".".to_string()
             }
@@ -1176,7 +1176,7 @@ pub fn cmd_export(args: &ExportArgs) -> i32 {
     EXIT_OK
 }
 
-/// `_cmd_agent_rules(args)` — `rac export --agent-rules [--check]`
+/// `_cmd_agent_rules(args)` — `decided export --agent-rules [--check]`
 /// (v0.21.15, ADR-067). `--check` never writes and exits 1 on drift.
 fn cmd_agent_rules(args: &ExportArgs) -> i32 {
     // Invalid --client values were already rejected by the argv parser
@@ -1236,7 +1236,7 @@ pub fn cmd_schema(args: &SchemaArgs) -> i32 {
     };
 
     let Some(spec) = crate::spec::spec_for(name) else {
-        // Unknown schema: multi-line blob to stderr, exit 2 (no `rac:` prefix).
+        // Unknown schema: multi-line blob to stderr, exit 2 (no `decided:` prefix).
         eprintln!("{}", output::render_unknown_schema(name, &names));
         return EXIT_USAGE;
     };
@@ -1294,12 +1294,12 @@ pub fn cmd_resolve(args: &ResolveArgs) -> i32 {
             .map(|p| format!("- {p}"))
             .collect();
         eprintln!(
-            "rac: duplicate artifact ID: {}\n\nFound in:\n{}",
+            "decided: duplicate artifact ID: {}\n\nFound in:\n{}",
             args.id,
             found.join("\n")
         );
     } else {
-        eprintln!("rac: artifact not found: {}", args.id);
+        eprintln!("decided: artifact not found: {}", args.id);
     }
     // Not-found and duplicate identity are both repository findings (exit 1).
     if result.outcome == crate::resolve::OUTCOME_RESOLVED {
@@ -1369,7 +1369,7 @@ pub fn annotate_search_recency(matches: &mut [crate::resolve::ResolvedArtifact],
     );
 }
 
-/// Serve `rac find` from the persistent index store (`_find_from_store`,
+/// Serve `decided find` from the persistent index store (`_find_from_store`,
 /// ADR-112): a warm run against an unchanged corpus reads the mapped base;
 /// a cold run builds fresh, writes the store, and serves either the
 /// reopened view or the fresh structures (ADR-080).
@@ -1506,7 +1506,7 @@ pub fn cmd_retrieve(args: &RetrieveArgs) -> i32 {
 /// stderr, EMPTY stdout, exit 1. Bug-for-bug mirror; the stderr text is
 /// out of parity scope.
 fn state_log_crash() -> i32 {
-    eprintln!("rac-rs: state log is not valid UTF-8");
+    eprintln!("decided-rs: state log is not valid UTF-8");
     EXIT_VALIDATION_FAILED
 }
 
@@ -1515,7 +1515,7 @@ pub struct McpStatsArgs {
     pub share: bool,
 }
 
-/// `rac mcp-stats` — Guide-only read-back. An empty or missing log is a
+/// `decided mcp-stats` — Guide-only read-back. An empty or missing log is a
 /// valid answer (telemetry is off by default), like `find` with no
 /// matches: exit 0 for every log state.
 pub fn cmd_mcp_stats(args: &McpStatsArgs) -> i32 {
@@ -1538,7 +1538,7 @@ pub struct UsageArgs {
     pub share: bool,
 }
 
-/// `rac usage` — unified read-back over the CLI-usage log and the Guide
+/// `decided usage` — unified read-back over the CLI-usage log and the Guide
 /// log (ADR-046). No consent gate on reads; exit 0 for every log state.
 /// The CLI log is read FIRST (a bad usage log crashes before the Guide
 /// log is touched, like the oracle's statement order).
@@ -1571,7 +1571,7 @@ pub struct SkillArgs {
     pub json: bool,
 }
 
-/// `rac skill <action> [name] [--dir DIR] [--json]` — list or install the
+/// `decided skill <action> [name] [--dir DIR] [--json]` — list or install the
 /// bundled Claude Code agent skills. The `--dir` not-a-directory check runs
 /// BEFORE the unknown-name check (skill brief, landmine 5).
 pub fn cmd_skill(args: &SkillArgs) -> i32 {
@@ -1597,8 +1597,8 @@ pub fn cmd_skill(args: &SkillArgs) -> i32 {
         Err(SkillInstallError::NotFound(message)) => return usage_error(&message),
         Err(SkillInstallError::FileExists(message)) | Err(SkillInstallError::Io(message)) => {
             // Refused (never overwrites) or operational failure — exit 1
-            // with the `rac: ` prefix, every existing file untouched.
-            eprintln!("rac: {message}");
+            // with the `decided: ` prefix, every existing file untouched.
+            eprintln!("decided: {message}");
             return EXIT_VALIDATION_FAILED;
         }
     };
@@ -1620,7 +1620,7 @@ pub struct HookArgs {
     pub json: bool,
 }
 
-/// `rac hook <action> [--style STYLE] [--dir DIR] [--json]` — list or
+/// `decided hook <action> [--style STYLE] [--dir DIR] [--json]` — list or
 /// install the bundled git hooks. `list` ignores `--style`/`--dir`; an
 /// invalid style never reaches here (argparse choices fire first).
 pub fn cmd_hook(args: &HookArgs) -> i32 {
@@ -1642,7 +1642,7 @@ pub fn cmd_hook(args: &HookArgs) -> i32 {
         Ok(installation) => installation,
         Err(HookInstallError::NotAGitWorkTree(message)) => return usage_error(&message),
         Err(HookInstallError::FileExists(message)) | Err(HookInstallError::Io(message)) => {
-            eprintln!("rac: {message}");
+            eprintln!("decided: {message}");
             return EXIT_VALIDATION_FAILED;
         }
     };
@@ -1664,17 +1664,17 @@ pub struct EvalArgs {
     pub config: String,
 }
 
-/// `rac eval [--check | --update-baseline] [--json] ...` — score retrieval
+/// `decided eval [--check | --update-baseline] [--json] ...` — score retrieval
 /// against the fixture benchmark, or gate against the baseline (ADR-066).
 /// Modes win over `--json` (eval brief, landmine 7); every `EvalUsageError`
-/// exits 2 with a `rac eval: ` stderr prefix — including a missing baseline
+/// exits 2 with a `decided eval: ` stderr prefix — including a missing baseline
 /// under `--check`, discovered only AFTER the benchmark has run (statement
 /// order mirrors the oracle's single try block).
 pub fn cmd_eval(args: &EvalArgs) -> i32 {
     use crate::eval;
 
     let fail = |err: eval::EvalUsageError| -> i32 {
-        eprintln!("rac eval: {}", err.0);
+        eprintln!("decided eval: {}", err.0);
         EXIT_USAGE
     };
     let scorecard = match eval::run_eval(&args.root, &args.queries) {
@@ -1686,10 +1686,10 @@ pub fn cmd_eval(args: &EvalArgs) -> i32 {
         if let Err(e) = std::fs::write(&args.baseline, payload) {
             // The oracle lets the OSError escape as a traceback (exit 1);
             // fail with the same code without the traceback noise.
-            eprintln!("rac: cannot write {}: {e}", args.baseline);
+            eprintln!("decided: cannot write {}: {e}", args.baseline);
             return EXIT_VALIDATION_FAILED;
         }
-        emit(format!("rac eval: baseline updated -> {}", args.baseline));
+        emit(format!("decided eval: baseline updated -> {}", args.baseline));
         return EXIT_OK;
     }
     if args.check {
@@ -1708,7 +1708,7 @@ pub fn cmd_eval(args: &EvalArgs) -> i32 {
             }
             return EXIT_VALIDATION_FAILED;
         }
-        emit("rac eval: gate PASS".to_string());
+        emit("decided eval: gate PASS".to_string());
         return EXIT_OK;
     }
     if args.json {
@@ -1730,10 +1730,10 @@ pub struct NewArgs {
     pub json: bool,
 }
 
-/// `rac new <type> <output_path>` — create one artifact from its canonical
+/// `decided new <type> <output_path>` — create one artifact from its canonical
 /// template. Usage errors (bad type, exists, missing parent, no repo
 /// config) exit 2; operational errors (malformed config, id exhaustion)
-/// exit 1 — all stderr `rac: <msg>`.
+/// exit 1 — all stderr `decided: <msg>`.
 pub fn cmd_new(args: &NewArgs) -> i32 {
     use crate::scaffold::ScaffoldError;
     let created = match crate::scaffold::create_artifact(&args.artifact_type, &args.output_path) {
@@ -1745,7 +1745,7 @@ pub fn cmd_new(args: &NewArgs) -> i32 {
             | ScaffoldError::MissingRepositoryConfig(_)),
         ) => return usage_error(e.message()),
         Err(e) => {
-            eprintln!("rac: {}", e.message());
+            eprintln!("decided: {}", e.message());
             return EXIT_VALIDATION_FAILED;
         }
     };
@@ -1772,7 +1772,7 @@ fn maybe_ask_usage_sharing() {
     }
     {
         let mut out = std::io::stdout().lock();
-        let _ = out.write_all("\nShare anonymous usage to help shape Lore? [y/N] ".as_bytes());
+        let _ = out.write_all("\nShare anonymous usage to help shape AsDecided? [y/N] ".as_bytes());
         let _ = out.flush();
     }
     let mut answer = String::new();
@@ -1789,8 +1789,8 @@ fn handle_share_answer(answer: &str) -> Option<&'static str> {
     if share_answer_is_yes(answer) {
         crate::consent::opt_in();
         Some(
-            "Sharing on \u{2014} one anonymous daily ping. 'rac telemetry status' \
-             shows exactly what; 'rac telemetry off' stops it.",
+            "Sharing on \u{2014} one anonymous daily ping. 'decided telemetry status' \
+             shows exactly what; 'decided telemetry off' stops it.",
         )
     } else {
         crate::consent::decline();
@@ -1809,6 +1809,7 @@ fn share_answer_is_yes(answer: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod share_prompt_tests {
     use super::share_answer_is_yes;
 
@@ -1837,7 +1838,7 @@ pub struct InitArgs {
     pub json: bool,
 }
 
-/// `rac init [directory] [--key KEY] [--ticketing PROVIDER] [--profile
+/// `decided init [directory] [--key KEY] [--ticketing PROVIDER] [--profile
 /// NAME]` — establish (or confirm) the repository identity namespace.
 /// Invalid key exits 2; conflict/malformed config exit 1. A successful
 /// non-JSON init may ask the one-time sharing question (TTY-gated).
@@ -1858,7 +1859,7 @@ pub fn cmd_init(args: &InitArgs) -> i32 {
             e @ (ScaffoldError::InvalidRepositoryKey(_) | ScaffoldError::InvalidOrgEndpoint(_)),
         ) => return usage_error(e.message()),
         Err(e) => {
-            eprintln!("rac: {}", e.message());
+            eprintln!("decided: {}", e.message());
             return EXIT_VALIDATION_FAILED;
         }
     };
@@ -1879,7 +1880,7 @@ pub struct QuickstartArgs {
     pub json: bool,
 }
 
-/// `rac quickstart [directory] [--key KEY] [--type TYPE]` — identity plus
+/// `decided quickstart [directory] [--key KEY] [--type TYPE]` — identity plus
 /// one starter artifact in one step (ADR-044). Exit routing mirrors the
 /// oracle's except ladder: bad type / bad key / missing parent are usage
 /// (2); a non-empty corpus, key conflict, or occupied starter path are
@@ -1898,7 +1899,7 @@ pub fn cmd_quickstart(args: &QuickstartArgs) -> i32 {
                 | ScaffoldError::OutputDirectoryMissing(_)),
             ) => return usage_error(e.message()),
             Err(e) => {
-                eprintln!("rac: {}", e.message());
+                eprintln!("decided: {}", e.message());
                 return EXIT_VALIDATION_FAILED;
             }
         };
@@ -1920,14 +1921,16 @@ pub struct MigrateArgs {
     pub json: bool,
 }
 
-/// `rac migrate metadata <directory> [--dry-run]` — canonical frontmatter
+/// `decided migrate metadata <directory> [--dry-run]` — canonical frontmatter
 /// identity for every recognized legacy artifact. A completed migration
 /// (or dry run) always exits 0 — nothing to migrate is a valid outcome.
 pub fn cmd_migrate(args: &MigrateArgs) -> i32 {
     use crate::scaffold::ScaffoldError;
-    let _ = &args.target; // argparse choices guarantee "metadata"
     if !Path::new(&args.directory).is_dir() {
         return usage_error(&format!("not a directory: {}", args.directory));
+    }
+    if args.target == "layout" {
+        return migrate_layout(args);
     }
     let report = match crate::scaffold::migrate_metadata(
         &args.directory,
@@ -1937,7 +1940,7 @@ pub fn cmd_migrate(args: &MigrateArgs) -> i32 {
         Ok(report) => report,
         Err(e @ ScaffoldError::MissingRepositoryConfig(_)) => return usage_error(e.message()),
         Err(e) => {
-            eprintln!("rac: {}", e.message());
+            eprintln!("decided: {}", e.message());
             return EXIT_VALIDATION_FAILED;
         }
     };
@@ -1945,6 +1948,64 @@ pub fn cmd_migrate(args: &MigrateArgs) -> i32 {
         emit(output::render_migrate_json(&report));
     } else {
         emit(output::render_migrate_human(&report));
+    }
+    EXIT_OK
+}
+
+/// Explicit one-way repository layout cutover. Nothing is inferred or moved
+/// during ordinary commands: operators first inspect `--dry-run`, then apply.
+fn migrate_layout(args: &MigrateArgs) -> i32 {
+    let root = Path::new(&args.directory);
+    let moves = [
+        (root.join(".rac"), root.join(".decided")),
+        (root.join("rac"), root.join("decisions")),
+    ];
+    let planned: Vec<_> = moves
+        .iter()
+        .filter(|(from, _)| from.exists())
+        .collect();
+    for (_, to) in &planned {
+        if to.exists() {
+            return usage_error(&format!(
+                "refusing layout migration because destination already exists: {}",
+                to.display()
+            ));
+        }
+    }
+    if !args.dry_run {
+        for (from, to) in &planned {
+            if let Err(error) = std::fs::rename(from, to) {
+                eprintln!(
+                    "decided: cannot migrate {} to {}: {error}",
+                    from.display(),
+                    to.display()
+                );
+                return EXIT_VALIDATION_FAILED;
+            }
+        }
+    }
+    if args.json {
+        let operations: Vec<_> = planned
+            .iter()
+            .map(|(from, to)| {
+                serde_json::json!({"from": from, "to": to})
+            })
+            .collect();
+        emit(
+            serde_json::to_string_pretty(&serde_json::json!({
+                "directory": args.directory,
+                "dry_run": args.dry_run,
+                "operations": operations,
+            }))
+            .expect("layout migration result is serializable"),
+        );
+    } else if planned.is_empty() {
+        emit("No legacy .rac or rac layout found.".to_string());
+    } else {
+        let verb = if args.dry_run { "Would move" } else { "Moved" };
+        for (from, to) in planned {
+            emit(format!("{verb} {} -> {}", from.display(), to.display()));
+        }
     }
     EXIT_OK
 }
@@ -1958,7 +2019,7 @@ pub struct RenameArgs {
     pub json: bool,
 }
 
-/// `rac rename <old> <new> <directory> [--apply] [--top-level]` — compute
+/// `decided rename <old> <new> <directory> [--apply] [--top-level]` — compute
 /// (and optionally apply) the corpus-wide rename edit set. Refusals exit 1
 /// with the human rendering on STDERR but the JSON plan on STDOUT; a valid
 /// dry run and a successful apply exit 0.
@@ -2011,18 +2072,18 @@ pub struct TelemetryArgs {
     pub unlock: bool,
 }
 
-/// `rac telemetry [on|off|status] [--enterprise] [--unlock]` — show or
+/// `decided telemetry [on|off|status] [--enterprise] [--unlock]` — show or
 /// change sharing consent (ADR-041) and the enterprise hard-lock
 /// (ADR-086). Flag validation order is pinned: enterprise/unlock with a
 /// non-`off` action first, then unlock-without-enterprise, then the
 /// opt-in-while-locked refusal — three distinct exit-2 usage errors.
 pub fn cmd_telemetry(args: &TelemetryArgs) -> i32 {
     if (args.enterprise || args.unlock) && args.action != "off" {
-        return usage_error("--enterprise/--unlock are only valid with 'rac telemetry off'");
+        return usage_error("--enterprise/--unlock are only valid with 'decided telemetry off'");
     }
     if args.unlock && !args.enterprise {
         return usage_error(
-            "--unlock requires --enterprise (use 'rac telemetry off --enterprise --unlock')",
+            "--unlock requires --enterprise (use 'decided telemetry off --enterprise --unlock')",
         );
     }
 
@@ -2030,13 +2091,13 @@ pub fn cmd_telemetry(args: &TelemetryArgs) -> i32 {
         if crate::consent::load_consent().enterprise_locked {
             return usage_error(
                 "cannot opt in while the enterprise telemetry lock is set; remove it with \
-                 'rac telemetry off --enterprise --unlock' first (ADR-086).",
+                 'decided telemetry off --enterprise --unlock' first (ADR-086).",
             );
         }
         let record = crate::consent::opt_in();
         emit(format!("Sharing on. Install id: {}", record.install_id));
         emit(
-            "One anonymous daily ping: install id, rac version, active-repo count. \
+            "One anonymous daily ping: install id, decided version, active-repo count. \
              Never paths, queries, or content (ADR-041)."
                 .to_string(),
         );
@@ -2052,7 +2113,7 @@ pub fn cmd_telemetry(args: &TelemetryArgs) -> i32 {
             crate::consent::enterprise_unlock();
             emit(
                 "Enterprise lock removed. Sharing stays off; re-enable with \
-                 'rac telemetry on' (ADR-086)."
+                 'decided telemetry on' (ADR-086)."
                     .to_string(),
             );
         } else if args.enterprise {
@@ -2060,7 +2121,7 @@ pub fn cmd_telemetry(args: &TelemetryArgs) -> i32 {
             emit(
                 "Sharing off and enterprise-locked. The daily ping is forced off \
                  and cannot be re-enabled until unlocked with \
-                 'rac telemetry off --enterprise --unlock' (ADR-086)."
+                 'decided telemetry off --enterprise --unlock' (ADR-086)."
                     .to_string(),
             );
         } else {
@@ -2099,12 +2160,12 @@ pub fn cmd_telemetry(args: &TelemetryArgs) -> i32 {
         if status.enterprise_locked {
             emit(
                 "Enterprise lock: on \u{2014} the daily ping is forced off. Remove with \
-                 'rac telemetry off --enterprise --unlock' (ADR-086)."
+                 'decided telemetry off --enterprise --unlock' (ADR-086)."
                     .to_string(),
             );
         } else if status.sharing {
             emit(
-                "Shared daily: install id, rac version, active-repo count. \
+                "Shared daily: install id, decided version, active-repo count. \
                  Never paths, queries, or content (ADR-041)."
                     .to_string(),
             );

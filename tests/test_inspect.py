@@ -1,4 +1,4 @@
-"""Tests for artifact inspection (`rac inspect`)."""
+"""Tests for artifact inspection (`decided inspect`)."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.artifacts import ARTIFACT_SPECS
-from rac.core.classification import CONFIDENCE_THRESHOLD, score_artifacts
-from rac.core.markdown import parse
-from rac.services.inspect import (
+from asdecided.cli import main
+from asdecided.core.artifacts import ARTIFACT_SPECS
+from asdecided.core.classification import CONFIDENCE_THRESHOLD, score_artifacts
+from asdecided.core.markdown import parse
+from asdecided.services.inspect import (
     inspect_directory,
     inspect_file,
     inspect_text,

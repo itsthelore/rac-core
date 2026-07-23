@@ -17,18 +17,18 @@ use crate::index_store::{
 };
 use crate::walk::find_markdown_files;
 
-pub const CACHE_DIR_ENV: &str = "RAC_CACHE_DIR";
+pub const CACHE_DIR_ENV: &str = "DECIDED_CACHE_DIR";
 
 /// Whether the persistent cache is active for this invocation (ADR-112):
-/// on by default; `--no-cache` per invocation, non-empty `RAC_NO_CACHE`
+/// on by default; `--no-cache` per invocation, non-empty `DECIDED_NO_CACHE`
 /// environment-wide.
 pub fn cache_enabled(cache_flag: bool) -> bool {
-    cache_flag && std::env::var("RAC_NO_CACHE").unwrap_or_default().is_empty()
+    cache_flag && std::env::var("DECIDED_NO_CACHE").unwrap_or_default().is_empty()
 }
 
-/// The derived-cache directory ladder: `RAC_CACHE_DIR` >
-/// `$XDG_CACHE_HOME/rac/derived` > `~/.cache/rac/derived` >
-/// `<tmp>/rac-cache/rac/derived` (the homeless floor — never raises).
+/// The derived-cache directory ladder: `DECIDED_CACHE_DIR` >
+/// `$XDG_CACHE_HOME/decisions/derived` > `~/.cache/decisions/derived` >
+/// `<tmp>/decided-cache/decisions/derived` (the homeless floor — never raises).
 pub fn default_cache_dir() -> PathBuf {
     if let Ok(dir) = std::env::var(CACHE_DIR_ENV) {
         if !dir.is_empty() {
@@ -39,10 +39,10 @@ pub fn default_cache_dir() -> PathBuf {
         Ok(xdg) if !xdg.is_empty() => PathBuf::from(xdg),
         _ => match std::env::var("HOME") {
             Ok(home) if !home.is_empty() => Path::new(&home).join(".cache"),
-            _ => std::env::temp_dir().join("rac-cache"),
+            _ => std::env::temp_dir().join("decided-cache"),
         },
     };
-    base.join("rac").join("derived")
+    base.join("decided").join("derived")
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +308,7 @@ impl DerivedIndexCache {
         }
         // Cold miss: build the store from nothing with the parallel fragment
         // fan-out (ADR-107/108) — byte-identical to the serial build, only
-        // faster to produce; the RAC_TIMING scorecard line rides here.
+        // faster to produce; the DECIDED_TIMING scorecard line rides here.
         let build_started = crate::timing::start();
         let (derived, mut stats) =
             crate::parallel_build::build_derived_index_parallel(directory, recursive, None);

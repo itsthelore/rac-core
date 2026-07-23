@@ -12,7 +12,7 @@ nothing here is "corrected". If a behaviour below looks wrong, that is the point
 Expected strings were captured by running the current code against small,
 purpose-built corpora; they are embedded inline (no new golden files). Color is
 disabled because pytest's stdout is not a TTY, so the human renderers emit plain
-text (see ``rac.output.human._USE_COLOR``).
+text (see ``asdecided.output.human._USE_COLOR``).
 """
 
 from __future__ import annotations
@@ -22,22 +22,22 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
-from rac.output.human import (
+from asdecided.cli import main
+from asdecided.output.human import (
     render_relationship_validation_human,
     render_relationships_human,
 )
-from rac.output.json import render_relationships_json
-from rac.output.sarif import render_relationships_sarif
-from rac.services.coverage import analyze_coverage, render_coverage_human
-from rac.services.relationships import (
+from asdecided.output.json import render_relationships_json
+from asdecided.output.sarif import render_relationships_sarif
+from asdecided.services.coverage import analyze_coverage, render_coverage_human
+from asdecided.services.relationships import (
     ISSUE_RELATIONSHIP_CYCLE,
     Relationship,
     build_relationship_report,
     neighborhood,
     validate_relationships,
 )
-from rac.services.rename import (
+from asdecided.services.rename import (
     apply_rename,
     compute_rename,
 )

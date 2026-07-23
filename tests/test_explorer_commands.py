@@ -7,7 +7,7 @@ input (DESIGN-command-surface).
 
 from __future__ import annotations
 
-from rac.explorer.commands import EXAMPLES, REGISTRY, SEARCH, parse, suggestions
+from asdecided.explorer.commands import EXAMPLES, REGISTRY, SEARCH, parse, suggestions
 
 
 def test_registry_is_the_v0810_contract():
@@ -36,9 +36,9 @@ def test_registry_is_the_v0810_contract():
 def test_decisions_for_command_parses_with_a_path_argument():
     # The path→decisions surface (decision-to-code-proximity Initiative 3) is a
     # registered command whose argument is a code path, routed like `/open <ref>`.
-    invocation = parse("/decisions-for src/rac/mcp/server.py")
+    invocation = parse("/decisions-for src/asdecided/mcp/server.py")
     assert invocation.command == "decisions-for"
-    assert invocation.args == "src/rac/mcp/server.py"
+    assert invocation.args == "src/asdecided/mcp/server.py"
 
 
 def test_action_commands_are_discoverable():

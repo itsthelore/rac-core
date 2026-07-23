@@ -1,7 +1,7 @@
 # Context cost & lean delivery
 
 A knowledge server justifies itself only if it stays lean — otherwise it becomes
-the noise it was meant to cure. Two findings shape how Lore delivers knowledge to
+the noise it was meant to cure. Two findings shape how AsDecided delivers knowledge to
 an agent:
 
 - **Context rot.** Every frontier model degrades as input grows, well before the
@@ -10,7 +10,7 @@ an agent:
   descriptions and schemas before it answers anything; oversized surfaces have
   been cited around ~23k tokens.
 
-Lore's answer is three deliberate properties: a **measured, budgeted** tool
+AsDecided's answer is three deliberate properties: a **measured, budgeted** tool
 surface, **selective on-demand** retrieval by default, and a **CLI delivery path**
 that spends no standing tokens at all. None of them uses AI summarisation or
 compression — payloads stay small because they are *scoped*, not lossily shrunk
@@ -24,30 +24,30 @@ schemas a client loads every session — is measured deterministically and offli
 measures ~915 tokens against a 1000 budget — roughly 25× under the ~23k figure the
 context-tax critique cited. A description or schema edit that inflates the surface
 fails CI rather than quietly taxing every session (see the
-[`rac-mcp-surface-budget`](https://github.com/itsthelore/rac-core/blob/main/rac/requirements/rac-mcp-surface-budget.md)
-requirement and `rac/mcp/surface.py`).
+[`decided-mcp-surface-budget`](https://github.com/itsthelore/rac-core/blob/main/decisions/requirements/decided-mcp-surface-budget.md)
+requirement and `decisions/mcp/surface.py`).
 
 ## 2. Retrieval is selective and on-demand by default
 
 Both delivery surfaces return the **relevant** artifacts for a query, never the
 whole corpus:
 
-- `search_artifacts` / `rac find` return the matches for a query — a small, scoped
+- `search_artifacts` / `decided find` return the matches for a query — a small, scoped
   result set, ranked and bounded by the response budget (ADR-033).
-- `get_artifact` / `rac resolve` return **one** artifact by id.
-- `get_related` / `rac relationships` return an artifact's immediate neighbours,
+- `get_artifact` / `decided resolve` return **one** artifact by id.
+- `get_related` / `decided relationships` return an artifact's immediate neighbours,
   not a transitive dump.
 
 This is the antidote to context rot: an agent receives small, relevant payloads by
 construction, and pulls more only when it asks. **Bulk, whole-corpus delivery is an
-explicit, opt-in action** — `rac export` — never a retrieval default. No default
+explicit, opt-in action** — `decided export` — never a retrieval default. No default
 path hands an agent the entire corpus; it must request it.
 
 ## 3. The CLI is a first-class, lowest-tax delivery path
 
 The MCP server is not the only way to ground an agent, and it is not always the
 leanest. A CLI spends **no** standing token tax — it costs nothing until invoked —
-which is why the context-tax critique steers toward CLI utilities. Lore's
+which is why the context-tax critique steers toward CLI utilities. AsDecided's
 CLI-first posture (ADR-005) makes this a supported choice, not an afterthought:
 `find`, `resolve`, and `relationships` deliver the same grounding the MCP tools do.
 
@@ -55,16 +55,16 @@ Ground an agent through the CLI by having it shell out and read JSON:
 
 ```bash
 # What did we already decide about deleting users?
-rac find "delete user" rac/ --json
+decided find "delete user" decisions/ --json
 
 # Read the specific decision the search surfaced.
-rac resolve RAC-01JY4M8X2QZ7 rac/ --json
+decided resolve RAC-01JY4M8X2QZ7 decisions/ --json
 
 # Which recorded decisions govern the file I'm about to edit?
-rac decisions-for src/users/repository.py rac/ --json
+decided decisions-for src/users/repository.py decisions/ --json
 
 # What else would this change affect?
-rac relationships rac/ --json
+decided relationships decisions/ --json
 ```
 
 Each returns a small, scoped, JSON payload the agent can act on — the same

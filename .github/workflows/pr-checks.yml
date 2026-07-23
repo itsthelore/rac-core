@@ -1,10 +1,8 @@
 name: PR Checks
 
-# Pre-merge tier (v0.7.14, ADR-027 rule 1): pull requests run the static
-# quality gates plus a small smoke battery — core, golden, and dogfood on one
-# Python version. The full battery × version grid stays merge-gated on main
-# (ci.yml); this tier exists to catch lint/type breakage, output-contract
-# drift, and corpus damage before merge, in about two minutes.
+# Pre-merge distribution checks. Rust behavior and the bounded retirement
+# oracle are owned by rust-spike.yml under ADR-120. This workflow verifies only
+# the maintained Python packaging/SDK bridge and the three shipped Actions.
 on:
   pull_request:
 
@@ -16,58 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: lint (ruff + mypy)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install package with dev extras
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
-
-      - name: ruff check
-        run: python -m ruff check src/ tests/
-
-      - name: ruff format --check
-        run: python -m ruff format --check src/ tests/
-
-      - name: mypy
-        run: python -m mypy src/
-
-  smoke:
-    name: smoke (core + golden + dogfood, py3.11)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install package with dev extras
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
-
-      - name: Run smoke battery
-        run: >
-          python -m pytest -q
-          tests/test_validate.py tests/test_parser.py tests/test_schema.py
-          tests/test_identity.py tests/test_frontmatter.py
-          tests/test_metadata_identity.py tests/test_idgen.py
-          tests/test_ci_batteries.py tests/test_corpus.py
-          tests/test_operations.py
-          tests/test_golden.py tests/test_dogfood.py
+  bridge:
+    uses: ./.github/workflows/tests.yml
 
   # Watchkeeper dogfood (v0.12.3): every pull request here gets a product
   # knowledge review from the local action in source mode — which is also
@@ -82,12 +30,12 @@ jobs:
 
       - uses: ./
         with:
-          path: rac
+          path: decisions
           install-from: source
 
   # Validate dogfood (v0.17.2): every pull request runs the local validate
   # action in source mode — the live end-to-end test of validate-action/action.yml
-  # (install, `rac validate --sarif`, exit-code propagation). SARIF uploads to
+  # (install, `decided validate --sarif`, exit-code propagation). SARIF uploads to
   # Code Scanning for same-repo PRs; it is skipped on forks, whose token cannot be
   # granted security-events: write, so the check never fails on a missing scope.
   validate:
@@ -103,93 +51,16 @@ jobs:
 
       - uses: ./validate-action
         with:
-          path: rac
+          path: decisions
           install-from: source
           upload-sarif: ${{ !github.event.pull_request.head.repo.fork }}
 
-  # Agent-rules drift gate (v0.21.16, ADR-067): every pull request re-derives the
-  # live-decision digest from the corpus and fails if any committed agent-context
-  # file (CLAUDE.md, AGENTS.md, .cursor/rules, .github/copilot-instructions.md) is
-  # stale or missing its managed block. `--check` never writes; this is the
-  # Success Measure "a stale rules file fails CI", so the generated projection
-  # cannot silently rot relative to rac/. Source install, like the other dogfood
-  # jobs.
-  agent-rules:
-    name: agent-rules (drift check, source install)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install package
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-
-      - name: Check agent-rules freshness
-        run: rac export rac/ --agent-rules --check
-
-  # Grounding-eval gate (v0.23.0, WS1, ADR-066): every pull request re-scores the
-  # retrieval tools against the committed fixture corpus and query set and fails
-  # if any gated metric regresses past its floor or baseline tolerance, or a
-  # hard-negative (e.g. a superseded decision) surfaces. `--check` never writes
-  # the baseline; re-baselining is human-only via `rac eval --update-baseline`,
-  # so CI can never silently move the bar. Source install, like the other gates.
-  eval:
-    name: grounding-eval (gate, source install)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install package
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-
-      - name: Run the grounding-eval gate
-        run: rac eval --check
-
-  # Doctor dogfood (v0.23.0, WS3): every pull request runs `rac doctor` on the
-  # RAC corpus. It exits non-zero only on a validation or relationship-integrity
-  # error (orphan/hub/injection findings are advisory warnings and exit 0), so it
-  # gates the same errors the validate/relationships jobs do, in one health pass.
-  doctor:
-    name: doctor (dogfood, source install)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install package
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-
-      - name: Run the doctor health diagnostic
-        run: rac doctor rac/
-
   # PR-gate dogfood (v0.21.14): every pull request runs the local PR-gate action
   # in source mode — the live end-to-end test of pr-gate-action/action.yml. It
-  # carries the full contract via a single `rac gate` command — validation,
+  # carries the full contract via a single `decided gate` command — validation,
   # relationships, and review under the corpus enforcement policy — into one
   # required check, uploading one SARIF document under the Code Scanning category
-  # `rac-gate` (distinct from the standalone validate job above, so the analyses
+  # `decided-gate` (distinct from the standalone validate job above, so the analyses
   # never collide). Skipped on forks, whose token cannot be granted
   # security-events: write.
   gate:
@@ -205,7 +76,6 @@ jobs:
 
       - uses: ./pr-gate-action
         with:
-          path: rac
+          path: decisions
           install-from: source
           upload-sarif: ${{ !github.event.pull_request.head.repo.fork }}
-

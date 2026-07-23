@@ -1,0 +1,461 @@
+{
+  "_meta": {
+    "role": "Canonical machine-readable artifact-spec registry: the ordered ARTIFACT_SPECS (requirement, decision, roadmap, prompt, design) and relationship-section descriptions, read by BOTH RAC engines — the Python engine (rac.core.artifacts) and the Rust engine (rac-engine::spec). ADR-063 Guard 1: one shared, language-neutral source of truth, so classification/validation cannot drift between engines.",
+    "canonical": "This file, in itsthelore/rac-spec, is the upstream source of truth. Implementations vendor it (rac-core: src/rac/spec/artifact-specs.json) and a sync gate keeps each vendored copy's artifact_specs and relationship_descriptions payloads identical to this file's. Edit here; downstream copies re-sync — never the reverse.",
+    "consumers": [
+      "rac.core.artifacts (Python)",
+      "rac-engine::spec (Rust, include_str!)"
+    ]
+  },
+  "artifact_specs": [
+    {
+      "name": "requirement",
+      "display": "Requirement",
+      "required": [
+        "problem",
+        "requirements"
+      ],
+      "recommended": [
+        "success metrics",
+        "risks",
+        "assumptions"
+      ],
+      "optional": [
+        "related decisions",
+        "related roadmaps",
+        "related prompts",
+        "related designs",
+        "related requirements",
+        "related tickets",
+        "verified by"
+      ],
+      "metadata": {
+        "status": [
+          "Proposed",
+          "Accepted",
+          "Superseded",
+          "Deprecated"
+        ]
+      },
+      "retired_status": [
+        "Superseded",
+        "Deprecated"
+      ],
+      "descriptions": {
+        "problem": "The user or business problem this addresses",
+        "requirements": "Numbered requirement statements, e.g. [REQ-001] ...",
+        "success metrics": "How success will be measured",
+        "risks": "Potential implementation, delivery, or adoption risks",
+        "assumptions": "Assumptions this artifact depends on",
+        "related decisions": "Decision artifacts this artifact references",
+        "related roadmaps": "Roadmap artifacts this artifact references",
+        "related prompts": "Prompt artifacts this artifact references",
+        "related designs": "Design artifacts this artifact references",
+        "related requirements": "Requirement artifacts this artifact references",
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)",
+        "verified by": "External tests or traces that verify this capability; targets are file paths, not in-corpus artifacts (ADR-096)"
+      },
+      "guidance": {
+        "problem": [
+          "What user or business problem does this solve?",
+          "Who is affected, and why does it matter now?"
+        ],
+        "requirements": [
+          "What must the system do?",
+          "Is each one a testable [REQ-NNN] statement?"
+        ],
+        "success metrics": [
+          "How will you know this succeeded?",
+          "What measurable target indicates success?"
+        ],
+        "risks": [
+          "What could prevent successful delivery?",
+          "What dependencies or unknowns exist?"
+        ],
+        "assumptions": [
+          "What are you assuming to be true?",
+          "What would change the approach if it turned out false?"
+        ]
+      },
+      "synonyms": {
+        "success criteria": "success metrics",
+        "kpis": "success metrics",
+        "kpi": "success metrics"
+      },
+      "id_field": null,
+      "starter_bodies": {
+        "problem": "TODO: describe the problem being solved and who experiences it.",
+        "requirements": "- [REQ-001] TODO: describe a required system behaviour.",
+        "success metrics": "TODO: describe how success will be measured.",
+        "risks": "TODO: describe implementation, delivery, operational, or adoption risks.",
+        "assumptions": "TODO: describe conditions assumed to be true."
+      }
+    },
+    {
+      "name": "decision",
+      "display": "Decision",
+      "required": [
+        "context",
+        "decision",
+        "consequences"
+      ],
+      "recommended": [
+        "status",
+        "category",
+        "alternatives considered"
+      ],
+      "optional": [
+        "supersedes",
+        "related requirements",
+        "related roadmaps",
+        "related designs",
+        "related decisions",
+        "related tickets",
+        "applies to"
+      ],
+      "metadata": {
+        "status": [
+          "Proposed",
+          "Accepted",
+          "Superseded",
+          "Deprecated"
+        ],
+        "category": [
+          "Architecture",
+          "Product",
+          "Process",
+          "Technical",
+          "Other"
+        ]
+      },
+      "retired_status": [
+        "Superseded",
+        "Deprecated"
+      ],
+      "descriptions": {
+        "supersedes": "The artifact this one supersedes",
+        "related requirements": "Requirement artifacts this artifact references",
+        "related roadmaps": "Roadmap artifacts this artifact references",
+        "related designs": "Design artifacts this artifact references",
+        "related decisions": "Decision artifacts this artifact references",
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)",
+        "applies to": "Code paths or components this decision governs; path entries are existence-checked, component names recorded as labels (ADR-019, decision-to-code-proximity)"
+      },
+      "guidance": {
+        "context": [
+          "What forces, constraints, or problems led to this decision?",
+          "What background does a reader need?"
+        ],
+        "decision": [
+          "What was decided?",
+          "State it as a clear, active choice."
+        ],
+        "consequences": [
+          "What becomes easier or harder as a result?",
+          "What trade-offs are you accepting?"
+        ],
+        "status": [
+          "Is this Proposed, Accepted, Superseded, or Deprecated?"
+        ],
+        "category": [
+          "Which area: Architecture, Product, Process, Technical, or Other?"
+        ],
+        "alternatives considered": [
+          "What other options were weighed?",
+          "Why were they not chosen?"
+        ]
+      },
+      "synonyms": {
+        "alternatives": "alternatives considered",
+        "options considered": "alternatives considered"
+      },
+      "id_field": null,
+      "starter_bodies": {
+        "context": "TODO: describe the situation, constraints, and background.",
+        "decision": "TODO: describe the decision that has been made.",
+        "consequences": "TODO: describe the expected positive and negative consequences.",
+        "alternatives considered": "TODO: describe the options that were considered and why they were not chosen."
+      }
+    },
+    {
+      "name": "roadmap",
+      "display": "Roadmap",
+      "required": [
+        "outcomes",
+        "initiatives"
+      ],
+      "recommended": [
+        "success measures",
+        "assumptions",
+        "risks"
+      ],
+      "optional": [
+        "related decisions",
+        "related requirements",
+        "related prompts",
+        "related designs",
+        "related roadmaps",
+        "related tickets"
+      ],
+      "metadata": {
+        "status": [
+          "Planned",
+          "Achieved",
+          "Superseded",
+          "Abandoned"
+        ]
+      },
+      "retired_status": [
+        "Superseded",
+        "Abandoned"
+      ],
+      "descriptions": {
+        "outcomes": "The user, business, or operational outcomes this roadmap pursues",
+        "initiatives": "The major bodies of work that support those outcomes",
+        "success measures": "How progress toward the outcomes will be measured",
+        "assumptions": "Conditions that must hold for this roadmap to stay valid",
+        "risks": "What could prevent the outcomes from being achieved",
+        "related decisions": "Decision artifacts this artifact references",
+        "related requirements": "Requirement artifacts this artifact references",
+        "related prompts": "Prompt artifacts this artifact references",
+        "related designs": "Design artifacts this artifact references",
+        "related roadmaps": "Roadmap artifacts this artifact references",
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
+      },
+      "guidance": {
+        "outcomes": [
+          "What user, business, or operational outcomes matter?",
+          "Why are these outcomes important now?"
+        ],
+        "initiatives": [
+          "What major bodies of work support these outcomes?",
+          "How does each initiative connect to an outcome?"
+        ],
+        "success measures": [
+          "How will the team know the roadmap is succeeding?",
+          "What observable signals would show progress?"
+        ],
+        "assumptions": [
+          "What must be true for this roadmap to remain valid?"
+        ],
+        "risks": [
+          "What could prevent these outcomes from being achieved?"
+        ]
+      },
+      "synonyms": {
+        "success metrics": "success measures"
+      },
+      "id_field": null,
+      "starter_bodies": {
+        "outcomes": "TODO: describe the outcomes this roadmap is intended to achieve.",
+        "initiatives": "TODO: describe the major initiatives that support the outcomes.",
+        "success measures": "TODO: describe how progress or success will be measured.",
+        "assumptions": "TODO: describe conditions assumed to be true.",
+        "risks": "TODO: describe implementation, delivery, operational, or adoption risks."
+      }
+    },
+    {
+      "name": "prompt",
+      "display": "Prompt",
+      "required": [
+        "objective",
+        "input",
+        "instructions",
+        "output"
+      ],
+      "recommended": [
+        "constraints",
+        "examples",
+        "evaluation"
+      ],
+      "optional": [
+        "related requirements",
+        "related decisions",
+        "related roadmaps",
+        "related designs",
+        "related tickets"
+      ],
+      "metadata": {
+        "status": [
+          "Active",
+          "Deprecated"
+        ]
+      },
+      "retired_status": [
+        "Deprecated"
+      ],
+      "descriptions": {
+        "objective": "What this prompt is intended to achieve",
+        "input": "The information, context, or source material the prompt expects",
+        "instructions": "The steps, rules, or approach the model should follow",
+        "output": "The expected response format or result",
+        "constraints": "Boundaries or restrictions the response must respect",
+        "examples": "Example inputs and outputs that clarify intended behavior",
+        "evaluation": "Human criteria for judging whether a response is good",
+        "related requirements": "Requirement artifacts this artifact references",
+        "related decisions": "Decision artifacts this artifact references",
+        "related roadmaps": "Roadmap artifacts this artifact references",
+        "related designs": "Design artifacts this artifact references",
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
+      },
+      "guidance": {
+        "objective": [
+          "What task should this prompt help complete?",
+          "What outcome should the model produce?"
+        ],
+        "input": [
+          "What context or source material does the prompt require?",
+          "What assumptions should the model make about the input?"
+        ],
+        "instructions": [
+          "What should the model do first?",
+          "What process should it follow?"
+        ],
+        "output": [
+          "What should the output contain?",
+          "Should the response be structured as bullets, JSON, Markdown, or prose?"
+        ],
+        "constraints": [
+          "What should the model avoid?",
+          "Are there tone, format, safety, or scope constraints?"
+        ],
+        "examples": [
+          "What examples would make the desired behavior clearer?"
+        ],
+        "evaluation": [
+          "What makes a good response?",
+          "How can the user tell whether the prompt worked?"
+        ]
+      },
+      "synonyms": {
+        "expected output": "output",
+        "output specification": "output",
+        "input specification": "input"
+      },
+      "id_field": null,
+      "starter_bodies": {
+        "objective": "TODO: describe what this prompt is intended to achieve.",
+        "input": "TODO: describe the information, context, or source material the prompt expects.",
+        "instructions": "TODO: describe the steps, rules, or approach the model should follow.",
+        "output": "TODO: describe the expected response format or result.",
+        "constraints": "TODO: describe any boundaries or restrictions.",
+        "examples": "TODO: provide example inputs and outputs if useful.",
+        "evaluation": "TODO: describe how the output should be judged."
+      }
+    },
+    {
+      "name": "design",
+      "display": "Design",
+      "required": [
+        "context",
+        "user need",
+        "design",
+        "constraints"
+      ],
+      "recommended": [
+        "rationale",
+        "alternatives",
+        "accessibility",
+        "style guidance",
+        "open questions"
+      ],
+      "optional": [
+        "related requirements",
+        "related decisions",
+        "related roadmaps",
+        "related prompts",
+        "related tickets"
+      ],
+      "metadata": {
+        "status": [
+          "Proposed",
+          "Accepted",
+          "Superseded",
+          "Deprecated"
+        ]
+      },
+      "retired_status": [
+        "Superseded",
+        "Deprecated"
+      ],
+      "descriptions": {
+        "context": "The product area, situation, or experience this design addresses",
+        "user need": "The user, audience, task, pain point, or goal this design supports",
+        "design": "The proposed experience, interaction, layout, flow, or behavior",
+        "constraints": "Technical, product, accessibility, platform, or implementation constraints",
+        "rationale": "Why this design approach was chosen",
+        "alternatives": "Other approaches considered and why they were not chosen",
+        "accessibility": "Accessibility needs and expectations for the design",
+        "style guidance": "Visual, tone, layout, or interaction style guidance",
+        "open questions": "Unresolved design questions to validate or decide later",
+        "related requirements": "Requirement artifacts this artifact references",
+        "related decisions": "Decision artifacts this artifact references",
+        "related roadmaps": "Roadmap artifacts this artifact references",
+        "related prompts": "Prompt artifacts this artifact references",
+        "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)"
+      },
+      "guidance": {
+        "context": [
+          "What situation, product area, or user experience does this design address?",
+          "Why is this design needed now?"
+        ],
+        "user need": [
+          "Who is the user or audience?",
+          "What task, pain point, or goal does this design support?"
+        ],
+        "design": [
+          "What is the proposed design?",
+          "How should the experience work?"
+        ],
+        "constraints": [
+          "What constraints shape this design?",
+          "What must the design respect or avoid?"
+        ],
+        "rationale": [
+          "Why is this the preferred approach?",
+          "What trade-offs does this design make?"
+        ],
+        "alternatives": [
+          "What other approaches were considered?",
+          "Why were they not chosen?"
+        ],
+        "accessibility": [
+          "What accessibility needs should this design support?",
+          "Are there keyboard, contrast, readability, or screen-reader considerations?"
+        ],
+        "style guidance": [
+          "What visual or interaction style should be followed?",
+          "What patterns should remain consistent?"
+        ],
+        "open questions": [
+          "What still needs to be decided?",
+          "What should be validated or explored further?"
+        ]
+      },
+      "synonyms": {},
+      "id_field": null,
+      "starter_bodies": {
+        "context": "TODO: describe the design context and why this design exists.",
+        "user need": "TODO: describe who this design is for and what they need to accomplish.",
+        "design": "TODO: describe the proposed experience, interaction, layout, flow, or system behavior.",
+        "constraints": "TODO: describe technical, product, accessibility, platform, or implementation constraints.",
+        "rationale": "TODO: explain why this design approach was chosen.",
+        "alternatives": "TODO: describe alternatives that were considered.",
+        "accessibility": "TODO: describe accessibility considerations.",
+        "style guidance": "TODO: describe visual, tone, layout, or interaction style guidance.",
+        "open questions": "TODO: list unresolved design questions."
+      }
+    }
+  ],
+  "relationship_descriptions": {
+    "related requirements": "Requirement artifacts this artifact references",
+    "related decisions": "Decision artifacts this artifact references",
+    "related roadmaps": "Roadmap artifacts this artifact references",
+    "related prompts": "Prompt artifacts this artifact references",
+    "related designs": "Design artifacts this artifact references",
+    "supersedes": "The artifact this one supersedes",
+    "related tickets": "External tickets this artifact traces to; provider set by .rac/config.yaml ticketing.provider (ADR-087)",
+    "verified by": "External tests or traces that verify this capability; targets are file paths, not in-corpus artifacts (ADR-096)",
+    "applies to": "Code paths or components this decision governs; path entries are existence-checked, component names recorded as labels (ADR-019, decision-to-code-proximity)"
+  }
+}

@@ -9,8 +9,8 @@ expectation was read off the code as it stands on ``claude/rebuild-scale-10m``.
 
 Coverage map (see charmap/compare.md):
 - F1 (HIGH):   git binary absent degrades recency and drift to "unknown"/empty.
-- F2 (MEDIUM): ``rac diff`` on a missing file is a usage error (exit 2).
-- F3 (MEDIUM): ``rac diff`` on identical inputs prints ``No changes.``.
+- F2 (MEDIUM): ``decided diff`` on a missing file is a usage error (exit 2).
+- F3 (MEDIUM): ``decided diff`` on identical inputs prints ``No changes.``.
 - F4 (MEDIUM): ``drift_problem`` exact human wording.
 - F5 (MEDIUM): ``artifact_recency(with_creation=True)`` reports the first commit.
 - F6 (MEDIUM): compare ``_issue_ref`` path-key derivation (all three branches).
@@ -28,14 +28,14 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.corpus import CorpusCache
-from rac.output import human as human_output
-from rac.services.compare import CHANGE_ADDED, _issue_ref, compare_states, load_state
-from rac.services.diff import diff as diff_products
-from rac.services.drift import DriftRecord, drift_problem, suspect_drift
-from rac.services.recency import artifact_recency
-from rac.services.relationships import ISSUE_DUPLICATE_IDENTIFIER, RelationshipIssue
+from asdecided.cli import main
+from asdecided.core.corpus import CorpusCache
+from asdecided.output import human as human_output
+from asdecided.services.compare import CHANGE_ADDED, _issue_ref, compare_states, load_state
+from asdecided.services.diff import diff as diff_products
+from asdecided.services.drift import DriftRecord, drift_problem, suspect_drift
+from asdecided.services.recency import artifact_recency
+from asdecided.services.relationships import ISSUE_DUPLICATE_IDENTIFIER, RelationshipIssue
 
 # --- fixtures / helpers ------------------------------------------------------
 
@@ -120,17 +120,17 @@ def test_drift_degrades_when_git_binary_absent(tmp_path, monkeypatch):
     assert suspect_drift(str(tmp_path), entries) == []
 
 
-# --- F2 — `rac diff` on a missing file is a usage error (MEDIUM) -------------
+# --- F2 — `decided diff` on a missing file is a usage error (MEDIUM) -------------
 
 
 def test_diff_missing_file_is_usage_error(capsys):
     with pytest.raises(SystemExit) as exc:
         main(["diff", "does-not-exist.md", fixture_path("diff", "new.md")])
     assert exc.value.code == 2
-    assert "rac: file not found: does-not-exist.md" in capsys.readouterr().err
+    assert "decided: file not found: does-not-exist.md" in capsys.readouterr().err
 
 
-# --- F3 — `rac diff` on identical inputs prints "No changes." (MEDIUM) -------
+# --- F3 — `decided diff` on identical inputs prints "No changes." (MEDIUM) -------
 
 
 def test_diff_identical_files_reports_no_changes(capsys):
@@ -259,7 +259,7 @@ def test_compare_added_unclassified_file(tmp_path):
 def test_diff_human_emits_ansi_color_when_enabled(monkeypatch):
     # The golden test forces color off; with a TTY (`_USE_COLOR=True`) added items
     # are green (32), removed red (31), and titles bold (1).
-    from rac.core.markdown import parse_file
+    from asdecided.core.markdown import parse_file
 
     old = parse_file(fixture_path("diff", "old.md"))
     new = parse_file(fixture_path("diff", "new.md"))

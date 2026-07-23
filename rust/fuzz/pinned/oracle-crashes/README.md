@@ -26,14 +26,14 @@ parity env.
   multi-file corpora), not just `validate` — see `rust/fuzz/findings2/`
   entries suffixed `-oracle-crash`.
 
-## Class B — `RAC_MAX_FILE_BYTES` in the read-crash zone (campaign-2 finding 004)
+## Class B — `DECIDED_MAX_FILE_BYTES` in the read-crash zone (campaign-2 finding 004)
 
 No special corpus needed — ANY readable file crashes the oracle's
 `parse_file` at `fh.read(cap + 1)`:
 
-- `RAC_MAX_FILE_BYTES=99999999999999999999` (any cap >= 2^63 - 1):
+- `DECIDED_MAX_FILE_BYTES=99999999999999999999` (any cap >= 2^63 - 1):
   `OverflowError: cannot fit 'int' into an index-sized integer`
-- `RAC_MAX_FILE_BYTES=9223372036854775806` (2^63 - 34 .. 2^63 - 2):
+- `DECIDED_MAX_FILE_BYTES=9223372036854775806` (2^63 - 34 .. 2^63 - 2):
   `OverflowError: byte string is too large`
 - caps below 2^63 - 34 but above the machine's allocatable memory
   (e.g. `1099511627776` on the campaign box): `MemoryError` —

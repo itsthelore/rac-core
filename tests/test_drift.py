@@ -13,11 +13,11 @@ import os
 import subprocess
 from pathlib import Path
 
-from rac.core.corpus import CorpusCache
-from rac.services.doctor import diagnose, render_doctor_json
-from rac.services.drift import CODE_SUSPECT_ARTIFACT, suspect_drift
-from rac.services.review import PRIORITY_SUSPECT_DRIFT, build_review
-from rac.services.review import REVIEW_SUSPECT_ARTIFACT as REVIEW_CODE
+from asdecided.core.corpus import CorpusCache
+from asdecided.services.doctor import diagnose, render_doctor_json
+from asdecided.services.drift import CODE_SUSPECT_ARTIFACT, suspect_drift
+from asdecided.services.review import PRIORITY_SUSPECT_DRIFT, build_review
+from asdecided.services.review import REVIEW_SUSPECT_ARTIFACT as REVIEW_CODE
 
 # A decision that references a requirement (a resolvable in-corpus edge) and a
 # decision whose only reference is an external ticket (never resolves, ADR-087).
@@ -234,7 +234,7 @@ def test_review_drift_and_doctor_report_the_same_code(tmp_path):
 
 
 def test_review_human_labels_the_drift_group(tmp_path):
-    from rac.output.human import render_review_human
+    from asdecided.output.human import render_review_human
 
     _corpus(tmp_path)
     _touch(tmp_path, "req.md", _REQ.format(id=_RID, t="Req v2"), "2026-06-01T00:00:00+00:00")

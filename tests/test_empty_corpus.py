@@ -12,10 +12,10 @@ from __future__ import annotations
 import asyncio
 import json
 
-from rac.cli import main
-from rac.mcp.budget import DEFAULT_BUDGET
-from rac.mcp.server import build_server
-from rac.output.human import EMPTY_CORPUS_HINT
+from asdecided.cli import main
+from asdecided.mcp.budget import DEFAULT_BUDGET
+from asdecided.mcp.server import build_server
+from asdecided.output.human import EMPTY_CORPUS_HINT
 
 # --- exit codes: empty is success across summary commands --------------------
 

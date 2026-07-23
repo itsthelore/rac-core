@@ -1,9 +1,9 @@
 {
   "context_servers": {
-    "lore": {
+    "asdecided": {
       "source": "custom",
-      "command": "rac",
-      "args": ["mcp", "--root", "."],
+      "command": "decided-mcp",
+      "args": ["--root", "."],
       "env": {}
     }
   }

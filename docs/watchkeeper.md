@@ -1,6 +1,6 @@
 # Watchkeeper — product knowledge review on pull requests
 
-Watchkeeper reviews *changes* to product knowledge. Where `rac review`
+Watchkeeper reviews *changes* to product knowledge. Where `decided review`
 answers "what needs attention in this repository right now?", Watchkeeper
 answers "what changed between these two states, and does it need a human?"
 — changed artifacts, validation and relationship deltas, deterministic
@@ -14,7 +14,7 @@ only network use in CI is installing the package.
 ## The command
 
 ```bash
-rac watchkeeper rac --base main
+decided watchkeeper rac --base main
 ```
 
 See the [CLI reference](cli.md#watchkeeper) for every flag, the finding
@@ -67,7 +67,7 @@ On every pull request that touches your corpus you get:
 | `install-from` | `pypi` | `pypi`, or `source` for this repository's own dogfood |
 
 The action is a wrapper: it installs RAC, resolves the base ref, runs one
-`rac watchkeeper --format github` invocation, and propagates its exit code
+`decided watchkeeper --format github` invocation, and propagates its exit code
 unchanged. All analysis and policy live in the package — pin `rac-version`
 to pin behavior.
 

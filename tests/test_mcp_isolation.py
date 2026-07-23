@@ -3,10 +3,10 @@
 AST-based rules over the source tree, mirroring ``test_explorer_isolation``
 (ADR-015, ADR-031):
 
-- ``rac.core`` and ``rac.services`` never import the ``mcp`` SDK or ``rac.mcp``
+- ``asdecided.core`` and ``asdecided.services`` never import the ``mcp`` SDK or ``asdecided.mcp``
   — the dependency direction points one way, so Core cannot depend on its
   consumer.
-- ``rac.mcp`` imports no write-capable service: Guide is read-only by
+- ``asdecided.mcp`` imports no write-capable service: Guide is read-only by
   construction, not by promise (ADR-031). The write-shaped services
   (``create``, ``init``, ``migrate``, ``ingest``, ``improve``) are forbidden in
   the server layer.
@@ -26,11 +26,11 @@ SRC = Path(__file__).parent.parent / "src" / "rac"
 # (the roadmap names these explicitly). ``create``/``init``/``migrate`` write
 # files directly; ``ingest``/``improve`` are write-shaped transforms.
 WRITE_SERVICES: tuple[str, ...] = (
-    "rac.services.create",
-    "rac.services.init",
-    "rac.services.migrate",
-    "rac.services.ingest",
-    "rac.services.improve",
+    "asdecided.services.create",
+    "asdecided.services.init",
+    "asdecided.services.migrate",
+    "asdecided.services.ingest",
+    "asdecided.services.improve",
 )
 
 
@@ -58,7 +58,7 @@ def _violations(files: list[Path], forbidden: tuple[str, ...]) -> list[str]:
 def test_core_and_services_never_import_mcp_or_guide():
     files = sorted((SRC / "core").rglob("*.py")) + sorted((SRC / "services").rglob("*.py"))
     assert files
-    assert _violations(files, ("mcp", "rac.mcp")) == []
+    assert _violations(files, ("mcp", "asdecided.mcp")) == []
 
 
 def test_server_layer_imports_no_write_capable_service():

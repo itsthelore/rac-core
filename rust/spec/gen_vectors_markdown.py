@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Generate markdown-module test vectors from the Python oracle.
 
-Drives rac.core.markdown (markdown-it-py 4.2.0 block parsing + the section
+Drives asdecided.core.markdown (markdown-it-py 4.2.0 block parsing + the section
 walk) over a bounded set of synthetic parser edge cases, dumping the complete
 extracted structure for byte-exact replay by the Rust port
 (rust/rac-engine/tests/markdown_vectors.rs).
@@ -29,11 +29,11 @@ FILES_DIR = os.path.join(VEC_DIR, "files")
 
 os.makedirs(FILES_DIR, exist_ok=True)
 os.chdir(ENGINE_DIR)
-os.environ.pop("RAC_MAX_FILE_BYTES", None)
+os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
 
-from rac.core import limits  # noqa: E402
-from rac.core import markdown as md  # noqa: E402
-from rac.core.frontmatter import split_frontmatter  # noqa: E402
+from asdecided.core import limits  # noqa: E402
+from asdecided.core import markdown as md  # noqa: E402
+from asdecided.core.frontmatter import split_frontmatter  # noqa: E402
 
 
 def product_value(p, text=None):
@@ -109,11 +109,11 @@ def T(name, text, cap=None, source_path="", events=True):
     assert name not in NAMES, name
     NAMES.add(name)
     if cap is not None:
-        os.environ["RAC_MAX_FILE_BYTES"] = str(cap)
+        os.environ["DECIDED_MAX_FILE_BYTES"] = str(cap)
     try:
         product = md.parse(text, source_path=source_path)
     finally:
-        os.environ.pop("RAC_MAX_FILE_BYTES", None)
+        os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
     split = split_frontmatter(text)
     case = {
         "name": name,
@@ -136,11 +136,11 @@ def F(name, path, cap=None, degraded=False):
     assert name not in NAMES, name
     NAMES.add(name)
     if cap is not None:
-        os.environ["RAC_MAX_FILE_BYTES"] = str(cap)
+        os.environ["DECIDED_MAX_FILE_BYTES"] = str(cap)
     try:
         product = md.parse_file(path)
     finally:
-        os.environ.pop("RAC_MAX_FILE_BYTES", None)
+        os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
     text = None
     if not degraded:
         with open(path, "rb") as fh:
@@ -158,17 +158,17 @@ def F(name, path, cap=None, degraded=False):
 
 
 def C(name, raw):
-    """max_file_bytes() with RAC_MAX_FILE_BYTES set to `raw` (None = unset)."""
+    """max_file_bytes() with DECIDED_MAX_FILE_BYTES set to `raw` (None = unset)."""
     assert name not in NAMES, name
     NAMES.add(name)
     if raw is None:
-        os.environ.pop("RAC_MAX_FILE_BYTES", None)
+        os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
     else:
-        os.environ["RAC_MAX_FILE_BYTES"] = raw
+        os.environ["DECIDED_MAX_FILE_BYTES"] = raw
     try:
         cap = limits.max_file_bytes()
     finally:
-        os.environ.pop("RAC_MAX_FILE_BYTES", None)
+        os.environ.pop("DECIDED_MAX_FILE_BYTES", None)
     CASES.append({"name": name, "kind": "cap", "raw": raw, "expected": str(cap)})
 
 

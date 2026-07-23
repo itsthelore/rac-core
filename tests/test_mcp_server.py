@@ -1,6 +1,6 @@
 """Guide server wiring — factory, CLI registration, exit codes (v0.10.0).
 
-Covers the construction and CLI surface of ``rac mcp``: that the factory builds
+Covers the construction and CLI surface of ``decided mcp``: that the factory builds
 a server with the pinned read tools and verbatim descriptions, that the
 subcommand is registered and defaults ``--root`` to the current directory, and
 that a bad ``--root`` exits with the usage code without ever starting the
@@ -16,10 +16,10 @@ import asyncio
 import pytest
 from conftest import fixture_path
 
-from rac import cli
-from rac.mcp import server as mcp_server
-from rac.mcp.budget import DEFAULT_BUDGET
-from rac.mcp.server import build_server, run_server
+from asdecided import cli
+from asdecided.mcp import server as mcp_server
+from asdecided.mcp.budget import DEFAULT_BUDGET
+from asdecided.mcp.server import build_server, run_server
 
 CORPUS = fixture_path("mcp", "corpus")
 
@@ -97,7 +97,7 @@ def test_cli_bad_root_exits_usage_without_serving(monkeypatch):
         called = True
         return 0
 
-    monkeypatch.setattr("rac.mcp.server.run_server", _should_not_run)
+    monkeypatch.setattr("asdecided.mcp.server.run_server", _should_not_run)
     parser = cli.build_parser()
     args = parser.parse_args(["mcp", "--root", "/no/such/directory"])
     with pytest.raises(SystemExit) as exc:
@@ -124,7 +124,7 @@ def test_cli_valid_root_runs_server_and_returns_zero(monkeypatch):
         captured["cache"] = cache_enabled
         return 0
 
-    monkeypatch.setattr("rac.mcp.server.run_server", _fake_run)
+    monkeypatch.setattr("asdecided.mcp.server.run_server", _fake_run)
     parser = cli.build_parser()
     args = parser.parse_args(["mcp", "--root", CORPUS])
     assert args.func(args) == cli.EXIT_OK
@@ -156,7 +156,7 @@ def test_default_budget_is_ten_thousand():
 def test_empty_corpus_startup_emits_helpful_stderr(tmp_path, capsys):
     # An empty directory (no RAC artifacts) must produce a diagnostic on stderr
     # so the first misconfigured run fails visibly, not silently.
-    from rac.mcp.server import _check_corpus
+    from asdecided.mcp.server import _check_corpus
 
     _check_corpus(str(tmp_path))
     captured = capsys.readouterr()
@@ -179,7 +179,7 @@ def test_empty_corpus_get_summary_returns_zero_artifacts(tmp_path):
 
 def test_non_empty_corpus_startup_emits_no_stderr(capsys):
     # A root with known artifacts must produce no startup diagnostic.
-    from rac.mcp.server import _check_corpus
+    from asdecided.mcp.server import _check_corpus
 
     _check_corpus(CORPUS)
     captured = capsys.readouterr()

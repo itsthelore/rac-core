@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from conftest import fixture_path
 
-from rac.core.markdown import parse_file
-from rac.services.diff import diff
+from asdecided.core.markdown import parse_file
+from asdecided.services.diff import diff
 
 
 def make_diff():

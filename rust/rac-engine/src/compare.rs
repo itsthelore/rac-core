@@ -1,4 +1,4 @@
-//! Repository state comparison (`rac.services.compare`): `load_state` walks
+//! Repository state comparison (`decided.services.compare`): `load_state` walks
 //! one directory into a fully analysed `RepoState`; `compare_states` derives
 //! every delta between two states — changed artifacts, validation delta,
 //! relationship delta, statistics delta. Artifacts are matched by

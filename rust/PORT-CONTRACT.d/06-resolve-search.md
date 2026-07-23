@@ -1,4 +1,4 @@
-# 06 — Resolve & Search (`rac resolve`, `rac find`) — `src/rac/services/resolve.py`
+# 06 — Resolve & Search (`rac resolve`, `rac find`) — `src/asdecided/services/resolve.py`
 
 Scope: exact-ID resolution, tiered token-boundary search matching (ADR-037/038/109),
 BM25F + RRF deterministic ranking (ADR-078), and the `resolve`/`find` CLI output
@@ -451,7 +451,7 @@ RAC-KTQ63DSJCAZ5               design       Explorer Command Surface
 
 - Directory guard: not a dir → stderr `rac: not a directory: {dir}\n`, exit 2.
 - `--top-level` disables recursion; `--recursive` is a no-op affirmation.
-- Cache (ADR-112): ON by default; `--no-cache` or non-empty `RAC_NO_CACHE`
+- Cache (ADR-112): ON by default; `--no-cache` or non-empty `DECIDED_NO_CACHE`
   env selects the fresh walk. **Contract: cached and fresh output are
   byte-identical** (verified with `cmp` on `--json --explain` output). The Rust
   port can treat the fresh path as normative. `--verify` only affects cache

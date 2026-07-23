@@ -43,9 +43,9 @@ MCP server do.
   segments, vseg/fseg, marker JSON, corpus hash); oracle-generated
   golden fixtures — store dirs built by the oracle over pinned fixture
   corpora, committed as segment hashes + small raw segments for codec
-  vectors. Harness: cache-state plumbing (per-engine `RAC_CACHE_DIR`
+  vectors. Harness: cache-state plumbing (per-engine `DECIDED_CACHE_DIR`
   into the sandbox, a `pre_run` setup step to warm a cache with the
-  same engine, `RAC_NO_CACHE` env cases); prove existing suites
+  same engine, `DECIDED_NO_CACHE` env cases); prove existing suites
   oracle-vs-oracle after any harness change.
 - **B1 — `rac index` command**: plain-walk port (no cache), human +
   JSON (identity-only contract: aliases in, search_sections /
@@ -61,7 +61,7 @@ MCP server do.
   ScopeRow/governing_decisions reuse from retrieve.rs, load_or_build,
   default_cache_dir ladder), `ReadModelView`/Fold over the mmap
   reader, BM25F fed from store integers with the pinned float order;
-  `find --cache/--no-cache` + `RAC_NO_CACHE`/`RAC_CACHE_DIR`.
+  `find --cache/--no-cache` + `DECIDED_NO_CACHE`/`DECIDED_CACHE_DIR`.
   Referee: cache-state matrix (cold, warm, stale, bypassed) byte-
   compared vs the oracle in the same state, plus warm==cold on every
   covered find case.
@@ -76,7 +76,7 @@ MCP server do.
   cross-doc merge (no pickling boundary; keep the spike's
   order-preserving posture). Referee: store bytes invariant across
   worker counts (1 vs N) and equal to the serial build; the
-  RAC_PARALLEL_BUILD_MIN_FILES threshold and fault→serial-floor
+  DECIDED_PARALLEL_BUILD_MIN_FILES threshold and fault→serial-floor
   degrade pinned.
 - **B6 — serving freshness (MCP)**: `FreshnessTracker` (base + delta,
   compaction threshold `max(10_000, base//100)`, RSS shed,
@@ -114,7 +114,7 @@ MCP server do.
 - The oracle asserts read-model equality against a *fresh build*,
   never a self round-trip; the Rust tests must do the same.
 - Temp-file names embed pid/random bytes (never mapped payload);
-  `RAC_TIMING` writes stderr only — neither is a parity surface.
+  `DECIDED_TIMING` writes stderr only — neither is a parity surface.
 - Cache failure of any kind degrades silently to a fresh build
   ("latency only"); the degrade paths need explicit negative cases
   (corrupt segment, truncation, version bump, unwritable dir, homeless

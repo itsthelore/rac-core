@@ -17,13 +17,13 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.artifacts import spec_for
-from rac.core.markdown import parse
-from rac.core.validation import has_errors, validate
-from rac.services.inspect import inspect_file, inspect_text
-from rac.services.relationships import extract_relationships, parse_references
-from rac.services.stats import collect_stats
+from asdecided.cli import main
+from asdecided.core.artifacts import spec_for
+from asdecided.core.markdown import parse
+from asdecided.core.validation import has_errors, validate
+from asdecided.services.inspect import inspect_file, inspect_text
+from asdecided.services.relationships import extract_relationships, parse_references
+from asdecided.services.stats import collect_stats
 
 # Each fixture and the relationship keys (snake_case) it should expose via inspect.
 # Note: keys are spec-driven — only relationship sections declared optional for
@@ -312,8 +312,8 @@ def test_linked_fixtures_validate(artifact, info):
 
 # --- bounded multi-hop neighbourhood (v0.24, WS-D) ---------------------------
 
-from rac.core.limits import MAX_TRAVERSAL_DEPTH  # noqa: E402
-from rac.services.relationships import (  # noqa: E402
+from asdecided.core.limits import MAX_TRAVERSAL_DEPTH  # noqa: E402
+from asdecided.services.relationships import (  # noqa: E402
     Relationship,
     neighborhood,
 )

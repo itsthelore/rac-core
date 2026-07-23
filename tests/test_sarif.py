@@ -12,15 +12,15 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.output import (
+from asdecided.cli import main
+from asdecided.output import (
     render_relationships_sarif,
     render_review_sarif,
     render_validate_sarif,
 )
-from rac.services.relationships import validate_relationships
-from rac.services.review import build_review
-from rac.services.validate import validate_directory
+from asdecided.services.relationships import validate_relationships
+from asdecided.services.review import build_review
+from asdecided.services.validate import validate_directory
 
 BAD_DECISION = """\
 ---
@@ -105,8 +105,8 @@ def test_sarif_uris_are_percent_encoded(tmp_path):
 
 
 def test_sarif_omits_suppressed_findings(tmp_path):
-    (tmp_path / ".rac").mkdir()
-    (tmp_path / ".rac" / "config.yaml").write_text(
+    (tmp_path / ".decided").mkdir()
+    (tmp_path / ".decided" / "config.yaml").write_text(
         "repository_key: RAC\nvalidation:\n  rules:\n    invalid-decision-status: off\n",
         encoding="utf-8",
     )

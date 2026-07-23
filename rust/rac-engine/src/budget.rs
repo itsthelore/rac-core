@@ -1,6 +1,6 @@
-//! Per-response character budget (ADR-033) — a port of `src/rac/mcp/budget.py`
+//! Per-response character budget (ADR-033) — a port of `src/asdecided/mcp/budget.py`
 //! (ORACLE-NEXT revision, which adds the `items` rule). Shared by the CLI
-//! retrieve surface (`commands::cmd_retrieve`) and the rac-mcp server.
+//! retrieve surface (`commands::cmd_retrieve`) and the decided-mcp server.
 //!
 //! The budget unit is CHARACTERS (Python `len` of the serialized string —
 //! Unicode code points, not bytes) of the payload serialized as

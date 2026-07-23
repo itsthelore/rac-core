@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate artifact-spec test vectors from the live oracle registry.
 
-Dumps `rac.core.artifacts.ARTIFACT_SPECS` (and the canonical
+Dumps `asdecided.core.artifacts.ARTIFACT_SPECS` (and the canonical
 `RELATIONSHIP_SECTIONS`) in a stable, order-preserving JSON shape. The Rust
 test loads the embedded `artifact-specs.json`, then asserts every field matches
 this vector — so a drift between the embedded copy, the live Python registry,
@@ -16,8 +16,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from rac.core.artifacts import ARTIFACT_SPECS
-from rac.services.references import RELATIONSHIP_SECTIONS
+from asdecided.core.artifacts import ARTIFACT_SPECS
+from asdecided.services.references import RELATIONSHIP_SECTIONS
 
 OUT = Path(__file__).resolve().parents[1] / "rac-engine/tests/vectors/spec.json"
 

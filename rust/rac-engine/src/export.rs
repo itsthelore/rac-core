@@ -1,4 +1,4 @@
-//! Corpus export (`rac.services.export`) — deterministic viewer/graph/documents
+//! Corpus export (`decided.services.export`) — deterministic viewer/graph/documents
 //! projections of a corpus. One walk, shared across projections; no timestamps.
 
 use crate::identity::{artifact_identifier, artifact_identifiers};

@@ -23,8 +23,8 @@ headings, normalizes them (case- and whitespace-insensitive, so `## Problem` and
   That is a valid, expected outcome — not an error.
 
 ```bash
-rac inspect login-flow.md      # Artifact Type: Requirement (71%)
-rac schema --list              # the five registered types
+decided inspect login-flow.md      # Artifact Type: Requirement (71%)
+decided schema --list              # the five registered types
 ```
 
 ## Documents vs. artifacts
@@ -49,8 +49,8 @@ Ids are compared case-insensitively. Identity is what
 
 ## The five types
 
-For each type, scaffold a starter file with `rac schema <type> --template` and read
-the full section guidance with `rac schema <type>`.
+For each type, scaffold a starter file with `decided schema <type> --template` and read
+the full section guidance with `decided schema <type>`.
 
 ### Requirement
 

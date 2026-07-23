@@ -7,7 +7,7 @@
       "walk": ["validate", "{dir}", "--no-cache"]
     },
     "rust": {
-      "bin": "../target/release/rac",
+      "bin": "../target/release/decided",
       "version": ["--version"],
       "single_validate": ["validate", "{file}"],
       "walk": ["validate", "{dir}"],

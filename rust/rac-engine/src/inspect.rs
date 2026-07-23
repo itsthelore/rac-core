@@ -1,4 +1,4 @@
-//! Artifact inspection (`rac.services.inspect`): classify one document and
+//! Artifact inspection (`decided.services.inspect`): classify one document and
 //! report its structure, or aggregate types across a directory.
 //!
 //! Section names are stored normalized (e.g. `"success metrics"`); the

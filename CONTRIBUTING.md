@@ -26,19 +26,19 @@ ruff check src/ tests/
 ruff format --check src/ tests/
 mypy src/
 
-rac validate rac/
+decided validate decisions/
 
-rac relationships rac/ --validate
+decided relationships decisions/ --validate
 ```
 
 - `pytest` runs the full suite, including the **dogfood gate** (RAC's own
-  planning corpus under `rac/` must pass RAC) and **golden output tests**
+  planning corpus under `decisions/` must pass RAC) and **golden output tests**
   (CLI output is pinned byte-for-byte).
 - If you intentionally changed what the CLI prints, refresh the goldens and
   commit the diff — it will be reviewed as a product change:
 
   ```bash
-  RAC_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py
+  DECIDED_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py
   ```
 
 See [docs/testing.md](docs/testing.md) for test layout, fixtures, and useful
@@ -53,21 +53,21 @@ pytest variations.
 - User-visible changes get a line in [CHANGELOG.md](CHANGELOG.md) under
   **Unreleased** — user impact over implementation details.
 - JSON output is a stable, versioned contract: field changes must be additive
-  and `schema_version`-gated (see `rac/decisions/`).
+  and `schema_version`-gated (see `decisions/decisions/`).
 
 ## RAC artifact expectations
 
-The `rac/` directory is RAC's own product knowledge — requirements, decisions
+The `decisions/` directory is RAC's own product knowledge — requirements, decisions
 (ADRs), roadmaps, prompts, and designs — maintained with the same care as code:
 
 - Behavior changes that reflect a product decision should trace to an artifact
-  under `rac/` (a roadmap initiative or an ADR).
-- Artifacts you add or edit must keep the corpus green: `rac validate rac/`,
-  `rac relationships rac/ --validate`, and `rac review rac/` all run in CI.
+  under `decisions/` (a roadmap initiative or an ADR).
+- Artifacts you add or edit must keep the corpus green: `decided validate decisions/`,
+  `decided relationships decisions/ --validate`, and `decided review decisions/` all run in CI.
 
 ## Commit conventions
 
-Follow [`rac/prompts/rac-agent-commit-guidelines.md`](rac/prompts/rac-agent-commit-guidelines.md):
+Follow [`decisions/prompts/rac-agent-commit-guidelines.md`](decisions/prompts/rac-agent-commit-guidelines.md):
 
 ```text
 <type>(<area>): <imperative summary> [roadmap:vX.Y.Z]

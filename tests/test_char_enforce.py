@@ -23,18 +23,18 @@ from pathlib import Path
 
 import pytest
 
-import rac.output.human as human
-from rac.core.markdown import parse
-from rac.output import render_gate_json
-from rac.output.human import (
+import asdecided.output.human as human
+from asdecided.core.markdown import parse
+from asdecided.output import render_gate_json
+from asdecided.output.human import (
     render_gate_human,
     render_stdin_corpus_human,
     render_validate_dir_human,
 )
-from rac.services import doctor
-from rac.services.doctor import render_doctor_human
-from rac.services.gate import build_gate
-from rac.services.validate import validate_directory, validate_stdin_against_corpus
+from asdecided.services import doctor
+from asdecided.services.doctor import render_doctor_human
+from asdecided.services.gate import build_gate
+from asdecided.services.validate import validate_directory, validate_stdin_against_corpus
 
 
 @pytest.fixture(autouse=True)

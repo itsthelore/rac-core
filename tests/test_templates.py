@@ -1,26 +1,26 @@
-"""Tests for rac.core.templates — the canonical template registry (v0.7.10).
+"""Tests for asdecided.core.templates — the canonical template registry (v0.7.10).
 
 Bundled templates are part of RAC's compatibility contract (ADR-021): every
 supported artifact type must have a packaged template that classifies as its
 type, passes structural validation, and stays aligned with the spec-derived
-`rac schema --template` render so the two sources cannot drift.
+`decided schema --template` render so the two sources cannot drift.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from rac.core.artifacts import ARTIFACT_SPECS
-from rac.core.classification import classify
-from rac.core.markdown import parse
-from rac.core.schema import schema_reference
-from rac.core.templates import (
+from asdecided.core.artifacts import ARTIFACT_SPECS
+from asdecided.core.classification import classify
+from asdecided.core.markdown import parse
+from asdecided.core.schema import schema_reference
+from asdecided.core.templates import (
     TemplateNotFound,
     available_templates,
     load_template,
 )
-from rac.core.validation import has_errors, validate
-from rac.output.templates import render_schema_template
+from asdecided.core.validation import has_errors, validate
+from asdecided.output.templates import render_schema_template
 
 SPEC_NAMES = [spec.name for spec in ARTIFACT_SPECS]
 
@@ -67,5 +67,5 @@ def test_template_passes_structural_validation(name):
 @pytest.mark.parametrize("name", SPEC_NAMES)
 def test_template_matches_spec_derived_render(name):
     # Drift guard: the bundled file must equal the spec-derived render, so the
-    # creation template and `rac schema --template` stay one source of truth.
+    # creation template and `decided schema --template` stay one source of truth.
     assert load_template(name) == render_schema_template(schema_reference(name))

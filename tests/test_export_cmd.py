@@ -1,4 +1,4 @@
-"""Tests for the v0.11.0 `rac export` command (roadmap v0.11.0, Initiatives 1+3).
+"""Tests for the v0.11.0 `decided export` command (roadmap v0.11.0, Initiatives 1+3).
 
 The export payload and the Portal HTML are public contracts (ADR-007, viewer
 contract v1): the JSON golden pins the payload byte-for-byte, the HTML test
@@ -7,11 +7,11 @@ seam, and the drift guard fails when the rac-localview viewer source changes
 without re-vendoring (Initiative 2's mitigation).
 
 The golden lives here rather than in tests/test_golden.py because it needs a
-case-specific `rac.__version__` monkeypatch (the one environment-derived
+case-specific `asdecided.__version__` monkeypatch (the one environment-derived
 payload field). Same mechanism otherwise — refresh after an intentional
 change with:
 
-    RAC_UPDATE_GOLDEN=1 python -m pytest tests/test_export_cmd.py
+    DECIDED_UPDATE_GOLDEN=1 python -m pytest tests/test_export_cmd.py
 """
 
 from __future__ import annotations
@@ -25,14 +25,14 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-import rac
-from rac.cli import main
-from rac.output.portal import PortalSeamMissing, render_export_html
-from rac.services.export import build_corpus_export
+import asdecided
+from asdecided.cli import main
+from asdecided.output.portal import PortalSeamMissing, render_export_html
+from asdecided.services.export import build_corpus_export
 
 REPO_ROOT = Path(__file__).parent.parent
 GOLDEN = Path(__file__).parent / "golden" / "export_json.txt"
-RAC_LOCALVIEW = REPO_ROOT / "rac-localview"
+DECIDED_LOCALVIEW = REPO_ROOT / "rac-localview"
 
 # The empty data seam exactly as the shell-only viewer build emits it.
 SEAM = '<script type="application/json" id="lore-export"></script>'
@@ -40,8 +40,8 @@ SEAM = '<script type="application/json" id="lore-export"></script>'
 
 def _shell() -> str:
     return (
-        resources.files("rac.templates")
-        .joinpath("portal/lore-portal-shell.html")
+        resources.files("asdecided.templates")
+        .joinpath("portal/asdecided-portal-shell.html")
         .read_text(encoding="utf-8")
     )
 
@@ -145,15 +145,15 @@ def test_golden_export_json(capsys, monkeypatch):
     rc = main(["export", "tests/fixtures/export"])
     out = capsys.readouterr().out
 
-    if os.environ.get("RAC_UPDATE_GOLDEN") == "1":
+    if os.environ.get("DECIDED_UPDATE_GOLDEN") == "1":
         GOLDEN.parent.mkdir(parents=True, exist_ok=True)
         GOLDEN.write_text(out, encoding="utf-8")
 
     assert rc == 0
     assert out == GOLDEN.read_text(encoding="utf-8"), (
-        f"Output of `rac export tests/fixtures/export` drifted from {GOLDEN}.\n"
+        f"Output of `decided export tests/fixtures/export` drifted from {GOLDEN}.\n"
         "If the change is intentional, refresh with: "
-        "RAC_UPDATE_GOLDEN=1 python -m pytest tests/test_export_cmd.py"
+        "DECIDED_UPDATE_GOLDEN=1 python -m pytest tests/test_export_cmd.py"
     )
 
 
@@ -254,7 +254,7 @@ def test_payload_is_script_safe():
 
 def test_seam_missing_raises_and_cli_exits_2(monkeypatch, capsys):
     export = build_corpus_export(fixture_path("export"))
-    monkeypatch.setattr("rac.output.portal._load_shell", lambda: "<html></html>")
+    monkeypatch.setattr("asdecided.output.portal._load_shell", lambda: "<html></html>")
     with pytest.raises(PortalSeamMissing):
         render_export_html(export)
     with pytest.raises(SystemExit) as exc:
@@ -267,12 +267,12 @@ def test_seam_missing_raises_and_cli_exits_2(monkeypatch, capsys):
 
 
 def test_viewer_source_drift_guard():
-    """Re-implements the normative hash from rac-localview/scripts/vendor-portal-shell.mjs."""
-    if not RAC_LOCALVIEW.is_dir():
+    """Re-implements the normative hash from asdecided-localview/scripts/vendor-portal-shell.mjs."""
+    if not DECIDED_LOCALVIEW.is_dir():
         pytest.skip("rac-localview/ not present (installed-package context)")
 
     provenance = json.loads(
-        (REPO_ROOT / "src/rac/templates/portal/provenance.json").read_text(encoding="utf-8")
+        (REPO_ROOT / "src/asdecided/templates/portal/provenance.json").read_text(encoding="utf-8")
     )
 
     def collect(base: Path, exclude: tuple[str, ...] = ()) -> list[str]:
@@ -280,22 +280,22 @@ def test_viewer_source_drift_guard():
         for p in base.rglob("*"):
             if not p.is_file():
                 continue
-            rel = p.relative_to(RAC_LOCALVIEW).as_posix()
+            rel = p.relative_to(DECIDED_LOCALVIEW).as_posix()
             if any(rel == ex or rel.startswith(ex + "/") for ex in exclude):
                 continue
             out.append(rel)
         return out
 
     files = sorted(
-        collect(RAC_LOCALVIEW / "src/viewer", exclude=("src/viewer/sample",))
-        + collect(RAC_LOCALVIEW / "src/components")
-        + collect(RAC_LOCALVIEW / "src/styles")
+        collect(DECIDED_LOCALVIEW / "src/viewer", exclude=("src/viewer/sample",))
+        + collect(DECIDED_LOCALVIEW / "src/components")
+        + collect(DECIDED_LOCALVIEW / "src/styles")
         + ["vite.config.viewer.ts", "scripts/build-viewer-artifact.mjs"]
     )
 
     digest = hashlib.sha256()
     for rel in files:
-        content = (RAC_LOCALVIEW / rel).read_text(encoding="utf-8").replace("\r\n", "\n")
+        content = (DECIDED_LOCALVIEW / rel).read_text(encoding="utf-8").replace("\r\n", "\n")
         digest.update(rel.encode("utf-8"))
         digest.update(b"\0")
         digest.update(content.encode("utf-8"))

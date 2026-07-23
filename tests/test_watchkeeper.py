@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.output import render_watchkeeper_json
-from rac.services.watchkeeper import (
+from asdecided.cli import main
+from asdecided.output import render_watchkeeper_json
+from asdecided.services.watchkeeper import (
     REASON_BROKEN_RELATIONSHIP,
     REASON_VALIDATION_REGRESSION,
     build_watchkeeper_report,

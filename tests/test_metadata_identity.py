@@ -8,12 +8,12 @@ canonical IDs surface through the repository duplicate-identifier path.
 
 from __future__ import annotations
 
-from rac.core.artifacts import spec_for
-from rac.core.identity import artifact_identifier, identity_conflict
-from rac.core.markdown import parse
-from rac.core.validation import has_errors, validate
-from rac.services.index import build_repository_index
-from rac.services.relationships import validate_relationships
+from asdecided.core.artifacts import spec_for
+from asdecided.core.identity import artifact_identifier, identity_conflict
+from asdecided.core.markdown import parse
+from asdecided.core.validation import has_errors, validate
+from asdecided.services.index import build_repository_index
+from asdecided.services.relationships import validate_relationships
 
 DECISION_BODY = """# Some Decision
 

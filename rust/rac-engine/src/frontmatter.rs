@@ -1,4 +1,4 @@
-//! Frontmatter parsing — port of `src/rac/core/frontmatter.py` plus the
+//! Frontmatter parsing — port of `src/asdecided/core/frontmatter.py` plus the
 //! bounded PyYAML-1.1 SafeLoader subset it rides on (PORT-CONTRACT.d/02).
 //!
 //! This is parity landmine #1: the oracle is PyYAML 6.0.3's pure-Python
@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use crate::pycompat::{py_float_repr, py_repr_str, py_strip};
 
 // ---------------------------------------------------------------------------
-// Limits (src/rac/core/limits.py)
+// Limits (src/asdecided/core/limits.py)
 // ---------------------------------------------------------------------------
 
 pub const DEFAULT_MAX_FILE_BYTES: u64 = 1 << 20; // 1 MiB
@@ -73,12 +73,12 @@ const ORACLE_READ_OVERFLOW_MIN: i128 = i64::MAX as i128;
 /// `cap + 1` over the CPython bytes allocation limit (PY_SSIZE_T_MAX - 33).
 const ORACLE_READ_TOOLARGE_MIN: i128 = i64::MAX as i128 - 33;
 
-/// The per-file byte cap, honoring `RAC_MAX_FILE_BYTES` — Python `int()`
+/// The per-file byte cap, honoring `DECIDED_MAX_FILE_BYTES` — Python `int()`
 /// semantics (Unicode digits, underscores, unbounded magnitude; unparseable
 /// or non-positive overrides fall back to the default). Shared parser with
 /// `markdown::max_file_bytes_from` so the read and parse stages agree.
 pub fn file_cap() -> FileCap {
-    match std::env::var("RAC_MAX_FILE_BYTES") {
+    match std::env::var("DECIDED_MAX_FILE_BYTES") {
         Ok(raw) => file_cap_from(Some(&raw)),
         Err(_) => FileCap::Cap(DEFAULT_MAX_FILE_BYTES),
     }
@@ -104,7 +104,7 @@ pub fn file_cap_from(raw: Option<&str>) -> FileCap {
 }
 
 // ---------------------------------------------------------------------------
-// Issue / metadata models (src/rac/core/models.py, metadata.py)
+// Issue / metadata models (src/asdecided/core/models.py, metadata.py)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
@@ -4042,8 +4042,8 @@ pub fn load_frontmatter_mapping(raw: &str) -> (Option<Vec<(Yaml, Yaml)>>, Vec<Is
     }
 }
 
-/// Full-document YAML load for the strict `.rac/config.yaml` readers
-/// (`rac gate`, `rac.services.init._parse_config_yaml`): `Ok(root)` on a
+/// Full-document YAML load for the strict `.decided/config.yaml` readers
+/// (`decided gate`, `decided.services.init._parse_config_yaml`): `Ok(root)` on a
 /// clean parse, `Err(problem text)` otherwise. The oracle embeds PyYAML's
 /// exact multi-line exception prose in its `invalid YAML: <exc>` message;
 /// that prose is not byte-reproducible here (stderr is out of parity
@@ -4304,7 +4304,7 @@ fn validate_fields(
 }
 
 // ---------------------------------------------------------------------------
-// parse_file support (src/rac/core/markdown.py read stage) — the frontmatter
+// parse_file support (src/asdecided/core/markdown.py read stage) — the frontmatter
 // contract owns the wordings; the markdown module sequences the issues.
 // ---------------------------------------------------------------------------
 
@@ -4313,7 +4313,7 @@ pub fn oversize_file_issue(cap: u64) -> Issue {
     Issue {
         severity: "error",
         code: "artifact-oversize".to_string(),
-        message: format!("artifact exceeds the {cap}-byte file cap (set RAC_MAX_FILE_BYTES to raise it)"),
+        message: format!("artifact exceeds the {cap}-byte file cap (set DECIDED_MAX_FILE_BYTES to raise it)"),
         line: Some(1),
     }
 }
@@ -4324,7 +4324,7 @@ pub fn oversize_parse_issue(cap: u64) -> Issue {
     Issue {
         severity: "error",
         code: "artifact-oversize".to_string(),
-        message: format!("artifact exceeds the {cap}-byte parse cap (set RAC_MAX_FILE_BYTES to raise it)"),
+        message: format!("artifact exceeds the {cap}-byte parse cap (set DECIDED_MAX_FILE_BYTES to raise it)"),
         line: Some(1),
     }
 }

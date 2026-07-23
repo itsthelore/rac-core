@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 
-from rac import cli
-from rac.services.note_ingest import (
+from asdecided import cli
+from asdecided.services.note_ingest import (
     LogseqConverter,
     NotionConverter,
     ObsidianConverter,

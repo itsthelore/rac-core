@@ -9,14 +9,14 @@ It runs the same coding task twice against the same client — once with no MCP
 server, once with RAC Guide connected — and shows the behavioural difference.
 A stranger can reproduce it from this file alone.
 
-The demo is specified by `rac/designs/guide-grounding-demo.md` and implements
-`rac/roadmaps/v0.10.x-guide/v0.10.2-guide-grounding-demo.md`. The headline
+The demo is specified by `decisions/designs/guide-grounding-demo.md` and implements
+`decisions/roadmaps/v0.10.x-guide/v0.10.2-guide-grounding-demo.md`. The headline
 client is **Claude Code** (best MCP tool-calling reliability of the target
 clients at the time of design).
 
 ## The scenario
 
-The corpus in `examples/guide/rac/` records a real-shaped decision for a
+The corpus in `examples/guide/decisions/` records a real-shaped decision for a
 fictional user-management service called **Meridian**:
 
 - **ADR-001 — Soft-Delete User Records** (`GUIDE-KTW9YBDWDBFM`): user rows are
@@ -91,7 +91,7 @@ changes to the demo corpus.
 **Command form:**
 
 ```bash
-claude mcp add lore -- rac mcp --root /absolute/path/to/examples/guide
+claude mcp add lore -- decided-mcp --root /absolute/path/to/examples/guide
 ```
 
 **`.mcp.json` form** (in the project root):
@@ -99,9 +99,9 @@ claude mcp add lore -- rac mcp --root /absolute/path/to/examples/guide
 ```json
 {
   "mcpServers": {
-    "lore": {
-      "command": "rac",
-      "args": ["mcp", "--root", "/absolute/path/to/examples/guide"]
+    "asdecided": {
+      "command": "decided-mcp",
+      "args": ["--root", "/absolute/path/to/examples/guide"]
     }
   }
 }
@@ -154,18 +154,18 @@ That difference — Run 1 violates, Run 2 cites and complies — is the demo.
 ### Verify the grounded path is mechanically possible
 
 The grounded run depends on a natural search term actually surfacing ADR-001.
-You can confirm that without an API key, using `rac find` (the same matching
+You can confirm that without an API key, using `decided find` (the same matching
 `search_artifacts` uses):
 
 ```bash
-rac find "delete user" examples/guide
-rac find "delete" examples/guide
-rac find "soft-delete" examples/guide
+decided find "delete user" examples/guide
+decided find "delete" examples/guide
+decided find "soft-delete" examples/guide
 ```
 
 Each returns `GUIDE-KTW9YBDWDBFM  decision  ADR-001: Soft-Delete User Records`.
 A raw MCP client (the `mcp` Python SDK over stdio) against
-`rac mcp --root examples/guide` returns the same match from `search_artifacts`,
+`decided-mcp --root examples/guide` returns the same match from `search_artifacts`,
 and `get_artifact` / `get_related` return the decision with its full content
 and its connected requirement, design, and roadmap. This is pinned by the test
 suite (`tests/test_dogfood.py`, the `guide demo searchability` tests).
@@ -186,7 +186,7 @@ asserted from a single run.
   ("there's a soft-delete policy") does **not** count.
 - **Re-run trigger:** the measurement is re-run before release and after **any**
   change to the four tool descriptions (the design contract in
-  `rac/designs/guide-tool-surface.md`). A miss feeds back into description text,
+  `decisions/designs/guide-tool-surface.md`). A miss feeds back into description text,
   never into the prompt.
 
 ### Run-log template (fill when the measurement is executed)
@@ -226,7 +226,7 @@ Notes:
 ## Recording shot list (at most 90 seconds)
 
 One contrast pair, real time, no edits beyond trimming, real tool calls
-visible. Shot order per `rac/designs/guide-grounding-demo.md`:
+visible. Shot order per `decisions/designs/guide-grounding-demo.md`:
 
 1. **The task prompt** — show the verbatim prompt once, on screen long enough
    to read.

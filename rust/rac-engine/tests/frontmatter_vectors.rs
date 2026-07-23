@@ -124,7 +124,7 @@ fn enc_yaml(v: &Yaml) -> Value {
         }),
         Yaml::Set(items) => {
             let mut encoded: Vec<Value> = items.iter().map(enc_yaml).collect();
-            encoded.sort_by_key(|e| canon(e));
+            encoded.sort_by_key(canon);
             json!({"t": "set", "v": encoded})
         }
     }
@@ -316,7 +316,7 @@ fn run_file_pipeline(path: &str) -> (Vec<Issue>, Option<ArtifactMetadata>, Vec<I
     (read_issues, metadata, metadata_issues)
 }
 
-/// Files + env-cap cases share the RAC_MAX_FILE_BYTES env var, so they run
+/// Files + env-cap cases share the DECIDED_MAX_FILE_BYTES env var, so they run
 /// inside a single test (tests are threads of one process).
 #[test]
 fn files_and_env_cap_match_oracle() {
@@ -327,9 +327,9 @@ fn files_and_env_cap_match_oracle() {
 
     for (n, case) in v["files"].as_array().unwrap().iter().enumerate() {
         let name = case["name"].as_str().unwrap();
-        std::env::remove_var("RAC_MAX_FILE_BYTES");
+        std::env::remove_var("DECIDED_MAX_FILE_BYTES");
         if let Some(env) = case["env"].as_str() {
-            std::env::set_var("RAC_MAX_FILE_BYTES", env);
+            std::env::set_var("DECIDED_MAX_FILE_BYTES", env);
         }
         let dir = root.join(format!("case_{n}"));
         fs::create_dir_all(&dir).unwrap();
@@ -372,9 +372,9 @@ fn files_and_env_cap_match_oracle() {
     }
 
     for case in v["env_cap"].as_array().unwrap() {
-        std::env::remove_var("RAC_MAX_FILE_BYTES");
+        std::env::remove_var("DECIDED_MAX_FILE_BYTES");
         if let Some(val) = case["value"].as_str() {
-            std::env::set_var("RAC_MAX_FILE_BYTES", val);
+            std::env::set_var("DECIDED_MAX_FILE_BYTES", val);
         }
         assert_eq!(
             file_cap(),
@@ -383,7 +383,7 @@ fn files_and_env_cap_match_oracle() {
             case["value"]
         );
     }
-    std::env::remove_var("RAC_MAX_FILE_BYTES");
+    std::env::remove_var("DECIDED_MAX_FILE_BYTES");
 
     // Oracle read-crash zone (empirical, CPython 3.11; see FileCap docs):
     // fh.read(cap + 1) raises uncaught for caps at or above 2^63 - 34.

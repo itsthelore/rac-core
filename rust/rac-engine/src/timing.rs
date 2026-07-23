@@ -1,12 +1,12 @@
 //! Opt-in, stderr-only phase timing for performance diagnosis.
 //!
-//! `RAC_TIMING` is deliberately outside every output/parity contract. When it
+//! `DECIDED_TIMING` is deliberately outside every output/parity contract. When it
 //! is unset these helpers do not read clocks and emit nothing. Timing lines do
 //! not contain paths, queries, identifiers, or document content.
 
 use std::time::{Duration, Instant};
 
-pub const ENV: &str = "RAC_TIMING";
+pub const ENV: &str = "DECIDED_TIMING";
 
 pub fn enabled() -> bool {
     std::env::var_os(ENV).is_some()
@@ -24,7 +24,7 @@ pub fn emit(operation: &'static str, duration: Duration, counters: &[(&'static s
         return;
     }
     eprint!(
-        "rac-timing: op={operation} duration_ms={:.3}",
+        "decided-timing: op={operation} duration_ms={:.3}",
         duration.as_secs_f64() * 1000.0
     );
     for (name, value) in counters {

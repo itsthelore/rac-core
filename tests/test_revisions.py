@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from rac.services.revisions import (
+from asdecided.services.revisions import (
     NotAGitRepository,
     RevisionNotFound,
     materialized_revision,

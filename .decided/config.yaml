@@ -1,0 +1,21 @@
+repository_key: RAC
+
+# External ticketing provider (ADR-087, ADR-093). Roadmap intent lives in the
+# corpus; execution is tracked in GitHub issues, linked from a live artifact's
+# `## Related Tickets` section. `decided validate` format-lints those references as
+# `owner/repo#123` or a URL — offline; the engine never fetches issue state.
+ticketing:
+  provider: github
+
+# Warnings-first onboarding (ADR-053), dogfooded: RAC's own corpus predates the
+# v0.17.1 requirement-quality checks (29148 / EARS / BCP-14, ADR-056), so they are
+# disabled here pending incremental cleanup. The checks ship at full strength for
+# adopting repositories; this is the same gradient a new adopter would use to take
+# RAC's gate green on day one and tighten over time.
+validation:
+  rules:
+    requirement-normative-keyword: off   # BCP-14: lowercase shall/should (error)
+    requirement-not-singular: off        # 29148: one normative statement per line
+    requirement-non-ears: off            # EARS: a line with no SHALL/SHOULD/MAY
+    requirement-ears-clause: off         # EARS: "If …" without a "then" response
+    roadmap-no-advancement-link: off     # roadmap links no requirement/decision

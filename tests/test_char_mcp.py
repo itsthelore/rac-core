@@ -15,7 +15,7 @@ The gaps these close (verified unpinned in the existing suite):
   per-instance-memoized, or lazily-hashed rewrite would pass every current test
   yet serve stale MCP responses; these tests make that rewrite fail (finding #1).
 - Cache parity is never checked *under budget truncation* (finding #2).
-- ``default_cache_dir()`` precedence (``RAC_CACHE_DIR`` > ``$XDG_CACHE_HOME`` >
+- ``default_cache_dir()`` precedence (``DECIDED_CACHE_DIR`` > ``$XDG_CACHE_HOME`` >
   ``~/.cache``) is untested (finding #4).
 - ``get_related`` edge-cap overflow, reported-depth clamping, and the
   non-truncatable ``neighborhood`` field are unpinned at the tool level
@@ -37,12 +37,12 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.core.corpus import corpus_content_hash
-from rac.core.limits import MAX_RELATED_EDGES, MAX_TRAVERSAL_DEPTH
-from rac.mcp.budget import DEFAULT_BUDGET, HINT_RELATED
-from rac.mcp.server import build_server
-from rac.services import derived_cache
-from rac.services.derived_cache import DerivedIndexCache, default_cache_dir
+from asdecided.core.corpus import corpus_content_hash
+from asdecided.core.limits import MAX_RELATED_EDGES, MAX_TRAVERSAL_DEPTH
+from asdecided.mcp.budget import DEFAULT_BUDGET, HINT_RELATED
+from asdecided.mcp.server import build_server
+from asdecided.services import derived_cache
+from asdecided.services.derived_cache import DerivedIndexCache, default_cache_dir
 
 CORPUS = fixture_path("mcp", "corpus")
 
@@ -210,22 +210,22 @@ def test_cache_parity_under_budget_truncation(tmp_path, name, args, budget):
 
 # =============================================================================
 # Finding #4 (MEDIUM): default_cache_dir() resolution precedence.
-# RAC_CACHE_DIR (absolute override) > $XDG_CACHE_HOME/rac/derived > ~/.cache/rac/derived.
+# DECIDED_CACHE_DIR (absolute override) > $XDG_CACHE_HOME/rac/derived > ~/.cache/rac/derived.
 # =============================================================================
 
 
 def test_default_cache_dir_precedence(tmp_path, monkeypatch):
     # XDG tier: $XDG_CACHE_HOME/rac/derived when no override is set.
-    monkeypatch.delenv("RAC_CACHE_DIR", raising=False)
+    monkeypatch.delenv("DECIDED_CACHE_DIR", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
     assert default_cache_dir() == tmp_path / "xdg" / "rac" / "derived"
 
-    # Override tier: RAC_CACHE_DIR wins verbatim (no rac/derived suffix appended).
-    monkeypatch.setenv("RAC_CACHE_DIR", str(tmp_path / "override"))
+    # Override tier: DECIDED_CACHE_DIR wins verbatim (no rac/derived suffix appended).
+    monkeypatch.setenv("DECIDED_CACHE_DIR", str(tmp_path / "override"))
     assert default_cache_dir() == tmp_path / "override"
 
     # Home fallback: neither env var set -> ~/.cache/rac/derived.
-    monkeypatch.delenv("RAC_CACHE_DIR", raising=False)
+    monkeypatch.delenv("DECIDED_CACHE_DIR", raising=False)
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     assert default_cache_dir() == tmp_path / "home" / ".cache" / "rac" / "derived"

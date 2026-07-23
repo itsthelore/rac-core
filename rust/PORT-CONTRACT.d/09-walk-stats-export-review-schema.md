@@ -3,9 +3,9 @@
 Scope: the deterministic corpus walk (`rac.core.fs` + `rac.core.corpus`), and the
 `stats`, `export`, `review`, `schema`/`templates` commands. Every claim below was
 verified against the oracle (`.venv-oracle/bin/rac`, Python 3.11.15) unless marked
-`UNVERIFIED`. Source files: `src/rac/core/fs.py`, `src/rac/core/corpus.py`,
-`src/rac/services/stats.py`, `src/rac/services/export.py`,
-`src/rac/services/review.py`, `src/rac/core/schema.py`, `src/rac/output/{human,json,sarif,templates}.py`.
+`UNVERIFIED`. Source files: `src/asdecided/core/fs.py`, `src/asdecided/core/corpus.py`,
+`src/asdecided/services/stats.py`, `src/asdecided/services/export.py`,
+`src/asdecided/services/review.py`, `src/asdecided/core/schema.py`, `src/asdecided/output/{human,json,sarif,templates}.py`.
 
 The producing oracle version string is `0.1.dev50+g21c8be403` (setuptools_scm). This
 string appears verbatim in two payloads (`export --json` `rac_version`, and every SARIF
@@ -23,7 +23,7 @@ exactly one `\n`. So `stdout == render() + "\n"`. Exception chains noted per-com
 `\n\n` — see §5.4).
 
 ### 0.2 Human output color is TTY-gated (and computed ONCE at import)
-`src/rac/output/human.py`:
+`src/asdecided/output/human.py`:
 ```python
 _USE_COLOR = sys.stdout.isatty()
 def _c(text, code): return text if not _USE_COLOR else f"\033[{code}m{text}\033[0m"
@@ -77,7 +77,7 @@ round-half-even but the *string* forms differ (`0.0` vs `0.0`; but e.g. `10.0` i
 
 ---
 
-## 1. The corpus walk — `find_markdown_files` (`src/rac/core/fs.py`)
+## 1. The corpus walk — `find_markdown_files` (`src/asdecided/core/fs.py`)
 
 This is THE traversal every command in this section (and most others) uses. Get it
 byte-exact or every downstream ordering diverges.
@@ -114,7 +114,7 @@ def find_markdown_files(directory: str, recursive: bool = True) -> list[Path]:
 ### 1.3 Hidden exclusion (dirs AND files)
 The filter drops any path where **any component of the path relative to root** starts with
 `.`. This excludes:
-- Hidden directories at any depth: `.git/`, `.venv/`, `.rac/`, `.hidden/` → all their `.md`
+- Hidden directories at any depth: `.git/`, `.venv/`, `.decided/`, `.hidden/` → all their `.md`
   files dropped.
 - Hidden files: `.dotfile.md`, `.foo.md` dropped.
 - Note it is `part.startswith(".")` on each **relative** part, so `root` itself being inside a
@@ -191,8 +191,8 @@ time. Therefore:
 - Even where the cache IS used (validate etc.), the design contract is byte-identical output:
   `CorpusCache` only short-circuits reparse of byte-unchanged files, and identical bytes reparse
   to an identical `Product` (docstring REQ-003). The flag to disable globally is env
-  `RAC_NO_CACHE=<nonempty>`; per-invocation `--no-cache`. `_cache_enabled(args) = args.cache and
-  not os.environ.get("RAC_NO_CACHE")`. For THIS section, treat the cache as irrelevant to output.
+  `DECIDED_NO_CACHE=<nonempty>`; per-invocation `--no-cache`. `_cache_enabled(args) = args.cache and
+  not os.environ.get("DECIDED_NO_CACHE")`. For THIS section, treat the cache as irrelevant to output.
 
 ---
 

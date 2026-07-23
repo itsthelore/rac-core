@@ -1,4 +1,4 @@
-"""Tests for rac.core.frontmatter — the metadata envelope parser (ADR-025).
+"""Tests for asdecided.core.frontmatter — the metadata envelope parser (ADR-025).
 
 Strictness is the contract: malformed YAML, duplicate keys, unknown fields,
 wrong types, and unsupported schema versions are actionable errors; artifacts
@@ -7,9 +7,9 @@ without frontmatter are untouched; body line numbers stay file-accurate.
 
 from __future__ import annotations
 
-from rac.core.frontmatter import parse_frontmatter, split_frontmatter
-from rac.core.markdown import parse
-from rac.core.validation import has_errors, validate
+from asdecided.core.frontmatter import parse_frontmatter, split_frontmatter
+from asdecided.core.markdown import parse
+from asdecided.core.validation import has_errors, validate
 
 VALID = """---
 schema_version: 1

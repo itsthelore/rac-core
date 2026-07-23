@@ -31,11 +31,11 @@ import json
 import tempfile
 from pathlib import Path
 
-from rac.core.corpus import corpus_content_hash
-from rac.core.models import Issue
-from rac.services.derived_cache import SCHEMA_VERSION, build_derived_index
-from rac.services.freshness import FileState
-from rac.services.index_store import (
+from asdecided.core.corpus import corpus_content_hash
+from asdecided.core.models import Issue
+from asdecided.services.derived_cache import SCHEMA_VERSION, build_derived_index
+from asdecided.services.freshness import FileState
+from asdecided.services.index_store import (
     ValidationRow,
     _encode_validation_store,  # noqa: PLC2701 — byte-exact vector source
     manifest_root_key,
@@ -43,7 +43,7 @@ from rac.services.index_store import (
     store_dir,
     write_store,
 )
-from rac.services.index_format import Writer, encode_segment
+from asdecided.services.index_format import Writer, encode_segment
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parents[1] / "rac-engine/tests/vectors/index_store.json"

@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac import __version__
-from rac.cli import main
+from asdecided import __version__
+from asdecided.cli import main
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -92,7 +92,7 @@ def test_diff_json_shape(capsys):
 
 
 def test_broken_pipe_exits_quietly():
-    # A downstream consumer closing the pipe early (`rac export … | head`) must
+    # A downstream consumer closing the pipe early (`decided export … | head`) must
     # not dump a BrokenPipeError traceback: stderr stays clean, the process
     # exits non-zero without "Exception ignored" shutdown noise. Runs in a
     # subprocess because EPIPE only occurs on a real OS pipe.
@@ -100,7 +100,7 @@ def test_broken_pipe_exits_quietly():
         [
             sys.executable,
             "-c",
-            "from rac.cli import main; raise SystemExit(main(['export', 'rac', '--json']))",
+            "from asdecided.cli import main; raise SystemExit(main(['export', 'rac', '--json']))",
         ],
         cwd=REPO_ROOT,
         stdout=subprocess.PIPE,

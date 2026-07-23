@@ -7,16 +7,16 @@ on:
   pull_request:
     paths:
       - "rust/**"
-      - "rac/**"
-      - "src/rac/**"
+      - "decisions/**"
+      - "src/asdecided/**"
       - "pyproject.toml"
       - ".github/workflows/rust-spike.yml"
   push:
     branches: [main]
     paths:
       - "rust/**"
-      - "rac/**"
-      - "src/rac/**"
+      - "decisions/**"
+      - "src/asdecided/**"
       - "pyproject.toml"
       - ".github/workflows/rust-spike.yml"
 
@@ -65,20 +65,20 @@ jobs:
 
       - name: Guard 1 — vendored registry matches rac-spec
         env:
-          RAC_SPEC_DIR: ${{ github.workspace }}/rac-spec
+          DECIDED_SPEC_DIR: ${{ github.workspace }}/rac-spec
         run: python rust/spec/sync_spec.py
 
       - name: Guard 2 — Rust reproduces rac-spec contract bytes
         run: |
           python rust/tools/conformance_certify.py \
             --spec-dir "${{ github.workspace }}/rac-spec" \
-            --engine "rust=${{ github.workspace }}/rust/target/release/rac"
+            --engine "rust=${{ github.workspace }}/rust/target/release/decided"
 
       - name: Live RAC corpus invariants
         run: |
           python rust/tools/live_corpus_invariants.py \
-            --engine rust/target/release/rac \
-            --corpus rac
+            --engine rust/target/release/decided \
+            --corpus decisions
 
   retirement-certification:
     name: Bounded Python retirement certification
@@ -104,11 +104,11 @@ jobs:
         run: |
           python -m venv .venv-retirement
           .venv-retirement/bin/pip install --quiet -e .
-          .venv-retirement/bin/rac --version
+          .venv-retirement/bin/python -m asdecided.cli --version
 
       - name: Build native release binary
         working-directory: rust
-        run: cargo build --release --locked -p rac
+        run: cargo build --release --locked -p decided
 
       - name: Checkout authoritative rac-spec fixtures
         uses: actions/checkout@v4
@@ -120,5 +120,5 @@ jobs:
         run: |
           python rust/tools/conformance_certify.py \
             --spec-dir "${{ github.workspace }}/rac-spec" \
-            --engine "python=${{ github.workspace }}/.venv-retirement/bin/rac" \
-            --engine "rust=${{ github.workspace }}/rust/target/release/rac"
+            --engine "python=${{ github.workspace }}/.venv-retirement/bin/python -m asdecided.cli" \
+            --engine "rust=${{ github.workspace }}/rust/target/release/decided"

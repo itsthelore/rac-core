@@ -1,4 +1,4 @@
-"""Tests for the v0.13.6 `rac export --okf` OKF bundle view (ADR-048).
+"""Tests for the v0.13.6 `decided export --okf` OKF bundle view (ADR-048).
 
 The bundle is a derived OKF v0.1 view of the corpus: one Markdown file per typed
 artifact (front matter projecting the RAC ``type`` to its OKF ``type``), plus a
@@ -14,11 +14,11 @@ from datetime import UTC, datetime
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.artifacts import ARTIFACT_SPECS
-from rac.output.okf import OKF_TYPE, render_okf_bundle
-from rac.services.export import build_corpus_export
-from rac.services.recency import ArtifactRecency, RecencyReport
+from asdecided.cli import main
+from asdecided.core.artifacts import ARTIFACT_SPECS
+from asdecided.output.okf import OKF_TYPE, render_okf_bundle
+from asdecided.services.export import build_corpus_export
+from asdecided.services.recency import ArtifactRecency, RecencyReport
 
 _DAY = datetime(2026, 6, 14, 9, 0, tzinfo=UTC)
 _ROOT = fixture_path("export")

@@ -1,4 +1,4 @@
-//! Portfolio statistics (`rac.services.stats`), per PORT-CONTRACT.d/09 §2.
+//! Portfolio statistics (`decided.services.stats`), per PORT-CONTRACT.d/09 §2.
 //!
 //! Walks the corpus, classifies each file, and aggregates per family
 //! (requirement features, decisions, roadmaps, prompts, designs, unrecognized)

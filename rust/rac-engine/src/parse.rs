@@ -1,4 +1,4 @@
-//! File -> parsed artifact: the oracle's `rac.core.markdown.parse` /
+//! File -> parsed artifact: the oracle's `decided.core.markdown.parse` /
 //! `parse_file` composition of the markdown body walk (`markdown.rs`) with
 //! the frontmatter envelope (`frontmatter.rs`), per PORT-CONTRACT.d/04 §0
 //! and PORT-CONTRACT.d/09 §1.7.
@@ -112,12 +112,12 @@ fn attach_metadata(product: Product) -> Artifact {
     }
 }
 
-/// `rac.core.markdown.parse(text, source_path)` with metadata attached.
+/// `decided.core.markdown.parse(text, source_path)` with metadata attached.
 pub fn parse_text(text: &str, source_path: &str) -> Artifact {
     attach_metadata(markdown::parse(text, source_path))
 }
 
-/// `rac.core.markdown.parse_file(path)` with metadata attached.
+/// `decided.core.markdown.parse_file(path)` with metadata attached.
 pub fn parse_file(path: &str) -> Artifact {
     attach_metadata(markdown::parse_file(path))
 }

@@ -14,20 +14,20 @@ import json
 import random
 import time
 
-from rac.core import markdown as md_mod
-from rac.core.frontmatter import parse_frontmatter
-from rac.core.markdown import _BRACKET_RE, _CANONICAL_ID_RE, parse, parse_file
-from rac.core.metadata import ID_RE
-from rac.core.validation import (
+from asdecided.core import markdown as md_mod
+from asdecided.core.frontmatter import parse_frontmatter
+from asdecided.core.markdown import _BRACKET_RE, _CANONICAL_ID_RE, parse, parse_file
+from asdecided.core.metadata import ID_RE
+from asdecided.core.validation import (
     _AMBIGUOUS_RE,
     _EARS_IF_RE,
     _NORMATIVE_RE,
     _QUARTER_RE,
     _THEN_RE,
 )
-from rac.mcp.server import build_server
-from rac.services import relationships as rel_mod
-from rac.services.resolve import find_artifacts
+from asdecided.mcp.server import build_server
+from asdecided.services import relationships as rel_mod
+from asdecided.services.resolve import find_artifacts
 
 DECISION = (
     "---\nschema_version: 1\nid: {id}\ntype: decision\n---\n# {title}\n\n"
@@ -82,7 +82,7 @@ def _get_related(root, artifact_id, budget=1_000_000_000):
 
 
 def test_oversize_file_is_reported_not_raised(tmp_path, monkeypatch):
-    monkeypatch.setenv("RAC_MAX_FILE_BYTES", "512")
+    monkeypatch.setenv("DECIDED_MAX_FILE_BYTES", "512")
     big = tmp_path / "big.md"
     big.write_text("# T\n\n" + ("x " * 1000), encoding="utf-8")
     product = parse_file(str(big))  # must not raise
@@ -229,9 +229,9 @@ def test_query_input_is_matched_literally_not_compiled(tmp_path):
 
 
 def test_walk_continues_past_malformed_and_binary(tmp_path, monkeypatch):
-    from rac.core.corpus import walk_corpus
+    from asdecided.core.corpus import walk_corpus
 
-    monkeypatch.setenv("RAC_MAX_FILE_BYTES", "2048")
+    monkeypatch.setenv("DECIDED_MAX_FILE_BYTES", "2048")
     _decision(tmp_path, "good", "RAC-AAAAAAAAAAAA")
     (tmp_path / "binary.md").write_bytes(b"\xff\xfe\x00\x01 not utf8 \x80\x81")
     (tmp_path / "huge.md").write_text("# H\n\n" + ("z " * 4000), encoding="utf-8")

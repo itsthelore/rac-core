@@ -1,6 +1,6 @@
-//! Resolve & search (`rac resolve`, `rac find`) — a port of
-//! `src/rac/services/resolve.py` (+ the index construction in
-//! `src/rac/services/index.py`), per PORT-CONTRACT.d/06.
+//! Resolve & search (`decided resolve`, `decided find`) — a port of
+//! `src/asdecided/services/resolve.py` (+ the index construction in
+//! `src/asdecided/services/index.py`), per PORT-CONTRACT.d/06.
 //!
 //! Landmines reproduced here (contract §15):
 //! - ASCII-only tokenizer (§1) vs full-Unicode casefold/strip in exact
@@ -106,7 +106,7 @@ fn tf(term: &str, tokens: &[String]) -> i64 {
 }
 
 // ---------------------------------------------------------------------------
-// Index entries (rac.services.index.IndexEntry)
+// Index entries (decided.services.index.IndexEntry)
 // ---------------------------------------------------------------------------
 
 /// One searchable row of the repository index.

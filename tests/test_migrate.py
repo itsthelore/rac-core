@@ -1,4 +1,4 @@
-"""Tests for rac.services.migrate and `rac migrate metadata` (v0.7.13).
+"""Tests for asdecided.services.migrate and `decided migrate metadata` (v0.7.13).
 
 Pins the migration contract: idempotent, byte-preserving, unknown documents
 reported not guessed, dry runs write nothing, repaired documents picked up by
@@ -11,18 +11,18 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.core.markdown import parse_file
-from rac.core.validation import has_errors, validate
-from rac.services.create import MissingRepositoryConfig, create_artifact
-from rac.services.init import init_repository
-from rac.services.migrate import (
+from asdecided.cli import main
+from asdecided.core.markdown import parse_file
+from asdecided.core.validation import has_errors, validate
+from asdecided.services.create import MissingRepositoryConfig, create_artifact
+from asdecided.services.init import init_repository
+from asdecided.services.migrate import (
     STATUS_ALREADY_CANONICAL,
     STATUS_MIGRATED,
     STATUS_SKIPPED_UNKNOWN,
     migrate_metadata,
 )
-from rac.services.resolve import OUTCOME_RESOLVED, resolve_artifact
+from asdecided.services.resolve import OUTCOME_RESOLVED, resolve_artifact
 
 LEGACY_DECISION = """# A Legacy Decision
 
@@ -203,7 +203,7 @@ def test_cli_migrate_without_init_exit_2(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["migrate", "metadata", str(tmp_path)])
     assert exc.value.code == 2
-    assert "run `rac init`" in capsys.readouterr().err
+    assert "run `decided init`" in capsys.readouterr().err
 
 
 def test_cli_migrate_not_a_directory_exit_2(repo, capsys):

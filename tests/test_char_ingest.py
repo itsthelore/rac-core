@@ -1,4 +1,4 @@
-"""Characterization tests for the `rac ingest` cluster.
+"""Characterization tests for the `decided ingest` cluster.
 
 Characterization tests added before the rebuild-scale examiner freeze: they pin
 the *current* observable behavior of document ingest, note-tool ingest, and the
@@ -9,7 +9,7 @@ do — nothing here is a correctness judgement.
 Focus areas (behaviors the existing suite left unpinned):
 
 - ``render_vault_ingest_human`` — the full multi-line stdout/summary a user sees
-  for ``rac ingest <dir>`` (preview and write/skip shapes).
+  for ``decided ingest <dir>`` (preview and write/skip shapes).
 - Case-insensitive file-extension dispatch (``FILE.DOCX``, ``notes.Md``,
   ``graph.JSON``).
 - Roam page-title to draft-filename sanitization bytes.
@@ -26,10 +26,10 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac import cli
-from rac.cli import main
-from rac.output.human import render_vault_ingest_human
-from rac.services.ingest import (
+from asdecided import cli
+from asdecided.cli import main
+from asdecided.output.human import render_vault_ingest_human
+from asdecided.services.ingest import (
     MarkdownConverter,
     MarkItDownConverter,
     UnsupportedDocument,
@@ -37,7 +37,7 @@ from rac.services.ingest import (
     converter_for,
     ingest,
 )
-from rac.services.note_ingest import (
+from asdecided.services.note_ingest import (
     LogseqConverter,
     NotionConverter,
     ObsidianConverter,

@@ -1,7 +1,7 @@
 # RAC Watchkeeper composite action (v0.12.3).
 #
 # A thin wrapper: install RAC, resolve the base revision, run one
-# `rac watchkeeper --format github` invocation, and route its outputs —
+# `decided watchkeeper --format github` invocation, and route its outputs —
 # stdout to the step summary, stderr (workflow-command annotations) to the
 # step log. All analysis, rendering, and failure policy live in the Python
 # package (ADR-015); the action never reinterprets exit codes.
@@ -19,9 +19,9 @@ branding:
 inputs:
   path:
     description: >-
-      Corpus directory to compare (passed to `rac watchkeeper`).
+      Corpus directory to compare (passed to `decided watchkeeper`).
     required: false
-    default: "rac"
+    default: "decisions"
   base:
     description: >-
       Base state: a git revision or a directory. Empty (the default)
@@ -30,7 +30,7 @@ inputs:
     default: ""
   fail-on:
     description: >-
-      Failure policy forwarded to `rac watchkeeper --fail-on`:
+      Failure policy forwarded to `decided watchkeeper --fail-on`:
       `error` (fail when review is recommended), `warning` (also fail on
       any warning finding), or `none` (never fail, still report).
     required: false
@@ -40,7 +40,7 @@ inputs:
       Emit inline annotations via workflow commands (`true` or `false`).
     required: false
     default: "true"
-  rac-version:
+  decided-version:
     description: >-
       Exact rac-core version to install from PyPI. Empty
       installs the latest release. Ignored when `install-from` is `source`.
@@ -48,7 +48,7 @@ inputs:
     default: ""
   install-from:
     description: >-
-      Where to install RAC from: `pypi` (the default for consumers) or
+      Where to install AsDecided from: `pypi` (the default for consumers) or
       `source` (the action checkout itself — used by this repository's own
       dogfood job; requires `uses: ./` on a full checkout).
     required: false
@@ -61,19 +61,21 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install RAC
+    - name: Install AsDecided
       shell: bash
       env:
         INSTALL_FROM: ${{ inputs.install-from }}
-        RAC_VERSION: ${{ inputs.rac-version }}
+        DECIDED_VERSION: ${{ inputs.decided-version }}
       run: |
         python -m pip install --quiet --upgrade pip
         if [ "$INSTALL_FROM" = "source" ]; then
-          # The action checkout itself; setuptools-scm needs git metadata,
-          # so this path requires `uses: ./` on a real checkout.
+          (cd "$GITHUB_ACTION_PATH/rust" && cargo build --release --locked -p decided -p decided-mcp)
+          cp "$GITHUB_ACTION_PATH/rust/target/release/decided" \
+             "$GITHUB_ACTION_PATH/rust/target/release/decided-mcp" \
+             "$GITHUB_ACTION_PATH/src/asdecided/bin/"
           python -m pip install --quiet "$GITHUB_ACTION_PATH"
-        elif [ -n "$RAC_VERSION" ]; then
-          python -m pip install --quiet "rac-core==$RAC_VERSION"
+        elif [ -n "$DECIDED_VERSION" ]; then
+          python -m pip install --quiet "rac-core==$DECIDED_VERSION"
         else
           python -m pip install --quiet rac-core
         fi
@@ -90,7 +92,7 @@ runs:
         fi
         # Make sure the base ref exists locally; harmless when it already
         # does, best-effort when the base is a directory or a plain SHA
-        # (rac fails with exit 2 and a clear message if it cannot resolve).
+        # (decided fails with exit 2 and a clear message if it cannot resolve).
         case "$BASE" in
           origin/*)
             REF="${BASE#origin/}"
@@ -114,7 +116,7 @@ runs:
         # stdout becomes the job's step summary; stderr stays in the live
         # step log where the runner parses the annotation commands. The
         # exit code propagates unchanged — policy lives in --fail-on.
-        rac watchkeeper "$INPUT_PATH" \
+        decided watchkeeper "$INPUT_PATH" \
           --base "$WATCHKEEPER_BASE" \
           --format github \
           --fail-on "$FAIL_ON" \

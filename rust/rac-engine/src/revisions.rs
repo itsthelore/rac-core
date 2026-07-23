@@ -1,4 +1,4 @@
-//! Git revision materialization (`rac.services.revisions`) — the only
+//! Git revision materialization (`decided.services.revisions`) — the only
 //! git-consuming module of the watchkeeper path (ADR-043). A revision name
 //! becomes a temporary directory holding the corpus subpath at that
 //! revision, via `git archive --format=tar` (never mutates `.git`: no
@@ -9,14 +9,14 @@
 //! - `git rev-parse --show-toplevel` (cwd = the corpus directory) finds the
 //!   work-tree root; failure -> `not a git repository: <directory>`; a
 //!   missing git binary -> `git executable not found` (both exit 2 at the
-//!   CLI as `rac: <msg>`).
+//!   CLI as `decided: <msg>`).
 //! - `git rev-parse --verify --quiet <rev>^{commit}` (cwd = repo root);
 //!   nonzero -> `unknown revision: <rev>`.
 //! - `git archive --format=tar <rev> -- <pathspec>` (cwd = repo root); a
 //!   NONZERO exit is not an error — the subpath does not exist at that
 //!   revision and an EMPTY corpus is materialized (the fresh-adoption
 //!   "everything added" comparison).
-//! - The temporary directory is prefixed `rac-watchkeeper-` and removed
+//! - The temporary directory is prefixed `decided-watchkeeper-` and removed
 //!   when the materialization guard drops. Its path never appears in any
 //!   output surface (all reported paths are corpus-relative).
 
@@ -26,7 +26,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// The two usage-error surfaces of revision resolution; `message()` is the
-/// text after the CLI's `rac: ` prefix.
+/// text after the CLI's `decided: ` prefix.
 #[derive(Debug)]
 pub enum RevisionError {
     /// `NotAGitRepository` — not inside a git work tree, or no git binary.
@@ -87,7 +87,7 @@ impl Drop for MaterializedRevision {
     }
 }
 
-/// A fresh `rac-watchkeeper-` temp directory under the platform temp root
+/// A fresh `decided-watchkeeper-` temp directory under the platform temp root
 /// (std honors TMPDIR like `tempfile` does).
 fn make_temp_dir() -> io::Result<PathBuf> {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -95,7 +95,7 @@ fn make_temp_dir() -> io::Result<PathBuf> {
     let pid = std::process::id();
     loop {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let candidate = base.join(format!("rac-watchkeeper-{pid}-{n}"));
+        let candidate = base.join(format!("decided-watchkeeper-{pid}-{n}"));
         match std::fs::create_dir(&candidate) {
             Ok(()) => return Ok(candidate),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -306,14 +306,14 @@ mod tests {
 
     #[test]
     fn pax_path_record() {
-        let payload = b"27 path=rac/some-long-name\n";
-        assert_eq!(pax_path(payload).as_deref(), Some("rac/some-long-name"));
+        let payload = b"33 path=decisions/some-long-name\n";
+        assert_eq!(pax_path(payload).as_deref(), Some("decisions/some-long-name"));
     }
 
     #[test]
     fn rejects_escaping_names() {
         assert!(!safe_relative("/abs"));
         assert!(!safe_relative("a/../b"));
-        assert!(safe_relative("rac/d1.md"));
+        assert!(safe_relative("decisions/d1.md"));
     }
 }

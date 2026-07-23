@@ -9,7 +9,7 @@ Measures, per configured engine, over repeated runs:
   (e) peak RSS                  — /usr/bin/time -v, getrusage fallback
 
   (f) search matrix              — no-cache, cold-cache, warm-cache
-  (g) RAC_TIMING phase records  — one warm diagnostic run per query
+  (g) DECIDED_TIMING phase records  — one warm diagnostic run per query
 
 Reports p50/p95/p99 and min/max over repeated runs. Writes plain-text and
 JSON to a results dir (gitignored). Deterministic invocation env: stdio to
@@ -49,7 +49,7 @@ def _scratch_env(scratch):
     env["XDG_STATE_HOME"] = os.path.join(scratch, "state")
     env["XDG_CONFIG_HOME"] = os.path.join(scratch, "config")
     env["XDG_CACHE_HOME"] = os.path.join(scratch, "cache")
-    env.pop("RAC_TIMING", None)
+    env.pop("DECIDED_TIMING", None)
     return env
 
 
@@ -68,7 +68,7 @@ def _time_run(bin_path, args, env):
 
 
 def _time_run_capture(bin_path, args, env):
-    """Run once with captured streams for match counts and RAC_TIMING."""
+    """Run once with captured streams for match counts and DECIDED_TIMING."""
     t0 = time.perf_counter()
     proc = subprocess.run(
         [bin_path] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -118,7 +118,7 @@ def _measure_query(bin_path, args, env, runs, cache_dir, mode):
     times = []
     codes = set()
     query_env = dict(env)
-    query_env["RAC_CACHE_DIR"] = cache_dir
+    query_env["DECIDED_CACHE_DIR"] = cache_dir
     for _ in range(runs):
         if mode == "cold_cache":
             shutil.rmtree(cache_dir, ignore_errors=True)
@@ -263,7 +263,7 @@ def main(argv=None):
 
     # Resolve corpus dirs (relative to repo/tools) and existence + counts.
     present = {}
-    corpus_root = os.environ.get("RAC_PERF_CORPUS_ROOT")
+    corpus_root = os.environ.get("DECIDED_PERF_CORPUS_ROOT")
     for size, path in corpora.items():
         if corpus_root:
             p = os.path.join(corpus_root, "c" + str(size))
@@ -285,7 +285,7 @@ def main(argv=None):
         smallest = min(present, key=lambda s: present[s]["count"])
 
     for ename, ecfg in engines.items():
-        override = "RAC_PERF_" + ename.upper().replace("-", "_") + "_BIN"
+        override = "DECIDED_PERF_" + ename.upper().replace("-", "_") + "_BIN"
         bin_path = os.environ.get(override, ecfg["bin"])
         if not os.path.isabs(bin_path):
             local = os.path.abspath(os.path.join(HERE, bin_path))
@@ -370,7 +370,7 @@ def main(argv=None):
                             context_name, query_name)
 
                         no_cache_env = dict(env)
-                        no_cache_env["RAC_NO_CACHE"] = "1"
+                        no_cache_env["DECIDED_NO_CACHE"] = "1"
                         mode_data["no_cache"] = _measure(
                             bin_path, command, no_cache_env, runs_for(size))
 
@@ -379,13 +379,13 @@ def main(argv=None):
 
                         shutil.rmtree(base, ignore_errors=True)
                         warm_env = dict(env)
-                        warm_env["RAC_CACHE_DIR"] = base
+                        warm_env["DECIDED_CACHE_DIR"] = base
                         _time_run(bin_path, command, warm_env)  # unmeasured prime
                         mode_data["warm_cache"] = _measure_query(
                             bin_path, command, env, runs_for(size), base, "warm_cache")
 
                         timed_env = dict(warm_env)
-                        timed_env["RAC_TIMING"] = "1"
+                        timed_env["DECIDED_TIMING"] = "1"
                         _dt, rc, stdout, stderr = _time_run_capture(
                             bin_path, command, timed_env)
                         try:

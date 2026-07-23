@@ -1,7 +1,6 @@
 Bundled agent skills:
 
-- rac-artifacts  Author and maintain Lore (RAC) Markdown artifacts with the rac CLI.
-- rac-review     Review a Lore (RAC) corpus and work findings worst-first.
-- rac-ingest     Convert legacy documents into valid, linked Lore (RAC) artifacts.
-- rac-import     Reformat one document into one valid Lore (RAC) artifact, with human review.
-- rac-capture    Capture a new decision or requirement into a valid Lore (RAC) artifact.
+- decided-artifacts  Author and maintain AsDecided Markdown artifacts with the decided CLI.
+- decided-review     Review an AsDecided corpus and work findings worst-first.
+- decided-import     Reformat one document into one valid AsDecided artifact, with human review.
+- decided-capture    Capture a new decision or requirement into a valid AsDecided artifact.

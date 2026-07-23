@@ -12,8 +12,8 @@ import json
 import shutil
 from pathlib import Path
 
-from rac import cli
-from rac.services import eval as ev
+from asdecided import cli
+from asdecided.services import eval as ev
 
 EVAL_DIR = Path(__file__).parent / "eval"
 CORPUS = EVAL_DIR / "corpus"
@@ -230,8 +230,8 @@ def test_ci_workflows_never_rebaseline():
 
 
 def test_search_case_consumes_production_order_verbatim():
-    from rac.services.index import build_repository_index
-    from rac.services.resolve import search_index
+    from asdecided.services.index import build_repository_index
+    from asdecided.services.resolve import search_index
 
     entries = build_repository_index(str(CORPUS)).artifacts
     case = ev.QueryCase(
@@ -264,7 +264,7 @@ def test_get_related_scores_incoming_edges():
 def test_additive_evidence_fields_do_not_shift_membership(monkeypatch):
     """REQ-010: scoring compares only returned-id membership, so additive WS2
     evidence/snippet fields on retrieval output cannot move a metric."""
-    from rac.services.index import build_repository_index
+    from asdecided.services.index import build_repository_index
 
     entries = build_repository_index(str(CORPUS)).artifacts
     case = ev.QueryCase(

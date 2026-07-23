@@ -1,4 +1,4 @@
-"""Tests for portfolio statistics (`rac stats`)."""
+"""Tests for portfolio statistics (`decided stats`)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.services.stats import collect_stats
+from asdecided.cli import main
+from asdecided.services.stats import collect_stats
 
 
 def test_collect_counts():

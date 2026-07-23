@@ -1,4 +1,4 @@
-"""Tests for corpus-aware stdin validation — `rac validate - --corpus DIR`.
+"""Tests for corpus-aware stdin validation — `decided validate - --corpus DIR`.
 
 The engine seam behind the generated Claude Code `PreToolUse` pre-edit hook
 (v0.21.17, ADR-067): a proposed document piped on stdin is validated
@@ -17,9 +17,9 @@ import io
 import json
 from pathlib import Path
 
-from rac.cli import main
-from rac.core.markdown import parse
-from rac.services.validate import validate_stdin_against_corpus
+from asdecided.cli import main
+from asdecided.core.markdown import parse
+from asdecided.services.validate import validate_stdin_against_corpus
 
 # --- corpus + document builders ----------------------------------------------
 
@@ -241,7 +241,7 @@ def test_cli_structurally_invalid_blocks_even_without_finding(tmp_path, monkeypa
 
 
 def test_structurally_invalid_blocks_without_corpus_flag(monkeypatch):
-    """No regression: plain `rac validate -` still exits 1 on a structural error."""
+    """No regression: plain `decided validate -` still exits 1 on a structural error."""
     doc = "# Just a title with no required sections\n"
     code, _, _ = _run(["validate", "-"], doc, monkeypatch)
     assert code == 1

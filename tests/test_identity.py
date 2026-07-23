@@ -1,6 +1,6 @@
-"""Tests for rac.core.identity — the deterministic artifact identifier.
+"""Tests for asdecided.core.identity — the deterministic artifact identifier.
 
-Identity was promoted from rac.services.relationships to rac.core.identity in
+Identity was promoted from asdecided.services.relationships to asdecided.core.identity in
 v0.7.5 so repository indexing, relationship resolution, and portfolio analysis
 share one owner, with no compatibility shim (ADR-023). These cover the four-step
 identifier precedence (REQ-002): explicit ``## ID`` > ``spec.id_field`` >
@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from rac.core.artifacts import spec_for
-from rac.core.identity import artifact_identifier
-from rac.core.markdown import parse
+from asdecided.core.artifacts import spec_for
+from asdecided.core.identity import artifact_identifier
+from asdecided.core.markdown import parse
 
 
 def test_identifier_explicit_id_section_wins():

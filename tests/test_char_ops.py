@@ -10,7 +10,7 @@ Surfaces pinned here (unpinned before this file):
 - the installed ``pre-commit`` git hook blocking path, end to end
   (staged invalid ``*.md`` -> commit refused with exit 1 and a reason on
   stderr; a valid corpus commits cleanly);
-- ``rac.release.main`` exit codes 0/1/2 and its ``✓`` / ``✗`` / ``usage:``
+- ``asdecided.release.main`` exit codes 0/1/2 and its ``✓`` / ``✗`` / ``usage:``
   message shapes;
 - ``evaluate_gate`` / ``GateFailure.render`` for the regression rule (a metric
   below ``baseline − tolerance`` renders ``FAIL [regression] …``, distinct from
@@ -18,7 +18,7 @@ Surfaces pinned here (unpinned before this file):
 - ``eval`` usage-error branches (duplicate case id, unresolved ``get_related``);
 - ``usage.render_human`` empty-state / guide-section / trend / pluralization,
   ``usage.share_url`` template + report payload, and the recent-days window;
-- the ``rac export --agent-rules --client`` rejection and the generate
+- the ``decided export --agent-rules --client`` rejection and the generate
   append-to-existing-prose branch;
 - the ``post-commit`` hook not-on-PATH skip branch and ``consent.opt_in``
   preserving an ``enterprise_locked`` record.
@@ -35,16 +35,16 @@ from pathlib import Path
 
 import pytest
 
-from rac import consent, usage
-from rac.cli import main
-from rac.release import main as release_main
-from rac.services import eval as ev
-from rac.services.agent_rules import (
+from asdecided import consent, usage
+from asdecided.cli import main
+from asdecided.release import main as release_main
+from asdecided.services import eval as ev
+from asdecided.services.agent_rules import (
     STATE_UPDATED,
     embedded_digest,
     generate_agent_rules,
 )
-from rac.services.hook import install_hook
+from asdecided.services.hook import install_hook
 
 # The console-script bin dir of the running interpreter; in a venv `rac` lives
 # beside `python`. The git hooks shell out to `rac`, which is not otherwise on
@@ -100,7 +100,7 @@ def isolated(tmp_path, monkeypatch):
 
 def test_pre_commit_hook_blocks_invalid_and_passes_valid(repo):
     # The installed pre-commit hook refuses a commit when a staged Markdown
-    # artifact fails `rac validate`, and lets a valid corpus through.
+    # artifact fails `decided validate`, and lets a valid corpus through.
     install_hook(str(repo), "pre-commit")
 
     (repo / "bad.md").write_text(
@@ -110,7 +110,7 @@ def test_pre_commit_hook_blocks_invalid_and_passes_valid(repo):
     with pytest.raises(subprocess.CalledProcessError) as exc:
         _git(repo, "commit", "--quiet", "-m", "bad", rac_on_path=True)
     assert exc.value.returncode == 1
-    assert "rac: validation failed for bad.md" in exc.value.stderr
+    assert "decided: validation failed for bad.md" in exc.value.stderr
 
     # Repairing the artifact lets the commit through cleanly.
     (repo / "bad.md").write_text(
@@ -130,7 +130,7 @@ def test_pre_commit_hook_allows_commit_when_no_markdown_staged(repo):
     assert committed.returncode == 0
 
 
-# --- HIGH #2: rac.release.main exit codes and message shapes ------------------
+# --- HIGH #2: asdecided.release.main exit codes and message shapes ------------------
 
 
 def test_release_main_ok_prints_wellformed_and_returns_0(tmp_path, capsys):
@@ -165,7 +165,7 @@ def test_release_main_no_args_is_usage_error_returns_2(capsys):
     assert release_main([]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == "usage: python -m rac.release <version> [changelog-path]\n"
+    assert captured.err == "usage: python -m asdecided.release <version> [changelog-path]\n"
 
 
 # --- HIGH #3: eval gate regression rule + render text -------------------------
@@ -277,7 +277,7 @@ def _enable() -> None:
 def test_render_human_empty_state_message():
     empty = usage.render_human(usage.summarize_usage(Path("/no/such/log.jsonl")), None)
     assert empty.startswith("RAC usage\n")
-    assert "No CLI usage recorded — telemetry is off (enable with `rac telemetry on`)." in empty
+    assert "No CLI usage recorded — telemetry is off (enable with `decided telemetry on`)." in empty
 
 
 def test_render_human_counts_pluralization_trend_and_guide_section(isolated):
@@ -368,7 +368,7 @@ def _agent_corpus(tmp_path: Path) -> Path:
 def test_cli_unknown_client_is_usage_error(tmp_path, capsys):
     # argparse's `choices` constraint on --client intercepts an unknown value
     # before the handler runs: exit 2 with an "invalid choice" message. (The
-    # handler's own "rac: unknown --client" string is therefore unreachable from
+    # handler's own "decided: unknown --client" string is therefore unreachable from
     # the CLI; this pins what a user actually observes.)
     rac_dir = _agent_corpus(tmp_path)
     with pytest.raises(SystemExit) as exc:
@@ -402,7 +402,7 @@ def test_post_commit_hook_skips_when_rac_not_on_path(repo):
     _git(repo, "add", ".")  # rac_on_path=False -> rac is not resolvable
     committed = _git(repo, "commit", "--quiet", "-m", "advisory")
     assert committed.returncode == 0
-    assert "rac: not on PATH; skipping write-cadence nudge" in committed.stderr
+    assert "decided: not on PATH; skipping write-cadence nudge" in committed.stderr
 
 
 def test_opt_in_preserves_existing_enterprise_lock(isolated):

@@ -1,6 +1,6 @@
 # Scale & performance
 
-Lore is designed so a growing corpus stays fast on a single node. The engine's
+AsDecided is designed so a growing corpus stays fast on a single node. The engine's
 original posture (ADR-032) re-derived its expensive structures — the repository
 index, the resolved relationship graph, and the search token vectors — from disk
 on **every** read. That is the right default at hundreds of artifacts, but its
@@ -62,19 +62,19 @@ through mapped identity segments without materialising the whole corpus.
 
 Reuse of that store is **the default** (ADR-112) on the three surfaces where
 repeated reads against a stable corpus dominate — `--no-cache` disables it per
-invocation, `RAC_NO_CACHE=1` per environment:
+invocation, `DECIDED_NO_CACHE=1` per environment:
 
 | Command | Default reuse | What it reuses |
 | --- | --- | --- |
-| `rac mcp` | on | The whole derived read-model for a long-lived server (ADR-099/104). |
-| `rac find` | on | The persistent store for one-shot queries, instead of a fresh walk (ADR-110/112). |
-| `rac validate` | on | A per-file result cache, so re-validation is incremental (ADR-106). |
+| `decided-mcp` | on | The whole derived read-model for a long-lived server (ADR-099/104). |
+| `decided find` | on | The persistent store for one-shot queries, instead of a fresh walk (ADR-110/112). |
+| `decided validate` | on | A per-file result cache, so re-validation is incremental (ADR-106). |
 
-For the long-lived `rac mcp` server, freshness is tracked **incrementally** by
+For the long-lived `decided-mcp` server, freshness is tracked **incrementally** by
 an event-sourced watcher on Linux (ADR-105/118), so a clean warm endpoint can
 answer without walking the corpus. Platforms without a synchronous
 completed-write barrier use the parallel stat-manifest fallback; this preserves
-freshness but remains O(files). A one-shot `rac find` has no long-lived process
+freshness but remains O(files). A one-shot `decided find` has no long-lived process
 to hold that watcher, so it verifies freshness through a **persisted stat
 manifest** (ADR-112): every
 enumerated file is stat'ed and only stat-changed files are re-read, so an
@@ -84,7 +84,7 @@ in-place rewrite (ADR-105's S5) — is caught by `--verify`, which forces the
 full byte re-hash floor. The first-ever query against a corpus pays the cold
 build; every later warm query rides the store.
 
-`rac validate` keys each file's result on its content hash × the active config
+`decided validate` keys each file's result on its content hash × the active config
 fingerprint, so validating a large corpus after a small edit does work
 proportional to what changed. A changed config invalidates exactly the affected
 results; a corrupt cache recomputes from scratch; `--verify` applies the same
@@ -117,9 +117,9 @@ levers here are single-node.
 
 ## Related decisions
 
-- [ADR-104](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-104-persistent-mmap-index-store.md) — persistent memory-mapped index store
-- [ADR-105](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-105-event-sourced-serving-freshness.md) — event-sourced serving freshness
-- [ADR-106](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-106-incremental-validation.md) — incremental directory validation
-- [ADR-107](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-107-parallel-cold-build.md) — parallel cold build
-- [ADR-108](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-108-term-range-partitioned-parallel-merge.md) — term-range-partitioned parallel merge
-- [ADR-110](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-110-one-shot-find-store-reuse.md) — one-shot `rac find` store reuse
+- [ADR-104](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-104-persistent-mmap-index-store.md) — persistent memory-mapped index store
+- [ADR-105](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-105-event-sourced-serving-freshness.md) — event-sourced serving freshness
+- [ADR-106](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-106-incremental-validation.md) — incremental directory validation
+- [ADR-107](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-107-parallel-cold-build.md) — parallel cold build
+- [ADR-108](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-108-term-range-partitioned-parallel-merge.md) — term-range-partitioned parallel merge
+- [ADR-110](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-110-one-shot-find-store-reuse.md) — one-shot `decided find` store reuse

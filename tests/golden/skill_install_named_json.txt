@@ -3,8 +3,8 @@
   "installed": true,
   "skills": [
     {
-      "skill": "rac-review",
-      "path": ".claude/skills/rac-review/SKILL.md"
+      "skill": "decided-review",
+      "path": ".claude/skills/decided-review/SKILL.md"
     }
   ]
 }

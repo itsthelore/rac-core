@@ -1,11 +1,11 @@
 """Movement-B bundle B4 — incremental directory validation (ADR-106).
 
-B4 makes ``rac validate DIR --cache`` changeset-bound: a stat-manifest scan
+B4 makes ``decided validate DIR --cache`` changeset-bound: a stat-manifest scan
 detects the changed / added / removed set, and only changed files are re-parsed
 and re-validated while unchanged files reuse their cached ``FileValidation``.
 Directory validation is a pure per-file computation — every ``FileValidation`` is
 a pure function of ``(file bytes, resolved config)`` and OKF conformance is
-per-file — so there is no cross-file layer in ``rac validate DIR`` (duplicate-id /
+per-file — so there is no cross-file layer in ``decided validate DIR`` (duplicate-id /
 relationship-resolution / cycle checks live in the relationships subsystem, not
 here). These tests pin what the incremental mode must guarantee:
 
@@ -14,11 +14,11 @@ here). These tests pin what the incremental mode must guarantee:
     file-mutation scenarios the performance lens frames as cross-file transition
     classes T1–T5/T7 (a dangling reference's target added, a duplicate id
     appearing, a referenced file removed, a supersedes cycle created by an edit, a
-    target's status flipped). ``rac validate DIR`` emits no relationship findings,
+    target's status flipped). ``decided validate DIR`` emits no relationship findings,
     so both paths agree on every scenario — the assertion is that the per-file
     cache correctly reuses / invalidates across each mutation without ever
     inventing or dropping a finding.
-(b) **The config-fingerprint key** — editing an *ancestor* ``.rac/config.yaml``
+(b) **The config-fingerprint key** — editing an *ancestor* ``.decided/config.yaml``
     (the audit-mandated trap) invalidates every cached result, so the next run
     reflects the new severity policy exactly as a fresh run does.
 (c) **Cached-result reuse** — a counting seam on ``validate()`` proves unchanged
@@ -36,10 +36,10 @@ import os
 import time
 from pathlib import Path
 
-import rac.services.validate as validate_service
-from rac.cli import main
-from rac.services.index_store import open_validation_store, validate_store_root
-from rac.services.validate import (
+import asdecided.services.validate as validate_service
+from asdecided.cli import main
+from asdecided.services.index_store import open_validation_store, validate_store_root
+from asdecided.services.validate import (
     _config_fingerprint,
     _root_key,
     validate_directory,
@@ -65,8 +65,8 @@ def _decision(ident: str, title: str, *, status: str = "Accepted", related=()) -
 
 def _corpus(tmp_path: Path, files: dict[str, str], *, key: str = "RAC") -> Path:
     corpus = tmp_path / "corpus"
-    (corpus / ".rac").mkdir(parents=True)
-    (corpus / ".rac" / "config.yaml").write_text(f"repository_key: {key}\n", encoding="utf-8")
+    (corpus / ".decided").mkdir(parents=True)
+    (corpus / ".decided" / "config.yaml").write_text(f"repository_key: {key}\n", encoding="utf-8")
     for name, text in files.items():
         path = corpus / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -92,7 +92,7 @@ def _run(capsys, argv: list[str]) -> tuple[int, str]:
 
 def _assert_parity(capsys, cache_dir: Path, monkeypatch, corpus: Path) -> None:
     """Full run == cold-cache run == warm-cache run, for human, JSON, and exit code."""
-    monkeypatch.setenv("RAC_CACHE_DIR", str(cache_dir))
+    monkeypatch.setenv("DECIDED_CACHE_DIR", str(cache_dir))
     for fmt in ([], ["--json"], ["--sarif"]):
         full = _run(capsys, ["validate", str(corpus), *fmt])
         cold = _run(capsys, ["validate", str(corpus), "--cache", *fmt])
@@ -101,7 +101,7 @@ def _assert_parity(capsys, cache_dir: Path, monkeypatch, corpus: Path) -> None:
 
 
 def _warm(capsys, cache_dir: Path, monkeypatch, corpus: Path) -> None:
-    monkeypatch.setenv("RAC_CACHE_DIR", str(cache_dir))
+    monkeypatch.setenv("DECIDED_CACHE_DIR", str(cache_dir))
     _run(capsys, ["validate", str(corpus), "--cache"])
 
 
@@ -219,8 +219,8 @@ def test_ancestor_config_edit_invalidates_cache(tmp_path, capsys, monkeypatch):
     # down so the config edit is genuinely an *ancestor* edit relative to the
     # validated directory (the audit's ancestor-walk trap, v2 §3.1).
     corpus = tmp_path / "corpus"
-    (corpus / ".rac").mkdir(parents=True)
-    config = corpus / ".rac" / "config.yaml"
+    (corpus / ".decided").mkdir(parents=True)
+    config = corpus / ".decided" / "config.yaml"
     config.write_text("repository_key: RAC\n", encoding="utf-8")
     sub = corpus / "adr"
     sub.mkdir()
@@ -231,7 +231,7 @@ def test_ancestor_config_edit_invalidates_cache(tmp_path, capsys, monkeypatch):
     )
 
     cache = tmp_path / "cache"
-    monkeypatch.setenv("RAC_CACHE_DIR", str(cache))
+    monkeypatch.setenv("DECIDED_CACHE_DIR", str(cache))
     warm_rc, _ = _run(capsys, ["validate", str(sub), "--cache"])  # warm: fails on missing section
     assert warm_rc == 1
 
@@ -315,10 +315,10 @@ def test_size_and_mtime_preserving_rewrite_is_the_accepted_stat_miss(tmp_path, c
 
 def test_cli_verify_flag_reaches_the_full_hash_floor(tmp_path, capsys, monkeypatch):
     # The same S5 scenario through the CLI: the default (cached) run serves the
-    # stale result; `rac validate --verify` forces the content-confirm-all scan
+    # stale result; `decided validate --verify` forces the content-confirm-all scan
     # and reports the rewrite (ADR-112 flag wiring).
     corpus = _corpus(tmp_path, {"a.md": _decision(_D1, "A", status="Accepted")})
-    monkeypatch.setenv("RAC_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DECIDED_CACHE_DIR", str(tmp_path / "cache"))
     path = corpus / "a.md"
     before = path.stat()
 
@@ -381,20 +381,20 @@ def test_truncated_store_is_a_miss(tmp_path, capsys, monkeypatch):
 def test_timing_line_is_stderr_only_and_opt_in(tmp_path, capsys, monkeypatch):
     corpus = _corpus(tmp_path, {"a.md": _decision(_D1, "A")})
     cache = tmp_path / "cache"
-    monkeypatch.setenv("RAC_CACHE_DIR", str(cache))
+    monkeypatch.setenv("DECIDED_CACHE_DIR", str(cache))
 
-    # Absent by default: no rac-timing line on either stream.
+    # Absent by default: no decided-timing line on either stream.
     main(["validate", str(corpus), "--cache"])
     quiet = capsys.readouterr()
-    assert "rac-timing" not in quiet.err
-    assert "rac-timing" not in quiet.out
+    assert "decided-timing" not in quiet.err
+    assert "decided-timing" not in quiet.out
 
-    monkeypatch.setenv("RAC_TIMING", "1")
+    monkeypatch.setenv("DECIDED_TIMING", "1")
     rc = main(["validate", str(corpus), "--cache", "--json"])
     captured = capsys.readouterr()
     assert rc == 0
-    assert "rac-timing" not in captured.out  # frozen stdout untouched
-    assert "rac-timing: detect_ms=" in captured.err
+    assert "decided-timing" not in captured.out  # frozen stdout untouched
+    assert "decided-timing: detect_ms=" in captured.err
     assert "recompute_ms=" in captured.err
     assert "files_changed=" in captured.err
 

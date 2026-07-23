@@ -1,15 +1,15 @@
-# RAC validate composite action (v0.17.2, ADR-058).
+# AsDecided validate composite action (ADR-058).
 #
-# A thin wrapper: install RAC, run one `rac validate --sarif`, upload the SARIF
+# A thin wrapper: install AsDecided, run one `decided validate --sarif`, upload the SARIF
 # to GitHub Code Scanning, and re-surface the CLI exit code. All analysis and
 # severity policy live in the package (ADR-015 / ADR-053); the action never
 # reinterprets findings. The Watchkeeper action lives at the repository root;
 # this validate action is referenced as
 # `uses: itsthelore/rac-core/validate-action@<ref>`.
-name: "RAC validate"
+name: "AsDecided validate"
 description: >-
-  Validate a requirements-as-code (RAC) corpus and surface findings on the pull
-  request via GitHub Code Scanning (SARIF). A thin wrapper over the `rac` CLI.
+  Validate an AsDecided corpus and surface findings on the pull request via
+  GitHub Code Scanning (SARIF). A thin wrapper over the `decided` CLI.
 author: "Tom Ballard"
 
 branding:
@@ -18,9 +18,9 @@ branding:
 
 inputs:
   path:
-    description: "The RAC corpus directory to validate (passed to `rac validate`)."
+    description: "The corpus directory to validate (passed to `decided validate`)."
     required: false
-    default: "rac"
+    default: "decisions"
   upload-sarif:
     description: >-
       Upload SARIF to GitHub Code Scanning (`true` or `false`). Requires the job
@@ -30,8 +30,8 @@ inputs:
   sarif-file:
     description: "Where the SARIF document is written."
     required: false
-    default: "rac.sarif"
-  rac-version:
+    default: "decided.sarif"
+  decided-version:
     description: >-
       Exact rac-core version to install from PyPI. Empty installs the
       latest release. Ignored when `install-from` is `source`.
@@ -39,7 +39,7 @@ inputs:
     default: ""
   install-from:
     description: >-
-      Where to install RAC from: `pypi` (the default for consumers) or `source`
+      Where to install AsDecided from: `pypi` (the default for consumers) or `source`
       (the action checkout itself — for this repository's own dogfood job;
       requires `uses: ./validate-action` on a full checkout).
     required: false
@@ -52,24 +52,28 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install RAC
+    - name: Install AsDecided
       shell: bash
       env:
         INSTALL_FROM: ${{ inputs.install-from }}
-        RAC_VERSION: ${{ inputs.rac-version }}
+        DECIDED_VERSION: ${{ inputs.decided-version }}
       run: |
         python -m pip install --quiet --upgrade pip
         if [ "$INSTALL_FROM" = "source" ]; then
+          (cd "$GITHUB_ACTION_PATH/../rust" && cargo build --release --locked -p decided -p decided-mcp)
+          cp "$GITHUB_ACTION_PATH/../rust/target/release/decided" \
+             "$GITHUB_ACTION_PATH/../rust/target/release/decided-mcp" \
+             "$GITHUB_ACTION_PATH/../src/asdecided/bin/"
           python -m pip install --quiet "$GITHUB_ACTION_PATH/.."
-        elif [ -n "$RAC_VERSION" ]; then
-          python -m pip install --quiet "rac-core==$RAC_VERSION"
+        elif [ -n "$DECIDED_VERSION" ]; then
+          python -m pip install --quiet "rac-core==$DECIDED_VERSION"
         else
           python -m pip install --quiet rac-core
         fi
 
     # The CLI is the source of truth (ADR-058). `set +e` lets a non-zero exit
     # still produce SARIF for upload; the exit code is re-surfaced below.
-    - name: Run rac validate (SARIF)
+    - name: Run decided validate (SARIF)
       id: validate
       shell: bash
       env:
@@ -77,7 +81,7 @@ runs:
         SARIF_FILE: ${{ inputs.sarif-file }}
       run: |
         set +e
-        rac validate "$INPUT_PATH" --sarif > "$SARIF_FILE"
+        decided validate "$INPUT_PATH" --sarif > "$SARIF_FILE"
         echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
     - name: Upload SARIF to Code Scanning
@@ -87,14 +91,14 @@ runs:
         sarif_file: ${{ inputs.sarif-file }}
 
     # Errors fail the check; warnings (including findings downgraded in
-    # .rac/config.yaml, ADR-053) annotate without failing — warnings-first.
+    # .decided/config.yaml, ADR-053) annotate without failing — warnings-first.
     - name: Report result
       shell: bash
       env:
         EXIT_CODE: ${{ steps.validate.outputs.exit_code }}
       run: |
         if [ "$EXIT_CODE" != "0" ]; then
-          echo "::error::rac validate exited $EXIT_CODE — see the Code Scanning annotations."
+          echo "::error::decided validate exited $EXIT_CODE — see the Code Scanning annotations."
           exit "$EXIT_CODE"
         fi
-        echo "rac validate passed."
+        echo "decided validate passed."

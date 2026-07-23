@@ -223,7 +223,7 @@ impl FreshnessTracker {
             return self.model.as_ref().expect("rebuilt model");
         }
         // Cold start: the whole corpus parsed from nothing; the three cold
-        // phases feed the RAC_TIMING scorecard (ADR-107).
+        // phases feed the DECIDED_TIMING scorecard (ADR-107).
         let parse_start = std::time::Instant::now();
         if self.delta_documents.is_some() {
             self.rebuild_delta(&changed);

@@ -1,27 +1,27 @@
-# Governance: the enforcement policy & `rac gate`
+# Governance: the enforcement policy & `decided gate`
 
-`rac gate` is RAC's single enforcement entry point. It runs validation,
+`decided gate` is RAC's single enforcement entry point. It runs validation,
 relationship integrity, and review over a corpus, then classifies every finding
 as **blocking** or **advisory** under the corpus *enforcement policy*. One
 command, one exit code, one SARIF document — so a pull-request gate carries the
 whole RAC contract as a single required check.
 
 The policy is governed, not hardcoded. A repository declares which finding
-classes block the gate in its committed `.rac/config.yaml`, so the same policy
+classes block the gate in its committed `.decided/config.yaml`, so the same policy
 travels with the corpus and applies identically in the editor and in CI. The
 decisions behind this are
-[ADR-049](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-049-enforcement-is-the-product.md)
+[ADR-049](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-049-enforcement-is-the-product.md)
 (enforcement is the product) and
-[ADR-063](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)
+[ADR-063](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-063-non-python-clients-are-thin.md)
 (policy lives in the corpus, not in any consumer).
 
 ## Running the gate
 
 ```bash
-rac gate rac/              # human summary; exit 0 if nothing blocking, else 1
-rac gate rac/ --json       # stable JSON contract (ADR-007)
-rac gate rac/ --sarif      # one SARIF 2.1.0 document over all findings
-rac gate rac/ --top-level  # do not recurse into subdirectories
+decided gate decisions/              # human summary; exit 0 if nothing blocking, else 1
+decided gate decisions/ --json       # stable JSON contract (ADR-007)
+decided gate decisions/ --sarif      # one SARIF 2.1.0 document over all findings
+decided gate decisions/ --top-level  # do not recurse into subdirectories
 ```
 
 The exit code is the only enforcement signal: `0` when nothing is blocking, `1`
@@ -30,9 +30,9 @@ annotated in SARIF) but never fail the gate.
 
 ## The `enforcement:` policy
 
-Add an optional top-level `enforcement:` section to `.rac/config.yaml`. It maps
-**finding codes** (the stable `[code]` shown in `rac validate`, `rac review`, and
-`rac relationships --validate` output) to an enforcement class:
+Add an optional top-level `enforcement:` section to `.decided/config.yaml`. It maps
+**finding codes** (the stable `[code]` shown in `decided validate`, `decided review`, and
+`decided relationships --validate` output) to an enforcement class:
 
 ```yaml
 repository_key: RAC
@@ -80,17 +80,17 @@ Suppose a live roadmap references a decision the team has retired. By default th
 is a blocking `relationship-target-superseded` finding, so the gate fails:
 
 ```text
-$ rac gate rac/
+$ decided gate decisions/
 ...
 Blocking:   1
-  ✗ rac/roadmaps/v1.md
+  ✗ decisions/roadmaps/v1.md
       [relationships] relationship-target-superseded: related_decisions: adr-002 — target is superseded
 ✗ Gate failed — 1 blocking finding(s).
 $ echo $?
 1
 ```
 
-Downgrade just that code in `.rac/config.yaml`:
+Downgrade just that code in `.decided/config.yaml`:
 
 ```yaml
 enforcement:
@@ -102,11 +102,11 @@ The finding still surfaces — now as advisory, and it still annotates the pull
 request in SARIF — but the gate passes:
 
 ```text
-$ rac gate rac/
+$ decided gate decisions/
 ...
 Blocking:   0
 Advisory:   1
-  ! rac/roadmaps/v1.md
+  ! decisions/roadmaps/v1.md
       [relationships] relationship-target-superseded: related_decisions: adr-002 — target is superseded
 ✓ Gate passed — nothing blocking.
 $ echo $?
@@ -120,12 +120,12 @@ the merge — exactly the governed knob a maintainer wants.
 
 Enforcement only standardises an organisation when *which findings are blocking*
 is set centrally, not re-litigated per repository. Because the policy is plain
-data in `.rac/config.yaml`, a team can standardise it across a fleet:
+data in `.decided/config.yaml`, a team can standardise it across a fleet:
 
 - **Commit a shared `enforcement:` block.** Keep the canonical policy in one
   place (a platform repo, a template repo, or a copier/cookiecutter template) and
-  have every RAC repository carry the same `.rac/config.yaml` enforcement section.
-  Each repository's `rac gate` then makes the same blocking-versus-advisory
+  have every RAC repository carry the same `.decided/config.yaml` enforcement section.
+  Each repository's `decided gate` then makes the same blocking-versus-advisory
   decisions without per-repository edits.
 - **Tighten centrally, roll out by sync.** Promoting a code from `advisory` to
   `blocking` in the shared block, then syncing the file, tightens the gate across
@@ -134,8 +134,8 @@ data in `.rac/config.yaml`, a team can standardise it across a fleet:
 - **Adopt warnings-first, then ratchet.** A new team can start with broad
   `advisory`/`off` entries to get the gate green on a legacy corpus, then move
   codes back to `blocking` one at a time as the corpus is cleaned up — the same
-  ratchet the severity overrides ([ADR-053](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-053-validation-severity-overrides.md))
-  offer for `rac validate`, now spanning the whole gate.
+  ratchet the severity overrides ([ADR-053](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-053-validation-severity-overrides.md))
+  offer for `decided validate`, now spanning the whole gate.
 
 Because the same file governs both the editor and the PR action, a fleet-wide
 policy change lands in one edit and is enforced everywhere the corpus is checked.
@@ -146,15 +146,15 @@ AI coding agents are the place a settled decision is most likely to be quietly
 re-litigated, because the agent never sees the corpus. RAC integrates with agents
 through two deterministic, engine-owned channels and enforces with structural
 validation — **not** a semantic verdict and **not** a cross-platform interceptor
-([ADR-067](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-067-agent-integration-boundary.md)):
+([ADR-067](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-067-agent-integration-boundary.md)):
 
-- **Context supply.** `rac export --agent-rules` generates committed,
+- **Context supply.** `decided export --agent-rules` generates committed,
   drift-guarded rules files (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`,
   `.github/copilot-instructions.md`) plus the `lore` MCP read tools. This reaches
   *every* agent — including Copilot — with zero per-developer setup.
 - **Post-edit enforcement.** The same structural diagnostics fire on
   agent-written files exactly as on human edits: the editor's save-time
-  diagnostics, `rac validate`, and the `rac gate` PR check.
+  diagnostics, `decided validate`, and the `decided gate` PR check.
 
 No platform exposes a hook to inspect-and-veto a proposed agent edit before it
 lands — with **one** exception.
@@ -169,8 +169,8 @@ not itself the interceptor. The generated hook:
 - lives at `.claude/hooks/rac-preedit.py` and is registered in
   `.claude/settings.json` under `hooks.PreToolUse` (merged in without clobbering
   existing settings);
-- fires on `Write`/`Edit`/`MultiEdit`, acts only on Markdown files under `rac/`,
-  and pipes the proposed content to `rac validate - --corpus rac/`
+- fires on `Write`/`Edit`/`MultiEdit`, acts only on Markdown files under `decisions/`,
+  and pipes the proposed content to `decided validate - --corpus decisions/`
   ([CLI reference](cli.md#corpus-aware-single-document-validation-corpus));
 - **blocks** the edit (exit 2, with the finding) only on a *structural* finding —
   a reference to a retired or missing decision, or a malformed artifact;
@@ -179,7 +179,7 @@ not itself the interceptor. The generated hook:
 
 It is **opt-in and Claude-Code-specific**. All validation stays in `rac` — the
 hook computes nothing
-([ADR-063](https://github.com/itsthelore/rac-core/blob/main/rac/decisions/adr-063-non-python-clients-are-thin.md)).
+([ADR-063](https://github.com/itsthelore/rac-core/blob/main/decisions/decisions/adr-063-non-python-clients-are-thin.md)).
 Disabling it (**"RAC: Disable Claude Code pre-edit hook"**, or deleting the
 registration) falls back cleanly to the post-edit diagnostics above. RAC makes no
 claim of intercepting Copilot inline suggestions or Cursor agent edits — no
@@ -189,5 +189,5 @@ platform API exists for that, so those clients rely on the post-edit guard.
 
 - [Validation](validation.md) — severity overrides (ADR-053) and SARIF.
 - [Security posture](security.md) — the offline guarantee behind the gate.
-- [Repository Workflow](repo-workflow.md) — `rac init` and `.rac/config.yaml`.
-- [CLI Reference](cli.md) — `rac gate` flags and exit codes.
+- [Repository Workflow](repo-workflow.md) — `decided init` and `.decided/config.yaml`.
+- [CLI Reference](cli.md) — `decided gate` flags and exit codes.

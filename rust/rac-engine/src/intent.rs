@@ -1,4 +1,4 @@
-//! Deterministic intent analysis (`rac.services.intent`): pure, explainable
+//! Deterministic intent analysis (`decided.services.intent`): pure, explainable
 //! checks over a `RepositoryComparison` — measurable requirements becoming
 //! vague, mandatory language weakening, ambiguous wording arriving,
 //! acceptance criteria / success measures disappearing, relationship

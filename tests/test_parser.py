@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from conftest import fixture_path
 
-from rac.core.markdown import parse, parse_file
+from asdecided.core.markdown import parse, parse_file
 
 
 def test_parses_basic_structure():

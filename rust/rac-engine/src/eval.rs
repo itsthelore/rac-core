@@ -1,6 +1,6 @@
-//! Grounding retrieval benchmark — `rac eval` (PORT-CONTRACT.d/15).
+//! Grounding retrieval benchmark — `decided eval` (PORT-CONTRACT.d/15).
 //!
-//! Port of `src/rac/services/eval.py`. Deterministic by ADR-066: the scored
+//! Port of `src/asdecided/services/eval.py`. Deterministic by ADR-066: the scored
 //! path is a pure function of (corpus bytes, query set, retrieval code) — no
 //! network, no randomness, no clock. The only wall-clock/build values are
 //! `metadata.generated_at` and `metadata.lore_version`, both diagnostic and
@@ -9,8 +9,8 @@
 //! The benchmark guards the REAL retrieval surface: a `search_artifacts`
 //! case consumes `resolve::search_index` order verbatim, and a `get_related`
 //! case consumes the `incoming` neighborhood ordering that the MCP
-//! `get_related` tool serializes (mirrored here from `rac-mcp::graph::
-//! incoming_references` — rac-engine cannot depend on rac-mcp, and eval only
+//! `get_related` tool serializes (mirrored here from `decided-mcp::graph::
+//! incoming_references` — decided-engine cannot depend on decided-mcp, and eval only
 //! needs the ordered id list).
 
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ pub const DEFAULT_CONFIG: &str = "tests/eval/eval-config.json";
 const TOOL_SEARCH: &str = "search_artifacts";
 const TOOL_GET_RELATED: &str = "get_related";
 
-/// `EvalUsageError` — the CLI maps this to exit 2 (`rac eval: <msg>`).
+/// `EvalUsageError` — the CLI maps this to exit 2 (`decided eval: <msg>`).
 pub struct EvalUsageError(pub String);
 
 type EvalResult<T> = Result<T, EvalUsageError>;
@@ -277,7 +277,7 @@ pub fn load_config(path: &str) -> EvalResult<Value> {
 
 /// Rank of a snake_case relationship section in the canonical order
 /// (`_RELATIONSHIP_ORDER`); unknown sections rank last. Mirrors
-/// `rac-mcp::graph::relationship_order`.
+/// `decided-mcp::graph::relationship_order`.
 fn relationship_order(section: &str) -> usize {
     for (i, (name, _)) in RELATIONSHIP_SECTIONS.iter().enumerate() {
         if snake(name) == section {
@@ -289,7 +289,7 @@ fn relationship_order(section: &str) -> usize {
 
 /// The ordered incoming-reference id list for `target_path` — exactly the
 /// `incoming` order the MCP `get_related` tool returns (mirrors
-/// `rac-mcp::graph::incoming_references`, `MAX_RELATED_EDGES` = 1000).
+/// `decided-mcp::graph::incoming_references`, `MAX_RELATED_EDGES` = 1000).
 fn incoming_ids(
     relationships: &[Relationship],
     identity_by_path: &HashMap<&str, &str>,
@@ -513,7 +513,7 @@ fn now_iso() -> String {
     crate::consent::utc_isoformat_micros(secs, micros)
 }
 
-// --- The gate (`rac eval --check`) --------------------------------------------
+// --- The gate (`decided eval --check`) --------------------------------------------
 
 const RULE_NEGATIVE: &str = "negative_violations";
 const RULE_FLOOR: &str = "floor";

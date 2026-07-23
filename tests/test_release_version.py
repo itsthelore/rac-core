@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from rac.release import (
+from asdecided.release import (
     changelog_has_entry,
     is_canonical_release_version,
     parse_release_version,

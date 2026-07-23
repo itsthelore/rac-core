@@ -144,8 +144,8 @@ enum SetupStep {
     /// Run the SIDE'S OWN engine once inside the sandbox before the
     /// refereed run — the cache-warming step (INDEX-PLAN P0). argv gets
     /// `{SANDBOX}` resolved; env is the same deterministic base + case
-    /// env the refereed run sees, so a case that points `RAC_CACHE_DIR`
-    /// into the sandbox and clears `RAC_NO_CACHE` warms exactly the
+    /// env the refereed run sees, so a case that points `DECIDED_CACHE_DIR`
+    /// into the sandbox and clears `DECIDED_NO_CACHE` warms exactly the
     /// cache the refereed run then reads. cwd is sandbox-relative
     /// (default the sandbox root); stdout/stderr are discarded; `expect_exit`
     /// (default 0) must match or the case errors out loudly — a warm run
@@ -313,7 +313,7 @@ fn strip_stale_human(stdout: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// "mask-version" — the rac version string is build-derived (setuptools-scm
-/// git-describe on the oracle; `RAC_RS_VERSION` injection seam on the Rust
+/// git-describe on the oracle; `DECIDED_RS_VERSION` injection seam on the Rust
 /// side, PORT-CONTRACT.md decision 6). It appears in exactly two payload
 /// positions (PORT-CONTRACT.d/09 §3.7): `export --json` `corpus.rac_version`
 /// and SARIF `tool.driver.version` (a `version` key next to `"name": "rac"`).
@@ -410,7 +410,7 @@ fn mask_json_field(stdout: &[u8], dotted: &str) -> Result<Vec<u8>, String> {
 /// (`secrets.token_hex(16)` -> 32 lowercase hex) and re-mints consented_at
 /// (`isoformat(timespec="seconds")` with `+00:00` -> `Z`) on every opt-in,
 /// and the oracle exposes NO seam to pin any of them (unlike the
-/// `RAC_RS_VERSION` build seam), so the referee masks exactly those two
+/// `DECIDED_RS_VERSION` build seam), so the referee masks exactly those two
 /// minted shapes instead: a maximal 32-char lowercase-hex run at word
 /// boundaries becomes `<MASKED-HEX32>`, and a `dddd-dd-ddTdd:dd:ddZ`
 /// timestamp at digit/word boundaries becomes `<MASKED-UTC-TS>`. Applied
@@ -861,7 +861,7 @@ struct RunOutput {
 ///   reads or writes real user state — with no consent file recorded the
 ///   oracle's usage ping / telemetry stays neutralized and nothing touches
 ///   the network (ADR-041 posture);
-/// - RAC_NO_CACHE=1 forces the simple walk (output-neutral per ADR-106/112,
+/// - DECIDED_NO_CACHE=1 forces the simple walk (output-neutral per ADR-106/112,
 ///   removes cache-state variance);
 /// - LC_ALL=C, TZ=UTC, COLUMNS=80 pin incidental locale/width sensitivity;
 /// - PYTHONHASHSEED=0 pins any set-iteration-order dependence in the oracle.
@@ -876,7 +876,7 @@ fn base_env(xdg_root: &Path) -> Vec<(String, String)> {
     env.push(("XDG_CONFIG_HOME".into(), xdg("config")));
     env.push(("XDG_STATE_HOME".into(), xdg("state")));
     env.push(("XDG_CACHE_HOME".into(), xdg("cache")));
-    env.push(("RAC_NO_CACHE".into(), "1".into()));
+    env.push(("DECIDED_NO_CACHE".into(), "1".into()));
     env.push(("LC_ALL".into(), "C".into()));
     env.push(("TZ".into(), "UTC".into()));
     env.push(("COLUMNS".into(), "80".into()));
@@ -1361,7 +1361,7 @@ fn run() -> Result<i32, String> {
     // engine config discovery and git discovery walk upward from the sandbox
     // to the filesystem root, so a sandbox under an in-tree scoreboard dir
     // (e.g. `--scoreboard-dir parity-out` from rust/) inherits the repo's own
-    // `.rac/config.yaml` and `.git`, silently flipping every case that
+    // `.decided/config.yaml` and `.git`, silently flipping every case that
     // asserts their absence (new-err-no-repo-config, migrate-err-no-config,
     // watchkeeper-err-not-a-git-repo). Root them in the system temp dir,
     // keyed by the scoreboard path so concurrent invocations stay disjoint.

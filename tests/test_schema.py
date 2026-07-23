@@ -1,4 +1,4 @@
-"""Tests for schema reference (`rac schema`, v0.5.2)."""
+"""Tests for schema reference (`decided schema`, v0.5.2)."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.artifacts import spec_for
-from rac.core.schema import available_schemas, schema_reference
+from asdecided.cli import main
+from asdecided.core.artifacts import spec_for
+from asdecided.core.schema import available_schemas, schema_reference
 
 
 def test_available_schemas_are_registered_artifacts():

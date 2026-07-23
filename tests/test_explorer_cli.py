@@ -1,12 +1,12 @@
-"""Tests for the `rac explorer` CLI wiring (v0.8.0)."""
+"""Tests for the `decided explorer` CLI wiring (v0.8.0)."""
 
 from __future__ import annotations
 
 import pytest
 
-import rac.explorer.launch as launch
-from rac.cli import main
-from rac.explorer.launch import MISSING_EXTRA_HINT, ExplorerUnavailable, run_explorer
+import asdecided.explorer.launch as launch
+from asdecided.cli import main
+from asdecided.explorer.launch import MISSING_EXTRA_HINT, ExplorerUnavailable, run_explorer
 
 
 class _AppSpy:

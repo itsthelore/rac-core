@@ -1,154 +1,154 @@
 [
   {
     "id": "retrieve-version",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "--version"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-human",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-multiterm-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "index cache", "rac", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-supersedes-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "calver", "rac", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-supersedes-human",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "calver", "rac"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-all-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "calver", "rac", "--all", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-live-flag-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "calver", "rac", "--live", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-scope-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": [
       "retrieve", "search", "rac",
-      "--scope", "src/rac/services/resolve.py", "--json"
+      "--scope", "src/asdecided/services/resolve.py", "--json"
     ],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-scope-human",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": [
       "retrieve", "budget", "rac",
-      "--scope", "src/rac/mcp/server.py"
+      "--scope", "src/asdecided/mcp/server.py"
     ],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-scope-only-no-keyword",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": [
       "retrieve", "zzz-no-keyword-hits", "rac",
-      "--scope", "src/rac/services/resolve.py", "--json"
+      "--scope", "src/asdecided/services/resolve.py", "--json"
     ],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-scope-outside-repo-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--scope", "../outside.py", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-topk1-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--top-k", "1", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-budget-excerpt-trim-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--budget", "500", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-budget-item-drop-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--budget", "120", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-budget-envelope-over-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--budget", "1", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-budget-truncated-human",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--budget", "500"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-unicode-task-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "İstanbul Straße café", "rac", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-empty-result-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "zzz no such term anywhere", "rac", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-rac-empty-result-human-repr",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "it's a 'quoted' zzzz", "rac"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-chain-substitution-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "widget", "rust/fixtures/retrieve/chain", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-chain-substitution-human",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "widget", "rust/fixtures/retrieve/chain"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-chain-all-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "widget", "rust/fixtures/retrieve/chain", "--all", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-chain-scope-merge-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": [
       "retrieve", "storage", "rust/fixtures/retrieve/chain",
       "--scope", "src/api/handlers.py", "--json"
@@ -157,7 +157,7 @@
   },
   {
     "id": "retrieve-chain-scope-glob-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": [
       "retrieve", "zzz", "rust/fixtures/retrieve/chain",
       "--scope", "src/api/deep/nested/mod.py", "--json"
@@ -166,7 +166,7 @@
   },
   {
     "id": "retrieve-chain-dead-end-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": [
       "retrieve", "frobnication pipeline", "rust/fixtures/retrieve/chain", "--json"
     ],
@@ -174,31 +174,31 @@
   },
   {
     "id": "retrieve-mixed-type-retirement-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "gadget", "rust/fixtures/retrieve/mixed", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-mixed-type-retirement-all-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "gadget", "rust/fixtures/retrieve/mixed", "--all", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-mixed-human-em-dash-status",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "café Straße", "rust/fixtures/retrieve/mixed"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-mixed-crlf-excerpt-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "crlf design", "rust/fixtures/retrieve/mixed", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-mixed-budget-shared-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": [
       "retrieve", "gadget", "rust/fixtures/retrieve/mixed",
       "--top-k", "2", "--budget", "150", "--json"
@@ -207,90 +207,90 @@
   },
   {
     "id": "retrieve-fixture-resolve-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "tests/fixtures/resolve", "--json"],
     "expect_exit": 0
   },
   {
     "id": "retrieve-err-missing-dir",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rust/fixtures/retrieve/nope", "--json"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-topk-zero",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--top-k", "0"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-topk-negative",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--top-k", "-3"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-budget-zero",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--budget", "0"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-topk-not-int",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--top-k", "x"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-missing-task",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-scope-missing-value",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--scope"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-live-all-conflict",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "markdown", "rac", "--live", "--all"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-err-extra-positional",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["retrieve", "a", "b", "c"],
     "expect_exit": 2,
     "expect_nonzero_ok": true
   },
   {
     "id": "retrieve-find-live-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["find", "versioning", "rac", "--live", "--json"],
     "expect_exit": 0,
     "normalize": ["strip-recency-json"]
   },
   {
     "id": "retrieve-find-live-human",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["find", "versioning", "rac", "--live"],
     "expect_exit": 0,
     "normalize": ["strip-stale-human"]
   },
   {
     "id": "retrieve-find-live-mixed-fixture-json",
-    "env": { "RAC_RS_VERSION": "0.1.dev55+gf2091befd" },
+    "env": { "DECIDED_RS_VERSION": "0.1.dev55+gf2091befd" },
     "argv": ["find", "gadget", "rust/fixtures/retrieve/mixed", "--live", "--json"],
     "expect_exit": 0,
     "normalize": ["strip-recency-json"]

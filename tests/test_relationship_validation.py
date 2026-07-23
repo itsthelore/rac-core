@@ -1,4 +1,4 @@
-"""Tests for v0.7.2 relationship validation (`rac relationships --validate`).
+"""Tests for v0.7.2 relationship validation (`decided relationships --validate`).
 
 Validation resolves explicit references against artifact identifiers discovered in
 the repository and reports missing targets, ambiguous targets, duplicate
@@ -15,10 +15,10 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.classification import classify
-from rac.core.markdown import parse_file
-from rac.services.relationships import (
+from asdecided.cli import main
+from asdecided.core.classification import classify
+from asdecided.core.markdown import parse_file
+from asdecided.services.relationships import (
     ISSUE_DUPLICATE_IDENTIFIER,
     ISSUE_EDGE_UNSUPPORTED,
     ISSUE_SCOPE_TARGET_NOT_FOUND,
@@ -80,7 +80,7 @@ def test_self_type_broken_reference_is_reported(tmp_path):
 def test_external_ticket_reference_is_never_broken(tmp_path):
     # A ## Related Tickets entry resolves to no in-corpus artifact by design, so
     # it is exempt from referential integrity — never reported not-found, and not
-    # counted among the resolved references (it is format-linted by `rac validate`).
+    # counted among the resolved references (it is format-linted by `decided validate`).
     (tmp_path / "adr-001.md").write_text(
         _DECISION.format(t="A1") + "\n## Related Tickets\n\n- PROJ-1234\n- some-external-ref\n",
         encoding="utf-8",
@@ -487,7 +487,7 @@ def test_superseded_target_fails_cli_with_suffix(tmp_path, capsys):
 #
 # ``## Applies To`` entries are code paths/components a decision governs. Literal
 # path/directory entries are existence-checked against the repository root (here
-# the tmp corpus dir, since no ``.rac/config.yaml`` sits above it); glob patterns
+# the tmp corpus dir, since no ``.decided/config.yaml`` sits above it); glob patterns
 # and component-name labels are recorded without existence-checking. A missing
 # literal path is an ``applies-to-target-not-found`` error.
 

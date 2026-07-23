@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from conftest import fixture_path
 
-from rac.services.compare import (
+from asdecided.services.compare import (
     CHANGE_ADDED,
     CHANGE_MODIFIED,
     CHANGE_REMOVED,

@@ -1,7 +1,7 @@
 # Examples
 
 Short, realistic artifacts you can adapt. These show the *shape* of each type — for a
-blank starter with section guidance, use `rac schema <type> --template`
+blank starter with section guidance, use `decided schema <type> --template`
 ([cli.md](cli.md#schema)).
 
 ## A requirement
@@ -63,7 +63,7 @@ Technical
 - usage-export
 ```
 
-Validate the link with `rac relationships . --validate` — see
+Validate the link with `decided relationships . --validate` — see
 [relationships.md](relationships.md).
 
 ## A roadmap
@@ -135,7 +135,7 @@ This repository ships a before/after pair under `examples/`. Compare them to see
 RAC reports requirement and metric changes:
 
 ```bash
-rac diff examples/example_dashboard_v1.md examples/example_dashboard_v2.md
+decided diff examples/example_dashboard_v1.md examples/example_dashboard_v2.md
 ```
 
 See [cli.md](cli.md#diff) for the full output.

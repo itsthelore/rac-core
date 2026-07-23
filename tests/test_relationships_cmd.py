@@ -1,4 +1,4 @@
-"""Tests for the v0.7.1 `rac relationships` command.
+"""Tests for the v0.7.1 `decided relationships` command.
 
 Repository-level relationship inspection (ADR-015): discovers the explicit
 relationships declared across artifacts, counts individual references, and emits
@@ -16,8 +16,8 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.services.relationships import (
+from asdecided.cli import main
+from asdecided.services.relationships import (
     build_relationship_report,
     build_relationship_report_file,
 )

@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from rac.core.operations import CancellationToken, OperationCancelled, Progress
-from rac.services.index import build_repository_index
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.relationships import ISSUE_TARGET_NOT_FOUND
-from rac.services.repository import (
+from asdecided.core.operations import CancellationToken, OperationCancelled, Progress
+from asdecided.services.index import build_repository_index
+from asdecided.services.portfolio import build_portfolio_summary
+from asdecided.services.relationships import ISSUE_TARGET_NOT_FOUND
+from asdecided.services.repository import (
     SOURCE_RELATIONSHIPS,
     SOURCE_VALIDATION,
     load_repository,
 )
-from rac.services.validate import validate_directory
+from asdecided.services.validate import validate_directory
 
 FIXTURES = Path(__file__).parent / "fixtures" / "portfolio_summary"
 

@@ -39,17 +39,17 @@ use crate::spec::{snake as spec_snake, spec_for, specs, ArtifactSpec};
 use crate::stats::PortfolioStats;
 use crate::validate::py_title;
 
-/// The injectable version string (PORT-CONTRACT decision 6): `RAC_RS_VERSION`
+/// The injectable version string (PORT-CONTRACT decision 6): `DECIDED_RS_VERSION`
 /// when set, else the spike default.
 pub fn rac_version() -> String {
-    // Precedence: a runtime `RAC_RS_VERSION` (the parity harness pins the
+    // Precedence: a runtime `DECIDED_RS_VERSION` (the parity harness pins the
     // oracle's exact string here) > the version compiled in at build time
-    // (`RAC_RS_VERSION` set when the release wheel builds, so a distributed
+    // (`DECIDED_RS_VERSION` set when the release wheel builds, so a distributed
     // binary reports the right version with no runtime pin, native-engine
     // cutover) > the dev fallback.
-    std::env::var("RAC_RS_VERSION")
+    std::env::var("DECIDED_RS_VERSION")
         .ok()
-        .or_else(|| option_env!("RAC_RS_VERSION").map(str::to_string))
+        .or_else(|| option_env!("DECIDED_RS_VERSION").map(str::to_string))
         .unwrap_or_else(|| "0.0.0-rs".to_string())
 }
 
@@ -384,7 +384,7 @@ pub fn render_validate_dir_human(result: &DirectoryValidation) -> String {
     lines.push(summary);
     if result.checked() == 0 && result.skipped() == 0 {
         lines.push(String::new());
-        lines.push("No artifacts yet \u{2014} create your first with: rac quickstart".to_string());
+        lines.push("No artifacts yet \u{2014} create your first with: decided quickstart".to_string());
     }
     lines.join("\n")
 }
@@ -528,10 +528,10 @@ fn sarif_document(mut results: Vec<SarifResult>) -> String {
         .collect();
 
     let mut driver = Map::new();
-    driver.insert("name".into(), json!("rac"));
+    driver.insert("name".into(), json!("decided"));
     driver.insert(
         "informationUri".into(),
-        json!("https://github.com/itsthelore/rac-core"),
+        json!("https://github.com/itsthelore/decided-core"),
     );
     driver.insert("version".into(), json!(rac_version()));
     driver.insert("rules".into(), Value::Array(rules));
@@ -594,8 +594,8 @@ fn sarif_relationship_reason(code: &str) -> &str {
 
 /// The SARIF result's `(message text, percent-encoded uri)` for one
 /// relationship-validation finding — the oracle's `_relationship_result`.
-/// Shared with `rac gate`, which reads the SAME builder so the gate finding's
-/// message and path can never drift from `rac relationships --sarif`
+/// Shared with `decided gate`, which reads the SAME builder so the gate finding's
+/// message and path can never drift from `decided relationships --sarif`
 /// (the gate's relationship paths are therefore the ENCODED uri form).
 pub(crate) fn relationship_sarif_parts(issue: &RelationshipIssue) -> (String, String) {
     let label = issue.relationship.as_deref().unwrap_or("").replace('_', " ");
@@ -1542,7 +1542,7 @@ pub fn render_templates_json(names: &[&str]) -> String {
 
 // --- stats -------------------------------------------------------------------
 
-const EMPTY_CORPUS_HINT: &str = "No artifacts yet — create your first with: rac quickstart";
+const EMPTY_CORPUS_HINT: &str = "No artifacts yet — create your first with: decided quickstart";
 
 fn invalid_files_json(items: &[(&str, &[String])]) -> Value {
     Value::Array(
@@ -1847,7 +1847,7 @@ pub fn render_stats_human(s: &PortfolioStats) -> String {
 
 // --- portfolio ---------------------------------------------------------------
 
-/// Human `rac portfolio` output (`render_portfolio_human`).
+/// Human `decided portfolio` output (`render_portfolio_human`).
 pub fn render_portfolio_human(s: &PortfolioSummary) -> String {
     let mut lines: Vec<String> = vec![
         bold("Repository Summary"),
@@ -1939,7 +1939,7 @@ pub fn render_portfolio_human(s: &PortfolioSummary) -> String {
     lines.join("\n")
 }
 
-/// Human `rac index` output: the repository manifest (services/index.py).
+/// Human `decided index` output: the repository manifest (services/index.py).
 pub fn render_index_human(index: &crate::index::RepositoryIndex) -> String {
     let mut lines = vec![
         bold("Repository Index"),
@@ -1975,7 +1975,7 @@ pub fn render_index_human(index: &crate::index::RepositoryIndex) -> String {
     lines.join("\n")
 }
 
-/// JSON `rac index` output — `json.dumps(index.to_dict(), indent=2)`
+/// JSON `decided index` output — `json.dumps(index.to_dict(), indent=2)`
 /// (ensure_ascii default; identity-only contract, ADR-007).
 pub fn render_index_json(index: &crate::index::RepositoryIndex) -> String {
     let artifacts: Vec<Value> = index
@@ -2000,7 +2000,7 @@ pub fn render_index_json(index: &crate::index::RepositoryIndex) -> String {
     dumps_indent2(&Value::Object(payload))
 }
 
-/// JSON `rac portfolio` output — `PortfolioSummary.to_dict()` (ADR-007).
+/// JSON `decided portfolio` output — `PortfolioSummary.to_dict()` (ADR-007).
 pub fn render_portfolio_json(s: &PortfolioSummary) -> String {
     dumps_indent2(&portfolio_summary_value(s))
 }
@@ -2077,7 +2077,7 @@ pub fn portfolio_summary_value(s: &PortfolioSummary) -> Value {
 
 // --- coverage ----------------------------------------------------------------
 
-/// Human `rac coverage` output (`render_coverage_human`).
+/// Human `decided coverage` output (`render_coverage_human`).
 pub fn render_coverage_human(report: &CoverageReport) -> String {
     let (unscheduled, unapplied, unscoped) = report.counts();
     let mut lines: Vec<String> = vec![
@@ -2122,7 +2122,7 @@ pub fn render_coverage_human(report: &CoverageReport) -> String {
     lines.join("\n")
 }
 
-/// JSON `rac coverage` output — `json.dumps(report.to_dict(), indent=2,
+/// JSON `decided coverage` output — `json.dumps(report.to_dict(), indent=2,
 /// ensure_ascii=False)`.
 pub fn render_coverage_json(report: &CoverageReport) -> String {
     let (unscheduled, unapplied, unscoped) = report.counts();
@@ -2154,7 +2154,7 @@ pub fn render_coverage_json(report: &CoverageReport) -> String {
 
 // --- decisions-for -----------------------------------------------------------
 
-/// Human `rac decisions-for` output: aligned `id  status  title` rows with the
+/// Human `decided decisions-for` output: aligned `id  status  title` rows with the
 /// matching declared `## Applies To` entry under each, or a valid empty result.
 pub fn render_decisions_for_human(result: &ScopeLookupResult) -> String {
     if result.decisions.is_empty() {
@@ -2209,7 +2209,7 @@ pub fn render_decisions_for_human(result: &ScopeLookupResult) -> String {
     lines.join("\n")
 }
 
-/// JSON `rac decisions-for` output — the same `ScopeLookupResult` payload the
+/// JSON `decided decisions-for` output — the same `ScopeLookupResult` payload the
 /// MCP `find_decisions` path argument serializes (ADR-031).
 pub fn render_decisions_for_json(result: &ScopeLookupResult) -> String {
     dumps_indent2(&scope_lookup_value(result))
@@ -2563,6 +2563,8 @@ pub fn render_doctor_json(report: &DoctorReport) -> String {
 pub fn render_export_json(export: &CorpusExport) -> String {
     let mut corpus = Map::new();
     corpus.insert("name".into(), json!(export.corpus_name));
+    // Stable export schema key and model field; the RAC spelling is durable
+    // compatibility data, not a command/product alias.
     corpus.insert("rac_version".into(), json!(export.rac_version));
     corpus.insert("artifact_count".into(), json!(export.artifact_count()));
 
@@ -2650,7 +2652,7 @@ pub fn render_agent_rules_human(result: &crate::agent_rules::AgentRulesResult) -
             lines.push(red(&format!(
                 "\u{2717} Drift \u{2014} {stale} file(s) stale or missing the block."
             )));
-            lines.push("  Regenerate: rac export --agent-rules".to_string());
+            lines.push("  Regenerate: decided export --agent-rules".to_string());
         } else {
             lines.push(green(
                 "\u{2713} In sync \u{2014} every present target matches the corpus.",
@@ -2771,7 +2773,7 @@ pub fn render_resolve_human(artifact: &ResolvedArtifact) -> String {
     )
 }
 
-/// `ResolutionResult.to_dict()` for the failure outcomes — the `rac resolve
+/// `ResolutionResult.to_dict()` for the failure outcomes — the `decided resolve
 /// --json` error body, also served as the MCP structured lookup error
 /// (`errors.from_resolution`, ADR-034).
 pub fn resolution_error_value(result: &ResolutionResult) -> Value {
@@ -2812,7 +2814,7 @@ pub fn recency_value(recency: &Recency) -> Value {
     Value::Object(m)
 }
 
-/// The search-match `evidence` dict exactly as `rac find --json --explain`
+/// The search-match `evidence` dict exactly as `decided find --json --explain`
 /// serializes it: `{field, terms, tier, score, components:{bm25,
 /// lexical_rank, graph_rank, inbound}}`.
 pub fn evidence_value(e: &Evidence) -> Value {
@@ -2833,7 +2835,7 @@ pub fn evidence_value(e: &Evidence) -> Value {
 /// `ResolvedArtifact.to_dict(include_evidence=…)` — the search-match /
 /// resolved-artifact dict in pinned key order (`id, type, title, path,
 /// [section], [snippet], [evidence], [recency], [tags]`); conditional keys
-/// are absent, never null (except `title`). Shared by the CLI `rac find`
+/// are absent, never null (except `title`). Shared by the CLI `decided find`
 /// renderers and the MCP tool payloads.
 pub fn find_match_value(m: &ResolvedArtifact, include_evidence: bool) -> Value {
     let mut obj = Map::new();
@@ -2861,7 +2863,7 @@ pub fn find_match_value(m: &ResolvedArtifact, include_evidence: bool) -> Value {
     Value::Object(obj)
 }
 
-/// `render_retrieve_human(payload)` — the human `rac retrieve` block
+/// `render_retrieve_human(payload)` — the human `decided retrieve` block
 /// (ADR-113), rendered from the budget-shaped payload (post-truncation), so
 /// the human view reflects exactly what the JSON face carries.
 pub fn render_retrieve_human(payload: &Value) -> String {
@@ -3059,7 +3061,7 @@ pub fn render_find_human(result: &SearchResult, explain: bool) -> String {
 
 // --- mcp-stats / usage (state read-back, ADR-040/ADR-046) --------------------
 
-/// Human `rac mcp-stats` output — what the local telemetry log says. An
+/// Human `decided mcp-stats` output — what the local telemetry log says. An
 /// empty or missing log is a valid answer, rendered as guidance. Note
 /// `First Event:`/`Last Event:` print the Python value directly, so a
 /// populated log whose events all lack a string `ts` prints `None`.
@@ -3073,7 +3075,7 @@ pub fn render_mcp_stats_human(summary: &crate::telemetry::TelemetrySummary) -> S
     if summary.event_count == 0 {
         lines.push(String::new());
         lines.push("No telemetry recorded.".to_string());
-        lines.push("Telemetry is off by default; enable it with: rac mcp --telemetry".to_string());
+        lines.push("Telemetry is off by default; enable it with: decided mcp --telemetry".to_string());
         if summary.skipped_lines != 0 {
             lines.push(String::new());
             lines.push(format!("Skipped Unreadable Lines: {}", summary.skipped_lines));
@@ -3107,7 +3109,7 @@ pub fn render_mcp_stats_human(summary: &crate::telemetry::TelemetrySummary) -> S
     lines.join("\n")
 }
 
-/// JSON `rac mcp-stats` output — `json.dumps(to_dict(), indent=2)`, which
+/// JSON `decided mcp-stats` output — `json.dumps(to_dict(), indent=2)`, which
 /// is `ensure_ascii=True` (the ONLY ascii-escaped payload of the three
 /// state surfaces; `usage --json` and both share URLs use
 /// `ensure_ascii=False`).
@@ -3115,7 +3117,7 @@ pub fn render_mcp_stats_json(summary: &crate::telemetry::TelemetrySummary) -> St
     dumps_indent2(&crate::telemetry::summary_value(summary))
 }
 
-/// Human `rac usage` output — the unified CLI + Guide read-back (ADR-046).
+/// Human `decided usage` output — the unified CLI + Guide read-back (ADR-046).
 /// Two DIFFERENT error pluralizations by design: CLI rows use
 /// `error`/`errors` (`'s' if errors != 1`), Guide rows always `error(s)`;
 /// both suffixes appear only when the count is nonzero, with the
@@ -3127,7 +3129,7 @@ pub fn render_usage_human(
     let mut lines = vec!["RAC usage".to_string(), String::new()];
     if cli.total == 0 {
         lines.push(
-            "No CLI usage recorded \u{2014} telemetry is off (enable with `rac telemetry on`)."
+            "No CLI usage recorded \u{2014} telemetry is off (enable with `decided telemetry on`)."
                 .to_string(),
         );
     } else {
@@ -3171,7 +3173,7 @@ pub fn render_usage_human(
     lines.join("\n")
 }
 
-/// JSON `rac usage` output — the combined payload with
+/// JSON `decided usage` output — the combined payload with
 /// `ensure_ascii=False, indent=2` (raw UTF-8, unlike mcp-stats).
 pub fn render_usage_json(
     cli: &crate::usage::UsageSummary,
@@ -3180,9 +3182,9 @@ pub fn render_usage_json(
     dumps_indent2_no_ascii(&crate::usage::combined_value(cli, guide))
 }
 
-// --- skill / hook (rac skill, rac hook — PORT-CONTRACT.d/15) -----------------
+// --- skill / hook (decided skill, decided hook — PORT-CONTRACT.d/15) -----------------
 
-/// Human `rac skill list`: bold header, blank line, `- <name ljust w>  <desc>`
+/// Human `decided skill list`: bold header, blank line, `- <name ljust w>  <desc>`
 /// rows in registry order; the name column width is computed dynamically as
 /// `max(len(name))` (13 with the current set).
 pub fn render_skill_list_human() -> String {
@@ -3195,7 +3197,7 @@ pub fn render_skill_list_human() -> String {
     lines.join("\n")
 }
 
-/// JSON `rac skill list` (stable contract, ADR-007; `ensure_ascii=True`).
+/// JSON `decided skill list` (stable contract, ADR-007; `ensure_ascii=True`).
 pub fn render_skill_list_json() -> String {
     let skills: Vec<Value> = crate::skill::BUNDLED_SKILLS
         .iter()
@@ -3204,7 +3206,7 @@ pub fn render_skill_list_json() -> String {
     dumps_indent2(&json!({"schema_version": "1", "skills": skills}))
 }
 
-/// Human `rac skill install`: one `Installed <name> skill: <path>` line per
+/// Human `decided skill install`: one `Installed <name> skill: <path>` line per
 /// skill, blank line, the discovery blurb.
 pub fn render_skill_install_human(installation: &crate::skill::SkillInstallation) -> String {
     let mut lines: Vec<String> = installation
@@ -3220,7 +3222,7 @@ pub fn render_skill_install_human(installation: &crate::skill::SkillInstallation
     lines.join("\n")
 }
 
-/// JSON `rac skill install` — note: no `bytes_written` (it is in the
+/// JSON `decided skill install` — note: no `bytes_written` (it is in the
 /// oracle's model but NOT in `to_dict`, skill brief landmine 4).
 pub fn render_skill_install_json(installation: &crate::skill::SkillInstallation) -> String {
     let skills: Vec<Value> = installation
@@ -3231,7 +3233,7 @@ pub fn render_skill_install_json(installation: &crate::skill::SkillInstallation)
     dumps_indent2(&json!({"schema_version": "1", "installed": true, "skills": skills}))
 }
 
-/// Human `rac hook list`: bold header, blank line, `- <style ljust w>  <desc>`
+/// Human `decided hook list`: bold header, blank line, `- <style ljust w>  <desc>`
 /// rows (style column width dynamic = 11 with the current set).
 pub fn render_hook_list_human() -> String {
     let specs = &crate::hook::BUNDLED_HOOKS;
@@ -3243,7 +3245,7 @@ pub fn render_hook_list_human() -> String {
     lines.join("\n")
 }
 
-/// JSON `rac hook list` (stable contract, ADR-007).
+/// JSON `decided hook list` (stable contract, ADR-007).
 pub fn render_hook_list_json() -> String {
     let hooks: Vec<Value> = crate::hook::BUNDLED_HOOKS
         .iter()
@@ -3252,7 +3254,7 @@ pub fn render_hook_list_json() -> String {
     dumps_indent2(&json!({"schema_version": "1", "hooks": hooks}))
 }
 
-/// Human `rac hook install`.
+/// Human `decided hook install`.
 pub fn render_hook_install_human(installation: &crate::hook::InstalledHook) -> String {
     format!(
         "Installed {} git hook: {}\n\nGit runs it automatically on each commit. Remove the file to stop it.",
@@ -3260,7 +3262,7 @@ pub fn render_hook_install_human(installation: &crate::hook::InstalledHook) -> S
     )
 }
 
-/// JSON `rac hook install`.
+/// JSON `decided hook install`.
 pub fn render_hook_install_json(installation: &crate::hook::InstalledHook) -> String {
     dumps_indent2(&json!({
         "schema_version": "1",
@@ -3269,19 +3271,19 @@ pub fn render_hook_install_json(installation: &crate::hook::InstalledHook) -> St
     }))
 }
 
-// --- scaffold writes (rac new / init / quickstart / migrate / rename —
+// --- scaffold writes (decided new / init / quickstart / migrate / rename —
 // PORT-CONTRACT.d/16) ---------------------------------------------------------
 
-/// Human `rac new`: what was created, its identity, and the next step. The
+/// Human `decided new`: what was created, its identity, and the next step. The
 /// path is the argv string VERBATIM (no pathlib normalization).
 pub fn render_new_human(created: &crate::scaffold::CreatedArtifact) -> String {
     format!(
-        "Created {} artifact: {}\nID: {}\n\nEdit the TODO placeholders, then check it with: rac validate {}",
+        "Created {} artifact: {}\nID: {}\n\nEdit the TODO placeholders, then check it with: decided validate {}",
         created.artifact_type, created.path, created.id, created.path
     )
 }
 
-/// JSON `rac new` (stable contract, ADR-007) — note: NO `bytes_written`
+/// JSON `decided new` (stable contract, ADR-007) — note: NO `bytes_written`
 /// (in the oracle's dataclass but not its `to_dict`).
 pub fn render_new_json(created: &crate::scaffold::CreatedArtifact) -> String {
     dumps_indent2(&json!({
@@ -3293,7 +3295,7 @@ pub fn render_new_json(created: &crate::scaffold::CreatedArtifact) -> String {
     }))
 }
 
-/// Human `rac init`: the established identity namespace. The idempotent
+/// Human `decided init`: the established identity namespace. The idempotent
 /// verb carries its own colon (`Already initialized:`).
 pub fn render_init_human(result: &crate::scaffold::InitResult) -> String {
     let verb = if result.created {
@@ -3315,7 +3317,7 @@ pub fn render_init_human(result: &crate::scaffold::InitResult) -> String {
     lines.join("\n")
 }
 
-/// JSON `rac init` (stable contract, ADR-007).
+/// JSON `decided init` (stable contract, ADR-007).
 pub fn render_init_json(result: &crate::scaffold::InitResult) -> String {
     dumps_indent2(&json!({
         "schema_version": "1",
@@ -3328,18 +3330,18 @@ pub fn render_init_json(result: &crate::scaffold::InitResult) -> String {
     }))
 }
 
-/// Human `rac quickstart`: identity (`Initialized`/`Using`), first
+/// Human `decided quickstart`: identity (`Initialized`/`Using`), first
 /// artifact, next step.
 pub fn render_quickstart_human(result: &crate::scaffold::QuickstartResult) -> String {
     let verb = if result.created { "Initialized" } else { "Using" };
     let artifact = &result.artifact;
     format!(
-        "{verb} repository key {}\nCreated {} artifact: {}\nID: {}\n\nNext: edit the TODO placeholders, then run: rac validate {}",
+        "{verb} repository key {}\nCreated {} artifact: {}\nID: {}\n\nNext: edit the TODO placeholders, then run: decided validate {}",
         result.repository_key, artifact.artifact_type, artifact.path, artifact.id, artifact.path
     )
 }
 
-/// JSON `rac quickstart` (stable contract, ADR-007) — nested `artifact`.
+/// JSON `decided quickstart` (stable contract, ADR-007) — nested `artifact`.
 pub fn render_quickstart_json(result: &crate::scaffold::QuickstartResult) -> String {
     dumps_indent2(&json!({
         "schema_version": "1",
@@ -3354,7 +3356,7 @@ pub fn render_quickstart_json(result: &crate::scaffold::QuickstartResult) -> Str
     }))
 }
 
-/// Human `rac migrate metadata`: assigned IDs and what remains. The
+/// Human `decided migrate metadata`: assigned IDs and what remains. The
 /// migrated path column is code-point ljust'd; the Skipped block appears
 /// only when unknowns exist.
 pub fn render_migrate_human(report: &crate::scaffold::MigrationReport) -> String {
@@ -3412,7 +3414,7 @@ pub fn render_migrate_human(report: &crate::scaffold::MigrationReport) -> String
     lines.join("\n")
 }
 
-/// JSON `rac migrate metadata` (stable contract, ADR-007).
+/// JSON `decided migrate metadata` (stable contract, ADR-007).
 pub fn render_migrate_json(report: &crate::scaffold::MigrationReport) -> String {
     let files: Vec<Value> = report
         .files
@@ -3464,7 +3466,7 @@ fn rename_reason_phrase(reason: Option<&str>) -> String {
     }
 }
 
-/// Human `rac rename` plan: a reviewable diff-hunk preview (dry run) or a
+/// Human `decided rename` plan: a reviewable diff-hunk preview (dry run) or a
 /// refusal (the CALLER routes refusals to stderr).
 pub fn render_rename_human(plan: &crate::rename::RenamePlan) -> String {
     let header = format!("Rename {} -> {}", plan.old_ref, plan.new_ref);
@@ -3507,7 +3509,7 @@ pub fn render_rename_human(plan: &crate::rename::RenamePlan) -> String {
     lines.join("\n")
 }
 
-/// JSON `rac rename` plan (stable additive contract, ADR-007) — emitted to
+/// JSON `decided rename` plan (stable additive contract, ADR-007) — emitted to
 /// STDOUT for refusals too (unlike the human refusal, which goes stderr).
 pub fn render_rename_json(plan: &crate::rename::RenamePlan) -> String {
     let edits: Vec<Value> = plan
@@ -3539,7 +3541,7 @@ pub fn render_rename_json(plan: &crate::rename::RenamePlan) -> String {
     }))
 }
 
-/// Human `rac rename --apply` outcome.
+/// Human `decided rename --apply` outcome.
 pub fn render_rename_result_human(result: &crate::rename::RenameResult) -> String {
     let header = format!("Rename {} -> {}", result.old_ref, result.new_ref);
     if !result.applied {
@@ -3557,7 +3559,7 @@ pub fn render_rename_result_human(result: &crate::rename::RenameResult) -> Strin
     )
 }
 
-/// JSON `rac rename --apply` outcome (no `edits` array).
+/// JSON `decided rename --apply` outcome (no `edits` array).
 pub fn render_rename_result_json(result: &crate::rename::RenameResult) -> String {
     dumps_indent2(&json!({
         "directory": result.directory,
@@ -3614,7 +3616,7 @@ fn wk_issue_phrase(issue: &RelationshipIssueRef) -> String {
     }
 }
 
-/// Human-readable `rac watchkeeper` output (v0.12.0).
+/// Human-readable `decided watchkeeper` output (v0.12.0).
 pub fn render_watchkeeper_human(report: &WatchkeeperReport) -> String {
     let comparison = &report.comparison;
     let mut lines: Vec<String> = vec![
@@ -3807,7 +3809,7 @@ fn wk_requirement_value(r: &Requirement) -> Value {
 }
 
 fn wk_diff_value(diff: &Diff) -> Value {
-    // Mirrors the `rac diff` JSON fields so the requirement-level shape is
+    // Mirrors the `decided diff` JSON fields so the requirement-level shape is
     // the same wherever a diff appears.
     let mut m = Map::new();
     m.insert(
@@ -3855,7 +3857,7 @@ fn wk_change_value(change: &crate::compare::ArtifactChange) -> Value {
     Value::Object(m)
 }
 
-/// JSON `rac watchkeeper` output (stable contract, ADR-007).
+/// JSON `decided watchkeeper` output (stable contract, ADR-007).
 pub fn render_watchkeeper_json(report: &WatchkeeperReport) -> String {
     let comparison = &report.comparison;
     let validation = &comparison.validation;
@@ -3951,7 +3953,7 @@ fn wk_repo_path(report: &WatchkeeperReport, corpus_relative: &str) -> String {
     crate::walk::py_join(&report.directory, &[corpus_relative])
 }
 
-/// The Markdown step-summary report (`rac watchkeeper --format github`).
+/// The Markdown step-summary report (`decided watchkeeper --format github`).
 pub fn render_watchkeeper_github(report: &WatchkeeperReport) -> String {
     let comparison = &report.comparison;
     let validation = &comparison.validation;

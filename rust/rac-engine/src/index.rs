@@ -1,4 +1,4 @@
-//! Repository index — `rac index` (services/index.py, INDEX-PLAN B1).
+//! Repository index — `decided index` (services/index.py, INDEX-PLAN B1).
 //!
 //! One walk, one parse per file, entries in sorted-path order. Identity-only
 //! JSON contract (id/type/title/path/aliases); the command never consumes or

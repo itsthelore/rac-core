@@ -15,8 +15,8 @@ from pathlib import Path
 
 from conftest import fixture_path
 
-from rac.mcp.server import build_server
-from rac.mcp.surface import (
+from asdecided.mcp.server import build_server
+from asdecided.mcp.surface import (
     PER_CALL_BUDGET_TOKENS,
     STANDING_BUDGET_HARD_CAP,
     STANDING_BUDGET_TOKENS,

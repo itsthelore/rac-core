@@ -131,8 +131,8 @@ fn directory_validation_walks_the_whole_catalog() {
 #[test]
 fn new_mints_an_id_over_the_full_catalog() {
     let root = scratch_root("new");
-    std::fs::create_dir_all(root.join(".rac")).unwrap();
-    std::fs::write(root.join(".rac/config.yaml"), "repository_key: RAC\n").unwrap();
+    std::fs::create_dir_all(root.join(".decided")).unwrap();
+    std::fs::write(root.join(".decided/config.yaml"), "repository_key: RAC\n").unwrap();
     let corpus = root.join("rac/hostile");
     std::fs::create_dir_all(&corpus).unwrap();
     for path in hostile_fixtures() {
@@ -152,7 +152,7 @@ fn new_mints_an_id_over_the_full_catalog() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// Class B — the two deterministic `RAC_MAX_FILE_BYTES` read-crash zones
+/// Class B — the two deterministic `DECIDED_MAX_FILE_BYTES` read-crash zones
 /// classify as the graceful marker (never a panic, never an attempted
 /// allocation), and a huge-but-parsed cap still reads every fixture.
 #[test]

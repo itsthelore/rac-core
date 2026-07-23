@@ -24,7 +24,7 @@ Rust port should replay these exact argv lists and diff stdout byte-for-byte.
 - Only **stdout** is captured (`capsys.readouterr().out`). stderr is explicitly
   out of scope for goldens (watchkeeper `--format github` streams annotations to
   stderr; those are pinned separately in `tests/test_watchkeeper.py`).
-- Refresh mechanism: env `RAC_UPDATE_GOLDEN=1` rewrites goldens. The Rust
+- Refresh mechanism: env `DECIDED_UPDATE_GOLDEN=1` rewrites goldens. The Rust
   harness does not need this, but note the goldens are authoritative only for
   the exact repo git state they were captured against for any git-touching case
   (none of the 40 golden cases touch git recency after stripping — see §1.3).
@@ -42,7 +42,7 @@ behave *as if* these are set, because the goldens were captured under them:
    rewriting. (Paths flow through unchanged; on Linux they stay `/`-separated.)
 2. **`rac.output.human._USE_COLOR = False`** — forces plain output. In the real
    binary this variable is `sys.stdout.isatty()` evaluated **at module import
-   time** (`src/rac/output/human.py:93`). So: **color is emitted only when
+   time** (`src/asdecided/output/human.py:93`). So: **color is emitted only when
    stdout is a TTY.** There is **no** `NO_COLOR` / `FORCE_COLOR` / `CLICOLOR`
    env check — piping (non-TTY) already yields plain output. The Rust port
    should key color off `stdout.is_terminal()` and, for parity/goldens, emit
@@ -62,7 +62,7 @@ behave *as if* these are set, because the goldens were captured under them:
 
 Additionally, `tests/conftest.py` has an **autouse** fixture `_isolated_xdg`
 that, for *every* test, points `XDG_CONFIG_HOME` / `XDG_STATE_HOME` /
-`XDG_CACHE_HOME` at temp dirs and deletes `RAC_CACHE_DIR` / `RAC_NO_CACHE`. The
+`XDG_CACHE_HOME` at temp dirs and deletes `DECIDED_CACHE_DIR` / `DECIDED_NO_CACHE`. The
 golden test's explicit `XDG_STATE_HOME` override wins over the autouse one for
 the state dir. Rationale (quoted): no test may read/write real user state, and
 with a live PostHog key in source (ADR-041) no run may phone home; cache
@@ -176,7 +176,7 @@ All under `tests/fixtures/`. Counts are `.md` files (artifacts) unless noted.
 | `resolve/` | 2: `markdown-first.md` (id `RAC-01JY4M8X2QZ7`, decision), `v0-canonical-format.md` (id `v0-canonical-format`, roadmap) | `resolve`, `find`, `relationships` |
 | `relationships/` | 5: `{decision,design,prompt,requirement,roadmap}_with_links.md` | `relationships` |
 | `relationship_validation/` | subdirs: `resolved/`, `broken/`, `ambiguous_target/`, `duplicate/`, `self_reference/` | `relationships --validate` |
-| `migrate/` | 3: `adr-001-legacy.md` (→migrated), `canonical.md` (→already-canonical), `notes.md` (→skipped-unknown); plus `.rac/` config dir | `migrate metadata --dry-run` |
+| `migrate/` | 3: `adr-001-legacy.md` (→migrated), `canonical.md` (→already-canonical), `notes.md` (→skipped-unknown); plus `.decided/` config dir | `migrate metadata --dry-run` |
 | `watchkeeper/base/` & `watchkeeper/head/` | each has `decisions/`, `requirements/`, `roadmaps/` subtrees | `watchkeeper --base` (dir-to-dir, **git-free** by design — see §4) |
 | `doctor/unlinked/` | 2: `adr-001-alpha.md`, `adr-002-beta.md` | `doctor` (advisory unlinked-reference, rc 0) |
 | `telemetry/state/rac/guide-telemetry.jsonl` | 1 jsonl (6 lines, one deliberately invalid) | `mcp-stats` (via `XDG_STATE_HOME`) |
@@ -232,9 +232,9 @@ Beyond `test_golden.py`, ~59 test files assert exit codes (`assert rc == …`,
 RAC artifacts carry **no stored timestamp**; recency is **derived from `git
 log`**, never stored (ADR-045). This makes several outputs depend on git state.
 The parity harness **must control or strip every field below.** Git is touched
-read-only in exactly these modules: `src/rac/services/recency.py`,
-`src/rac/services/revisions.py` (watchkeeper materialization),
-`src/rac/services/drift.py`, `src/rac/services/watchkeeper.py`.
+read-only in exactly these modules: `src/asdecided/services/recency.py`,
+`src/asdecided/services/revisions.py` (watchkeeper materialization),
+`src/asdecided/services/drift.py`, `src/asdecided/services/watchkeeper.py`.
 
 ### 4.1 The git primitives (exact commands)
 
@@ -288,7 +288,7 @@ Given `last_committed` (tz-aware) and a `reference` ("now", default
   `{"last_committed": None, "age_days": None, "stale": None}`.
 - `DEFAULT_STALE_AFTER_DAYS = 180`.
 - Threshold config: `load_freshness_threshold` reads `freshness.stale_after_days`
-  from the nearest `.rac/config.yaml` (walked upward via `find_config_file`).
+  from the nearest `.decided/config.yaml` (walked upward via `find_config_file`).
   Defaults to 180 when absent, malformed YAML, non-mapping, or value is not a
   **positive int** — and **`bool` is explicitly rejected** (`isinstance(value,
   bool)` guard: `true`/`false` are not day counts even though `bool` is an
@@ -334,16 +334,16 @@ env. Enumerated env vars actually set/deleted across `tests/*.py` (by frequency)
 |---|---|---|
 | `XDG_STATE_HOME` | 20 | telemetry/audit log location; golden points it at a relative fixture path |
 | `XDG_CONFIG_HOME` | 17 | consent/config isolation (autouse conftest) |
-| `RAC_CACHE_DIR` | 12 | override derived-index cache dir |
+| `DECIDED_CACHE_DIR` | 12 | override derived-index cache dir |
 | `EDITOR` / `VISUAL` | 10 / 9 | explorer/editor launch tests |
-| `RAC_MAX_FILE_BYTES` | 7 | file-size limit override (`limits.py`, default `DEFAULT_MAX_FILE_BYTES`) |
-| `RAC_AUDIT_PRINCIPAL` / `RAC_AUDIT_PATH` | 6 / 4 | read-access audit recorder (ADR-084) |
+| `DECIDED_MAX_FILE_BYTES` | 7 | file-size limit override (`limits.py`, default `DEFAULT_MAX_FILE_BYTES`) |
+| `DECIDED_AUDIT_PRINCIPAL` / `DECIDED_AUDIT_PATH` | 6 / 4 | read-access audit recorder (ADR-084) |
 | `XDG_CACHE_HOME` | 5 | cache isolation (autouse) |
-| `RAC_NO_CACHE` | 4 | disable persistent cache (default-on per ADR-112) |
+| `DECIDED_NO_CACHE` | 4 | disable persistent cache (default-on per ADR-112) |
 | `HOME` | 3 | home-relative path tests |
-| `RAC_TIMING` | 2 | timing instrumentation toggle |
-| `RAC_PARALLEL_BUILD_FAULT` | 1 | fault-injection for parallel cold build |
-| `RAC_UPDATE_GOLDEN` | (golden refresh) | rewrite goldens when `=1` |
+| `DECIDED_TIMING` | 2 | timing instrumentation toggle |
+| `DECIDED_PARALLEL_BUILD_FAULT` | 1 | fault-injection for parallel cold build |
+| `DECIDED_UPDATE_GOLDEN` | (golden refresh) | rewrite goldens when `=1` |
 
 **Consequence for the Rust port:** TZ/locale are **not** normalized by tests, so
 any locale-sensitive formatting in the port is a risk. Recency offsets come from

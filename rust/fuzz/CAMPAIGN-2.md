@@ -16,8 +16,8 @@ path edge forms, and multi-file corpora.
   landed — never mid-round (each round ran against a single build).
 - Findings catalog: `rust/fuzz/findings2/` (campaign 1: `findings/`).
 - Comparison: raw stdout bytes + exit codes under the parity env
-  (env-cleared, `RAC_NO_CACHE=1`, `LC_ALL=C`, `TZ=UTC`, `COLUMNS=80`,
-  `PYTHONHASHSEED=0`, `RAC_RS_VERSION` seam; stdin null unless the case
+  (env-cleared, `DECIDED_NO_CACHE=1`, `LC_ALL=C`, `TZ=UTC`, `COLUMNS=80`,
+  `PYTHONHASHSEED=0`, `DECIDED_RS_VERSION` seam; stdin null unless the case
   feeds it).
 
 ## Command matrix
@@ -42,7 +42,7 @@ rotate inside one slot).
     from the real set, case variants, or content-derived garbage
   - stdin: `validate - [--json]`, `validate - --corpus DIR --json`
     (case bytes fed on stdin)
-  - env: `RAC_MAX_FILE_BYTES` ∈ {small/boundary/data-length±1, zero,
+  - env: `DECIDED_MAX_FILE_BYTES` ∈ {small/boundary/data-length±1, zero,
     negative, unparseable, underscore/sign/whitespace forms, non-ASCII
     Nd digits (`٣٢`), > 2^63, > 2^64} on `validate FILE --json` /
     `validate DIR`
@@ -88,7 +88,7 @@ Numbering continues campaign 1 (001–003).
 
 | finding | class | surface | summary | resolution |
 |---|---|---|---|---|
-| **004** `RAC_MAX_FILE_BYTES` seam | (a) Rust bug + (b) oracle crash zone | every file-reading command | Rust parsed the override with an ASCII-only i64 parser: CPython `int()` accepts non-ASCII Nd digits (`٣٢` = 32) and unbounded magnitude, so such caps silently fell back to 1 MiB (wrong oversize behavior), and huge caps missed the oracle's read-stage crashes: `fh.read(cap+1)` raises `OverflowError: cannot fit 'int' into an index-sized integer` (cap ≥ 2^63−1) or `OverflowError: byte string is too large` (2^63−34 ≤ cap ≤ 2^63−2), boundaries pinned empirically. | **FIXED.** `frontmatter::FileCap` + shared `markdown::py_parse_int` (now saturating beyond i128); the two deterministic crash zones are mirrored as decision-3 markers at the read stage; the machine-dependent `MemoryError` zone (huge-but-allocatable caps) is documented, not mirrored. Vectors: `frontmatter.json` env_cap +7 cases, boundary asserts in `frontmatter_vectors.rs`; parity pins `pin-c2-maxbytes-*`. |
+| **004** `DECIDED_MAX_FILE_BYTES` seam | (a) Rust bug + (b) oracle crash zone | every file-reading command | Rust parsed the override with an ASCII-only i64 parser: CPython `int()` accepts non-ASCII Nd digits (`٣٢` = 32) and unbounded magnitude, so such caps silently fell back to 1 MiB (wrong oversize behavior), and huge caps missed the oracle's read-stage crashes: `fh.read(cap+1)` raises `OverflowError: cannot fit 'int' into an index-sized integer` (cap ≥ 2^63−1) or `OverflowError: byte string is too large` (2^63−34 ≤ cap ≤ 2^63−2), boundaries pinned empirically. | **FIXED.** `frontmatter::FileCap` + shared `markdown::py_parse_int` (now saturating beyond i128); the two deterministic crash zones are mirrored as decision-3 markers at the read stage; the machine-dependent `MemoryError` zone (huge-but-allocatable caps) is documented, not mirrored. Vectors: `frontmatter.json` env_cap +7 cases, boundary asserts in `frontmatter_vectors.rs`; parity pins `pin-c2-maxbytes-*`. |
 | **005** stdin surrogateescape | (a) Rust bug | `validate -` | The oracle reads stdin as TEXT with `errors="surrogateescape"` (each undecodable byte → lone surrogate U+DC00+b); Rust used the file path's lossy U+FFFD decode. Everything downstream diverged: PyYAML rejects surrogates (`unacceptable character #xdccc … position N`), `repr()` shows `\udccc`, JSON writes `\udccc`, human stdout re-emits the raw byte. | **FIXED.** `pycompat::decode_stdin_surrogateescape` maps each bad byte to a plane-16 PUA sentinel (U+10FC00+b) behind a process-wide flag; sentinel-aware sinks: YAML `check_printable`, `py_repr_str`, the JSON writer, and stdout emission (re-materializes the raw byte). Flag-gated: file-based runs are bit-identical to before. Unit tests in `pycompat.rs`; parity pins `pin-c2-stdin-*` via the harness's new `stdin_file` case field. |
 | **006** export universal newlines | (a) Rust bug | `export DIR [--json\|--documents]` | The oracle's `_body_markdown` re-reads artifacts in TEXT mode: universal newlines fold `\r\n`/`\r` to `\n` before `split_frontmatter`; Rust exported the raw CRLF body (`text` field, and `body_html` rendering input). 4 signatures filed in round 1, one root cause. | **FIXED.** `export::body_markdown` now folds `\r\n`/`\r` → `\n`. The same re-read is STRICT utf-8 in the oracle — invalid bytes crash it (`UnicodeDecodeError`) while Rust exports the lossy body; that side is divergence-by-design (catalogued as oracle-crash Class D). Parity pins `pin-c2-export-*-crlf` on `rust/fuzz/pinned/crlf/`. |
 | **007** fence-at-EOF html | (a) Rust bug | `export DIR [--json]` (`body_html`) | markdown-it-py builds fence content by slicing the source (`src[first:eMark+1]` truncates silently at EOF), so an UNCLOSED fence whose last line ends the document without a newline has no trailing `\n`; the markdown-it crate's `get_lines` appends one unconditionally → `<code>…inside\n</code>` vs `<code>…inside</code>`. | **FIXED.** Post-parse AST fixup in `mdhtml.rs` (`fix_eof_fence_content`): a CodeFence whose srcmap ends at EOF and whose span holds exactly 1 + content-lines source lines is unclosed-at-EOF; strip the synthetic newline. Container-nesting safe (line counts, not prefixes). Parity pin `pin-c2-export-render-fence-eof-strip`. |

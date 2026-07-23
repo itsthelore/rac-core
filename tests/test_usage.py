@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from rac import consent, usage
-from rac.cli import main
+from asdecided import consent, usage
+from asdecided.cli import main
 
 EVENT_KEYS = {"schema_version", "ts", "session", "command", "outcome", "duration_ms"}
 

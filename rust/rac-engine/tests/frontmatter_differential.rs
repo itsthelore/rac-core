@@ -1,7 +1,7 @@
 //! Differential driver for oracle-vs-port frontmatter fuzzing (Phase 3
 //! support). Ignored by default; the fuzz harness runs it with:
 //!
-//!   RAC_FM_DIFF_IN=<inputs.json> RAC_FM_DIFF_OUT=<out.json> \
+//!   DECIDED_FM_DIFF_IN=<inputs.json> DECIDED_FM_DIFF_OUT=<out.json> \
 //!       cargo test -p rac-engine --test frontmatter_differential -- --ignored
 //!
 //! `inputs.json` is a JSON array of raw frontmatter strings; the output is a
@@ -115,7 +115,7 @@ fn enc_yaml(v: &Yaml) -> Value {
         }),
         Yaml::Set(items) => {
             let mut encoded: Vec<Value> = items.iter().map(enc_yaml).collect();
-            encoded.sort_by_key(|e| canon(e));
+            encoded.sort_by_key(canon);
             json!({"t": "set", "v": encoded})
         }
     }
@@ -144,10 +144,10 @@ fn enc_meta(m: &Option<ArtifactMetadata>) -> Value {
 }
 
 #[test]
-#[ignore = "differential driver; run explicitly with RAC_FM_DIFF_IN/OUT"]
+#[ignore = "differential driver; run explicitly with DECIDED_FM_DIFF_IN/OUT"]
 fn differential_batch() {
-    let input = std::env::var("RAC_FM_DIFF_IN").expect("RAC_FM_DIFF_IN");
-    let output = std::env::var("RAC_FM_DIFF_OUT").expect("RAC_FM_DIFF_OUT");
+    let input = std::env::var("DECIDED_FM_DIFF_IN").expect("DECIDED_FM_DIFF_IN");
+    let output = std::env::var("DECIDED_FM_DIFF_OUT").expect("DECIDED_FM_DIFF_OUT");
     let text = std::fs::read_to_string(&input).expect("read diff input");
     let raws: Vec<String> = serde_json::from_str(&text).expect("parse diff input");
     let mut results: Vec<Value> = Vec::new();

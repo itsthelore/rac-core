@@ -14,16 +14,16 @@ import json
 
 from conftest import fixture_path
 
-import rac.services.improve as improve_mod
-from rac.cli import main
-from rac.core.artifacts import spec_for
-from rac.core.classification import classify
-from rac.core.markdown import parse, parse_file
-from rac.core.schema import available_schemas, schema_reference
-from rac.core.validation import has_errors, validate
-from rac.services.improve import improve_file, supports_improve
-from rac.services.inspect import inspect_file
-from rac.services.stats import collect_stats
+import asdecided.services.improve as improve_mod
+from asdecided.cli import main
+from asdecided.core.artifacts import spec_for
+from asdecided.core.classification import classify
+from asdecided.core.markdown import parse, parse_file
+from asdecided.core.schema import available_schemas, schema_reference
+from asdecided.core.validation import has_errors, validate
+from asdecided.services.improve import improve_file, supports_improve
+from asdecided.services.inspect import inspect_file
+from asdecided.services.stats import collect_stats
 
 
 def _stdin(monkeypatch, text: str) -> None:
@@ -207,7 +207,7 @@ def test_template_omits_optional_relationship_sections(capsys):
 def test_template_passes_validation(monkeypatch):
     ref = schema_reference("prompt")
     assert ref is not None
-    from rac.output import render_schema_template
+    from asdecided.output import render_schema_template
 
     template = render_schema_template(ref)
     _stdin(monkeypatch, template)

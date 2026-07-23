@@ -1,8 +1,8 @@
-"""Tests for built-in init profiles — `rac init --profile <name>` (ADR-088).
+"""Tests for built-in init profiles — `decided init --profile <name>` (ADR-088).
 
 A profile writes *configuration only* (never prose): the `.mcp.json` client wiring
 and, for `enterprise`, an enforcement-policy stanza. It applies on a fresh init,
-never overwrites an existing file, and leaves plain `rac init` unchanged.
+never overwrites an existing file, and leaves plain `decided init` unchanged.
 """
 
 from __future__ import annotations
@@ -11,20 +11,20 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.services.init import (
+from asdecided.cli import main
+from asdecided.services.init import (
     InvalidProfile,
     init_repository,
     load_enforcement_policy,
     load_overrides,
 )
-from rac.services.profiles import MCP_JSON, PROFILE_NAMES, get_profile
+from asdecided.services.profiles import MCP_JSON, PROFILE_NAMES, get_profile
 
 _LORE_MCP = {"mcpServers": {"lore": {"command": "rac", "args": ["mcp", "--root", "."]}}}
 
 
 def _config(tmp_path) -> str:
-    return (tmp_path / ".rac" / "config.yaml").read_text(encoding="utf-8")
+    return (tmp_path / ".decided" / "config.yaml").read_text(encoding="utf-8")
 
 
 # --- the profile definitions -------------------------------------------------
@@ -47,7 +47,7 @@ def test_default_profile_writes_mcp_configs_only(tmp_path):
     result = init_repository(str(tmp_path), key="ACME", profile="default")
     assert result.created
     assert result.profile == "default"
-    # Both client configs written; no policy stanza in .rac/config.yaml.
+    # Both client configs written; no policy stanza in .decided/config.yaml.
     assert (tmp_path / ".mcp.json").exists()
     assert (tmp_path / ".cursor" / "mcp.json").exists()
     assert json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8")) == _LORE_MCP

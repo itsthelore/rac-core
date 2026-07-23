@@ -30,11 +30,11 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from rac.core.corpus import corpus_content_hash, walk_corpus
-from rac.services.derived_cache import build_derived_index, to_json_obj
-from rac.services.index_store import store_dir, write_store
-from rac.services.parallel_build import build_derived_index_parallel
-from rac.services.parallel_merge import fragment_from_entry, reproduce
+from asdecided.core.corpus import corpus_content_hash, walk_corpus
+from asdecided.services.derived_cache import build_derived_index, to_json_obj
+from asdecided.services.index_store import store_dir, write_store
+from asdecided.services.parallel_build import build_derived_index_parallel
+from asdecided.services.parallel_merge import fragment_from_entry, reproduce
 
 _BUNDLE_VERSION = "3"
 
@@ -207,7 +207,7 @@ def test_scope_and_live_decision_parity(tmp_path):
     _write(
         tmp_path,
         "live.md",
-        _decision(_id(700), title="Live", applies_to=["src/rac/services/"]),
+        _decision(_id(700), title="Live", applies_to=["src/asdecided/services/"]),
     )
     _write(tmp_path, "dead.md", _decision(_id(701), status="Deprecated"))
     _serial, merged = _assert_merge_parity(tmp_path)

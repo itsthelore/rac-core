@@ -6,7 +6,7 @@ they fail CI whenever corpus validation or relationship integrity regresses.
 
 Classification is deliberately not gated: legacy corpus documents that
 classify as Unknown remain Unknown (a valid outcome, surfaced as advisory
-priority-3 findings by ``rac review``). Normalizing them to their schemas is
+priority-3 findings by ``decided review``). Normalizing them to their schemas is
 deferred — see rac/roadmaps/v0.7.9-repository-review.md, Risks.
 
 The examples corpus under ``examples/guide/rac/`` is also gated here
@@ -24,10 +24,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rac.services.relationships import validate_relationships
-from rac.services.resolve import find_artifacts, resolve_artifact
-from rac.services.review import build_review
-from rac.services.validate import validate_directory
+from asdecided.services.relationships import validate_relationships
+from asdecided.services.resolve import find_artifacts, resolve_artifact
+from asdecided.services.review import build_review
+from asdecided.services.validate import validate_directory
 
 CORPUS = str(Path(__file__).parent.parent / "rac")
 GUIDE_ROOT = str(Path(__file__).parent.parent / "examples" / "guide")
@@ -76,7 +76,7 @@ def test_guide_corpus_relationships_resolve():
 def test_guide_corpus_has_one_of_each_type():
     """The guide corpus must contain exactly one requirement, decision, design,
     and roadmap — the connected four the implementation contract pins."""
-    from rac.services.index import build_repository_index
+    from asdecided.services.index import build_repository_index
 
     index = build_repository_index(GUIDE_CORPUS, recursive=True)
     by_type: dict[str, int] = {}
@@ -108,17 +108,17 @@ def test_demo_keywords_surface_the_decision():
 
 def test_lore_does_not_match_explorer_artifacts():
     """Named regression (ADR-037): `lore` is a substring of "Explorer" but not a
-    token prefix of it. On the dogfood corpus — which carries both Lore and many
-    Explorer artifacts — `rac find lore` must return only Lore-related artifacts
+    token prefix of it. On the dogfood corpus — which carries both AsDecided and many
+    Explorer artifacts — `decided find lore` must return only AsDecided-related artifacts
     and never an Explorer one."""
     result = find_artifacts(CORPUS, "lore")
-    assert result.match_count > 0  # the Lore product-identity artifacts exist
+    assert result.match_count > 0  # the AsDecided product-identity artifacts exist
     leaked = [m.path for m in result.matches if "explorer" in m.path.casefold()]
     assert leaked == [], f"`lore` leaked Explorer artifacts: {leaked}"
-    # Every match is genuinely Lore-related: the token appears in its content.
+    # Every match is genuinely AsDecided-related: the token appears in its content.
     for m in result.matches:
         text = Path(m.path).read_text(encoding="utf-8").casefold()
-        from rac.services.resolve import tokenize
+        from asdecided.services.resolve import tokenize
 
         assert "lore" in tokenize(text), f"{m.path} matched 'lore' without a lore token"
 

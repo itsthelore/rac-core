@@ -3,8 +3,8 @@
 Scope: the JSON-RPC/MCP stdio surface of `rac mcp` — framing, handshake,
 `tools/list` bytes, tool result shape, the ADR-033 budget as observed on the
 wire, audit/telemetry side channels, and the parity rule for a two-server
-harness. Source modules: `src/rac/mcp/{server,budget,errors,audit,telemetry,
-transport,ping,surface}.py`, CLI wiring `src/rac/cli.py` (`cmd_mcp`,
+harness. Source modules: `src/asdecided/mcp/{server,budget,errors,audit,telemetry,
+transport,ping,surface}.py`, CLI wiring `src/asdecided/cli.py` (`cmd_mcp`,
 `p_mcp`). HTTP transport (ADR-098) is out of scope here; stdio is the pinned
 default and the porting target.
 
@@ -33,12 +33,12 @@ rac mcp --root <ROOT>            # stdio, cache on (ADR-112)
   fields and the summary `directory` field embed the resolved-from-`root`
   absolute paths as the walker produces them. A parity harness MUST pass the
   identical `--root` string (absolute path recommended) to both servers.
-- Cache: on by default; `--no-cache` or `RAC_NO_CACHE=1` disables. **Verified:
-  cache-on vs `RAC_NO_CACHE=1` runs are frame-for-frame byte-identical EXCEPT
+- Cache: on by default; `--no-cache` or `DECIDED_NO_CACHE=1` disables. **Verified:
+  cache-on vs `DECIDED_NO_CACHE=1` runs are frame-for-frame byte-identical EXCEPT
   for duplicate-token queries** (see §0a — an oracle defect; the ADR-112
   guarantee holds on the wire for queries whose token list has no repeats).
   The cache lives under `$XDG_CACHE_HOME/rac/derived`. As a consequence, the
-  parity harness pins `RAC_NO_CACHE=1` in the base environment of BOTH
+  parity harness pins `DECIDED_NO_CACHE=1` in the base environment of BOTH
   servers, making the no-cache engine path the canonical comparison path —
   the same path every other parity claim in this spike compares against.
 
@@ -54,12 +54,12 @@ the cache-on `evidence` bytes differ from the no-cache bytes
 Root cause (from source): the two serving paths disagree on how a duplicated
 term contributes to document frequency.
 
-- No-cache (`src/rac/services/resolve.py`, `_corpus_stats`, ~lines 730-738):
+- No-cache (`src/asdecided/services/resolve.py`, `_corpus_stats`, ~lines 730-738):
   `df = dict.fromkeys(terms, 0)` then `for term in terms: ... df[term] += 1`
   per matching document — the loop runs once per *occurrence*, so a term
   listed twice increments its df twice per matching doc (df doubles, idf
   drops, bm25 drops).
-- Cache-on (`src/rac/services/index_store.py`, ~lines 994 and 1047):
+- Cache-on (`src/asdecided/services/index_store.py`, ~lines 994 and 1047):
   `df = {term: self.prefix_df(term) for term in terms}` — a dict
   comprehension keyed by term, so a duplicated term is counted once from the
   persisted postings (dedup).
@@ -67,7 +67,7 @@ term contributes to document frequency.
 This violates ADR-112's invariant (cache on is byte-identical to the uncached
 path) for this input class. It is an oracle bug, not a port target: **the
 Rust engine matches the no-cache path** (as PORT-CONTRACT.d/06 pinned for the
-CLI search surface), and the parity harness pins `RAC_NO_CACHE=1` on both
+CLI search surface), and the parity harness pins `DECIDED_NO_CACHE=1` on both
 servers (§0 above) so the comparison referees the consistent engine path. The
 duplicate-token cases in `rust/mcp-parity-cases.json`
 (`search-duplicate-token-*`, `decisions-duplicate-token`,
@@ -78,9 +78,9 @@ duplicate-token cases in `rust/mcp-parity-cases.json`
   no daily ping thread and no PostHog traffic (`ping.py` requires
   `$XDG_CONFIG_HOME/rac/telemetry.json` consent + key); no telemetry log
   (also requires the `--telemetry` flag, off by default); no audit recorder
-  (requires an `audit:` stanza in the nearest `.rac/config.yaml` **at or
+  (requires an `audit:` stanza in the nearest `.decided/config.yaml` **at or
   above the root** — note the upward search in `audit._find_config_file`,
-  so a corpus inside a repo that has `.rac/config.yaml` can pick it up).
+  so a corpus inside a repo that has `.decided/config.yaml` can pick it up).
 - cwd: the server never depends on cwd for tool responses when `--root` is
   absolute (all reads go through `root`); run with cwd = repo root anyway —
   `_git_identity` and `artifact_provenance` invoke `git` with `cwd=root`.
@@ -94,7 +94,7 @@ stdout carries only JSON-RPC frames (verified: first byte written is the
 2. `rac mcp: telemetry on — …` (only with `--telemetry`)
 3. `rac mcp: audit on — appending one line per read-tool call … to <path>`
 4. `rac mcp: derived-index cache on (the default) — … under <cache_dir> …`
-   (absent under `--no-cache`/`RAC_NO_CACHE`)
+   (absent under `--no-cache`/`DECIDED_NO_CACHE`)
 5. `rac mcp: anonymous usage sharing on — …` or the no-key variant (consent only)
 6. Per-request SDK log lines: `Processing request of type ListToolsRequest` /
    `CallToolRequest`, and `Tool '<name>' not listed, no validation will be
@@ -364,9 +364,9 @@ bytes:
   designed exception is audit `on_write_error: block` on a failed write →
   the `audit-unavailable` payload above).
 - Audit: enabled only by an `audit:` stanza (`enabled: true`, optional
-  `path`, `on_write_error: warn|block`) in the nearest `.rac/config.yaml`
+  `path`, `on_write_error: warn|block`) in the nearest `.decided/config.yaml`
   at/above the root; a malformed stanza refuses startup via `_usage_error`.
-  Path resolution: `RAC_AUDIT_PATH` env > config `path` >
+  Path resolution: `DECIDED_AUDIT_PATH` env > config `path` >
   `$XDG_STATE_HOME/rac/audit.jsonl`. One JSON line appended per tool call,
   `json.dumps(…, ensure_ascii=False)` **default separators (spaces)**, key
   order: `schema_version, ts, session, principal, transport, attribution,
@@ -378,7 +378,7 @@ bytes:
 
   Nondeterministic per run: `ts` (UTC, milliseconds, `+00:00`→`Z`),
   `session` (`secrets.token_hex(8)` per process), `duration_ms`.
-  `principal`: `RAC_AUDIT_PRINCIPAL` > `git config user.name/user.email`
+  `principal`: `DECIDED_AUDIT_PRINCIPAL` > `git config user.name/user.email`
   **run in the root dir** > `"unattributed"`. `query` echoes the audit args
   the wrapper builds (optional args ride only when supplied); `returned` is
   the deduped ID list parsed back out of the payload. The audit **file** is
@@ -405,7 +405,7 @@ stdout. The nondeterminism lives only in side channels and inputs:
 | git state of the checkout | `provenance`, `recency.last_committed`, `status_history`, incoming graph | **control**: run both servers over the same commit of the same checkout |
 | wall clock (day granularity) | `recency.age_days` / `recency.stale` (now − commit date) | control: same-day runs; flag day-boundary risk in long harnesses |
 | `--root` string | every `path`, summary `directory` | control: identical absolute root |
-| git identity / `RAC_AUDIT_PRINCIPAL` | audit file only | ignore files |
+| git identity / `DECIDED_AUDIT_PRINCIPAL` | audit file only | ignore files |
 | SDK/pydantic versions | `serverInfo.version`, validation-error text | declare: pinned to `mcp 1.28.1` / pydantic `2.13` |
 
 ## 9. Parity comparison rule (two-server harness)

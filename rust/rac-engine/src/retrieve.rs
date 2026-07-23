@@ -1,5 +1,5 @@
-//! Compound deterministic grounding retrieval (`rac retrieve`, ADR-113) — a
-//! port of `src/rac/services/retrieve.py` and `src/rac/services/scope.py` /
+//! Compound deterministic grounding retrieval (`decided retrieve`, ADR-113) — a
+//! port of `src/asdecided/services/retrieve.py` and `src/asdecided/services/scope.py` /
 //! `scope_paths.py` (the scope-binding channel) from the
 //! `grounding-retrieval-surface` branch (oracle `0.1.dev55+gf2091befd`).
 //! The ADR-033 response budget (serialization + truncation) lives in
@@ -74,7 +74,7 @@ fn pure_posix_parts(text: &str) -> (Option<&'static str>, Vec<String>) {
     (root, parts)
 }
 
-/// `repository_root(directory)` — nearest ancestor holding `.rac/config.yaml`,
+/// `repository_root(directory)` — nearest ancestor holding `.decided/config.yaml`,
 /// else the resolved directory itself.
 fn repository_root(directory: &str) -> PathBuf {
     let resolved = Path::new(directory).canonicalize().unwrap_or_else(|_| {
@@ -84,7 +84,7 @@ fn repository_root(directory: &str) -> PathBuf {
             .unwrap_or_else(|_| PathBuf::from(directory))
     });
     for candidate in resolved.ancestors() {
-        if candidate.join(".rac").join("config.yaml").is_file() {
+        if candidate.join(".decided").join("config.yaml").is_file() {
             return candidate.to_path_buf();
         }
     }
@@ -377,7 +377,7 @@ pub fn scope_rows_from_items(items: &[CorpusItem]) -> Vec<ScopeRow> {
 }
 
 /// One governing decision (`GoverningDecision` — the fields retrieve and
-/// `rac decisions-for` read).
+/// `decided decisions-for` read).
 pub struct GoverningDecision {
     pub id: String,
     pub title: String,
@@ -423,7 +423,7 @@ pub struct ScopeLookupResult {
     pub decisions: Vec<GoverningDecision>,
 }
 
-/// `rac.services.scope.decisions_for_path(directory, path, recursive)` — the
+/// `decided.services.scope.decisions_for_path(directory, path, recursive)` — the
 /// CLI face of the scope lookup. Byte-identical to the derived-cache path
 /// (`governing_decisions`) for the same corpus and path; `recursive` threads
 /// the CLI's `--top-level` through the corpus walk (the MCP `find_decisions`
@@ -500,7 +500,7 @@ pub fn decisions_for_path_with_rows(
 /// decisions whose declared `## Applies To` scope governs `path`. Additive
 /// wrapper over the same scope internals `retrieve_grounding` uses
 /// (`scope_rows_from_items` / `normalize_query` / `entry_covers`), byte-identical
-/// to `rac.services.derived_cache.governing_decisions(...).to_dict()`.
+/// to `decided.services.derived_cache.governing_decisions(...).to_dict()`.
 pub fn find_decisions_path_payload(directory: &str, path: &str) -> Value {
     scope_lookup_value(&decisions_for_path(directory, path, true))
 }

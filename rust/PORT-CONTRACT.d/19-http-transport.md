@@ -3,10 +3,10 @@
 Scope: the streamable-HTTP transport of `rac mcp` (ADR-098), ported to
 `rac-mcp` (`src/http.rs`). Addendum 10 pins the stdio JSON-RPC surface and
 declares HTTP out of its scope; this addendum pins HTTP. Source of truth:
-`src/rac/mcp/transport.py` (the Python serving layer, which delegates to the
+`src/asdecided/mcp/transport.py` (the Python serving layer, which delegates to the
 MCP SDK's streamable-HTTP transport in `stateless_http` + `json_response`
-mode), CLI wiring `src/rac/cli.py` (`p_mcp` `--transport/--host/--port/--path`),
-and the audit gate `src/rac/mcp/audit.py`.
+mode), CLI wiring `src/asdecided/cli.py` (`p_mcp` `--transport/--host/--port/--path`),
+and the audit gate `src/asdecided/mcp/audit.py`.
 
 ## 0 — The parity surface, and what is deliberately not on it
 
@@ -72,11 +72,11 @@ covered POST-only clients are unaffected. Recorded as a documented divergence.
 HTTP refuses to start without a *working* audit sink. `http::ensure_audit_sink`
 mirrors `transport.ensure_audit_sink` + `audit.load_audit_config`:
 
-- Read the `audit:` stanza from the nearest `.rac/config.yaml` at or above
+- Read the `audit:` stanza from the nearest `.decided/config.yaml` at or above
   `--root` (walk up; no file / no `audit` section ⇒ disabled).
 - Not enabled ⇒ exit non-zero with the ADR-084 message ("… Add an `audit:`
   stanza with `enabled: true` …").
-- Enabled ⇒ resolve the path (`RAC_AUDIT_PATH` > config `path` >
+- Enabled ⇒ resolve the path (`DECIDED_AUDIT_PATH` > config `path` >
   `$XDG_STATE_HOME/rac/audit.jsonl`), `mkdir -p` its parent, and prove it
   append-openable; otherwise exit non-zero ("… requires a writable audit log …").
 

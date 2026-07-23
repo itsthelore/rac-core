@@ -1,4 +1,4 @@
-"""Tests for `rac gate` — policy-aware unified enforcement (v0.21.14, ADR-049).
+"""Tests for `decided gate` — policy-aware unified enforcement (v0.21.14, ADR-049).
 
 The gate composes validation, relationships, and review into one enforced verdict
 under the corpus enforcement policy. These tests pin the contract that matters:
@@ -21,19 +21,19 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.output import render_gate_json, render_gate_sarif
-from rac.services.gate import (
+from asdecided.cli import main
+from asdecided.output import render_gate_json, render_gate_sarif
+from asdecided.services.gate import (
     EMPTY_POLICY,
     ENFORCEMENT_ADVISORY,
     ENFORCEMENT_BLOCKING,
     EnforcementPolicy,
     build_gate,
 )
-from rac.services.init import MalformedRepositoryConfig, load_enforcement_policy
-from rac.services.relationships import validate_relationships
-from rac.services.review import build_review
-from rac.services.validate import validate_directory
+from asdecided.services.init import MalformedRepositoryConfig, load_enforcement_policy
+from asdecided.services.relationships import validate_relationships
+from asdecided.services.review import build_review
+from asdecided.services.validate import validate_directory
 
 # A minimal valid decision + a roadmap that references it by a resolvable
 # identifier (the filename-derived alias). This corpus is clean: it passes
@@ -158,7 +158,7 @@ def _superseded_corpus(tmp_path):
 
 
 def _write_config(tmp_path, body: str):
-    config_dir = tmp_path / ".rac"
+    config_dir = tmp_path / ".decided"
     config_dir.mkdir(exist_ok=True)
     (config_dir / "config.yaml").write_text(body, encoding="utf-8")
 

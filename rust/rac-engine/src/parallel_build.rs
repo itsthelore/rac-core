@@ -10,7 +10,7 @@
 //!
 //! Correctness never depends on the parallel rung: below the file-count
 //! threshold, on a 1–2 core box, or on ANY worker fault (a panic in a
-//! fragment task — exercised by `RAC_PARALLEL_BUILD_FAULT`), the build
+//! fragment task — exercised by `DECIDED_PARALLEL_BUILD_FAULT`), the build
 //! falls back to the authoritative serial floor, whose partial results are
 //! never written.
 
@@ -21,18 +21,18 @@ use crate::relationships::{relationships_from_corpus, CorpusItem};
 use crate::resolve::{entry_from_item, field_tokens_of, is_live_decision, IndexEntry};
 use crate::retrieve::{scope_rows_from_items, ScopeRow};
 
-const TIMING_ENV: &str = "RAC_TIMING";
+const TIMING_ENV: &str = "DECIDED_TIMING";
 /// Fault-injection hook: when set, every fragment task panics — exercising
 /// the fault → serial-floor degrade in a real parallel run. Never set in
 /// production.
-const FAULT_ENV: &str = "RAC_PARALLEL_BUILD_FAULT";
+const FAULT_ENV: &str = "DECIDED_PARALLEL_BUILD_FAULT";
 /// Below this file count the fan-out's coordination overhead outweighs the
 /// win, so the cold build stays on the serial floor (the oracle's measured
 /// crossover, kept for contract fidelity).
 pub const DEFAULT_MIN_PARALLEL_FILES: usize = 5_000;
-const MIN_FILES_ENV: &str = "RAC_PARALLEL_BUILD_MIN_FILES";
+const MIN_FILES_ENV: &str = "DECIDED_PARALLEL_BUILD_MIN_FILES";
 
-/// Per-phase cold-build timings for the `RAC_TIMING` scorecard line.
+/// Per-phase cold-build timings for the `DECIDED_TIMING` scorecard line.
 #[derive(Default)]
 pub struct BuildStats {
     pub files: usize,
@@ -218,14 +218,14 @@ pub fn build_derived_index_parallel(
     )
 }
 
-/// Write the cold-build scorecard line to stderr when `RAC_TIMING` is set —
+/// Write the cold-build scorecard line to stderr when `DECIDED_TIMING` is set —
 /// env-gated, stderr-only, byte-shaped like the oracle's (ADR-107).
 pub fn emit_build_timing(stats: &BuildStats) {
     if std::env::var_os(TIMING_ENV).is_none() {
         return;
     }
     eprintln!(
-        "rac-timing: build_parse_ms={:.3} build_derive_ms={:.3} build_write_ms={:.3} workers={} files={}",
+        "decided-timing: build_parse_ms={:.3} build_derive_ms={:.3} build_write_ms={:.3} workers={} files={}",
         stats.parse_ms, stats.derive_ms, stats.write_ms, stats.workers, stats.files
     );
 }

@@ -17,7 +17,7 @@ import json
 import pytest
 from conftest import fixture_path
 
-from rac.mcp.budget import (
+from asdecided.mcp.budget import (
     DEFAULT_BUDGET,
     HINT_CONTENT,
     HINT_RELATED,
@@ -25,11 +25,11 @@ from rac.mcp.budget import (
     HINT_SUMMARY,
     serialize,
 )
-from rac.mcp.server import build_server
-from rac.output import json as json_output
-from rac.services.portfolio import build_portfolio_summary
-from rac.services.recency import annotate_search_recency
-from rac.services.resolve import find_artifacts, find_decisions, resolve_artifact
+from asdecided.mcp.server import build_server
+from asdecided.output import json as json_output
+from asdecided.services.portfolio import build_portfolio_summary
+from asdecided.services.recency import annotate_search_recency
+from asdecided.services.resolve import find_artifacts, find_decisions, resolve_artifact
 
 CORPUS = fixture_path("mcp", "corpus")
 DUPLICATE = fixture_path("mcp", "duplicate")
@@ -49,9 +49,9 @@ def call(root: str, tool: str, args: dict, budget: int = DEFAULT_BUDGET) -> dict
 
 
 def find_like_cli(root: str, query: str) -> dict:
-    """The `rac find --explain --json` payload, recency joined as `cmd_find` does.
+    """The `decided find --explain --json` payload, recency joined as `cmd_find` does.
 
-    The read surfaces (MCP `search_artifacts` and `rac find`) both annotate
+    The read surfaces (MCP `search_artifacts` and `decided find`) both annotate
     git-derived recency post-ranking (freshness-and-drift phase 1). Mirroring
     that here keeps the one-source-of-truth equivalence exact against the MCP
     surface — both sides read the same git state at the same instant.
@@ -562,7 +562,7 @@ def test_get_artifact_unreadable_returns_structured_error(tmp_path, monkeypatch)
     def _boom(_path: str) -> str:
         raise OSError("file vanished")
 
-    monkeypatch.setattr("rac.mcp.server._read_content", _boom)
+    monkeypatch.setattr("asdecided.mcp.server._read_content", _boom)
 
     payload = call(root, "get_artifact", {"id": "RAC-MNRDA0000001"})
     assert payload == {
@@ -588,7 +588,7 @@ def test_get_artifact_non_utf8_returns_unreadable(tmp_path, monkeypatch):
     def _bad_bytes(_path: str) -> str:
         raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
 
-    monkeypatch.setattr("rac.mcp.server._read_content", _bad_bytes)
+    monkeypatch.setattr("asdecided.mcp.server._read_content", _bad_bytes)
 
     payload = call(root, "get_artifact", {"id": "RAC-MNRDB0000001"})
     assert payload["error"] == "unreadable"
@@ -751,7 +751,7 @@ def test_get_related_zero_outgoing_yields_empty_outgoing_object(tmp_path):
 def test_get_related_performs_exactly_one_corpus_walk(monkeypatch):
     # Change 1 collapses get_related to a single corpus walk feeding index and
     # relationships. Spy the canonical walk seam and assert it fires once.
-    import rac.mcp.server as server
+    import asdecided.mcp.server as server
 
     calls = {"count": 0}
     real_walk = server.walk_corpus

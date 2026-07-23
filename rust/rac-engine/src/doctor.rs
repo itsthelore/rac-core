@@ -1,13 +1,13 @@
-//! Repository health diagnostic (`rac.services.doctor`, v0.23.0 WS3) plus
+//! Repository health diagnostic (`decided.services.doctor`, v0.23.0 WS3) plus
 //! its two service dependencies with no prior Rust port:
-//! mentioned-but-unlinked reference detection (`rac.services.links`,
+//! mentioned-but-unlinked reference detection (`decided.services.links`,
 //! ADR-082) and the six injection-style content heuristics (REQ-005).
 //!
 //! Composes: structural validation (invalid-artifact errors), relationship
 //! integrity (upstream codes, upstream severities), the one-hop degree pass
 //! (orphans + high-fan-out hubs), injection-style content flags, unlinked
 //! body references, and git-native suspect-artifact drift (shared with
-//! `rac review` via `review::suspect_drift` — one source of truth).
+//! `decided review` via `review::suspect_drift` — one source of truth).
 //! Exit is non-zero only on an error-severity finding (REQ-007).
 
 use crate::commands::{validate_directory, STATUS_INVALID};
@@ -136,7 +136,7 @@ fn validation_findings(directory: &str, recursive: bool) -> Vec<DoctorFinding> {
             code: CODE_INVALID_ARTIFACT,
             severity: SEVERITY_ERROR,
             problem: format!("structural validation failed: {}", codes.join(", ")),
-            fix: format!("Run: rac validate {}", file.path),
+            fix: format!("Run: decided validate {}", file.path),
         });
     }
     findings
@@ -206,7 +206,7 @@ fn relationship_findings(directory: &str, recursive: bool) -> Vec<DoctorFinding>
                 code: issue_code_static(&issue.code),
                 severity,
                 problem: issue_problem(issue),
-                fix: format!("Run: rac relationships {directory} --validate"),
+                fix: format!("Run: decided relationships {directory} --validate"),
             }
         })
         .collect()
@@ -283,7 +283,7 @@ fn degree_findings(items: &[CorpusItem], hub_threshold: i64) -> Vec<DoctorFindin
     findings
 }
 
-/// Suspect-link drift: shared with `rac review` via `review::suspect_drift`
+/// Suspect-link drift: shared with `decided review` via `review::suspect_drift`
 /// (git recency over the validated relationship graph). Empty outside git.
 fn suspect_artifact_findings(directory: &str, items: &[CorpusItem]) -> Vec<DoctorFinding> {
     suspect_drift(directory, items)
@@ -299,7 +299,7 @@ fn suspect_artifact_findings(directory: &str, items: &[CorpusItem]) -> Vec<Docto
 }
 
 // ---------------------------------------------------------------------------
-// Injection-style content heuristics (rac.services.doctor._INJECTION_PATTERNS)
+// Injection-style content heuristics (decided.services.doctor._INJECTION_PATTERNS)
 //
 // Six deterministic Python-`re` patterns, hand-compiled (no regex crate in
 // the workspace): IGNORECASE throughout; `.` never crosses a newline;
@@ -645,7 +645,7 @@ fn injection_findings(items: &[CorpusItem]) -> Vec<DoctorFinding> {
 }
 
 // ---------------------------------------------------------------------------
-// Mentioned-but-unlinked reference detection (rac.services.links, ADR-082)
+// Mentioned-but-unlinked reference detection (decided.services.links, ADR-082)
 // ---------------------------------------------------------------------------
 
 /// Normalized relationship-section headings whose lines are declared edges,

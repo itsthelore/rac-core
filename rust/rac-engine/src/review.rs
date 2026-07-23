@@ -1,5 +1,5 @@
-//! Repository review (`rac.services.review`) — the prioritized, actionable
-//! report `rac review` renders. Composes the portfolio summary, git-native
+//! Repository review (`decided.services.review`) — the prioritized, actionable
+//! report `decided review` renders. Composes the portfolio summary, git-native
 //! drift advisories, and an optional write-cadence nudge.
 
 use std::path::{Path, PathBuf};
@@ -123,11 +123,11 @@ pub fn review_from_portfolio(
         } = item;
         let priority = attention_priority(code);
         let action = if code == ATTENTION_INVALID {
-            format!("Run: rac validate {path}")
+            format!("Run: decided validate {path}")
         } else if code == ATTENTION_BROKEN_RELATIONSHIP {
-            format!("Run: rac relationships {directory} --validate")
+            format!("Run: decided relationships {directory} --validate")
         } else {
-            format!("Run: rac improve {path} --template")
+            format!("Run: decided improve {path} --template")
         };
         issues.push(ReviewIssue {
             priority,
@@ -149,7 +149,7 @@ pub fn review_from_portfolio(
             identifier: crate::identity::path_stem(path),
             code: REVIEW_UNKNOWN_ARTIFACT.to_string(),
             message: "No artifact schema matched this document.".to_string(),
-            action: format!("Run: rac inspect {path} (see rac schema --list)"),
+            action: format!("Run: decided inspect {path} (see decided schema --list)"),
             impact: impact_for(REVIEW_UNKNOWN_ARTIFACT).to_string(),
         });
     }
@@ -271,7 +271,7 @@ fn drift_findings(directory: &str, items: &[CorpusItem]) -> Vec<ReviewIssue> {
             identifier: crate::identity::path_stem(&record.source_path),
             code: REVIEW_SUSPECT_ARTIFACT.to_string(),
             message: drift_problem(&record),
-            action: format!("Run: rac doctor {directory}"),
+            action: format!("Run: decided doctor {directory}"),
             impact: impact_for(REVIEW_SUSPECT_ARTIFACT).to_string(),
         })
         .collect()
@@ -336,7 +336,7 @@ fn cadence_finding(
         message: format!(
             "No product knowledge recorded in the last {window_days} days (newest artifact is {age_days} days old)."
         ),
-        action: "Run: rac new decision rac/decisions/<name>.md".to_string(),
+        action: "Run: decided new decision decisions/decisions/<name>.md".to_string(),
         impact: impact_for(REVIEW_STALE_CORPUS).to_string(),
     })
 }

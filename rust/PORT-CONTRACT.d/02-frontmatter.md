@@ -1,4 +1,4 @@
-# 02 — Frontmatter contract (`src/rac/core/frontmatter.py`)
+# 02 — Frontmatter contract (`src/asdecided/core/frontmatter.py`)
 
 Status: verified against the oracle venv (`.venv-oracle`, Python 3.11, PyYAML 6.0.3)
 on 2026-07-11 unless a claim is marked UNVERIFIED. This is parity landmine #1: the
@@ -12,7 +12,7 @@ Public surface consumed downstream:
 - `split_frontmatter(text: str) -> FrontmatterSplit`
 - `parse_frontmatter(raw: str) -> (ArtifactMetadata | None, list[Issue])`
 - Constants used: `MAX_FRONTMATTER_BYTES = 65536` (64 KiB), `MAX_FRONTMATTER_DEPTH = 32`
-  (both in `src/rac/core/limits.py`).
+  (both in `src/asdecided/core/limits.py`).
 - `Issue` (in `models.py`): `(severity, code, message, line=None)`. Every issue this
   module emits has `severity="error"` and `line=None`. (The one frontmatter-related
   issue with a line number — unterminated block — is emitted by `markdown.parse`,
@@ -320,7 +320,7 @@ Verified reprs: `'zzz'`, `2` (int key), `None` (null key), `datetime.date(2026, 
   stored None. Verified reprs: `'banana'`, `5`, `9`.
 - Registered names, exact case-sensitive match, in registry order:
   `requirement`, `decision`, `roadmap`, `prompt`, `design`
-  (`ARTIFACT_SPECS` in `src/rac/core/artifacts.py`; `Decision` ≠ `decision`,
+  (`ARTIFACT_SPECS` in `src/asdecided/core/artifacts.py`; `Decision` ≠ `decision`,
   capitalized → error. UNVERIFIED for the capitalized case specifically, but
   `spec_for` is a plain `==` loop).
 
@@ -373,17 +373,17 @@ Verified reprs: `'zzz'`, `2` (int key), `None` (null key), `datetime.date(2026, 
 
 ---
 
-## 7. `parse_file` interplay (`src/rac/core/markdown.py`, in-scope excerpts)
+## 7. `parse_file` interplay (`src/asdecided/core/markdown.py`, in-scope excerpts)
 
 `parse_file(path)` (all issues below land in `product.parse_issues`, and the
 product is a degraded empty `Product(title=None)` on the error paths):
 
-1. `cap = max_file_bytes()`: `RAC_MAX_FILE_BYTES` env override; unparseable
+1. `cap = max_file_bytes()`: `DECIDED_MAX_FILE_BYTES` env override; unparseable
    (`int()` fails) or ≤ 0 → default `1048576`. Verified: `"abc"` falls back.
 2. `os.path.getsize(path)`; if `> cap` → oversize (below). Then `open(path,"rb")`
    and `read(cap + 1)`; if the read returned `> cap` bytes → same oversize issue.
    Oversize (note **file** cap wording):
-   `error / artifact-oversize / artifact exceeds the {cap}-byte file cap (set RAC_MAX_FILE_BYTES to raise it)` / line 1.
+   `error / artifact-oversize / artifact exceeds the {cap}-byte file cap (set DECIDED_MAX_FILE_BYTES to raise it)` / line 1.
 3. Any `OSError` from stat/open/read →
    `error / unreadable-artifact / cannot read artifact: {exc}` / line 1 — the
    sentinel embeds the OS error string verbatim, e.g.
@@ -404,7 +404,7 @@ product is a degraded empty `Product(title=None)` on the error paths):
    `invalid artifact ID syntax: 'RAC-KTQ63DPSM�19 (…)'` with a literal � —
    repr does not escape it).
 5. `parse(text)` itself first applies the **parse** cap with different wording:
-   `error / artifact-oversize / artifact exceeds the {cap}-byte parse cap (set RAC_MAX_FILE_BYTES to raise it)` / line 1
+   `error / artifact-oversize / artifact exceeds the {cap}-byte parse cap (set DECIDED_MAX_FILE_BYTES to raise it)` / line 1
    — "file cap" vs "parse cap" wording is pinned, do not unify (verified both).
    This runs *before* `split_frontmatter`, so a >cap text never reaches
    frontmatter parsing.

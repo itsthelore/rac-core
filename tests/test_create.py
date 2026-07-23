@@ -1,9 +1,9 @@
-"""Tests for rac.services.create and the `rac new` / `rac templates` CLI.
+"""Tests for asdecided.services.create and the `decided new` / `decided templates` CLI.
 
 Pins the v0.7.10 creation contract (explicit literal output path, UTF-8
 content, never overwrite, no directory auto-creation, exit codes 0/1/2) and
 the v0.7.11 identity integration: every generated artifact carries canonical
-frontmatter with a system-assigned ID, and creation without `rac init` fails
+frontmatter with a system-assigned ID, and creation without `decided init` fails
 with an actionable usage error.
 """
 
@@ -13,13 +13,13 @@ import json
 
 import pytest
 
-from rac.cli import main
-from rac.core.artifacts import ARTIFACT_SPECS
-from rac.core.classification import classify
-from rac.core.markdown import parse
-from rac.core.templates import TemplateResourceMissing, load_template
-from rac.core.validation import has_errors, validate
-from rac.services.create import (
+from asdecided.cli import main
+from asdecided.core.artifacts import ARTIFACT_SPECS
+from asdecided.core.classification import classify
+from asdecided.core.markdown import parse
+from asdecided.core.templates import TemplateResourceMissing, load_template
+from asdecided.core.validation import has_errors, validate
+from asdecided.services.create import (
     IdGenerationExhausted,
     MissingRepositoryConfig,
     OutputDirectoryMissing,
@@ -28,7 +28,7 @@ from rac.services.create import (
     render_artifact,
     render_frontmatter,
 )
-from rac.services.init import init_repository
+from asdecided.services.init import init_repository
 
 SPEC_NAMES = [spec.name for spec in ARTIFACT_SPECS]
 
@@ -189,7 +189,7 @@ def test_cli_new_without_init_exits_2(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["new", "decision", str(tmp_path / "d.md")])
     assert exc.value.code == 2
-    assert "run `rac init`" in capsys.readouterr().err
+    assert "run `decided init`" in capsys.readouterr().err
 
 
 def test_cli_new_unsupported_type_exits_2(repo, capsys):
@@ -220,7 +220,7 @@ def test_cli_new_missing_resource_is_operational_error(repo, capsys, monkeypatch
     def boom(artifact_type, output_path):
         raise TemplateResourceMissing(artifact_type)
 
-    monkeypatch.setattr("rac.cli.create_artifact", boom)
+    monkeypatch.setattr("asdecided.cli.create_artifact", boom)
     rc = main(["new", "requirement", str(repo / "x.md")])
     assert rc == 1
     assert "packaged template missing" in capsys.readouterr().err

@@ -8,7 +8,7 @@ type: decision
 ## Context
 
 The closure parity smoke cases need a clean, minimal repository fixture:
-a repository key under `.rac/` and one valid decision so corpus walks
+a repository key under `.decided/` and one valid decision so corpus walks
 have something deterministic to index.
 
 ## Decision

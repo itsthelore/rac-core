@@ -1,4 +1,4 @@
-"""Tests for artifact improvement (`rac improve`).
+"""Tests for artifact improvement (`decided improve`).
 
 Advisory, deterministic, schema-driven, read-only. Supported artifact types get
 missing-section suggestions and guidance. Exit code is always 0 for a completed
@@ -14,13 +14,13 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.core.artifacts import ARTIFACT_SPECS, spec_for
-from rac.core.classification import classify
-from rac.core.markdown import parse_file
-from rac.core.validation import validate
-from rac.services.improve import improve_file, improve_text, supports_improve
-from rac.services.stats import collect_stats
+from asdecided.cli import main
+from asdecided.core.artifacts import ARTIFACT_SPECS, spec_for
+from asdecided.core.classification import classify
+from asdecided.core.markdown import parse_file
+from asdecided.core.validation import validate
+from asdecided.services.improve import improve_file, improve_text, supports_improve
+from asdecided.services.stats import collect_stats
 
 # A requirement missing a *required* section (Requirements) but still classifying
 # as a requirement — it keeps enough recommended sections to clear the threshold.
@@ -76,7 +76,7 @@ def test_improve_does_not_depend_on_typescore():
     # Decoupling guard: improvement must not reach into classification scoring.
     import inspect as _inspect
 
-    import rac.services.improve as improve_mod
+    import asdecided.services.improve as improve_mod
 
     src = _inspect.getsource(improve_mod)
     assert "TypeScore" not in src

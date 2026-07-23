@@ -3,15 +3,15 @@
 Requirements: BCP-14 keyword discipline (error), 29148 singular (warning), and
 EARS (warnings). Roadmaps: optional horizon and an advancement-linkage warning.
 Plus the repository-wide reach of severity overrides (ADR-053, revised): a rule a
-repo downgrades in .rac/config.yaml is downgraded for `rac review`/portfolio too,
-not only `rac validate`.
+repo downgrades in .decided/config.yaml is downgraded for `decided review`/portfolio too,
+not only `decided validate`.
 """
 
 from __future__ import annotations
 
-from rac.core.markdown import parse
-from rac.core.validation import validate
-from rac.services.portfolio import build_portfolio_summary
+from asdecided.core.markdown import parse
+from asdecided.core.validation import validate
+from asdecided.services.portfolio import build_portfolio_summary
 
 REQ = "# R\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] {line}\n"
 ROADMAP = "# R\n\n## Outcomes\n\no\n\n## Initiatives\n\ni\n{extra}"
@@ -102,12 +102,12 @@ BAD_REQ = "# R\n\n## Problem\n\np\n\n## Requirements\n\n- [REQ-001] The system s
 
 def test_review_honours_repository_overrides(tmp_path):
     (tmp_path / "r.md").write_text(BAD_REQ, encoding="utf-8")
-    cfg = tmp_path / ".rac"
+    cfg = tmp_path / ".decided"
     cfg.mkdir()
     # No overrides: the BCP-14 error makes the artifact invalid in the portfolio.
     cfg.joinpath("config.yaml").write_text("repository_key: RAC\n", encoding="utf-8")
     assert build_portfolio_summary(str(tmp_path)).invalid_artifacts == 1
-    # Downgraded: review/portfolio see it clean too, not just `rac validate`.
+    # Downgraded: review/portfolio see it clean too, not just `decided validate`.
     cfg.joinpath("config.yaml").write_text(
         "repository_key: RAC\nvalidation:\n  rules:\n    requirement-normative-keyword: off\n",
         encoding="utf-8",

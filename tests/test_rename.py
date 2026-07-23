@@ -2,7 +2,7 @@
 
 The headline guarantees under test (roadmap v0.21.18, ADR-007 / ADR-016 /
 ADR-063): a rename rewrites every inbound reference *and* the target's own
-declared identity, leaves ``rac relationships --validate`` clean, is deterministic
+declared identity, leaves ``decided relationships --validate`` clean, is deterministic
 (same inputs -> identical plan), and is reversible (apply old->new then new->old
 restores the original bytes). Negative boundaries — unknown OLD, ambiguous OLD,
 colliding NEW, invalid NEW, filename-only alias, dry-run writes nothing — are
@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from rac.cli import main
-from rac.services.relationships import validate_relationships
-from rac.services.rename import (
+from asdecided.cli import main
+from asdecided.services.relationships import validate_relationships
+from asdecided.services.rename import (
     IDENTITY_FRONTMATTER,
     IDENTITY_ID_SECTION,
     REASON_NEW_COLLIDES,

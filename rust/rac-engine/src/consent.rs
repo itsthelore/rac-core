@@ -1,6 +1,6 @@
-//! Usage-sharing consent (`src/rac/consent.py`) — ADR-041, ADR-086.
+//! Usage-sharing consent (`src/asdecided/consent.py`) — ADR-041, ADR-086.
 //!
-//! The record is JSON under `$XDG_CONFIG_HOME/rac/telemetry.json` with the
+//! The record is JSON under `$XDG_CONFIG_HOME/decisions/telemetry.json` with the
 //! Explorer-preferences posture: a missing/corrupt/non-dict file means no
 //! consent, loading never raises, and saving tolerates filesystem trouble
 //! silently. The install id is random (`secrets.token_hex(16)`), minted at
@@ -15,7 +15,7 @@
 //! This module also carries the shared XDG path builder, the UTC timestamp
 //! formatters, and the `/dev/urandom` token minting that `usage.rs` reuses
 //! for the recorder — the Rust analogue of consent.py sitting outside
-//! `rac.mcp` so everything here stays SDK-free.
+//! `decided.mcp` so everything here stays SDK-free.
 
 use serde_json::{Map, Value};
 
@@ -41,7 +41,7 @@ pub struct Consent {
     pub enterprise_locked: bool,
 }
 
-/// What `rac telemetry status` reports.
+/// What `decided telemetry status` reports.
 pub struct ConsentStatus {
     pub sharing: bool,
     pub install_id: String,
@@ -53,14 +53,14 @@ pub struct ConsentStatus {
 
 // ---------------------------------------------------------------------------
 // XDG paths — `os.environ.get(VAR) or str(Path.home() / …)`, then
-// `str(Path(base) / "rac" / name)`.
+// `str(Path(base) / "decided" / name)`.
 // ---------------------------------------------------------------------------
 
-/// `str(Path(base) / "rac" / name)` where `base` is `$VAR` when set and
+/// `str(Path(base) / "decided" / name)` where `base` is `$VAR` when set and
 /// NON-EMPTY (Python's `or` treats `""` as unset), else `$HOME/<fallback…>`.
 /// The base goes through PurePosixPath normalization, and a base that
-/// normalizes to `.` joins as a bare relative path (`Path(".") / "rac"` is
-/// `rac`, not `./rac`) — relative XDG values resolve against the process
+/// normalizes to `.` joins as a bare relative path (`Path(".") / "decided"` is
+/// `decided`, not `./decided`) — relative XDG values resolve against the process
 /// cwd on both engines, byte-for-byte.
 pub(crate) fn xdg_rac_file(var: &str, home_fallback: &[&str], name: &str) -> String {
     let base = match std::env::var(var) {
@@ -76,10 +76,10 @@ pub(crate) fn xdg_rac_file(var: &str, home_fallback: &[&str], name: &str) -> Str
     };
     let norm = normalize_root(&base);
     match norm.as_str() {
-        "." => format!("rac/{name}"),
-        "/" => format!("/rac/{name}"),
-        "//" => format!("//rac/{name}"),
-        _ => format!("{norm}/rac/{name}"),
+        "." => format!("decisions/{name}"),
+        "/" => format!("/decisions/{name}"),
+        "//" => format!("//decisions/{name}"),
+        _ => format!("{norm}/decisions/{name}"),
     }
 }
 

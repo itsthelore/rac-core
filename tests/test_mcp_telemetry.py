@@ -20,11 +20,11 @@ from pathlib import Path
 import pytest
 from conftest import fixture_path
 
-from rac.cli import main
-from rac.mcp import telemetry
-from rac.mcp.budget import DEFAULT_BUDGET
-from rac.mcp.server import build_server, run_server
-from rac.mcp.telemetry import (
+from asdecided.cli import main
+from asdecided.mcp import telemetry
+from asdecided.mcp.budget import DEFAULT_BUDGET
+from asdecided.mcp.server import build_server, run_server
+from asdecided.mcp.telemetry import (
     MAX_LOG_BYTES,
     SHARE_ISSUE_URL,
     SHARE_TEMPLATE,
@@ -339,7 +339,7 @@ def test_cli_mcp_stats_share_and_json_are_mutually_exclusive(tmp_path, monkeypat
 
 
 def test_cli_mcp_telemetry_flag_defaults_off():
-    from rac.cli import build_parser
+    from asdecided.cli import build_parser
 
     args = build_parser().parse_args(["mcp"])
     assert args.telemetry is False

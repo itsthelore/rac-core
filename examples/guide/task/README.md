@@ -2,7 +2,7 @@
 
 This is the minimal code slice the grounding demo runs against. It is a small,
 plausible cut of the Meridian user management service described by the
-`examples/guide/rac/` corpus: a PostgreSQL-backed repository layer and a thin
+`examples/guide/decisions/` corpus: a PostgreSQL-backed repository layer and a thin
 service layer, with the existing account-lifecycle patterns visible.
 
 The task (see `../demo.md`) asks an agent to implement account deletion. The
@@ -28,5 +28,5 @@ a hard `DELETE FROM users WHERE id = %s` — is the obvious thing to write and i
 exactly what ADR-001 (`GUIDE-KTW9YBDWDBFM`, *Soft-Delete User Records*)
 prohibits. That gap is the demo.
 
-This directory is intentionally outside `examples/guide/rac/`, so it does not
-affect `rac validate examples/guide/rac/` or the corpus relationship checks.
+This directory is intentionally outside `examples/guide/decisions/`, so it does not
+affect `decided validate examples/guide/decisions/` or the corpus relationship checks.

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rac.core.operations import CancellationToken
-from rac.explorer.adapter import ExplorerAdapter
-from rac.explorer.preferences import Preferences
-from rac.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
-from rac.services.portfolio import build_portfolio_summary
+from asdecided.core.operations import CancellationToken
+from asdecided.explorer.adapter import ExplorerAdapter
+from asdecided.explorer.preferences import Preferences
+from asdecided.explorer.state import LoadErrorState, LoadProgressState, RepositorySummaryState
+from asdecided.services.portfolio import build_portfolio_summary
 
 FIXTURES = Path(__file__).parent / "fixtures" / "portfolio_summary"
 
@@ -64,7 +64,7 @@ def test_failures_become_recoverable_error_state(tmp_path, monkeypatch):
     # A genuine, unexpected core failure surfaces as a recoverable error state.
     # The injection is at the load boundary because a malformed/non-UTF-8
     # artifact no longer aborts the load — WS4 degrades it gracefully.
-    import rac.explorer.adapter as adapter_mod
+    import asdecided.explorer.adapter as adapter_mod
 
     def _boom(*args, **kwargs):
         raise RuntimeError("core exploded")
@@ -351,7 +351,7 @@ def test_recommendations_state_requires_a_load():
 
 
 def test_recommendations_mirror_core_review_findings():
-    from rac.services.review import build_review
+    from asdecided.services.review import build_review
 
     adapter = ExplorerAdapter(str(FIXTURES / "broken_rels"))
     adapter.load()
@@ -412,7 +412,7 @@ def test_import_preview_converts_markdown_without_writing(tmp_path):
     target = tmp_path / "out.md"
     adapter = ExplorerAdapter(str(tmp_path))
     preview = adapter.import_preview(str(source), str(target))
-    from rac.explorer.state import ImportPreview
+    from asdecided.explorer.state import ImportPreview
 
     assert isinstance(preview, ImportPreview)
     assert preview.converter == "markdown"
@@ -421,12 +421,12 @@ def test_import_preview_converts_markdown_without_writing(tmp_path):
 
 
 def test_import_preview_matches_rac_ingest(tmp_path):
-    from rac.services.ingest import ingest
+    from asdecided.services.ingest import ingest
 
     source = tmp_path / "doc.md"
     source.write_text("# Same As Ingest\n", encoding="utf-8")
     preview = ExplorerAdapter(str(tmp_path)).import_preview(str(source))
-    from rac.explorer.state import ImportPreview
+    from asdecided.explorer.state import ImportPreview
 
     assert isinstance(preview, ImportPreview)
     assert preview.markdown == ingest(str(source)).markdown
@@ -447,7 +447,7 @@ def test_import_preview_reports_missing_source(tmp_path):
 
 
 def test_write_import_writes_and_refuses_overwrite(tmp_path):
-    from rac.explorer.state import ImportPreview
+    from asdecided.explorer.state import ImportPreview
 
     target = tmp_path / "written.md"
     preview = ImportPreview(
@@ -463,7 +463,7 @@ def test_write_import_writes_and_refuses_overwrite(tmp_path):
 
 
 def test_write_import_refuses_dangling_symlink_target(tmp_path):
-    from rac.explorer.state import ImportPreview
+    from asdecided.explorer.state import ImportPreview
 
     # A dangling symlink reports exists() False, but writing through it would
     # follow the link and create a file at its target — outside the path the
@@ -480,7 +480,7 @@ def test_write_import_refuses_dangling_symlink_target(tmp_path):
 
 
 def test_export_recommendations_renders_markdown_without_writing():
-    from rac.explorer.state import ImportPreview
+    from asdecided.explorer.state import ImportPreview
 
     adapter = ExplorerAdapter(str(FIXTURES / "broken_rels"))
     adapter.load()
@@ -700,7 +700,7 @@ def test_new_preview_reports_unknown_types(tmp_path):
 
 
 def test_write_new_creates_through_core_with_a_minted_id(tmp_path):
-    from rac.services.init import init_repository
+    from asdecided.services.init import init_repository
 
     init_repository(str(tmp_path), key="RAC")
     adapter = ExplorerAdapter(str(tmp_path))
@@ -712,7 +712,7 @@ def test_write_new_creates_through_core_with_a_minted_id(tmp_path):
 
 
 def test_write_new_refusals_write_nothing(tmp_path):
-    from rac.services.init import init_repository
+    from asdecided.services.init import init_repository
 
     init_repository(str(tmp_path), key="RAC")
     adapter = ExplorerAdapter(str(tmp_path))
@@ -791,7 +791,7 @@ def test_governing_decisions_returns_covering_live_decisions_as_rows(tmp_path):
 def test_governing_decisions_consumes_the_shared_core_no_second_vocabulary(tmp_path):
     # The adapter answer is exactly the decisions_for_path service answer mapped
     # to rows — the same seam the CLI and MCP faces read (authored once).
-    from rac.services.scope import decisions_for_path
+    from asdecided.services.scope import decisions_for_path
 
     adapter = _scoped_corpus(tmp_path)
     lookup = adapter.governing_decisions("src/auth/login.py")

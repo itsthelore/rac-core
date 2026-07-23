@@ -1,5 +1,5 @@
 //! Git-derived recency and staleness — a port of the git touchpoint in
-//! `src/rac/services/recency.py`, per PORT-CONTRACT.d/08 §4.
+//! `src/asdecided/services/recency.py`, per PORT-CONTRACT.d/08 §4.
 //!
 //! Recency is *derived* from `git log`, never stored (ADR-045). This module
 //! shells out to the real `git` binary with the exact argv the oracle uses and
@@ -38,7 +38,7 @@ fn run_git(args: &[&str], cwd: &Path) -> Option<String> {
 
 /// `run_git` with Python `text=True` universal-newline decoding (`\r\n` and
 /// lone `\r` → `\n`). The recency callers in this module only trim `%cI`
-/// stamps and the toplevel path, so they stay on the raw form; the rac-mcp
+/// stamps and the toplevel path, so they stay on the raw form; the decided-mcp
 /// provenance surface parses `git show` file content, where the
 /// normalization is load-bearing.
 pub fn run_git_text(args: &[&str], cwd: &Path) -> Option<String> {
