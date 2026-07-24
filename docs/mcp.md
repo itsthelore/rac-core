@@ -1,19 +1,16 @@
 # RAC Guide — MCP Server
 
-RAC Guide is an MCP server that serves your repository's requirements,
+AsDecided MCP serves your repository's requirements,
 decisions, designs, and roadmaps to coding agents as callable tools. It ships
-inside the `rac-core` package — no separate install.
+as the native `decided-mcp` binary.
 
 ## 1. Install
 
 ```bash
-pip install rac-core
-# or
-uv tool install rac-core
+brew install itsthelore/tap/rac-full
 ```
 
-Requires Python 3.11+. The MCP SDK is a standard dependency; no extra flag is
-needed.
+No Python runtime or extra is needed.
 
 ## 2. Configure your client
 
@@ -95,8 +92,8 @@ entry under the agent's `tools:` section:
 tools:
   lore:
     type: mcp
-    command: rac
-    args: ["mcp", "--root", "/path/to/your/repo"]
+    command: decided-mcp
+    args: ["--root", "/path/to/your/repo"]
 ```
 
 The tool travels with the agent definition, so it stays attached whichever

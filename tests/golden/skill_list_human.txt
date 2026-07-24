@@ -1,6 +1,0 @@
-Bundled agent skills:
-
-- decided-artifacts  Author and maintain AsDecided Markdown artifacts with the decided CLI.
-- decided-review     Review an AsDecided corpus and work findings worst-first.
-- decided-import     Reformat one document into one valid AsDecided artifact, with human review.
-- decided-capture    Capture a new decision or requirement into a valid AsDecided artifact.

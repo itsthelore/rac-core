@@ -59,14 +59,11 @@ Run the HTTP transport against a read-only checkout. The disposable
 so per-call latency stays flat as the corpus grows; `--cache` remains accepted
 as an explicit affirmation.
 
-```dockerfile
-FROM python:3.12-slim
-RUN pip install --no-cache-dir rac-core
-# Your knowledge repo's main branch, mounted read-only at runtime (see §5).
-WORKDIR /corpus
-EXPOSE 8000
-CMD ["rac", "mcp", "--root", "/corpus", \
-     "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]
+```bash
+docker run --rm --entrypoint decided-mcp -p 8000:8000 -v "$PWD:/corpus:ro" \
+  ghcr.io/itsthelore/rac:latest \
+  --root /corpus --transport http \
+  --host 0.0.0.0 --port 8000
 ```
 
 HTTP serving is **mandatory audit-on**: the server refuses to start without a

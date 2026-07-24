@@ -8,16 +8,12 @@ on:
     paths:
       - "rust/**"
       - "decisions/**"
-      - "src/asdecided/**"
-      - "pyproject.toml"
       - ".github/workflows/rust-spike.yml"
   push:
     branches: [main]
     paths:
       - "rust/**"
       - "decisions/**"
-      - "src/asdecided/**"
-      - "pyproject.toml"
       - ".github/workflows/rust-spike.yml"
 
 jobs:
@@ -79,46 +75,3 @@ jobs:
           python rust/tools/live_corpus_invariants.py \
             --engine rust/target/release/decided \
             --corpus decisions
-
-  retirement-certification:
-    name: Bounded Python retirement certification
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install rust toolchain (pinned by rust/rust-toolchain.toml)
-        run: rustup show
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
-
-      - name: Build frozen Python retirement oracle
-        env:
-          SETUPTOOLS_SCM_PRETEND_VERSION: 0.1.dev50+g21c8be403
-        run: |
-          python -m venv .venv-retirement
-          .venv-retirement/bin/pip install --quiet -e .
-          .venv-retirement/bin/python -m asdecided.cli --version
-
-      - name: Build native release binary
-        working-directory: rust
-        run: cargo build --release --locked -p decided
-
-      - name: Checkout authoritative rac-spec fixtures
-        uses: actions/checkout@v4
-        with:
-          repository: itsthelore/rac-spec
-          path: rac-spec
-
-      - name: Both engines reproduce the bounded rac-spec suite
-        run: |
-          python rust/tools/conformance_certify.py \
-            --spec-dir "${{ github.workspace }}/rac-spec" \
-            --engine "python=${{ github.workspace }}/.venv-retirement/bin/python -m asdecided.cli" \
-            --engine "rust=${{ github.workspace }}/rust/target/release/decided"

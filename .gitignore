@@ -1,7 +1,7 @@
 # macOS
 .DS_Store
 
-# Virtual environments
+# Python verification-tool environments
 .venv/
 .venv-oracle/
 venv/
@@ -14,7 +14,7 @@ build/
 dist/
 .pytest_cache/
 
-# Coverage data (pytest --cov; reported in CI, never committed)
+# Legacy coverage data
 .coverage
 .coverage.*
 htmlcov/
@@ -22,8 +22,5 @@ htmlcov/
 # MkDocs build output (deployed from CI, never committed)
 site/
 
-# Native engine binaries bundled into platform wheels at build time
-# (native-engine cutover); never committed — the package keeps only __init__.py.
-src/rac/bin/rac
-src/rac/bin/rac-mcp
-src/rac/bin/*.exe
+# Native build output
+rust/target/

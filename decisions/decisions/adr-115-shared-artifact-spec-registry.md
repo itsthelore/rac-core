@@ -127,6 +127,5 @@ Architecture
 
 ## Applies To
 
-- src/asdecided/spec/artifact-specs.json
-- src/asdecided/core/artifacts.py
+- rust/rac-engine/assets/spec/artifact-specs.json
 - rust/rac-engine/src/spec.rs

@@ -1,7 +1,7 @@
 # AsDecided PR-gate composite action (ADR-049 / ADR-063).
 #
 # Carries the full AsDecided contract into a single required pull-request check:
-# install AsDecided and run `decided gate` — one command that enforces validation,
+# build AsDecided and run `decided gate` — one command that enforces validation,
 # relationship integrity, and review under the corpus enforcement policy
 # (`.decided/config.yaml`), emitting one SARIF document (ADR-054). The single SARIF
 # is uploaded to GitHub Code Scanning under one category (`decided-gate`), and the
@@ -39,45 +39,14 @@ inputs:
     description: "Directory the single `gate.sarif` document is written to."
     required: false
     default: "decided-sarif"
-  decided-version:
-    description: >-
-      Exact rac-core version to install from PyPI. Empty installs the
-      latest release. Ignored when `install-from` is `source`.
-    required: false
-    default: ""
-  install-from:
-    description: >-
-      Where to install AsDecided from: `pypi` (the default for consumers) or `source`
-      (the action checkout itself — for this repository's own dogfood job;
-      requires `uses: ./pr-gate-action` on a full checkout).
-    required: false
-    default: "pypi"
-
 runs:
   using: "composite"
   steps:
-    - uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
-
-    - name: Install AsDecided
+    - name: Build native AsDecided
       shell: bash
-      env:
-        INSTALL_FROM: ${{ inputs.install-from }}
-        DECIDED_VERSION: ${{ inputs.decided-version }}
       run: |
-        python -m pip install --quiet --upgrade pip
-        if [ "$INSTALL_FROM" = "source" ]; then
-          (cd "$GITHUB_ACTION_PATH/../rust" && cargo build --release --locked -p decided -p decided-mcp)
-          cp "$GITHUB_ACTION_PATH/../rust/target/release/decided" \
-             "$GITHUB_ACTION_PATH/../rust/target/release/decided-mcp" \
-             "$GITHUB_ACTION_PATH/../src/asdecided/bin/"
-          python -m pip install --quiet "$GITHUB_ACTION_PATH/.."
-        elif [ -n "$DECIDED_VERSION" ]; then
-          python -m pip install --quiet "rac-core==$DECIDED_VERSION"
-        else
-          python -m pip install --quiet rac-core
-        fi
+        (cd "$GITHUB_ACTION_PATH/../rust" && cargo build --release --locked -p decided -p decided-mcp)
+        echo "$GITHUB_ACTION_PATH/../rust/target/release" >> "$GITHUB_PATH"
 
     # The CLI is the source of truth (ADR-058). `set +e` lets a non-zero exit
     # still produce SARIF for upload; the exit code is re-surfaced below. One

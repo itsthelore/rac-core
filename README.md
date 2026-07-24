@@ -1,32 +1,29 @@
 # AsDecided
 
-**Engineering decisions your agents can follow.**
-Build, as decided.
+**Engineering decisions your agents can follow. Build, as decided.**
 
 AsDecided keeps requirements, decisions, designs, roadmaps, and prompts as
 typed Markdown in your repository. Its native Rust engine validates that
-knowledge, retrieves the relevant decisions deterministically, and serves it
+knowledge, retrieves relevant decisions deterministically, and serves it
 read-only to agents over MCP.
 
-No embeddings, model call, or hosted index is required. The same repository
-state produces the same answer.
+No embeddings, model call, hosted index, or Python runtime is required. The
+same repository state produces the same answer.
 
 ## Install
 
-The distribution is still published from this repository as `rac-core` while
-the registry and repository rename are handled as a separate release gate:
+Install the complete RAC toolchain through Homebrew:
 
 ```sh
-pip install rac-core
+brew install itsthelore/tap/rac-full
 ```
 
-This installs exactly two executable surfaces:
+Native `decided` and `decided-mcp` archives are also published on
+[GitHub Releases](https://github.com/itsthelore/rac-core/releases).
 
-- `decided` — the native Rust CLI
-- `decided-mcp` — the native read-only MCP server
-
-There is no `rac` command, Python CLI fallback, or `RAC_*` environment-variable
-compatibility layer.
+`rac-core` is no longer distributed through PyPI. Python API consumers should
+use [`itsthelore/rac-sdk`](https://github.com/itsthelore/rac-sdk), which is a
+client SDK rather than a second engine implementation.
 
 ## Start a repository
 
@@ -48,16 +45,10 @@ not change with the product name.
 
 ## Migrate an existing repository
 
-Migration is explicit and never runs during an ordinary command. Inspect the
-plan first:
+Migration is explicit and never runs during an ordinary command:
 
 ```sh
 decided migrate layout . --dry-run
-```
-
-Then apply it:
-
-```sh
 decided migrate layout .
 ```
 
@@ -65,8 +56,6 @@ The migration moves `.rac/` to `.decided/` and `rac/` to `decisions/`. It
 refuses to overwrite either destination.
 
 ## MCP
-
-Configure clients to run the native server directly:
 
 ```json
 {
@@ -79,26 +68,18 @@ Configure clients to run the native server directly:
 }
 ```
 
-## Runtime controls
-
-Native runtime controls use the `DECIDED_*` namespace, including
-`DECIDED_CACHE_DIR`, `DECIDED_NO_CACHE`, `DECIDED_TIMING`,
-`DECIDED_MAX_FILE_BYTES`, `DECIDED_AUDIT_PATH`, and
-`DECIDED_AUDIT_PRINCIPAL`.
-
-Stable machine-readable fields such as `rac_version`, and existing `RAC-*`
-artifact IDs, remain unchanged where they are part of a published contract.
-
 ## Architecture
 
-Rust is the product engine and the only normal CLI/MCP runtime. Python remains
-only as packaging/SDK support and a bounded retirement-certification oracle;
-it is not a second supported command implementation. Document ingestion lives
-outside the core as an ancillary Python connector, and Explorer is retired.
-
+Rust is the product engine and the only CLI/MCP runtime in this repository.
 The authoritative language-neutral compatibility fixtures live in
 [`rac-spec`](https://github.com/itsthelore/rac-spec). Live-corpus validation is
 based on validity, determinism, freshness, and cache/no-cache equality.
+
+Document ingestion remains an ancillary Python connector rather than part of
+the core engine. The retired Python engine is preserved for historical review
+at the immutable
+[`python-engine-final`](https://github.com/itsthelore/rac-core/tree/python-engine-final)
+tag; it is not maintained or run in normal CI.
 
 ## License
 

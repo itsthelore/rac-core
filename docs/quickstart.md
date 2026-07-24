@@ -6,28 +6,21 @@ artifact, and run the three commands you'll use most: `validate`, `inspect`, and
 
 ## 1. Install
 
-RAC is a Python package (requires Python 3.11+). Install it with `pip`:
+Install the native toolchain with Homebrew:
 
 ```bash
-pip install rac-core
+brew install itsthelore/tap/rac-full
 ```
 
-Or with [uv](https://docs.astral.sh/uv/):
-
-```bash
-uv tool install rac-core
-```
-
-This puts a single command on your path: `rac`. Check it:
+This installs `decided` and `decided-mcp`. Check it:
 
 ```bash
 decided --version
 ```
 
-### No Python? Use the container image
+### Use the container image
 
-Every release also publishes an official container image to GHCR, versioned
-in lockstep with the PyPI package — the image tag is the same SemVer version:
+Every release also publishes a native container image to GHCR:
 
 ```bash
 docker run --rm -v "$PWD:/work" ghcr.io/itsthelore/rac:latest validate decisions/
@@ -42,7 +35,7 @@ docker pull ghcr.io/itsthelore/rac@sha256:<digest>
 ```
 
 The image is the CLI and nothing more, so it drops into any docker-native
-CI platform. GitLab CI (the image's entrypoint is `rac`; clear it so GitLab
+CI platform. GitLab CI (the image's entrypoint is `decided`; clear it so GitLab
 can run script steps):
 
 ```yaml

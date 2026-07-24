@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * vendor-portal-shell.mjs — build the Portal shell and vendor it into
- * the AsDecided package as data files. No dependencies.
+ * the native engine as an embedded asset. No dependencies.
  *
  * Runs the shell-only viewer build (`npm run build:viewer -- --shell-only`),
- * then writes into ../src/asdecided/templates/portal/:
+ * then writes into ../rust/rac-engine/assets/portal/:
  *
  *   asdecided-portal-shell.html   the shell, with a provenance comment
  *                            inserted immediately after the doctype
@@ -12,8 +12,7 @@
  *                              viewer_source_sha256, vendored_with }
  *
  * viewer_source_sha256 — the drift-guard hash over the viewer source
- * tree. The Python drift-guard test re-implements it exactly, so the
- * algorithm is normative:
+ * tree. The algorithm is normative:
  *
  *   File set (paths relative to rac-localview/, POSIX separators):
  *     - src/viewer/** recursively, EXCLUDING src/viewer/sample/
@@ -42,7 +41,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(root, '..');
-const portalDir = resolve(repoRoot, 'src/asdecided/templates/portal');
+const portalDir = resolve(repoRoot, 'rust/rac-engine/assets/portal');
 const shellBuildPath = resolve(root, 'dist/viewer/lore-portal-shell.html');
 
 /* ---- 1. build the shell ------------------------------------------------ */

@@ -30,7 +30,7 @@ A recipe README has these parts, in this order:
 
 1. **Title and framing** — `# RAC with <Client>`, then one line naming the two
    surfaces (the context file the client reads, and the `lore` MCP server).
-2. **Prerequisites** — `pip install rac-core` and a corpus under `decisions/`.
+2. **Prerequisites** — `brew install itsthelore/tap/rac-full` and a corpus under `decisions/`.
 3. **Context file (the push)** — `decided export decisions/ --agent-rules`, and which
    generated file this client reads (`AGENTS.md` is the glob-free default;
    `CLAUDE.md` and `.github/copilot-instructions.md` are the other targets).
@@ -53,15 +53,15 @@ config dialect the harness uses. Keep only the one your harness reads.
 
 ```toml
 [mcp_servers.lore]
-command = "rac"
-args = ["mcp", "--root", "."]
+command = "decided-mcp"
+args = ["--root", "."]
 ```
 
 ```yaml
 mcpServers:
   lore:
-    command: rac
-    args: [mcp, --root, .]
+    command: decided-mcp
+    args: [--root, .]
 ```
 
 Use a project-scoped config path (commit it to share with the team); for a global

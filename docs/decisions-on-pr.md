@@ -46,9 +46,6 @@ includes Herald is published. Inputs:
 - **`path`** — the corpus directory (default `rac`).
 - **`max-inline`** — decisions listed in full before the rest collapse into a
   details expander (default `5`).
-- **`rac-version`** — pin an exact rac-core release from PyPI; empty installs
-  the latest.
-
 On forks, where the token is read-only, the comment degrades to the step
 summary instead of failing the check.
 

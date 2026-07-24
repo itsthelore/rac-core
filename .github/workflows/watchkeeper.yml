@@ -9,9 +9,7 @@
 #       with:
 #         path: decisions
 #
-# Pin an exact release tag. No moving major tag is published: package
-# versions derive from git tags via setuptools-scm, and a floating tag
-# would corrupt version derivation (see docs/watchkeeper.md).
+# Pin an exact release tag for reproducible native builds.
 name: Watchkeeper
 
 on:
@@ -37,11 +35,6 @@ on:
         type: boolean
         required: false
         default: true
-      decided-version:
-        description: "Exact rac-core version from PyPI (empty: latest)."
-        type: string
-        required: false
-        default: ""
 
 permissions:
   contents: read
@@ -53,8 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # The comparison needs the base revision's history, and a
-          # source-mode install needs git metadata for setuptools-scm.
+          # The comparison needs the base revision's history.
           fetch-depth: 0
 
       # Reusable workflows run in the caller's repository, so the action is
@@ -66,4 +58,3 @@ jobs:
           base: ${{ inputs.base }}
           fail-on: ${{ inputs.fail-on }}
           annotate: ${{ inputs.annotate }}
-          decided-version: ${{ inputs.decided-version }}

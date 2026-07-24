@@ -35,10 +35,10 @@ pub const NEGATIVE_K: usize = 5;
 /// Metric rounding precision (`_PRECISION`).
 const PRECISION: i32 = 6;
 
-pub const DEFAULT_CORPUS: &str = "tests/eval/corpus";
-pub const DEFAULT_QUERIES: &str = "tests/eval/queries.json";
-pub const DEFAULT_BASELINE: &str = "tests/eval/baseline.json";
-pub const DEFAULT_CONFIG: &str = "tests/eval/eval-config.json";
+pub const DEFAULT_CORPUS: &str = "rust/fixtures/eval/corpus";
+pub const DEFAULT_QUERIES: &str = "rust/fixtures/eval/queries.json";
+pub const DEFAULT_BASELINE: &str = "rust/fixtures/eval/baseline.json";
+pub const DEFAULT_CONFIG: &str = "rust/fixtures/eval/eval-config.json";
 
 const TOOL_SEARCH: &str = "search_artifacts";
 const TOOL_GET_RELATED: &str = "get_related";

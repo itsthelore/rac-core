@@ -14,7 +14,7 @@ test it against your Omnigent version before relying on it in production.
 ## Prerequisites
 
 ```bash
-pip install rac-core   # the `rac` CLI and the `lore` MCP server
+brew install itsthelore/tap/rac-full   # the `decided` CLI and the `decided-mcp` server
 ```
 
 A repository with a RAC corpus under `decisions/` (run `decided quickstart`, or use this
@@ -52,8 +52,8 @@ first-class tool type, so add a `lore` entry under `tools:` (a sample is in
 tools:
   lore:
     type: mcp
-    command: rac
-    args: ["mcp", "--root", "."]
+    command: decided-mcp
+    args: ["--root", "."]
 ```
 
 This exposes the read-only `lore` tools (`get_summary`, `search_artifacts`,

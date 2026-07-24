@@ -156,26 +156,6 @@ pub fn install_skills(
 mod tests {
     use super::*;
 
-    /// The embedded resources must be byte-identical to the Python package
-    /// files the retirement oracle installs.
-    #[test]
-    fn embedded_bytes_equal_python_package_files() {
-        for (i, spec) in BUNDLED_SKILLS.iter().enumerate() {
-            let py_path = format!(
-                "{}/../../src/asdecided/skills/{}/SKILL.md",
-                env!("CARGO_MANIFEST_DIR"),
-                spec.name
-            );
-            let py_bytes = std::fs::read(&py_path)
-                .unwrap_or_else(|e| panic!("cannot read {py_path}: {e}"));
-            assert_eq!(
-                py_bytes, SKILL_BYTES[i],
-                "embedded {} differs from the Python package file",
-                spec.name
-            );
-        }
-    }
-
     #[test]
     fn registry_order_and_names() {
         assert_eq!(

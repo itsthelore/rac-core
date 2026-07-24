@@ -1,5 +1,0 @@
-RAC-01JY4M8X2QZ7     decision  Markdown Is the Canonical Source Format
-v0-canonical-format  roadmap   Canonical Format Roadmap
-                               ↳ Initiatives: Adopt Markdown everywhere.
-
-2 match(es) for 'markdown'.
