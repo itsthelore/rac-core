@@ -6,6 +6,8 @@ details, release history over commit history.
 
 ## Unreleased
 
+## v0.23.0 — 2026-07-24
+
 **AsDecided is now the product and runtime surface.** The supported native
 executables are `decided` and `decided-mcp`; there is no `rac` executable,
 Python CLI fallback, or `RAC_*` environment compatibility layer. New
