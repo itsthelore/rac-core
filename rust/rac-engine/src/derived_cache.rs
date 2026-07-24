@@ -50,10 +50,14 @@ pub fn default_cache_dir() -> PathBuf {
 // ---------------------------------------------------------------------------
 
 fn stat_pair(path: &Path) -> Option<(u64, u64)> {
-    use std::os::unix::fs::MetadataExt;
     let meta = std::fs::metadata(path).ok()?;
-    let mtime_ns = (meta.mtime() as i128) * 1_000_000_000 + i128::from(meta.mtime_nsec());
-    Some((meta.len(), mtime_ns as u64))
+    let mtime_ns = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos() as u64;
+    Some((meta.len(), mtime_ns))
 }
 
 /// Diff the corpus against `prev_manifest` by stat, content-confirming
