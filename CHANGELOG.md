@@ -6,6 +6,13 @@ details, release history over commit history.
 
 ## Unreleased
 
+## v0.23.1 — 2026-07-24
+
+- Fixed native Windows compilation by using portable filesystem metadata,
+  limiting permission changes and symlink inspection to Unix platforms.
+- Added a Windows workspace compile check to CI so native Windows support
+  remains a release gate.
+
 ## v0.23.0 — 2026-07-24
 
 **AsDecided is now the product and runtime surface.** The supported native
