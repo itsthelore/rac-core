@@ -206,9 +206,8 @@ decided ingest spec.docx -o spec.md      # write to a file
 decided ingest report.pdf -o report.md --force
 ```
 
-Conversion uses optional extras. Install the readers you need:
-`pip install 'rac-core[ingest]'` (DOCX/HTML), `[ingest-pdf]`,
-`[ingest-office]` (PPTX/XLSX), or `[ingest-all]`.
+Document ingestion is no longer shipped by `rac-core`. Use the ancillary
+Python ingestion connector when creating an initial corpus.
 
 ### Note-tool exports (Obsidian, Logseq, Notion, Roam)
 
@@ -991,14 +990,7 @@ it shows is also available through `decided portfolio`, `decided index`, `decide
 - **Exit codes:** `0` session quit · `2` not a directory, or the `explorer` extra is
   not installed
 
-The TUI dependency ships as an optional extra, so the core install stays light:
-
-```bash
-pip install 'rac-core[explorer]'
-decided explorer decisions/
-```
-
-Without the extra, `decided explorer` prints the install hint above and exits `2`.
+Explorer is retired and is not part of the native product.
 
 ---
 
@@ -1447,7 +1439,7 @@ against the repository root (the nearest `.decided/`).
 
 ```bash
 decided decisions-for src/decisions/mcp/server.py decisions/
-decided decisions-for .github/workflows/tests.yml decisions/ --json
+decided decisions-for rust/Cargo.toml decisions/ --json
 ```
 
 ```json

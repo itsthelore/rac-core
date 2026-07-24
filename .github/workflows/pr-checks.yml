@@ -1,8 +1,6 @@
 name: PR Checks
 
-# Pre-merge distribution checks. Rust behavior and the bounded retirement
-# oracle are owned by rust-spike.yml under ADR-120. This workflow verifies only
-# the maintained Python packaging/SDK bridge and the three shipped Actions.
+# Pre-merge dogfood checks for the three native Actions.
 on:
   pull_request:
 
@@ -14,14 +12,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  bridge:
-    uses: ./.github/workflows/tests.yml
-
   # Watchkeeper dogfood (v0.12.3): every pull request here gets a product
   # knowledge review from the local action in source mode — which is also
   # the live end-to-end test of action.yml itself.
   watchkeeper:
-    name: watchkeeper (dogfood, source install)
+    name: watchkeeper (dogfood, native)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -31,7 +26,6 @@ jobs:
       - uses: ./
         with:
           path: decisions
-          install-from: source
 
   # Validate dogfood (v0.17.2): every pull request runs the local validate
   # action in source mode — the live end-to-end test of validate-action/action.yml
@@ -39,7 +33,7 @@ jobs:
   # Code Scanning for same-repo PRs; it is skipped on forks, whose token cannot be
   # granted security-events: write, so the check never fails on a missing scope.
   validate:
-    name: validate (dogfood, source install)
+    name: validate (dogfood, native)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -52,7 +46,6 @@ jobs:
       - uses: ./validate-action
         with:
           path: decisions
-          install-from: source
           upload-sarif: ${{ !github.event.pull_request.head.repo.fork }}
 
   # PR-gate dogfood (v0.21.14): every pull request runs the local PR-gate action
@@ -64,7 +57,7 @@ jobs:
   # never collide). Skipped on forks, whose token cannot be granted
   # security-events: write.
   gate:
-    name: pr-gate (dogfood, source install)
+    name: pr-gate (dogfood, native)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -77,5 +70,4 @@ jobs:
       - uses: ./pr-gate-action
         with:
           path: decisions
-          install-from: source
           upload-sarif: ${{ !github.event.pull_request.head.repo.fork }}

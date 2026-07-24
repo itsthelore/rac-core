@@ -117,26 +117,6 @@ pub fn install_hook(target_dir: &str, style: &str) -> Result<InstalledHook, Hook
 mod tests {
     use super::*;
 
-    /// The embedded scripts must be byte-identical to the Python package
-    /// files the retirement oracle installs.
-    #[test]
-    fn embedded_bytes_equal_python_package_files() {
-        for (i, spec) in BUNDLED_HOOKS.iter().enumerate() {
-            let py_path = format!(
-                "{}/../../src/asdecided/hooks/{}.sh",
-                env!("CARGO_MANIFEST_DIR"),
-                spec.style
-            );
-            let py_bytes = std::fs::read(&py_path)
-                .unwrap_or_else(|e| panic!("cannot read {py_path}: {e}"));
-            assert_eq!(
-                py_bytes, HOOK_BYTES[i],
-                "embedded {} differs from the Python package file",
-                spec.style
-            );
-        }
-    }
-
     #[test]
     fn registry_order_and_default() {
         assert_eq!(available_hooks(), vec!["post-commit", "pre-commit"]);

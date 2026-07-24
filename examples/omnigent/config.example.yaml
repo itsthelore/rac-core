@@ -6,5 +6,5 @@
 tools:
   lore:
     type: mcp
-    command: rac
-    args: ["mcp", "--root", "."]
+    command: decided-mcp
+    args: ["--root", "."]

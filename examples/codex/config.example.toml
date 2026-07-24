@@ -2,5 +2,5 @@
 # Add this to ~/.codex/config.toml (global) or .codex/config.toml (trusted
 # project). Use an absolute path for --root in the global file.
 [mcp_servers.lore]
-command = "rac"
-args = ["mcp", "--root", "."]
+command = "decided-mcp"
+args = ["--root", "."]

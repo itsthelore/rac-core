@@ -13,7 +13,7 @@ the full text and relationships when it needs them.
 ## Prerequisites
 
 ```bash
-pip install rac-core   # the `rac` CLI and the `lore` MCP server
+brew install itsthelore/tap/rac-full   # the `decided` CLI and the `decided-mcp` server
 ```
 
 You also need a repository with a RAC corpus under `decisions/` (run `decided quickstart`

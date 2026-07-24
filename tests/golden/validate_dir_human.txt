@@ -1,5 +1,0 @@
-FAIL  tests/fixtures/portfolio/broken.md  (Requirement)
-  error   [missing-title] tests/fixtures/portfolio/broken.md
-          File has no top-level # title.
-
-FAIL  tests/fixtures/portfolio — 4 artifact(s) checked: 3 valid, 1 invalid. OKF v0.1: conformant.

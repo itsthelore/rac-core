@@ -758,25 +758,6 @@ pub fn migrate_metadata(
 mod tests {
     use super::*;
 
-    /// The embedded template bodies must be byte-identical to the Python
-    /// package files the oracle writes (`new` brief, landmine 5).
-    #[test]
-    fn embedded_templates_equal_python_package_files() {
-        for (i, name) in available_schemas().iter().enumerate() {
-            let py_path = format!(
-                "{}/../../src/asdecided/templates/{name}.md",
-                env!("CARGO_MANIFEST_DIR")
-            );
-            let py_bytes = std::fs::read(&py_path)
-                .unwrap_or_else(|e| panic!("cannot read {py_path}: {e}"));
-            assert_eq!(
-                py_bytes,
-                TEMPLATE_BYTES[i].as_bytes(),
-                "embedded {name} template differs from the Python package file"
-            );
-        }
-    }
-
     #[test]
     fn id_shape_is_key_dash_twelve_crockford() {
         let id = generate_id("RAC");

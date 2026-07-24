@@ -63,13 +63,10 @@ On every pull request that touches your corpus you get:
 | `base` | `''` | Base revision; empty resolves to `origin/<PR base branch>` |
 | `fail-on` | `error` | `error` · `warning` · `none` (report, never fail) |
 | `annotate` | `true` | Emit inline annotations |
-| `rac-version` | `''` | Exact PyPI version to install (empty: latest) |
-| `install-from` | `pypi` | `pypi`, or `source` for this repository's own dogfood |
 
-The action is a wrapper: it installs RAC, resolves the base ref, runs one
+The action builds the native CLI from its pinned action source, resolves the base ref, runs one
 `decided watchkeeper --format github` invocation, and propagates its exit code
-unchanged. All analysis and policy live in the package — pin `rac-version`
-to pin behavior.
+unchanged. All analysis and policy live in the engine.
 
 ### Reusable workflow
 
@@ -88,14 +85,9 @@ the action.
 
 ## Version pinning
 
-Pin **exact release tags** (`@vX.Y.Z`). This repository publishes no
-moving major tag (`@v1`-style): the package version is derived from git
-tags by setuptools-scm, and a floating tag would corrupt version
-derivation. Dependabot and Renovate both understand exact action tags.
-
-The action installs from PyPI, so it needs a published release carrying
-the `watchkeeper` command (v0.12.2 or later). This repository's own PR
-checks run the action with `install-from: source`, which doubles as the
+Pin **exact release tags** (`@vX.Y.Z`). Dependabot and Renovate both understand
+exact action tags. This repository's own PR
+checks run the action from the checked-out native source, which doubles as the
 end-to-end test of `action.yml` on every pull request.
 
 ## A worked example

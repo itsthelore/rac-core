@@ -14,8 +14,10 @@ can preview and apply the explicit migration with `decided migrate layout .
 --dry-run` and `decided migrate layout .`; existing `RAC-*` artifact IDs and
 published machine-schema keys remain unchanged. Rust is the normal product
 engine, Explorer is retired, and ingest leaves core as an ancillary connector.
-The Python implementation remains only as an SDK/packaging bridge and bounded
-retirement-certification oracle.
+The Python engine, package, PyPI release path, compatibility oracle, Explorer,
+and ingest implementation have been removed from `rac-core`. Python API access
+belongs in `itsthelore/rac-sdk`; the final former engine remains available only
+at the immutable `python-engine-final` Git tag for historical review.
 
 **Decisions on pull requests — the Herald action**
 (`pr-decision-surfacing`). A pull request that edits governed code now gets

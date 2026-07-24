@@ -1,9 +1,5 @@
-//! Artifact specs, loaded from `src/asdecided/spec/artifact-specs.json` (embedded at
-//! build time). That file is the one shared, language-neutral registry both
-//! engines read (ADR-063 Guard 1): the Python engine loads `ARTIFACT_SPECS`
-//! from it at import (`decided.core.artifacts`), and this module embeds the very
-//! same bytes via `include_str!`, so the two cannot drift. It mirrors the
-//! Python `ArtifactSpec` dataclass, preserving field/section/map order
+//! Artifact specs, loaded from the vendored, language-neutral rac-spec registry
+//! embedded at build time. Field, section, and map order are preserved
 //! everywhere (PORT-CONTRACT.d/04 §1, PORT-CONTRACT.d/09, PORT-CONTRACT.d/05 §3.1).
 //!
 //! The Python registry `ARTIFACT_SPECS` is an ordered tuple of 5 specs:
@@ -16,9 +12,8 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
-/// Embedded spec data — the shared registry `src/asdecided/spec/artifact-specs.json`,
-/// the same file the Python engine loads at import (ADR-063 Guard 1).
-const SPEC_JSON: &str = include_str!("../../../src/asdecided/spec/artifact-specs.json");
+/// Embedded spec data synced from `itsthelore/rac-spec`.
+const SPEC_JSON: &str = include_str!("../assets/spec/artifact-specs.json");
 
 /// One artifact type's schema. Field names/order mirror the Python dataclass.
 #[derive(Debug, Clone)]

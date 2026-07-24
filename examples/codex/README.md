@@ -8,7 +8,7 @@ Codex-specific RAC code. A stranger can reproduce this from the file alone.
 ## Prerequisites
 
 ```bash
-pip install rac-core   # the `rac` CLI and the `lore` MCP server
+brew install itsthelore/tap/rac-full   # the `decided` CLI and the `decided-mcp` server
 ```
 
 A repository with a RAC corpus under `decisions/` (run `decided quickstart`, or use this
@@ -40,8 +40,8 @@ codex mcp add lore -- decided-mcp --root .
 
 ```toml
 [mcp_servers.lore]
-command = "rac"
-args = ["mcp", "--root", "."]
+command = "decided-mcp"
+args = ["--root", "."]
 ```
 
 - **Global config** (most reliable): `~/.codex/config.toml` — use an absolute

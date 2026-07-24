@@ -1304,10 +1304,10 @@ fn run_eval(rest: &[&String]) -> u8 {
     let mut check = false;
     let mut update_baseline = false;
     let mut json = false;
-    let mut root: String = "tests/eval/corpus".to_string();
-    let mut queries: String = "tests/eval/queries.json".to_string();
-    let mut baseline: String = "tests/eval/baseline.json".to_string();
-    let mut config: String = "tests/eval/eval-config.json".to_string();
+    let mut root: String = "rust/fixtures/eval/corpus".to_string();
+    let mut queries: String = "rust/fixtures/eval/queries.json".to_string();
+    let mut baseline: String = "rust/fixtures/eval/baseline.json".to_string();
+    let mut config: String = "rust/fixtures/eval/eval-config.json".to_string();
     let mut extras: Vec<String> = Vec::new();
     let mut positional_only = false;
 

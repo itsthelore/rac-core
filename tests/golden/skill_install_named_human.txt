@@ -1,3 +1,0 @@
-Installed decided-review skill: .claude/skills/decided-review/SKILL.md
-
-Claude Code discovers skills automatically from .claude/skills/ in the project.

@@ -1,6 +1,0 @@
-Installed decided-artifacts skill: .claude/skills/decided-artifacts/SKILL.md
-Installed decided-review skill: .claude/skills/decided-review/SKILL.md
-Installed decided-import skill: .claude/skills/decided-import/SKILL.md
-Installed decided-capture skill: .claude/skills/decided-capture/SKILL.md
-
-Claude Code discovers skills automatically from .claude/skills/ in the project.

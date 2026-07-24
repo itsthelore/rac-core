@@ -50,23 +50,6 @@ pub fn render_export_html(export: &CorpusExport) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    /// The embedded shell must be byte-identical to the Python package file
-    /// the retirement oracle loads.
-    #[test]
-    fn embedded_shell_equals_python_package_file() {
-        let py_path = format!(
-            "{}/../../src/asdecided/templates/portal/asdecided-portal-shell.html",
-            env!("CARGO_MANIFEST_DIR")
-        );
-        let py_bytes =
-            std::fs::read(&py_path).unwrap_or_else(|e| panic!("cannot read {py_path}: {e}"));
-        assert_eq!(
-            py_bytes,
-            SHELL.as_bytes(),
-            "embedded portal shell differs from the Python package file"
-        );
-    }
-
     #[test]
     fn shell_carries_exactly_one_empty_seam() {
         assert_eq!(SHELL.matches(SEAM).count(), 1);

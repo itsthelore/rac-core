@@ -1,0 +1,79 @@
+name: Publish native release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-14
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install pinned Rust toolchain
+        working-directory: rust
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Build native binaries
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          (cd rust && DECIDED_RS_VERSION="$VERSION" cargo build --release --locked -p decided -p decided-mcp)
+      - name: Package Unix binaries
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p dist
+          tar -C rust/target/release -czf "dist/asdecided-${TARGET}.tar.gz" decided decided-mcp
+      - name: Package Windows binaries
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path rust/target/release/decided.exe,rust/target/release/decided-mcp.exe -DestinationPath dist/asdecided-${{ matrix.target }}.zip
+      - name: Attach binaries to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
+
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/itsthelore/rac
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build and smoke-test image
+        run: |
+          docker build --build-arg DECIDED_VERSION="$TAG" -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          docker run --rm "$IMAGE:$TAG" --version
+      - name: Publish image
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
