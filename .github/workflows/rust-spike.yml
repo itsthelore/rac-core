@@ -17,6 +17,24 @@ on:
       - ".github/workflows/rust-spike.yml"
 
 jobs:
+  windows-compile:
+    name: Windows native compile
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rust toolchain (pinned by rust/rust-toolchain.toml)
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Check native workspace
+        working-directory: rust
+        run: cargo check --workspace --locked
+
   rust-contract:
     name: Rust contract + live-corpus invariants
     runs-on: ubuntu-latest

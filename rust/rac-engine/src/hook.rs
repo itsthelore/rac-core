@@ -98,11 +98,12 @@ pub fn install_hook(target_dir: &str, style: &str) -> Result<InstalledHook, Hook
     std::fs::write(dest, content)
         .map_err(|e| HookInstallError::Io(format!("{e}: {dest_display}")))?;
     // dest.chmod(dest.stat().st_mode | S_IXUSR | S_IXGRP | S_IXOTH)
-    let mode = std::fs::metadata(dest)
-        .map_err(|e| HookInstallError::Io(format!("{e}: {dest_display}")))?
-        .permissions();
+    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(dest)
+            .map_err(|e| HookInstallError::Io(format!("{e}: {dest_display}")))?
+            .permissions();
         let new_mode = mode.mode() | 0o111;
         std::fs::set_permissions(dest, std::fs::Permissions::from_mode(new_mode))
             .map_err(|e| HookInstallError::Io(format!("{e}: {dest_display}")))?;

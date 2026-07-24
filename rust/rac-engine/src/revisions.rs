@@ -278,12 +278,14 @@ fn extract_tar(data: &[u8], target: &Path) {
                             let _ = std::fs::write(&dest, body);
                         }
                         b'2' => {
-                            let link = cstr_field(&header[157..257]);
                             if let Some(parent) = dest.parent() {
                                 let _ = std::fs::create_dir_all(parent);
                             }
                             #[cfg(unix)]
-                            let _ = std::os::unix::fs::symlink(&link, &dest);
+                            {
+                                let link = cstr_field(&header[157..257]);
+                                let _ = std::os::unix::fs::symlink(&link, &dest);
+                            }
                         }
                         _ => {} // hardlinks/devices: never in git archives
                     }
